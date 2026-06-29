@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot ./index.html",
-    "build": "bun build ./index.html --outdir dist --minify",
-    "serve": "bun build ./index.html --outdir dist --minify && bunx serve dist"
+    "build": "rm -rf dist && bun build ./index.html --outdir dist --minify",
+    "serve": "bun run build && bun static-server.ts 8080 dist"
   },
   "dependencies": {
     "react": "^19.0.0",

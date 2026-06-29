@@ -82,7 +82,7 @@ export function App() {
           <input
             value={apiBase}
             onChange={(e) => setApiBaseState(e.target.value)}
-            placeholder="URL de l'API (ex. https://mon-app.herokuapp.com)"
+            placeholder="URL de l'API (vide = même serveur)"
           />
           <button onClick={saveApiBase}>Connecter</button>
         </div>
