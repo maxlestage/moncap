@@ -41,6 +41,9 @@ bun static-server.ts 8080 dist
 - Calcul de l'itinéraire complet (distance + durée selon la vitesse)
 - Statistiques (nombre, longueur, centre)
 - Import / export **GPX**
+- **Temps réel (WebSocket)** : synchro des positions entre tous les écrans,
+  partage de sa position en direct (voitures vertes), signalements façon
+  Waze (police, accident, bouchon, danger) — pastille verte = connecté.
 
 ## Fichiers
 

@@ -1,7 +1,12 @@
 mod entity;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use axum::{
-    extract::{Path, Query, State},
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::{FromRef, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -10,6 +15,7 @@ use axum::{
 use rayon::prelude::*;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
 use tower_http::{
     cors::CorsLayer,
     services::{ServeDir, ServeFile},
@@ -17,6 +23,91 @@ use tower_http::{
 };
 
 use entity::position;
+
+/// Identifiant unique attribué à chaque connexion live et à chaque alerte.
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// État partagé : base, canal temps réel, alertes récentes en mémoire.
+#[derive(Clone)]
+struct AppState {
+    db: DatabaseConnection,
+    tx: broadcast::Sender<String>,
+    alerts: Arc<Mutex<Vec<Alert>>>,
+}
+
+impl FromRef<AppState> for DatabaseConnection {
+    fn from_ref(s: &AppState) -> Self {
+        s.db.clone()
+    }
+}
+
+impl FromRef<AppState> for broadcast::Sender<String> {
+    fn from_ref(s: &AppState) -> Self {
+        s.tx.clone()
+    }
+}
+
+/// Un signalement façon Waze (police, accident, bouchon, danger…).
+#[derive(Clone, Serialize, Deserialize)]
+struct Alert {
+    id: u64,
+    category: String,
+    lat: f64,
+    lon: f64,
+    label: String,
+    ts: u64,
+}
+
+/// Message reçu d'un client via WebSocket.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum ClientEvent {
+    /// Position GPS en direct de l'utilisateur.
+    Live { lat: f64, lon: f64, label: String },
+    /// Nouveau signalement.
+    Alert {
+        category: String,
+        lat: f64,
+        lon: f64,
+        #[serde(default)]
+        label: String,
+    },
+}
+
+/// Message diffusé aux clients via WebSocket.
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum ServerEvent {
+    /// Les positions enregistrées ont changé → le client recharge.
+    PositionsChanged,
+    /// Position live d'un utilisateur.
+    Live {
+        id: u64,
+        lat: f64,
+        lon: f64,
+        label: String,
+    },
+    /// Un utilisateur live s'est déconnecté.
+    LiveGone { id: u64 },
+    /// Un nouveau signalement.
+    Alert(Alert),
+    /// Instantané des signalements en cours (à la connexion).
+    Alerts { alerts: Vec<Alert> },
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Diffuse un événement à tous les clients connectés.
+fn broadcast_event(tx: &broadcast::Sender<String>, ev: &ServerEvent) {
+    if let Ok(json) = serde_json::to_string(ev) {
+        let _ = tx.send(json);
+    }
+}
 
 /// Données d'une nouvelle position envoyée par le client.
 #[derive(Deserialize)]
@@ -129,6 +220,14 @@ async fn main() {
         .await
         .expect("création du schéma impossible");
 
+    // Canal de diffusion temps réel (WebSocket).
+    let (tx, _rx) = broadcast::channel::<String>(256);
+    let state = AppState {
+        db,
+        tx,
+        alerts: Arc::new(Mutex::new(Vec::new())),
+    };
+
     // Front web statique (React + Bun, voir web/). Servi en repli : toute
     // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
     // avec index.html en repli (SPA).
@@ -148,10 +247,11 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
+        .route("/ws", get(ws_handler))
         .fallback_service(web)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
-        .with_state(db);
+        .with_state(state);
 
     // Heroku impose le port via la variable d'environnement PORT.
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
@@ -198,6 +298,7 @@ async fn list_positions(
 /// POST /positions — ajoute une position.
 async fn add_position(
     State(db): State<DatabaseConnection>,
+    State(tx): State<broadcast::Sender<String>>,
     Json(input): Json<NewPosition>,
 ) -> Result<Json<position::Model>, AppError> {
     let saved = position::ActiveModel {
@@ -208,12 +309,14 @@ async fn add_position(
     }
     .insert(&db)
     .await?;
+    broadcast_event(&tx, &ServerEvent::PositionsChanged);
     Ok(Json(saved))
 }
 
 /// PUT /positions/:id — met à jour une position (renommer/déplacer).
 async fn update_position(
     State(db): State<DatabaseConnection>,
+    State(tx): State<broadcast::Sender<String>>,
     Path(id): Path<i32>,
     Json(input): Json<NewPosition>,
 ) -> Result<Response, AppError> {
@@ -228,18 +331,21 @@ async fn update_position(
     }
     .update(&db)
     .await?;
+    broadcast_event(&tx, &ServerEvent::PositionsChanged);
     Ok(Json(updated).into_response())
 }
 
 /// DELETE /positions/:id — supprime une position.
 async fn delete_position(
     State(db): State<DatabaseConnection>,
+    State(tx): State<broadcast::Sender<String>>,
     Path(id): Path<i32>,
 ) -> Result<StatusCode, AppError> {
     let res = position::Entity::delete_by_id(id).exec(&db).await?;
     if res.rows_affected == 0 {
         Ok(StatusCode::NOT_FOUND)
     } else {
+        broadcast_event(&tx, &ServerEvent::PositionsChanged);
         Ok(StatusCode::NO_CONTENT)
     }
 }
@@ -247,6 +353,7 @@ async fn delete_position(
 /// POST /positions/import — importe des positions depuis un document GPX.
 async fn import_gpx(
     State(db): State<DatabaseConnection>,
+    State(tx): State<broadcast::Sender<String>>,
     body: String,
 ) -> Result<Json<Vec<position::Model>>, AppError> {
     let mut created = Vec::new();
@@ -261,7 +368,103 @@ async fn import_gpx(
         .await?;
         created.push(saved);
     }
+    if !created.is_empty() {
+        broadcast_event(&tx, &ServerEvent::PositionsChanged);
+    }
     Ok(Json(created))
+}
+
+/// GET /ws — connexion WebSocket temps réel (positions, live, alertes).
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+}
+
+async fn handle_socket(mut socket: WebSocket, state: AppState) {
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let mut rx = state.tx.subscribe();
+
+    // Instantané des signalements en cours, envoyé à la connexion.
+    let snapshot = ServerEvent::Alerts {
+        alerts: prune_alerts(&state.alerts),
+    };
+    if let Ok(json) = serde_json::to_string(&snapshot) {
+        let _ = socket.send(Message::Text(json)).await;
+    }
+
+    loop {
+        tokio::select! {
+            res = rx.recv() => match res {
+                Ok(msg) => {
+                    if socket.send(Message::Text(msg)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            },
+            msg = socket.recv() => match msg {
+                Some(Ok(Message::Text(t))) => handle_client_msg(&state, id, &t),
+                Some(Ok(Message::Close(_))) | None => break,
+                Some(Err(_)) => break,
+                _ => {}
+            },
+        }
+    }
+
+    // L'utilisateur live disparaît pour les autres.
+    broadcast_event(&state.tx, &ServerEvent::LiveGone { id });
+}
+
+/// Traite un message reçu d'un client et le rediffuse.
+fn handle_client_msg(state: &AppState, id: u64, text: &str) {
+    let Ok(ev) = serde_json::from_str::<ClientEvent>(text) else {
+        return;
+    };
+    match ev {
+        ClientEvent::Live { lat, lon, label } => {
+            broadcast_event(
+                &state.tx,
+                &ServerEvent::Live {
+                    id,
+                    lat,
+                    lon,
+                    label,
+                },
+            );
+        }
+        ClientEvent::Alert {
+            category,
+            lat,
+            lon,
+            label,
+        } => {
+            let alert = Alert {
+                id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+                category,
+                lat,
+                lon,
+                label,
+                ts: now_ms(),
+            };
+            {
+                let mut alerts = state.alerts.lock().unwrap();
+                alerts.push(alert.clone());
+                let len = alerts.len();
+                if len > 100 {
+                    alerts.drain(0..len - 100);
+                }
+            }
+            broadcast_event(&state.tx, &ServerEvent::Alert(alert));
+        }
+    }
+}
+
+/// Retire les signalements de plus de 30 min et renvoie ceux restants.
+fn prune_alerts(alerts: &Arc<Mutex<Vec<Alert>>>) -> Vec<Alert> {
+    let cutoff = now_ms().saturating_sub(30 * 60 * 1000);
+    let mut a = alerts.lock().unwrap();
+    a.retain(|x| x.ts >= cutoff);
+    a.clone()
 }
 
 /// GET /stats — vue d'ensemble des positions enregistrées.

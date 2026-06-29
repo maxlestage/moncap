@@ -32,6 +32,21 @@ Les routes sont volontairement aussi simples que possible :
 | GET     | `/stats`      | Vue d'ensemble : nombre, longueur, boîte englobante, centroïde |
 | POST    | `/route`      | Distance (km) + cap (°) entre deux points         |
 | POST    | `/route/multi` | Distance totale + durée estimée d'un itinéraire (`{points:[...], speed_kmh?}`) |
+| GET     | `/ws`         | WebSocket temps réel (positions, voitures live, signalements) |
+
+### Temps réel (WebSocket, façon Waze)
+
+`/ws` diffuse à tous les clients connectés :
+
+- `positions_changed` — émis à chaque ajout/modif/suppression/import → les
+  clients rechargent leur liste automatiquement.
+- `live` / `live_gone` — positions GPS en direct des utilisateurs qui
+  partagent leur localisation (marqueurs mobiles), expirées côté client.
+- `alert` / `alerts` — signalements (police, accident, bouchon, danger),
+  diffusés à tous et renvoyés en instantané à la connexion (gardés ~30 min).
+
+Le client envoie `{"kind":"live", lat, lon, label}` ou
+`{"kind":"alert", category, lat, lon, label}`.
 
 Les positions sont persistées dans **Postgres** via **SeaORM** (table
 `positions`, créée automatiquement au démarrage). Le calcul de trajet
