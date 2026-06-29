@@ -80,33 +80,53 @@ curl localhost:3000/positions.gpx
 # <?xml ...><gpx ...><wpt lat="48.8566" lon="2.3522"><name>Paris</name></wpt>...</gpx>
 ```
 
-## Déploiement Heroku
+## Déploiement Heroku (conteneur)
 
-Le backend se déploie via le **container stack** (Docker) : `heroku.yml`
-construit `backend/Dockerfile`, et l'app écoute sur `$PORT`. L'addon
-Heroku Postgres fournit automatiquement `DATABASE_URL`.
+L'app tourne en conteneur : le `Dockerfile` (racine) produit un binaire
+Rust optimisé qui écoute sur `$PORT` ; l'addon Heroku Postgres fournit
+`DATABASE_URL` ; le schéma est créé automatiquement au démarrage.
+
+Fichiers de déploiement :
+
+- `Dockerfile` — build multi-étapes complet et autonome (contexte = racine)
+- `Procfile` — `web: moncap-gps`
+- `heroku.yml` — build Docker + process `web`
+- `app.json` — stack conteneur + addon Postgres
+- `.dockerignore` — exclut `target/`, `frontend/`, `.git/`, `.env`
+
+### Sans ordinateur (recommandé) — déploiement automatique via GitHub
+
+1. Sur **Heroku** (navigateur) : crée une app, puis ajoute l'addon
+   **Heroku Postgres** (`essential-0`). Récupère ta **clé API** (Account
+   settings ▸ API Key).
+2. Sur **GitHub** (navigateur), dans *Settings ▸ Secrets and variables ▸
+   Actions*, ajoute trois secrets :
+   - `HEROKU_API_KEY` — ta clé API Heroku
+   - `HEROKU_APP_NAME` — le nom de l'app (ex. `moncap-gps`)
+   - `HEROKU_EMAIL` — l'e-mail de ton compte
+3. Chaque push sur `master` déclenche le workflow **Deploy**
+   (`.github/workflows/deploy.yml`) qui construit le `Dockerfile` et le
+   pousse sur Heroku. (Sans ces secrets, le job ne fait rien et reste vert.)
+
+Vérification : ouvre `https://<app>.herokuapp.com/health` → doit afficher `ok`.
+
+### Avec la CLI Heroku (si tu as un ordinateur)
 
 ```bash
-# 1. Créer l'app en mode conteneur
 heroku create moncap-gps --stack container
-
-# 2. Provisionner Postgres (fournit DATABASE_URL)
 heroku addons:create heroku-postgresql:essential-0 -a moncap-gps
-
-# 3. Déployer
-git push heroku claude/gps-app-rust-swift-1k3yq3:main
-
-# 4. Vérifier
-heroku open -a moncap-gps        # /health renvoie "ok"
-heroku logs --tail -a moncap-gps
+git push heroku HEAD:main
+heroku open -a moncap-gps
 ```
 
-Fichiers utilisés par Heroku :
+### Tester l'image en local (Docker)
 
-- `heroku.yml` — build Docker du service `web`
-- `backend/Dockerfile` — build multi-étapes (binaire Rust optimisé)
-- `app.json` — stack conteneur + addon Postgres (déploiement « Deploy to Heroku »)
-- `.dockerignore` — exclut `target/`, `frontend/`, etc.
+```bash
+docker build -t moncap-gps .
+docker run -p 3000:3000 \
+  -e DATABASE_URL="postgres://user:pass@host:5432/moncap" \
+  moncap-gps
+```
 
 La table `positions` est créée automatiquement au démarrage ; aucune
 migration manuelle n'est requise.
