@@ -520,9 +520,12 @@ fn compute_stats(items: &[position::Model]) -> Stats {
         })
     };
 
+    // `+ 0.0` normalise un éventuel -0.0 (somme vide) en 0.0.
+    let total_km = route_legs_km(&coords).iter().sum::<f64>() + 0.0;
+
     Stats {
         count: coords.len(),
-        total_km: route_legs_km(&coords).iter().sum(),
+        total_km,
         bbox,
         centroid,
     }
@@ -823,6 +826,15 @@ mod tests {
         assert_eq!(parsed[0].label, "Paris & <Co>");
         assert!((parsed[0].lat - 48.8566).abs() < 1e-9);
         assert!((parsed[1].lon - 4.8357).abs() < 1e-9);
+    }
+
+    #[test]
+    fn stats_empty_total_is_positive_zero() {
+        let s = compute_stats(&[]);
+        assert_eq!(s.count, 0);
+        assert_eq!(s.total_km, 0.0);
+        // Pas de -0.0 dans la sortie JSON.
+        assert!(s.total_km.is_sign_positive());
     }
 
     #[test]
