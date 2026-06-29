@@ -15,6 +15,7 @@ private func emoji(for category: String) -> String {
 struct ContentView: View {
     @StateObject private var location = LocationManager()
     @StateObject private var realtime = RealtimeClient(url: APIClient().wsURL)
+    @StateObject private var nav = NavigationManager()
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -34,17 +35,21 @@ struct ContentView: View {
         ZStack(alignment: .bottom) {
             map.ignoresSafeArea()
 
-            // Barre de recherche flottante (haut).
+            // Haut : bannière de navigation ou barre de recherche.
             VStack {
-                searchBar
+                if nav.active { navBanner } else { searchBar }
                 Spacer()
             }
             .padding(.horizontal)
             .padding(.top, 8)
 
-            // Carte d'itinéraire + barre d'actions (bas).
+            // Bas : carte ETA/itinéraire + barre d'actions.
             VStack(spacing: 12) {
-                if let info = routeInfo { routeCard(info) }
+                if nav.active {
+                    etaCard
+                } else if let info = routeInfo {
+                    routeCard(info)
+                }
                 bottomBar
             }
             .padding(.horizontal)
@@ -60,10 +65,19 @@ struct ContentView: View {
             await refresh()
         }
         .onReceive(location.$coordinate) { coord in
-            if sharing, let c = coord {
+            guard let c = coord else { return }
+            if sharing {
                 realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName)
             }
+            if nav.active {
+                nav.update(c)
+            }
         }
+    }
+
+    /// Itinéraire affiché : celui de la navigation en cours, sinon le calcul multi-points.
+    private var displayedRoute: [CLLocationCoordinate2D] {
+        nav.active ? nav.routeCoords : routeCoords
     }
 
     // MARK: - Carte
@@ -75,8 +89,8 @@ struct ContentView: View {
                 Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
             }
             // Itinéraire routier le plus simple, en vert.
-            if !routeCoords.isEmpty {
-                MapPolyline(coordinates: routeCoords)
+            if !displayedRoute.isEmpty {
+                MapPolyline(coordinates: displayedRoute)
                     .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
             } else if positions.count >= 2 {
                 // Repli : tracé direct si le routage n'a rien renvoyé.
@@ -117,6 +131,48 @@ struct ContentView: View {
         .background(.regularMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
         .onTapGesture { showPlaces = true }
+    }
+
+    private var navBanner: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                .font(.title)
+                .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                if nav.distanceToNext > 0 {
+                    Text("\(Int(nav.distanceToNext)) m").font(.title3.weight(.bold)).foregroundStyle(.white)
+                }
+                Text(nav.instruction)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(Color.green.gradient, in: RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+    }
+
+    private var etaCard: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(format: "%.0f min", nav.etaMinutes)).font(.title3.weight(.bold))
+                Text(String(format: "%.1f km restants", nav.remainingKm))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button { nav.stop() } label: {
+                Text("Quitter")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 10).padding(.horizontal, 18)
+                    .background(Color.red, in: Capsule())
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
     private func routeCard(_ info: String) -> some View {
@@ -206,13 +262,26 @@ struct ContentView: View {
                             .font(.subheadline)
                     }
                 }
-                Section("Positions") {
+                Section("Destinations") {
                     ForEach(positions) { p in
-                        VStack(alignment: .leading) {
-                            Text(p.label).font(.headline)
-                            Text(String(format: "%.4f, %.4f", p.lat, p.lon))
-                                .font(.caption).foregroundStyle(.secondary)
+                        Button {
+                            Task { await startNavigation(to: p) }
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(p.label).font(.headline)
+                                    Text(String(format: "%.4f, %.4f", p.lat, p.lon))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Label("Y aller", systemImage: "location.north.line.fill")
+                                    .labelStyle(.iconOnly)
+                                    .foregroundStyle(.green)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .disabled(location.coordinate == nil)
                     }
                     .onDelete(perform: deletePositions)
                     if positions.isEmpty {
@@ -289,7 +358,31 @@ struct ContentView: View {
         }
     }
 
+    /// Démarre la navigation depuis ma position vers une destination.
+    private func startNavigation(to dest: Position) async {
+        guard let c = location.coordinate else { return }
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: c))
+        request.destination = MKMapItem(
+            placemark: MKPlacemark(coordinate: .init(latitude: dest.lat, longitude: dest.lon)))
+        request.transportType = .automobile
+        request.requestsAlternateRoutes = false
+        guard let route = try? await MKDirections(request: request).calculate().routes.first else {
+            return
+        }
+        nav.start(route: route)
+        showPlaces = false
+        // Vue « conduite » : la carte suit et tourne dans le sens de la marche.
+        withAnimation {
+            camera = .userLocation(followsHeading: true, fallback: .automatic)
+        }
+    }
+
     private func recenter() {
+        if nav.active {
+            withAnimation { camera = .userLocation(followsHeading: true, fallback: .automatic) }
+            return
+        }
         guard let c = location.coordinate else { return }
         withAnimation {
             camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 1200, longitudinalMeters: 1200))
