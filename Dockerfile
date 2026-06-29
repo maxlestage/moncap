@@ -1,19 +1,18 @@
-# Image complète et autonome pour l'API moncap-gps (Rust + Axum).
+# Image Docker optionnelle (usage local). Le déploiement Heroku se fait
+# désormais via buildpack (voir Procfile + app.json), pas via ce Dockerfile.
 # Contexte de build attendu : la racine du dépôt.
 
 # --- Étape de build ---
 FROM rust:1-bookworm AS builder
 WORKDIR /app
 
-# 1) Compile uniquement les dépendances (mises en cache) avec un main factice.
-COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir src \
     && echo "fn main() {}" > src/main.rs \
     && cargo build --release \
     && rm -rf src
 
-# 2) Compile le vrai code.
-COPY backend/src ./src
+COPY src ./src
 RUN touch src/main.rs && cargo build --release
 
 # --- Image finale (légère) ---
@@ -23,7 +22,5 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/moncap-gps /usr/local/bin/moncap-gps
 
-# Heroku (ou tout hébergeur) fournit PORT et DATABASE_URL au runtime ;
-# le schéma Postgres est créé automatiquement au démarrage.
 EXPOSE 3000
 CMD ["moncap-gps"]

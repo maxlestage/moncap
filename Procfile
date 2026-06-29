@@ -1,1 +1,1 @@
-web: moncap-gps
+web: ./target/release/moncap-gps

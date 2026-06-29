@@ -9,9 +9,6 @@ jobs:
   backend:
     name: Backend (Rust)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -26,8 +23,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            backend/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('backend/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
 
       - name: Format
         run: cargo fmt --check

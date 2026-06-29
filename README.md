@@ -6,8 +6,10 @@ Application GPS minimale : un backend **Rust + Axum** et un front **Swift / Swif
 
 ```
 moncap/
-├── backend/        API Rust + Axum
-│   └── src/main.rs
+├── Cargo.toml      API Rust + Axum (crate à la racine, pour le buildpack Heroku)
+├── src/main.rs
+├── Procfile        web: ./target/release/moncap-gps
+├── app.json        buildpack Rust + addon Postgres (bouton « Deploy »)
 └── frontend/       App iOS SwiftUI
     └── MonCapGPS/
 ```
@@ -40,8 +42,7 @@ utilise la formule de Haversine pour la distance et le cap initial.
 # 1. Démarrer Postgres (via Docker)
 docker compose up -d db
 
-# 2. Lancer l'API
-cd backend
+# 2. Lancer l'API (depuis la racine du dépôt)
 cp .env.example .env            # ou exporter DATABASE_URL
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/moncap"
 cargo run
@@ -55,7 +56,7 @@ La connexion est configurable via la variable d'environnement
 Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
 (défaut : `info,sqlx=warn`). Les calculs de distances (`/stats`,
 `/positions/nearest`, `/route/multi`) sont parallélisés avec **rayon**, et
-le binaire de production est compilé avec LTO + `strip` pour rester léger.
+le binaire de production est `strip`é pour rester léger.
 
 ### Exemples
 
@@ -99,64 +100,44 @@ curl localhost:3000/stats
 # {"count":2,"total_km":390.9,"bbox":{...},"centroid":{"lat":47.3,"lon":3.6}}
 ```
 
-## Déploiement Heroku (conteneur)
+## Déploiement Heroku (buildpack — 100 % navigateur, sans CLI)
 
-L'app tourne en conteneur : le `Dockerfile` (racine) produit un binaire
-Rust optimisé qui écoute sur `$PORT` ; l'addon Heroku Postgres fournit
-`DATABASE_URL` ; le schéma est créé automatiquement au démarrage.
+L'app se déploie via un **buildpack Rust** : la crate est à la racine,
+Heroku la compile (`cargo build --release`) et lance le binaire défini dans
+le `Procfile`. L'addon **Heroku Postgres** fournit `DATABASE_URL` ; la table
+`positions` est créée automatiquement au démarrage. Pas de Docker, pas de
+GitHub Actions, pas de stack `container`.
 
-Fichiers de déploiement :
+Fichiers utilisés :
 
-- `Dockerfile` — build multi-étapes complet et autonome (contexte = racine)
-- `Procfile` — `web: moncap-gps`
-- `heroku.yml` — build Docker + process `web`
-- `app.json` — stack conteneur + addon Postgres
-- `.dockerignore` — exclut `target/`, `frontend/`, `.git/`, `.env`
+- `Cargo.toml` / `src/` — la crate à la racine (détectée par le buildpack)
+- `Procfile` — `web: ./target/release/moncap-gps`
+- `app.json` — déclare le buildpack Rust + l'addon Postgres
 
-### Sans ordinateur (recommandé) — déploiement automatique via GitHub
+### Option 1 — Le plus simple : bouton « Deploy to Heroku »
 
-1. Sur **Heroku** (navigateur) : crée une app, puis ajoute l'addon
-   **Heroku Postgres** (`essential-0`). Récupère ta **clé API** (Account
-   settings ▸ API Key).
-2. Sur **GitHub** (navigateur), dans *Settings ▸ Secrets and variables ▸
-   Actions*, ajoute trois secrets :
-   - `HEROKU_API_KEY` — ta clé API Heroku
-   - `HEROKU_APP_NAME` — le nom de l'app (ex. `moncap-gps`)
-   - `HEROKU_EMAIL` — l'e-mail de ton compte
-3. Chaque push sur `master` déclenche le workflow **Deploy**
-   (`.github/workflows/deploy.yml`) qui **force le stack `container`**,
-   construit le `Dockerfile` et le pousse sur Heroku. (Sans ces secrets, le
-   job ne fait rien et reste vert.)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/maxlestage/moncap)
 
-Vérification : ouvre `https://<app>.herokuapp.com/health` → doit afficher `ok`.
+Tape le bouton (depuis ton navigateur/téléphone). Heroku lit `app.json`,
+ajoute le buildpack Rust + Postgres, compile et démarre l'app. À la fin,
+ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 
-### Avec la CLI Heroku (si tu as un ordinateur)
+### Option 2 — Depuis le tableau de bord Heroku (connexion GitHub)
 
-```bash
-heroku create moncap-gps --stack container   # app NEUVE en mode conteneur
-heroku addons:create heroku-postgresql:essential-0 -a moncap-gps
-git push heroku HEAD:main
-heroku open -a moncap-gps
-```
+1. **New ▸ Create new app**, donne-lui un nom.
+2. Onglet **Settings ▸ Buildpacks ▸ Add buildpack** → colle cette URL :
+   `https://github.com/emk/heroku-buildpack-rust.git` → **Save changes**.
+3. Onglet **Resources ▸ Add-ons** → cherche **Heroku Postgres** → ajoute le
+   plan `essential-0`.
+4. Onglet **Deploy ▸ Deployment method ▸ GitHub** → connecte le dépôt
+   `maxlestage/moncap` → **Deploy Branch** (`master`).
+5. Ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 
-### Dépannage : « No default language could be detected for this app »
+> ℹ️ Le buildpack Rust **doit** être ajouté à l'étape 2, sinon Heroku affiche
+> « No default language could be detected for this app » (il ne sait pas
+> compiler du Rust tout seul).
 
-Ce message signifie que Heroku tente un build **buildpack** au lieu du
-`Dockerfile` : ton app n'est **pas** sur le stack `container`. Corrige-le
-une fois, puis re-pousse :
-
-```bash
-heroku stack:set container -a TON-APP
-git push heroku HEAD:main
-```
-
-> ⚠️ La connexion « Deploy to GitHub » du dashboard Heroku et le bouton
-> « Deploy » n'utilisent **que des buildpacks** : ils ne construisent pas le
-> `Dockerfile`. Pour du Docker, utilise `git push heroku` (après
-> `stack:set container`) **ou** le workflow GitHub Actions ci-dessus, qui
-> règle le stack tout seul.
-
-### Tester l'image en local (Docker)
+### Tester l'image en local (Docker, optionnel)
 
 ```bash
 docker build -t moncap-gps .
@@ -164,9 +145,6 @@ docker run -p 3000:3000 \
   -e DATABASE_URL="postgres://user:pass@host:5432/moncap" \
   moncap-gps
 ```
-
-La table `positions` est créée automatiquement au démarrage ; aucune
-migration manuelle n'est requise.
 
 ## Front (Swift / SwiftUI)
 
