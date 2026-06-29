@@ -49,7 +49,9 @@ async fn main() {
     let db = Database::connect(&db_url)
         .await
         .expect("connexion Postgres impossible");
-    ensure_schema(&db).await.expect("création du schéma impossible");
+    ensure_schema(&db)
+        .await
+        .expect("création du schéma impossible");
 
     // Routes volontairement minimales.
     let app = Router::new()
@@ -82,7 +84,9 @@ async fn ensure_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
 }
 
 /// GET /positions — renvoie toutes les positions.
-async fn list_positions(State(db): State<DatabaseConnection>) -> Result<Json<Vec<position::Model>>, AppError> {
+async fn list_positions(
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<Vec<position::Model>>, AppError> {
     let items = position::Entity::find().all(&db).await?;
     Ok(Json(items))
 }
@@ -142,5 +146,38 @@ impl From<sea_orm::DbErr> for AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PARIS: Coord = Coord {
+        lat: 48.8566,
+        lon: 2.3522,
+    };
+    const LYON: Coord = Coord {
+        lat: 45.7640,
+        lon: 4.8357,
+    };
+
+    #[test]
+    fn distance_paris_lyon() {
+        // Distance réelle ≈ 392 km.
+        let d = haversine_km(&PARIS, &LYON);
+        assert!((d - 391.5).abs() < 1.0, "distance inattendue: {d}");
+    }
+
+    #[test]
+    fn distance_to_self_is_zero() {
+        assert!(haversine_km(&PARIS, &PARIS) < 1e-9);
+    }
+
+    #[test]
+    fn bearing_paris_lyon_is_southeast() {
+        // Lyon est au sud-est de Paris : cap entre 90° et 180°.
+        let b = bearing_deg(&PARIS, &LYON);
+        assert!((90.0..180.0).contains(&b), "cap inattendu: {b}");
     }
 }
