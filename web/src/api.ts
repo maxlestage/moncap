@@ -66,3 +66,13 @@ export const api = {
 
   gpxUrl: (): string => `${getApiBase()}/positions.gpx`,
 };
+
+/** URL WebSocket dérivée de l'URL d'API (même origine si vide). */
+export function wsUrl(): string {
+  const base = getApiBase();
+  if (!base) {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    return `${proto}://${location.host}/ws`;
+  }
+  return base.replace(/^http/, "ws") + "/ws";
+}
