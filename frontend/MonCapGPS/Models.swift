@@ -32,3 +32,20 @@ struct RouteResponse: Codable {
     let distance_km: Double
     let bearing_deg: Double
 }
+
+/// Requête d'itinéraire à plusieurs points.
+struct MultiRouteRequest: Codable {
+    let points: [Coord]
+}
+
+/// Réponse d'itinéraire : distance totale et détail par segment.
+struct MultiRouteResponse: Codable {
+    let total_km: Double
+    let legs_km: [Double]
+}
+
+/// Réponse « position la plus proche ».
+struct NearestResponse: Codable {
+    let position: Position
+    let distance_km: Double
+}

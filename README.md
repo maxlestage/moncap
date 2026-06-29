@@ -22,7 +22,9 @@ Les routes sont volontairement aussi simples que possible :
 | GET     | `/positions`  | Liste les positions enregistrées                  |
 | POST    | `/positions`  | Ajoute une position (`{lat, lon, label}`)         |
 | DELETE  | `/positions/:id` | Supprime une position (204, ou 404 si absente) |
+| GET     | `/positions/nearest?lat=&lon=` | Position enregistrée la plus proche d'un point |
 | POST    | `/route`      | Distance (km) + cap (°) entre deux points         |
+| POST    | `/route/multi` | Distance totale d'un itinéraire (`{points:[...]}`) + détail par segment |
 
 Les positions sont persistées dans **Postgres** via **SeaORM** (table
 `positions`, créée automatiquement au démarrage). Le calcul de trajet
@@ -64,6 +66,14 @@ curl -X POST localhost:3000/route \
   -H 'content-type: application/json' \
   -d '{"from":{"lat":48.8566,"lon":2.3522},"to":{"lat":45.7640,"lon":4.8357}}'
 # {"distance_km":391.5,"bearing_deg":150.5}
+
+curl -X POST localhost:3000/route/multi \
+  -H 'content-type: application/json' \
+  -d '{"points":[{"lat":48.8566,"lon":2.3522},{"lat":45.7640,"lon":4.8357},{"lat":43.2965,"lon":5.3698}]}'
+# {"total_km":669.1,"legs_km":[391.5,277.6]}
+
+curl "localhost:3000/positions/nearest?lat=47.32&lon=5.04"
+# {"position":{"id":2,...,"label":"Lyon"},"distance_km":173.7}
 ```
 
 ## Déploiement Heroku
@@ -100,8 +110,9 @@ migration manuelle n'est requise.
 ## Front (Swift / SwiftUI)
 
 App iOS qui affiche une carte (MapKit), la position de l'appareil
-(CoreLocation) et les positions enregistrées. Boutons pour enregistrer la
-position courante et calculer un trajet vers la première position.
+(CoreLocation), les positions enregistrées et l'itinéraire qui les relie
+(polyligne). Boutons pour enregistrer la position courante et calculer la
+distance totale de l'itinéraire ; liste avec suppression par glissement.
 
 ### Mise en place dans Xcode
 

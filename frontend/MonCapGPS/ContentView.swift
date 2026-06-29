@@ -18,6 +18,12 @@ struct ContentView: View {
                     ForEach(positions) { p in
                         Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
                     }
+                    if positions.count >= 2 {
+                        MapPolyline(coordinates: positions.map {
+                            .init(latitude: $0.lat, longitude: $0.lon)
+                        })
+                        .stroke(.blue, lineWidth: 3)
+                    }
                 }
                 .frame(maxHeight: .infinity)
 
@@ -49,10 +55,11 @@ struct ContentView: View {
             HStack {
                 Button("Enregistrer ma position", action: { Task { await saveCurrent() } })
                     .buttonStyle(.borderedProminent)
-                Button("Trajet vers la 1re", action: { Task { await routeToFirst() } })
+                    .disabled(location.coordinate == nil)
+                Button("Itinéraire complet", action: { Task { await fullRoute() } })
                     .buttonStyle(.bordered)
+                    .disabled(positions.count < 2)
             }
-            .disabled(location.coordinate == nil)
         }
         .padding()
     }
@@ -102,13 +109,11 @@ struct ContentView: View {
         }
     }
 
-    /// Calcule le trajet de la position courante vers la première enregistrée.
-    private func routeToFirst() async {
-        guard let c = location.coordinate, let dest = positions.first else { return }
-        let from = Coord(lat: c.latitude, lon: c.longitude)
-        let to = Coord(lat: dest.lat, lon: dest.lon)
-        if let r = try? await api.route(from: from, to: to) {
-            routeInfo = String(format: "%.1f km · cap %.0f°", r.distance_km, r.bearing_deg)
+    /// Calcule la distance totale de l'itinéraire reliant toutes les positions.
+    private func fullRoute() async {
+        let points = positions.map { Coord(lat: $0.lat, lon: $0.lon) }
+        if let r = try? await api.multiRoute(points) {
+            routeInfo = String(format: "Itinéraire : %.1f km (%d segments)", r.total_km, r.legs_km.count)
         }
     }
 }
