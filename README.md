@@ -52,6 +52,11 @@ La connexion est configurable via la variable d'environnement
 `DATABASE_URL` (valeur par défaut :
 `postgres://postgres:postgres@localhost:5432/moncap`).
 
+Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
+(défaut : `info,sqlx=warn`). Les calculs de distances (`/stats`,
+`/positions/nearest`, `/route/multi`) sont parallélisés avec **rayon**, et
+le binaire de production est compilé avec LTO + `strip` pour rester léger.
+
 ### Exemples
 
 ```bash
