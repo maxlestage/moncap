@@ -23,8 +23,9 @@ Les routes sont volontairement aussi simples que possible :
 | POST    | `/positions`  | Ajoute une position (`{lat, lon, label}`)         |
 | DELETE  | `/positions/:id` | Supprime une position (204, ou 404 si absente) |
 | GET     | `/positions/nearest?lat=&lon=` | Position enregistrée la plus proche d'un point |
+| GET     | `/positions.gpx` | Exporte les positions au format GPX (waypoints) |
 | POST    | `/route`      | Distance (km) + cap (°) entre deux points         |
-| POST    | `/route/multi` | Distance totale d'un itinéraire (`{points:[...]}`) + détail par segment |
+| POST    | `/route/multi` | Distance totale + durée estimée d'un itinéraire (`{points:[...], speed_kmh?}`) |
 
 Les positions sont persistées dans **Postgres** via **SeaORM** (table
 `positions`, créée automatiquement au démarrage). Le calcul de trajet
@@ -69,11 +70,14 @@ curl -X POST localhost:3000/route \
 
 curl -X POST localhost:3000/route/multi \
   -H 'content-type: application/json' \
-  -d '{"points":[{"lat":48.8566,"lon":2.3522},{"lat":45.7640,"lon":4.8357},{"lat":43.2965,"lon":5.3698}]}'
-# {"total_km":669.1,"legs_km":[391.5,277.6]}
+  -d '{"points":[{"lat":48.8566,"lon":2.3522},{"lat":45.7640,"lon":4.8357},{"lat":43.2965,"lon":5.3698}],"speed_kmh":100}'
+# {"total_km":669.1,"legs_km":[391.5,277.6],"duration_min":401.5}
 
 curl "localhost:3000/positions/nearest?lat=47.32&lon=5.04"
 # {"position":{"id":2,...,"label":"Lyon"},"distance_km":173.7}
+
+curl localhost:3000/positions.gpx
+# <?xml ...><gpx ...><wpt lat="48.8566" lon="2.3522"><name>Paris</name></wpt>...</gpx>
 ```
 
 ## Déploiement Heroku
@@ -111,8 +115,9 @@ migration manuelle n'est requise.
 
 App iOS qui affiche une carte (MapKit), la position de l'appareil
 (CoreLocation), les positions enregistrées et l'itinéraire qui les relie
-(polyligne). Boutons pour enregistrer la position courante et calculer la
-distance totale de l'itinéraire ; liste avec suppression par glissement.
+(polyligne). Boutons pour enregistrer la position courante, calculer la
+distance et la durée de l'itinéraire, exporter les positions en GPX
+(feuille de partage) ; liste avec suppression par glissement.
 
 ### Mise en place dans Xcode
 
@@ -132,3 +137,4 @@ Fichiers Swift :
 - `LocationManager.swift` — accès GPS via CoreLocation
 - `APIClient.swift` — appels HTTP au backend
 - `Models.swift` — modèles partagés avec le backend
+- `ShareSheet.swift` — feuille de partage pour l'export GPX

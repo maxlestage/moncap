@@ -59,4 +59,12 @@ struct APIClient {
         let (data, _) = try await URLSession.shared.data(from: comps.url!)
         return try JSONDecoder().decode(NearestResponse.self, from: data)
     }
+
+    /// GET /positions.gpx — télécharge l'export GPX dans un fichier temporaire.
+    func exportGPX() async throws -> URL {
+        let (data, _) = try await URLSession.shared.data(from: baseURL.appendingPathComponent("positions.gpx"))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("moncap.gpx")
+        try data.write(to: url)
+        return url
+    }
 }

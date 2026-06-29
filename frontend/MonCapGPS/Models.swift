@@ -38,10 +38,11 @@ struct MultiRouteRequest: Codable {
     let points: [Coord]
 }
 
-/// Réponse d'itinéraire : distance totale et détail par segment.
+/// Réponse d'itinéraire : distance totale, détail par segment, durée estimée.
 struct MultiRouteResponse: Codable {
     let total_km: Double
     let legs_km: [Double]
+    let duration_min: Double
 }
 
 /// Réponse « position la plus proche ».
