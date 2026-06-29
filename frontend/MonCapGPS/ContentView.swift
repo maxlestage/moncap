@@ -61,6 +61,7 @@ struct ContentView: View {
         .task {
             location.start()
             realtime.onPositionsChanged = { Task { await refresh() } }
+            nav.onReroute = { Task { await recomputeRoute() } }
             realtime.connect()
             await refresh()
         }
@@ -135,11 +136,14 @@ struct ContentView: View {
 
     private var navBanner: some View {
         HStack(spacing: 14) {
-            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+            Image(systemName: nav.rerouting
+                ? "arrow.triangle.2.circlepath"
+                : "arrow.triangle.turn.up.right.diamond.fill")
                 .font(.title)
                 .foregroundStyle(.white)
+                .symbolEffect(.pulse, isActive: nav.rerouting)
             VStack(alignment: .leading, spacing: 2) {
-                if nav.distanceToNext > 0 {
+                if !nav.rerouting, nav.distanceToNext > 0 {
                     Text("\(Int(nav.distanceToNext)) m").font(.title3.weight(.bold)).foregroundStyle(.white)
                 }
                 Text(nav.instruction)
@@ -150,7 +154,7 @@ struct ContentView: View {
             Spacer()
         }
         .padding(16)
-        .background(Color.green.gradient, in: RoundedRectangle(cornerRadius: 18))
+        .background((nav.rerouting ? Color.orange : Color.green).gradient, in: RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
     }
 
@@ -360,22 +364,33 @@ struct ContentView: View {
 
     /// Démarre la navigation depuis ma position vers une destination.
     private func startNavigation(to dest: Position) async {
-        guard let c = location.coordinate else { return }
-        let request = MKDirections.Request()
-        request.source = MKMapItem(placemark: MKPlacemark(coordinate: c))
-        request.destination = MKMapItem(
-            placemark: MKPlacemark(coordinate: .init(latitude: dest.lat, longitude: dest.lon)))
-        request.transportType = .automobile
-        request.requestsAlternateRoutes = false
-        guard let route = try? await MKDirections(request: request).calculate().routes.first else {
-            return
-        }
-        nav.start(route: route)
+        guard let from = location.coordinate else { return }
+        let to = CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon)
+        guard let route = await drivingRoute(from: from, to: to) else { return }
+        nav.start(route: route, destination: to)
         showPlaces = false
         // Vue « conduite » : la carte suit et tourne dans le sens de la marche.
         withAnimation {
             camera = .userLocation(followsHeading: true, fallback: .automatic)
         }
+    }
+
+    /// Recalcule l'itinéraire depuis la position actuelle (sortie de route).
+    private func recomputeRoute() async {
+        guard let from = location.coordinate, let to = nav.destination else { return }
+        if let route = await drivingRoute(from: from, to: to) {
+            nav.applyReroute(route: route)
+        }
+    }
+
+    /// Itinéraire voiture le plus simple entre deux points.
+    private func drivingRoute(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async -> MKRoute? {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
+        request.transportType = .automobile
+        request.requestsAlternateRoutes = false
+        return try? await MKDirections(request: request).calculate().routes.first
     }
 
     private func recenter() {
