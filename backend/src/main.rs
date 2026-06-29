@@ -45,13 +45,21 @@ struct RouteResponse {
 #[derive(Deserialize)]
 struct MultiRouteRequest {
     points: Vec<Coord>,
+    /// Vitesse moyenne pour estimer la durée (défaut : 50 km/h).
+    #[serde(default = "default_speed_kmh")]
+    speed_kmh: f64,
 }
 
-/// Résultat d'un itinéraire : distance totale et détail par segment.
+fn default_speed_kmh() -> f64 {
+    50.0
+}
+
+/// Résultat d'un itinéraire : distance totale, détail par segment, durée estimée.
 #[derive(Serialize)]
 struct MultiRouteResponse {
     total_km: f64,
     legs_km: Vec<f64>,
+    duration_min: f64,
 }
 
 /// Point de référence pour chercher la position la plus proche.
@@ -86,6 +94,7 @@ async fn main() {
         .route("/positions", get(list_positions).post(add_position))
         .route("/positions/:id", axum::routing::delete(delete_position))
         .route("/positions/nearest", get(nearest_position))
+        .route("/positions.gpx", get(export_gpx))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
         .layer(CorsLayer::permissive())
@@ -197,10 +206,59 @@ async fn compute_route(Json(req): Json<RouteRequest>) -> Json<RouteResponse> {
 /// POST /route/multi — distance totale d'un itinéraire à plusieurs points.
 async fn compute_multi_route(Json(req): Json<MultiRouteRequest>) -> Json<MultiRouteResponse> {
     let legs_km = route_legs_km(&req.points);
+    let total_km: f64 = legs_km.iter().sum();
     Json(MultiRouteResponse {
-        total_km: legs_km.iter().sum(),
+        duration_min: duration_min(total_km, req.speed_kmh),
+        total_km,
         legs_km,
     })
+}
+
+/// Durée en minutes pour parcourir `km` à `speed_kmh` (0 si vitesse invalide).
+fn duration_min(km: f64, speed_kmh: f64) -> f64 {
+    if speed_kmh > 0.0 {
+        km / speed_kmh * 60.0
+    } else {
+        0.0
+    }
+}
+
+/// GET /positions.gpx — exporte les positions au format GPX.
+async fn export_gpx(State(db): State<DatabaseConnection>) -> Result<Response, AppError> {
+    let items = position::Entity::find().all(&db).await?;
+    let body = to_gpx(&items);
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/gpx+xml")],
+        body,
+    )
+        .into_response())
+}
+
+/// Construit un document GPX (waypoints) à partir des positions.
+fn to_gpx(positions: &[position::Model]) -> String {
+    let mut gpx = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <gpx version=\"1.1\" creator=\"moncap-gps\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n",
+    );
+    for p in positions {
+        gpx.push_str(&format!(
+            "  <wpt lat=\"{}\" lon=\"{}\"><name>{}</name></wpt>\n",
+            p.lat,
+            p.lon,
+            xml_escape(&p.label),
+        ));
+    }
+    gpx.push_str("</gpx>\n");
+    gpx
+}
+
+/// Échappe les caractères XML spéciaux d'un texte.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 /// Distance de chaque segment d'un itinéraire (vide si moins de 2 points).
@@ -293,5 +351,27 @@ mod tests {
     #[test]
     fn multi_route_single_point_is_empty() {
         assert!(route_legs_km(&[PARIS]).is_empty());
+    }
+
+    #[test]
+    fn duration_scales_with_speed() {
+        // 100 km à 50 km/h = 2 h = 120 min.
+        assert!((duration_min(100.0, 50.0) - 120.0).abs() < 1e-9);
+        // Vitesse nulle => 0.
+        assert_eq!(duration_min(100.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn gpx_contains_escaped_waypoints() {
+        let positions = vec![position::Model {
+            id: 1,
+            lat: 48.0,
+            lon: 2.0,
+            label: "A & <B>".to_string(),
+        }];
+        let gpx = to_gpx(&positions);
+        assert!(gpx.contains("<wpt lat=\"48\" lon=\"2\">"));
+        assert!(gpx.contains("A &amp; &lt;B&gt;"));
+        assert!(gpx.trim_end().ends_with("</gpx>"));
     }
 }
