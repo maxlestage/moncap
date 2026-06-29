@@ -50,3 +50,19 @@ struct NearestResponse: Codable {
     let position: Position
     let distance_km: Double
 }
+
+/// Boîte englobante des positions.
+struct BBox: Codable {
+    let min_lat: Double
+    let min_lon: Double
+    let max_lat: Double
+    let max_lon: Double
+}
+
+/// Vue d'ensemble des positions.
+struct Stats: Codable {
+    let count: Int
+    let total_km: Double
+    let bbox: BBox?
+    let centroid: Coord?
+}

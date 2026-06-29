@@ -21,9 +21,12 @@ Les routes sont volontairement aussi simples que possible :
 | GET     | `/health`     | Vérifie que le serveur répond (`ok`)              |
 | GET     | `/positions`  | Liste les positions enregistrées                  |
 | POST    | `/positions`  | Ajoute une position (`{lat, lon, label}`)         |
+| PUT     | `/positions/:id` | Met à jour une position (404 si absente)       |
 | DELETE  | `/positions/:id` | Supprime une position (204, ou 404 si absente) |
 | GET     | `/positions/nearest?lat=&lon=` | Position enregistrée la plus proche d'un point |
+| POST    | `/positions/import` | Importe des positions depuis un corps GPX |
 | GET     | `/positions.gpx` | Exporte les positions au format GPX (waypoints) |
+| GET     | `/stats`      | Vue d'ensemble : nombre, longueur, boîte englobante, centroïde |
 | POST    | `/route`      | Distance (km) + cap (°) entre deux points         |
 | POST    | `/route/multi` | Distance totale + durée estimée d'un itinéraire (`{points:[...], speed_kmh?}`) |
 
@@ -78,6 +81,17 @@ curl "localhost:3000/positions/nearest?lat=47.32&lon=5.04"
 
 curl localhost:3000/positions.gpx
 # <?xml ...><gpx ...><wpt lat="48.8566" lon="2.3522"><name>Paris</name></wpt>...</gpx>
+
+curl -X PUT localhost:3000/positions/1 \
+  -H 'content-type: application/json' \
+  -d '{"lat":48.85,"lon":2.35,"label":"Paris Centre"}'
+
+curl -X POST localhost:3000/positions/import \
+  -H 'content-type: application/gpx+xml' \
+  --data-binary '<gpx><wpt lat="45.764" lon="4.8357"><name>Lyon</name></wpt></gpx>'
+
+curl localhost:3000/stats
+# {"count":2,"total_km":390.9,"bbox":{...},"centroid":{"lat":47.3,"lon":3.6}}
 ```
 
 ## Déploiement Heroku (conteneur)
