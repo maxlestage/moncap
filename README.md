@@ -10,6 +10,7 @@ moncap/
 ├── src/main.rs
 ├── Procfile        web: ./target/release/moncap-gps
 ├── app.json        buildpack Rust + addon Postgres (bouton « Deploy »)
+├── web/            Front web React + Bun (voir web/README.md)
 └── frontend/       App iOS SwiftUI
     └── MonCapGPS/
 ```
