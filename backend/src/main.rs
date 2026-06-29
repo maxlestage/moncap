@@ -1,7 +1,7 @@
 mod entity;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -41,6 +41,33 @@ struct RouteResponse {
     bearing_deg: f64,
 }
 
+/// Trajet à plusieurs points (itinéraire).
+#[derive(Deserialize)]
+struct MultiRouteRequest {
+    points: Vec<Coord>,
+}
+
+/// Résultat d'un itinéraire : distance totale et détail par segment.
+#[derive(Serialize)]
+struct MultiRouteResponse {
+    total_km: f64,
+    legs_km: Vec<f64>,
+}
+
+/// Point de référence pour chercher la position la plus proche.
+#[derive(Deserialize)]
+struct NearestQuery {
+    lat: f64,
+    lon: f64,
+}
+
+/// La position la plus proche et sa distance.
+#[derive(Serialize)]
+struct NearestResponse {
+    position: position::Model,
+    distance_km: f64,
+}
+
 #[tokio::main]
 async fn main() {
     // Connexion Postgres. Configurable via DATABASE_URL.
@@ -58,7 +85,9 @@ async fn main() {
         .route("/health", get(|| async { "ok" }))
         .route("/positions", get(list_positions).post(add_position))
         .route("/positions/:id", axum::routing::delete(delete_position))
+        .route("/positions/nearest", get(nearest_position))
         .route("/route", post(compute_route))
+        .route("/route/multi", post(compute_multi_route))
         .layer(CorsLayer::permissive())
         .with_state(db);
 
@@ -121,12 +150,65 @@ async fn delete_position(
     }
 }
 
+/// GET /positions/nearest?lat=&lon= — la position enregistrée la plus proche.
+async fn nearest_position(
+    State(db): State<DatabaseConnection>,
+    Query(q): Query<NearestQuery>,
+) -> Result<Json<NearestResponse>, AppError> {
+    let from = Coord {
+        lat: q.lat,
+        lon: q.lon,
+    };
+    let nearest = position::Entity::find()
+        .all(&db)
+        .await?
+        .into_iter()
+        .map(|p| {
+            let d = haversine_km(
+                &from,
+                &Coord {
+                    lat: p.lat,
+                    lon: p.lon,
+                },
+            );
+            (p, d)
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1));
+
+    match nearest {
+        Some((position, distance_km)) => Ok(Json(NearestResponse {
+            position,
+            distance_km,
+        })),
+        None => Err(AppError(sea_orm::DbErr::Custom(
+            "aucune position enregistrée".to_string(),
+        ))),
+    }
+}
+
 /// POST /route — calcule distance et cap entre deux points.
 async fn compute_route(Json(req): Json<RouteRequest>) -> Json<RouteResponse> {
     Json(RouteResponse {
         distance_km: haversine_km(&req.from, &req.to),
         bearing_deg: bearing_deg(&req.from, &req.to),
     })
+}
+
+/// POST /route/multi — distance totale d'un itinéraire à plusieurs points.
+async fn compute_multi_route(Json(req): Json<MultiRouteRequest>) -> Json<MultiRouteResponse> {
+    let legs_km = route_legs_km(&req.points);
+    Json(MultiRouteResponse {
+        total_km: legs_km.iter().sum(),
+        legs_km,
+    })
+}
+
+/// Distance de chaque segment d'un itinéraire (vide si moins de 2 points).
+fn route_legs_km(points: &[Coord]) -> Vec<f64> {
+    points
+        .windows(2)
+        .map(|w| haversine_km(&w[0], &w[1]))
+        .collect()
 }
 
 /// Distance en km entre deux coordonnées (formule de Haversine).
@@ -193,5 +275,23 @@ mod tests {
         // Lyon est au sud-est de Paris : cap entre 90° et 180°.
         let b = bearing_deg(&PARIS, &LYON);
         assert!((90.0..180.0).contains(&b), "cap inattendu: {b}");
+    }
+
+    #[test]
+    fn multi_route_sums_legs() {
+        const MARSEILLE: Coord = Coord {
+            lat: 43.2965,
+            lon: 5.3698,
+        };
+        let legs = route_legs_km(&[PARIS, LYON, MARSEILLE]);
+        assert_eq!(legs.len(), 2);
+        let total: f64 = legs.iter().sum();
+        // Paris→Lyon (~391) + Lyon→Marseille (~278) ≈ 669 km.
+        assert!((total - 669.0).abs() < 5.0, "total inattendu: {total}");
+    }
+
+    #[test]
+    fn multi_route_single_point_is_empty() {
+        assert!(route_legs_km(&[PARIS]).is_empty());
     }
 }
