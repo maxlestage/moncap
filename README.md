@@ -167,8 +167,9 @@ docker run -p 3000:3000 \
 App iOS qui affiche une carte (MapKit), la position de l'appareil
 (CoreLocation), les positions enregistrées et l'itinéraire qui les relie
 (polyligne). Fonctions : enregistrer sa position, **itinéraire routier le plus simple
-tracé en vert** (MapKit `MKDirections`, distance + durée), export GPX
-(feuille de partage), liste avec suppression.
+tracé en vert** (MapKit `MKDirections`, distance + durée), **navigation
+turn-by-turn avec annonces vocales** (depuis ta position vers la
+destination, carte qui suit le cap), export GPX, liste avec suppression.
 
 **Temps réel (WebSocket)** façon Waze :
 
@@ -202,7 +203,9 @@ Fichiers Swift :
 
 - `MonCapGPSApp.swift` — point d'entrée de l'app
 - `ContentView.swift` — carte + contrôles + temps réel
-- `LocationManager.swift` — accès GPS via CoreLocation
+- `LocationManager.swift` — accès GPS + vitesse via CoreLocation
+- `RouteService.swift` — itinéraire routier MapKit (`MKDirections`)
+- `NavigationManager.swift` — navigation turn-by-turn + voix (`AVSpeechSynthesizer`)
 - `RealtimeClient.swift` — connexion WebSocket (positions live, voitures, alertes)
 - `APIClient.swift` — appels HTTP au backend
 - `Models.swift` — modèles partagés avec le backend
