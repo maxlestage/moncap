@@ -7,9 +7,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use rayon::prelude::*;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
-use tower_http::cors::CorsLayer;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use entity::position;
 
@@ -97,6 +98,14 @@ struct Stats {
 
 #[tokio::main]
 async fn main() {
+    // Logs structurés (niveau via RUST_LOG, défaut: info).
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,sqlx=warn".into()),
+        )
+        .init();
+
     // Connexion Postgres. Configurable via DATABASE_URL.
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/moncap".to_string());
@@ -121,6 +130,7 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
+        .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(db);
 
@@ -128,7 +138,7 @@ async fn main() {
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    println!("moncap-gps écoute sur http://{addr}");
+    tracing::info!("moncap-gps écoute sur http://{addr}");
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -226,46 +236,62 @@ async fn import_gpx(
 /// GET /stats — vue d'ensemble des positions enregistrées.
 async fn stats(State(db): State<DatabaseConnection>) -> Result<Json<Stats>, AppError> {
     let items = position::Entity::find().all(&db).await?;
+
+    // Réductions parallèles (rayon) hors du runtime async.
+    let stats = tokio::task::spawn_blocking(move || compute_stats(&items))
+        .await
+        .expect("tâche de calcul interrompue");
+
+    Ok(Json(stats))
+}
+
+/// Calcule les statistiques d'un ensemble de positions (parallélisé).
+fn compute_stats(items: &[position::Model]) -> Stats {
     let coords: Vec<Coord> = items
-        .iter()
+        .par_iter()
         .map(|p| Coord {
             lat: p.lat,
             lon: p.lon,
         })
         .collect();
 
-    let bbox = coords.first().map(|first| {
-        let mut b = BBox {
-            min_lat: first.lat,
-            min_lon: first.lon,
-            max_lat: first.lat,
-            max_lon: first.lon,
-        };
-        for c in &coords {
-            b.min_lat = b.min_lat.min(c.lat);
-            b.max_lat = b.max_lat.max(c.lat);
-            b.min_lon = b.min_lon.min(c.lon);
-            b.max_lon = b.max_lon.max(c.lon);
-        }
-        b
-    });
+    // Boîte englobante : réduction parallèle min/max.
+    let bbox = coords
+        .par_iter()
+        .map(|c| BBox {
+            min_lat: c.lat,
+            min_lon: c.lon,
+            max_lat: c.lat,
+            max_lon: c.lon,
+        })
+        .reduce_with(|a, b| BBox {
+            min_lat: a.min_lat.min(b.min_lat),
+            min_lon: a.min_lon.min(b.min_lon),
+            max_lat: a.max_lat.max(b.max_lat),
+            max_lon: a.max_lon.max(b.max_lon),
+        });
 
+    // Centroïde : sommes parallèles.
     let centroid = if coords.is_empty() {
         None
     } else {
         let n = coords.len() as f64;
+        let (slat, slon) = coords
+            .par_iter()
+            .map(|c| (c.lat, c.lon))
+            .reduce(|| (0.0, 0.0), |a, b| (a.0 + b.0, a.1 + b.1));
         Some(Coord {
-            lat: coords.iter().map(|c| c.lat).sum::<f64>() / n,
-            lon: coords.iter().map(|c| c.lon).sum::<f64>() / n,
+            lat: slat / n,
+            lon: slon / n,
         })
     };
 
-    Ok(Json(Stats {
+    Stats {
         count: coords.len(),
         total_km: route_legs_km(&coords).iter().sum(),
         bbox,
         centroid,
-    }))
+    }
 }
 
 /// GET /positions/nearest?lat=&lon= — la position enregistrée la plus proche.
@@ -277,30 +303,36 @@ async fn nearest_position(
         lat: q.lat,
         lon: q.lon,
     };
-    let nearest = position::Entity::find()
-        .all(&db)
-        .await?
-        .into_iter()
-        .map(|p| {
-            let d = haversine_km(
-                &from,
-                &Coord {
-                    lat: p.lat,
-                    lon: p.lon,
-                },
-            );
-            (p, d)
-        })
-        .min_by(|a, b| a.1.total_cmp(&b.1));
+    let items = position::Entity::find().all(&db).await?;
+
+    // Calcul parallèle (rayon) sur le pool dédié via spawn_blocking, pour ne
+    // pas bloquer le runtime async. Bénéfice réel quand `items` est grand.
+    let nearest = tokio::task::spawn_blocking(move || {
+        items
+            .into_par_iter()
+            .map(|p| {
+                let d = haversine_km(
+                    &from,
+                    &Coord {
+                        lat: p.lat,
+                        lon: p.lon,
+                    },
+                );
+                (p, d)
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+    })
+    .await
+    .expect("tâche de calcul interrompue");
 
     match nearest {
         Some((position, distance_km)) => Ok(Json(NearestResponse {
             position,
             distance_km,
         })),
-        None => Err(AppError(sea_orm::DbErr::Custom(
+        None => Err(AppError::NotFound(
             "aucune position enregistrée".to_string(),
-        ))),
+        )),
     }
 }
 
@@ -415,9 +447,10 @@ fn between(s: &str, open: &str, close: &str) -> Option<String> {
 }
 
 /// Distance de chaque segment d'un itinéraire (vide si moins de 2 points).
+/// Parallélisé : `par_windows` conserve l'ordre des segments.
 fn route_legs_km(points: &[Coord]) -> Vec<f64> {
     points
-        .windows(2)
+        .par_windows(2)
         .map(|w| haversine_km(&w[0], &w[1]))
         .collect()
 }
@@ -441,18 +474,25 @@ fn bearing_deg(a: &Coord, b: &Coord) -> f64 {
     (y.atan2(x).to_degrees() + 360.0) % 360.0
 }
 
-/// Erreur convertie en réponse HTTP 500.
-struct AppError(sea_orm::DbErr);
-
-impl From<sea_orm::DbErr> for AppError {
-    fn from(err: sea_orm::DbErr) -> Self {
-        AppError(err)
-    }
+/// Erreurs de l'API converties en réponses HTTP.
+#[derive(thiserror::Error, Debug)]
+enum AppError {
+    #[error("erreur base de données: {0}")]
+    Database(#[from] sea_orm::DbErr),
+    #[error("{0}")]
+    NotFound(String),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()).into_response()
+        match self {
+            // Les détails internes ne sont pas exposés au client.
+            AppError::Database(err) => {
+                tracing::error!("erreur base de données: {err}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "erreur interne").into_response()
+            }
+            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg).into_response(),
+        }
     }
 }
 
