@@ -166,8 +166,9 @@ docker run -p 3000:3000 \
 
 App iOS qui affiche une carte (MapKit), la position de l'appareil
 (CoreLocation), les positions enregistrées et l'itinéraire qui les relie
-(polyligne). Fonctions : enregistrer sa position, itinéraire (distance +
-durée), export GPX (feuille de partage), liste avec suppression.
+(polyligne). Fonctions : enregistrer sa position, **itinéraire routier le plus simple
+tracé en vert** (MapKit `MKDirections`, distance + durée), export GPX
+(feuille de partage), liste avec suppression.
 
 **Temps réel (WebSocket)** façon Waze :
 
