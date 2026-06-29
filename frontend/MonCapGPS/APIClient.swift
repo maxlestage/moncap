@@ -2,8 +2,17 @@ import Foundation
 
 /// Petit client HTTP vers le backend Axum.
 struct APIClient {
-    /// Adresse du backend. En simulateur iOS, localhost pointe vers le Mac.
-    var baseURL = URL(string: "http://localhost:3000")!
+    /// Adresse du backend. Par défaut l'app déployée sur Heroku ;
+    /// pour un backend local, mets `http://localhost:3000`.
+    var baseURL = URL(string: "https://moncap-c41a5aaf07e8.herokuapp.com")!
+
+    /// URL WebSocket dérivée de `baseURL` (http→ws, https→wss).
+    var wsURL: URL {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("ws"),
+                                  resolvingAgainstBaseURL: false)!
+        comps.scheme = baseURL.scheme == "https" ? "wss" : "ws"
+        return comps.url!
+    }
 
     /// GET /positions
     func positions() async throws -> [Position] {
