@@ -23,16 +23,27 @@ Les routes sont volontairement aussi simples que possible :
 | POST    | `/positions`  | Ajoute une position (`{lat, lon, label}`)         |
 | POST    | `/route`      | Distance (km) + cap (°) entre deux points         |
 
-Les positions sont stockées en mémoire. Le calcul de trajet utilise la
-formule de Haversine pour la distance et le cap initial.
+Les positions sont persistées dans **Postgres** via **SeaORM** (table
+`positions`, créée automatiquement au démarrage). Le calcul de trajet
+utilise la formule de Haversine pour la distance et le cap initial.
 
 ### Lancer le backend
 
 ```bash
+# 1. Démarrer Postgres (via Docker)
+docker compose up -d db
+
+# 2. Lancer l'API
 cd backend
+cp .env.example .env            # ou exporter DATABASE_URL
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/moncap"
 cargo run
 # moncap-gps écoute sur http://0.0.0.0:3000
 ```
+
+La connexion est configurable via la variable d'environnement
+`DATABASE_URL` (valeur par défaut :
+`postgres://postgres:postgres@localhost:5432/moncap`).
 
 ### Exemples
 
@@ -42,6 +53,7 @@ curl localhost:3000/health
 curl -X POST localhost:3000/positions \
   -H 'content-type: application/json' \
   -d '{"lat":48.8566,"lon":2.3522,"label":"Paris"}'
+# {"id":1,"lat":48.8566,"lon":2.3522,"label":"Paris"}
 
 curl localhost:3000/positions
 

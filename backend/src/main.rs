@@ -1,16 +1,21 @@
-use std::sync::{Arc, Mutex};
+mod entity;
 
 use axum::{
     extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
+use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 
-/// Une position GPS partagée par les clients.
-#[derive(Clone, Serialize, Deserialize)]
-struct Position {
+use entity::position;
+
+/// Données d'une nouvelle position envoyée par le client.
+#[derive(Deserialize)]
+struct NewPosition {
     lat: f64,
     lon: f64,
     label: String,
@@ -36,12 +41,15 @@ struct RouteResponse {
     bearing_deg: f64,
 }
 
-/// État partagé : la liste des positions enregistrées.
-type Db = Arc<Mutex<Vec<Position>>>;
-
 #[tokio::main]
 async fn main() {
-    let db: Db = Arc::new(Mutex::new(Vec::new()));
+    // Connexion Postgres. Configurable via DATABASE_URL.
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/moncap".to_string());
+    let db = Database::connect(&db_url)
+        .await
+        .expect("connexion Postgres impossible");
+    ensure_schema(&db).await.expect("création du schéma impossible");
 
     // Routes volontairement minimales.
     let app = Router::new()
@@ -58,15 +66,40 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+/// Crée la table `positions` si elle n'existe pas.
+async fn ensure_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    db.execute_unprepared(
+        "CREATE TABLE IF NOT EXISTS positions (\
+            id SERIAL PRIMARY KEY,\
+            lat DOUBLE PRECISION NOT NULL,\
+            lon DOUBLE PRECISION NOT NULL,\
+            label TEXT NOT NULL\
+        )",
+    )
+    .await?;
+    Ok(())
+}
+
 /// GET /positions — renvoie toutes les positions.
-async fn list_positions(State(db): State<Db>) -> Json<Vec<Position>> {
-    Json(db.lock().unwrap().clone())
+async fn list_positions(State(db): State<DatabaseConnection>) -> Result<Json<Vec<position::Model>>, AppError> {
+    let items = position::Entity::find().all(&db).await?;
+    Ok(Json(items))
 }
 
 /// POST /positions — ajoute une position.
-async fn add_position(State(db): State<Db>, Json(pos): Json<Position>) -> Json<Position> {
-    db.lock().unwrap().push(pos.clone());
-    Json(pos)
+async fn add_position(
+    State(db): State<DatabaseConnection>,
+    Json(input): Json<NewPosition>,
+) -> Result<Json<position::Model>, AppError> {
+    let saved = position::ActiveModel {
+        lat: Set(input.lat),
+        lon: Set(input.lon),
+        label: Set(input.label),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await?;
+    Ok(Json(saved))
 }
 
 /// POST /route — calcule distance et cap entre deux points.
@@ -94,4 +127,19 @@ fn bearing_deg(a: &Coord, b: &Coord) -> f64 {
     let y = dlon.sin() * lat2.cos();
     let x = lat1.cos() * lat2.sin() - lat1.sin() * lat2.cos() * dlon.cos();
     (y.atan2(x).to_degrees() + 360.0) % 360.0
+}
+
+/// Erreur convertie en réponse HTTP 500.
+struct AppError(sea_orm::DbErr);
+
+impl From<sea_orm::DbErr> for AppError {
+    fn from(err: sea_orm::DbErr) -> Self {
+        AppError(err)
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.0.to_string()).into_response()
+    }
 }
