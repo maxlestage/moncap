@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var routeInfo: String?
     @State private var camera: MapCameraPosition = .automatic
     @State private var showList = false
+    @State private var gpxFile: IdentifiableURL?
 
     var body: some View {
         NavigationStack {
@@ -31,12 +32,19 @@ struct ContentView: View {
             }
             .navigationTitle("MonCap GPS")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Exporter GPX", systemImage: "square.and.arrow.up") {
+                        Task { await exportGPX() }
+                    }
+                    .disabled(positions.isEmpty)
                     Button("Liste", systemImage: "list.bullet") { showList = true }
                 }
             }
             .sheet(isPresented: $showList) {
                 positionList
+            }
+            .sheet(item: $gpxFile) { file in
+                ShareSheet(items: [file.url])
             }
             .task {
                 location.start()
@@ -109,11 +117,18 @@ struct ContentView: View {
         }
     }
 
-    /// Calcule la distance totale de l'itinéraire reliant toutes les positions.
+    /// Calcule la distance totale et la durée de l'itinéraire.
     private func fullRoute() async {
         let points = positions.map { Coord(lat: $0.lat, lon: $0.lon) }
         if let r = try? await api.multiRoute(points) {
-            routeInfo = String(format: "Itinéraire : %.1f km (%d segments)", r.total_km, r.legs_km.count)
+            routeInfo = String(format: "Itinéraire : %.1f km · %.0f min", r.total_km, r.duration_min)
+        }
+    }
+
+    /// Télécharge l'export GPX et présente la feuille de partage.
+    private func exportGPX() async {
+        if let url = try? await api.exportGPX() {
+            gpxFile = IdentifiableURL(url: url)
         }
     }
 }
