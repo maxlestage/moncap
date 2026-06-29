@@ -10,7 +10,11 @@ use axum::{
 use rayon::prelude::*;
 use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, Set};
 use serde::{Deserialize, Serialize};
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 
 use entity::position;
 
@@ -106,15 +110,29 @@ async fn main() {
         )
         .init();
 
-    // Connexion Postgres. Configurable via DATABASE_URL.
-    let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/moncap".to_string());
-    let db = Database::connect(&db_url)
-        .await
-        .expect("connexion Postgres impossible");
+    // Connexion Postgres. DATABASE_URL est fourni par l'addon Heroku Postgres.
+    let db_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => normalize_pg_url(url),
+        Err(_) => {
+            tracing::warn!(
+                "DATABASE_URL non défini. Sur Heroku, ajoute l'addon Heroku Postgres \
+                 (Resources ▸ Add-ons ▸ Heroku Postgres). Tentative sur localhost…"
+            );
+            "postgres://postgres:postgres@localhost:5432/moncap".to_string()
+        }
+    };
+    let db = Database::connect(&db_url).await.expect(
+        "connexion Postgres impossible — vérifie que l'addon Heroku Postgres est ajouté \
+         (DATABASE_URL doit être défini)",
+    );
     ensure_schema(&db)
         .await
         .expect("création du schéma impossible");
+
+    // Front web statique (React + Bun, voir web/). Servi en repli : toute
+    // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
+    // avec index.html en repli (SPA).
+    let web = ServeDir::new("web/dist").not_found_service(ServeFile::new("web/dist/index.html"));
 
     // Routes volontairement minimales.
     let app = Router::new()
@@ -130,6 +148,7 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
+        .fallback_service(web)
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::permissive())
         .with_state(db);
@@ -154,6 +173,18 @@ async fn ensure_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
     )
     .await?;
     Ok(())
+}
+
+/// Ajoute `sslmode=require` pour les bases distantes (ex. Heroku Postgres
+/// impose TLS), sauf si déjà précisé ou si la base est locale.
+fn normalize_pg_url(url: String) -> String {
+    let local = url.contains("@localhost") || url.contains("@127.0.0.1");
+    if local || url.contains("sslmode=") {
+        url
+    } else {
+        let sep = if url.contains('?') { '&' } else { '?' };
+        format!("{url}{sep}sslmode=require")
+    }
 }
 
 /// GET /positions — renvoie toutes les positions.
@@ -589,6 +620,29 @@ mod tests {
         assert_eq!(parsed[0].label, "Paris & <Co>");
         assert!((parsed[0].lat - 48.8566).abs() < 1e-9);
         assert!((parsed[1].lon - 4.8357).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pg_url_adds_sslmode_for_remote_only() {
+        // Distante sans sslmode → ajout.
+        assert_eq!(
+            normalize_pg_url("postgres://u:p@ec2.amazonaws.com:5432/d".into()),
+            "postgres://u:p@ec2.amazonaws.com:5432/d?sslmode=require"
+        );
+        // Avec query existante → on ajoute avec &.
+        assert!(
+            normalize_pg_url("postgres://u:p@host/d?x=1".into()).ends_with("?x=1&sslmode=require")
+        );
+        // Locale → inchangée.
+        assert_eq!(
+            normalize_pg_url("postgres://postgres@localhost:5432/moncap".into()),
+            "postgres://postgres@localhost:5432/moncap"
+        );
+        // sslmode déjà présent → inchangée.
+        assert_eq!(
+            normalize_pg_url("postgres://u@host/d?sslmode=disable".into()),
+            "postgres://u@host/d?sslmode=disable"
+        );
     }
 
     #[test]

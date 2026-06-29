@@ -8,9 +8,12 @@ import type {
 
 const STORAGE_KEY = "moncap.apiBase";
 
-/** URL du backend, persistée dans le navigateur (modifiable dans l'UI). */
+/**
+ * URL du backend, persistée dans le navigateur (modifiable dans l'UI).
+ * Vide par défaut = même origine (cas où l'API sert aussi le front, ex. Heroku).
+ */
 export function getApiBase(): string {
-  return localStorage.getItem(STORAGE_KEY) ?? "http://localhost:3000";
+  return localStorage.getItem(STORAGE_KEY) ?? "";
 }
 
 export function setApiBase(url: string): void {
