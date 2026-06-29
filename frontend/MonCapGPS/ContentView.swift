@@ -26,6 +26,7 @@ struct ContentView: View {
     @State private var gpxFile: IdentifiableURL?
     @State private var sharing = false
     @State private var driverName = "Moi"
+    @State private var routeCoords: [CLLocationCoordinate2D] = []
 
     private var liveCars: [LiveUser] { Array(realtime.liveUsers.values) }
 
@@ -73,9 +74,14 @@ struct ContentView: View {
             ForEach(positions) { p in
                 Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
             }
-            if positions.count >= 2 {
+            // Itinéraire routier le plus simple, en vert.
+            if !routeCoords.isEmpty {
+                MapPolyline(coordinates: routeCoords)
+                    .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+            } else if positions.count >= 2 {
+                // Repli : tracé direct si le routage n'a rien renvoyé.
                 MapPolyline(coordinates: positions.map { .init(latitude: $0.lat, longitude: $0.lon) })
-                    .stroke(.blue, lineWidth: 6)
+                    .stroke(.green.opacity(0.5), style: StrokeStyle(lineWidth: 5, dash: [8, 6]))
             }
             ForEach(liveCars) { u in
                 Annotation(u.label, coordinate: .init(latitude: u.lat, longitude: u.lon)) {
@@ -184,9 +190,13 @@ struct ContentView: View {
                     }
                     .disabled(location.coordinate == nil)
                     Button {
-                        Task { await fullRoute(); showPlaces = false }
+                        Task {
+                            await updateRoute()
+                            fitRoute()
+                            showPlaces = false
+                        }
                     } label: {
-                        Label("Calculer l'itinéraire", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        Label("Itinéraire le plus simple", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                     }
                     .disabled(positions.count < 2)
                 }
@@ -262,6 +272,21 @@ struct ContentView: View {
     private func refresh() async {
         positions = (try? await api.positions()) ?? []
         stats = try? await api.stats()
+        await updateRoute()
+    }
+
+    /// Calcule l'itinéraire routier le plus simple (vert) et son résumé.
+    private func updateRoute() async {
+        let pts = positions.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        guard pts.count >= 2 else {
+            routeCoords = []
+            routeInfo = nil
+            return
+        }
+        if let r = await RouteService.roadRoute(through: pts) {
+            routeCoords = r.coordinates
+            routeInfo = String(format: "%.1f km · %.0f min", r.distanceKm, r.minutes)
+        }
     }
 
     private func recenter() {
@@ -294,10 +319,22 @@ struct ContentView: View {
         Task { for id in ids { try? await api.delete(id: id) } }
     }
 
-    private func fullRoute() async {
-        let points = positions.map { Coord(lat: $0.lat, lon: $0.lon) }
-        if let r = try? await api.multiRoute(points) {
-            routeInfo = String(format: "%.1f km · %.0f min", r.total_km, r.duration_min)
+    /// Cadre la carte sur l'itinéraire calculé.
+    private func fitRoute() {
+        let pts = routeCoords.isEmpty
+            ? positions.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            : routeCoords
+        guard pts.count >= 2 else { return }
+        let lats = pts.map(\.latitude)
+        let lons = pts.map(\.longitude)
+        let center = CLLocationCoordinate2D(
+            latitude: (lats.min()! + lats.max()!) / 2,
+            longitude: (lons.min()! + lons.max()!) / 2)
+        let span = MKCoordinateSpan(
+            latitudeDelta: (lats.max()! - lats.min()!) * 1.4 + 0.01,
+            longitudeDelta: (lons.max()! - lons.min()!) * 1.4 + 0.01)
+        withAnimation {
+            camera = .region(MKCoordinateRegion(center: center, span: span))
         }
     }
 
