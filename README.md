@@ -21,6 +21,7 @@ Les routes sont volontairement aussi simples que possible :
 | GET     | `/health`     | Vérifie que le serveur répond (`ok`)              |
 | GET     | `/positions`  | Liste les positions enregistrées                  |
 | POST    | `/positions`  | Ajoute une position (`{lat, lon, label}`)         |
+| DELETE  | `/positions/:id` | Supprime une position (204, ou 404 si absente) |
 | POST    | `/route`      | Distance (km) + cap (°) entre deux points         |
 
 Les positions sont persistées dans **Postgres** via **SeaORM** (table
@@ -56,6 +57,8 @@ curl -X POST localhost:3000/positions \
 # {"id":1,"lat":48.8566,"lon":2.3522,"label":"Paris"}
 
 curl localhost:3000/positions
+
+curl -X DELETE localhost:3000/positions/1   # -> 204 (ou 404 si absente)
 
 curl -X POST localhost:3000/route \
   -H 'content-type: application/json' \
