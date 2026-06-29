@@ -6,6 +6,7 @@ struct ContentView: View {
     private let api = APIClient()
 
     @State private var positions: [Position] = []
+    @State private var stats: Stats?
     @State private var routeInfo: String?
     @State private var camera: MapCameraPosition = .automatic
     @State private var showList = false
@@ -76,6 +77,12 @@ struct ContentView: View {
     private var positionList: some View {
         NavigationStack {
             List {
+                if let s = stats {
+                    Section("Statistiques") {
+                        Text("\(s.count) positions · itinéraire \(String(format: "%.1f", s.total_km)) km")
+                            .font(.subheadline)
+                    }
+                }
                 ForEach(positions) { p in
                     VStack(alignment: .leading) {
                         Text(p.label).font(.headline)
@@ -95,9 +102,10 @@ struct ContentView: View {
         }
     }
 
-    /// Recharge la liste des positions depuis le backend.
+    /// Recharge la liste des positions et les statistiques depuis le backend.
     private func refresh() async {
         positions = (try? await api.positions()) ?? []
+        stats = try? await api.stats()
     }
 
     /// Enregistre la position courante sur le backend.
