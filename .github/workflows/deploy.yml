@@ -7,6 +7,10 @@ name: Deploy
 #   HEROKU_APP_NAME  — nom de l'app Heroku (ex. moncap-gps)
 #   HEROKU_EMAIL     — e-mail de ton compte Heroku
 # Sans ces secrets, le job ne fait rien (et reste vert).
+#
+# Le workflow force lui-même le stack « container » : c'est ce qui évite
+# l'erreur "No default language could be detected for this app" (qui survient
+# quand Heroku tente un build buildpack au lieu du Dockerfile).
 
 on:
   push:
@@ -31,9 +35,17 @@ jobs:
 
       - name: Déploiement Heroku (conteneur)
         if: steps.guard.outputs.configured == 'true'
-        uses: akhileshns/heroku-deploy@v3.13.15
-        with:
-          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-          heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
-          heroku_email: ${{ secrets.HEROKU_EMAIL }}
-          usedocker: true
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          APP: ${{ secrets.HEROKU_APP_NAME }}
+        run: |
+          set -euo pipefail
+          # Heroku CLI (préinstallée sur ubuntu-latest ; installée sinon).
+          which heroku >/dev/null 2>&1 || curl -fsSL https://cli-assets.heroku.com/install.sh | sh
+          # Force le stack conteneur : c'est ce qui corrige l'erreur de buildpack.
+          heroku stack:set container -a "$APP"
+          # Build + push + release de l'image Docker (Dockerfile à la racine).
+          echo "$HEROKU_API_KEY" | docker login --username=_ --password-stdin registry.heroku.com
+          heroku container:push web -a "$APP"
+          heroku container:release web -a "$APP"
+          echo "Déployé. Vérifie https://$APP.herokuapp.com/health"

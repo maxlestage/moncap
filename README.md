@@ -124,19 +124,37 @@ Fichiers de déploiement :
    - `HEROKU_APP_NAME` — le nom de l'app (ex. `moncap-gps`)
    - `HEROKU_EMAIL` — l'e-mail de ton compte
 3. Chaque push sur `master` déclenche le workflow **Deploy**
-   (`.github/workflows/deploy.yml`) qui construit le `Dockerfile` et le
-   pousse sur Heroku. (Sans ces secrets, le job ne fait rien et reste vert.)
+   (`.github/workflows/deploy.yml`) qui **force le stack `container`**,
+   construit le `Dockerfile` et le pousse sur Heroku. (Sans ces secrets, le
+   job ne fait rien et reste vert.)
 
 Vérification : ouvre `https://<app>.herokuapp.com/health` → doit afficher `ok`.
 
 ### Avec la CLI Heroku (si tu as un ordinateur)
 
 ```bash
-heroku create moncap-gps --stack container
+heroku create moncap-gps --stack container   # app NEUVE en mode conteneur
 heroku addons:create heroku-postgresql:essential-0 -a moncap-gps
 git push heroku HEAD:main
 heroku open -a moncap-gps
 ```
+
+### Dépannage : « No default language could be detected for this app »
+
+Ce message signifie que Heroku tente un build **buildpack** au lieu du
+`Dockerfile` : ton app n'est **pas** sur le stack `container`. Corrige-le
+une fois, puis re-pousse :
+
+```bash
+heroku stack:set container -a TON-APP
+git push heroku HEAD:main
+```
+
+> ⚠️ La connexion « Deploy to GitHub » du dashboard Heroku et le bouton
+> « Deploy » n'utilisent **que des buildpacks** : ils ne construisent pas le
+> `Dockerfile`. Pour du Docker, utilise `git push heroku` (après
+> `stack:set container`) **ou** le workflow GitHub Actions ci-dessus, qui
+> règle le stack tout seul.
 
 ### Tester l'image en local (Docker)
 
