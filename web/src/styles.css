@@ -1,0 +1,151 @@
+:root {
+  --blue: #2563eb;
+  --bg: #f5f6f8;
+  --border: #e2e5ea;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: #1a1d21;
+}
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+.apibar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.apibar input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.map {
+  height: 380px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.controls {
+  margin-top: 16px;
+}
+
+.hint {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin: 4px 0 12px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.row input[type="number"] {
+  width: 80px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+button,
+.btn {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-block;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.danger {
+  background: #dc2626;
+}
+
+.info {
+  font-weight: 600;
+}
+
+.stats {
+  color: #374151;
+}
+
+.error {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.list .actions {
+  display: flex;
+  gap: 6px;
+}
+
+.list .actions button {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.list .empty {
+  justify-content: center;
+  color: #6b7280;
+}
