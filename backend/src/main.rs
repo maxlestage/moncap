@@ -28,7 +28,7 @@ struct RouteRequest {
     to: Coord,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct Coord {
     lat: f64,
     lon: f64,
@@ -76,6 +76,25 @@ struct NearestResponse {
     distance_km: f64,
 }
 
+/// Boîte englobante des positions.
+#[derive(Serialize)]
+struct BBox {
+    min_lat: f64,
+    min_lon: f64,
+    max_lat: f64,
+    max_lon: f64,
+}
+
+/// Vue d'ensemble des positions enregistrées.
+#[derive(Serialize)]
+struct Stats {
+    count: usize,
+    /// Longueur de l'itinéraire reliant les positions dans l'ordre enregistré.
+    total_km: f64,
+    bbox: Option<BBox>,
+    centroid: Option<Coord>,
+}
+
 #[tokio::main]
 async fn main() {
     // Connexion Postgres. Configurable via DATABASE_URL.
@@ -92,9 +111,14 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/positions", get(list_positions).post(add_position))
-        .route("/positions/:id", axum::routing::delete(delete_position))
+        .route(
+            "/positions/:id",
+            axum::routing::put(update_position).delete(delete_position),
+        )
         .route("/positions/nearest", get(nearest_position))
+        .route("/positions/import", post(import_gpx))
         .route("/positions.gpx", get(export_gpx))
+        .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
         .layer(CorsLayer::permissive())
@@ -146,6 +170,26 @@ async fn add_position(
     Ok(Json(saved))
 }
 
+/// PUT /positions/:id — met à jour une position (renommer/déplacer).
+async fn update_position(
+    State(db): State<DatabaseConnection>,
+    Path(id): Path<i32>,
+    Json(input): Json<NewPosition>,
+) -> Result<Response, AppError> {
+    if position::Entity::find_by_id(id).one(&db).await?.is_none() {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    }
+    let updated = position::ActiveModel {
+        id: Set(id),
+        lat: Set(input.lat),
+        lon: Set(input.lon),
+        label: Set(input.label),
+    }
+    .update(&db)
+    .await?;
+    Ok(Json(updated).into_response())
+}
+
 /// DELETE /positions/:id — supprime une position.
 async fn delete_position(
     State(db): State<DatabaseConnection>,
@@ -157,6 +201,71 @@ async fn delete_position(
     } else {
         Ok(StatusCode::NO_CONTENT)
     }
+}
+
+/// POST /positions/import — importe des positions depuis un document GPX.
+async fn import_gpx(
+    State(db): State<DatabaseConnection>,
+    body: String,
+) -> Result<Json<Vec<position::Model>>, AppError> {
+    let mut created = Vec::new();
+    for wpt in parse_gpx_waypoints(&body) {
+        let saved = position::ActiveModel {
+            lat: Set(wpt.lat),
+            lon: Set(wpt.lon),
+            label: Set(wpt.label),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await?;
+        created.push(saved);
+    }
+    Ok(Json(created))
+}
+
+/// GET /stats — vue d'ensemble des positions enregistrées.
+async fn stats(State(db): State<DatabaseConnection>) -> Result<Json<Stats>, AppError> {
+    let items = position::Entity::find().all(&db).await?;
+    let coords: Vec<Coord> = items
+        .iter()
+        .map(|p| Coord {
+            lat: p.lat,
+            lon: p.lon,
+        })
+        .collect();
+
+    let bbox = coords.first().map(|first| {
+        let mut b = BBox {
+            min_lat: first.lat,
+            min_lon: first.lon,
+            max_lat: first.lat,
+            max_lon: first.lon,
+        };
+        for c in &coords {
+            b.min_lat = b.min_lat.min(c.lat);
+            b.max_lat = b.max_lat.max(c.lat);
+            b.min_lon = b.min_lon.min(c.lon);
+            b.max_lon = b.max_lon.max(c.lon);
+        }
+        b
+    });
+
+    let centroid = if coords.is_empty() {
+        None
+    } else {
+        let n = coords.len() as f64;
+        Some(Coord {
+            lat: coords.iter().map(|c| c.lat).sum::<f64>() / n,
+            lon: coords.iter().map(|c| c.lon).sum::<f64>() / n,
+        })
+    };
+
+    Ok(Json(Stats {
+        count: coords.len(),
+        total_km: route_legs_km(&coords).iter().sum(),
+        bbox,
+        centroid,
+    }))
 }
 
 /// GET /positions/nearest?lat=&lon= — la position enregistrée la plus proche.
@@ -259,6 +368,50 @@ fn xml_escape(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+/// Inverse de `xml_escape`.
+fn xml_unescape(s: &str) -> String {
+    s.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+/// Extrait les waypoints (`<wpt lat lon><name>`) d'un document GPX.
+fn parse_gpx_waypoints(xml: &str) -> Vec<NewPosition> {
+    let mut out = Vec::new();
+    for chunk in xml.split("<wpt").skip(1) {
+        let Some(tag_end) = chunk.find('>') else {
+            continue;
+        };
+        let attrs = &chunk[..tag_end];
+        let body = &chunk[tag_end + 1..];
+        let (Some(lat), Some(lon)) = (attr_f64(attrs, "lat"), attr_f64(attrs, "lon")) else {
+            continue;
+        };
+        let label = between(body, "<name>", "</name>")
+            .map(|n| xml_unescape(&n))
+            .unwrap_or_else(|| format!("Point {}", out.len() + 1));
+        out.push(NewPosition { lat, lon, label });
+    }
+    out
+}
+
+/// Lit un attribut numérique `name="..."` dans un fragment de balise.
+fn attr_f64(attrs: &str, name: &str) -> Option<f64> {
+    let key = format!("{name}=\"");
+    let start = attrs.find(&key)? + key.len();
+    let end = attrs[start..].find('"')? + start;
+    attrs[start..end].trim().parse().ok()
+}
+
+/// Renvoie le texte situé entre `open` et `close`, s'il existe.
+fn between(s: &str, open: &str, close: &str) -> Option<String> {
+    let start = s.find(open)? + open.len();
+    let end = s[start..].find(close)? + start;
+    Some(s[start..end].to_string())
 }
 
 /// Distance de chaque segment d'un itinéraire (vide si moins de 2 points).
@@ -373,5 +526,38 @@ mod tests {
         assert!(gpx.contains("<wpt lat=\"48\" lon=\"2\">"));
         assert!(gpx.contains("A &amp; &lt;B&gt;"));
         assert!(gpx.trim_end().ends_with("</gpx>"));
+    }
+
+    #[test]
+    fn gpx_roundtrip_parses_back() {
+        let positions = vec![
+            position::Model {
+                id: 1,
+                lat: 48.8566,
+                lon: 2.3522,
+                label: "Paris & <Co>".to_string(),
+            },
+            position::Model {
+                id: 2,
+                lat: 45.764,
+                lon: 4.8357,
+                label: "Lyon".to_string(),
+            },
+        ];
+        let parsed = parse_gpx_waypoints(&to_gpx(&positions));
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].label, "Paris & <Co>");
+        assert!((parsed[0].lat - 48.8566).abs() < 1e-9);
+        assert!((parsed[1].lon - 4.8357).abs() < 1e-9);
+    }
+
+    #[test]
+    fn gpx_parse_ignores_invalid_waypoints() {
+        // Un wpt sans lat/lon est ignoré ; l'autre est conservé.
+        let xml = "<gpx><wpt lon=\"2.0\"><name>X</name></wpt>\
+                   <wpt lat=\"1.0\" lon=\"2.0\"></wpt></gpx>";
+        let parsed = parse_gpx_waypoints(xml);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].label, "Point 1");
     }
 }

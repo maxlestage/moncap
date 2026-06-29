@@ -21,11 +21,37 @@ struct APIClient {
         return try JSONDecoder().decode(Position.self, from: data)
     }
 
+    /// PUT /positions/:id — met à jour une position.
+    func update(id: Int, _ position: NewPosition) async throws -> Position {
+        var req = URLRequest(url: baseURL.appendingPathComponent("positions/\(id)"))
+        req.httpMethod = "PUT"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(position)
+        let (data, _) = try await URLSession.shared.data(for: req)
+        return try JSONDecoder().decode(Position.self, from: data)
+    }
+
     /// DELETE /positions/:id
     func delete(id: Int) async throws {
         var req = URLRequest(url: baseURL.appendingPathComponent("positions/\(id)"))
         req.httpMethod = "DELETE"
         _ = try await URLSession.shared.data(for: req)
+    }
+
+    /// POST /positions/import — importe des positions depuis un document GPX.
+    func importGPX(_ gpx: String) async throws -> [Position] {
+        var req = URLRequest(url: baseURL.appendingPathComponent("positions/import"))
+        req.httpMethod = "POST"
+        req.setValue("application/gpx+xml", forHTTPHeaderField: "Content-Type")
+        req.httpBody = gpx.data(using: .utf8)
+        let (data, _) = try await URLSession.shared.data(for: req)
+        return try JSONDecoder().decode([Position].self, from: data)
+    }
+
+    /// GET /stats — vue d'ensemble des positions.
+    func stats() async throws -> Stats {
+        let (data, _) = try await URLSession.shared.data(from: baseURL.appendingPathComponent("stats"))
+        return try JSONDecoder().decode(Stats.self, from: data)
     }
 
     /// POST /route
