@@ -1,15 +1,33 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, getApiBase, setApiBase } from "./api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, getApiBase, setApiBase, wsUrl } from "./api";
 import { MapView } from "./MapView";
-import type { Coord, Position, Stats } from "./types";
+import type { Alert, Coord, LiveUser, Position, Stats } from "./types";
+
+const ALERT_TYPES = [
+  { category: "police", emoji: "🚓", label: "Police" },
+  { category: "accident", emoji: "💥", label: "Accident" },
+  { category: "bouchon", emoji: "🚧", label: "Bouchon" },
+  { category: "danger", emoji: "⚠️", label: "Danger" },
+];
+
+const LIVE_TTL = 15_000; // une voiture live disparaît après 15 s sans nouvelle
+const ALERT_TTL = 30 * 60_000; // un signalement expire après 30 min
 
 export function App() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
-  const [routeInfo, setRouteInfo] = useState<string>("");
+  const [routeInfo, setRouteInfo] = useState("");
   const [speed, setSpeed] = useState(50);
   const [apiBase, setApiBaseState] = useState(getApiBase());
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [liveUsers, setLiveUsers] = useState<Record<number, LiveUser>>({});
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const myPos = useRef<Coord | null>(null);
+  const watchId = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -17,8 +35,8 @@ export function App() {
       const [pos, st] = await Promise.all([api.positions(), api.stats()]);
       setPositions(pos);
       setStats(st);
-    } catch (e) {
-      setError(`Impossible de joindre l'API (${getApiBase()}).`);
+    } catch {
+      setError(`Impossible de joindre l'API (${getApiBase() || "même serveur"}).`);
     }
   }, []);
 
@@ -26,29 +44,121 @@ export function App() {
     refresh();
   }, [refresh]);
 
+  // Connexion WebSocket temps réel (reconnecte si l'URL d'API change).
+  useEffect(() => {
+    const ws = new WebSocket(wsUrl());
+    wsRef.current = ws;
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => setConnected(false);
+    ws.onmessage = (e) => {
+      const ev = JSON.parse(e.data as string);
+      switch (ev.kind) {
+        case "positions_changed":
+          refresh();
+          break;
+        case "live":
+          setLiveUsers((prev) => ({
+            ...prev,
+            [ev.id]: { id: ev.id, lat: ev.lat, lon: ev.lon, label: ev.label, ts: Date.now() },
+          }));
+          break;
+        case "live_gone":
+          setLiveUsers((prev) => {
+            const next = { ...prev };
+            delete next[ev.id];
+            return next;
+          });
+          break;
+        case "alert":
+          setAlerts((prev) => [...prev.filter((a) => a.id !== ev.id), ev]);
+          break;
+        case "alerts":
+          setAlerts(ev.alerts);
+          break;
+      }
+    };
+    return () => ws.close();
+  }, [apiBase, refresh]);
+
+  // Purge des voitures live et signalements expirés.
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = Date.now();
+      setLiveUsers((prev) => {
+        const next: Record<number, LiveUser> = {};
+        for (const u of Object.values(prev)) if (now - u.ts < LIVE_TTL) next[u.id] = u;
+        return next;
+      });
+      setAlerts((prev) => prev.filter((a) => now - a.ts < ALERT_TTL));
+    }, 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  const send = (msg: unknown) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  };
+
+  // Active/désactive le partage de ma position en direct.
+  const toggleSharing = () => {
+    if (sharing) {
+      if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
+      watchId.current = null;
+      setSharing(false);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setError("Géolocalisation indisponible.");
+      return;
+    }
+    const label = prompt("Ton nom de conducteur ?", "Moi") ?? "Moi";
+    watchId.current = navigator.geolocation.watchPosition(
+      (p) => {
+        const c = { lat: p.coords.latitude, lon: p.coords.longitude };
+        myPos.current = c;
+        send({ kind: "live", lat: c.lat, lon: c.lon, label });
+      },
+      () => setError("Partage de position refusé."),
+      { enableHighAccuracy: true, maximumAge: 2000 },
+    );
+    setSharing(true);
+  };
+
+  // Envoie un signalement à ma position courante.
+  const report = (category: string, label: string) => {
+    const fire = (c: Coord) => send({ kind: "alert", category, lat: c.lat, lon: c.lon, label });
+    if (myPos.current) {
+      fire(myPos.current);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => fire({ lat: p.coords.latitude, lon: p.coords.longitude }),
+        () => setError("Position requise pour signaler."),
+      );
+    } else {
+      setError("Géolocalisation indisponible.");
+    }
+  };
+
   const addPoint = useCallback(
     async (coord: Coord) => {
       const label = prompt("Nom de la position ?", "Point") ?? "Point";
       try {
         await api.add({ lat: coord.lat, lon: coord.lon, label });
-        await refresh();
       } catch {
         setError("Échec de l'ajout.");
       }
     },
-    [refresh],
+    [],
   );
 
   const remove = async (id: number) => {
     await api.remove(id);
-    await refresh();
   };
 
   const rename = async (p: Position) => {
     const label = prompt("Nouveau nom ?", p.label);
     if (label == null) return;
     await api.update(p.id, { lat: p.lat, lon: p.lon, label });
-    await refresh();
   };
 
   const computeRoute = async () => {
@@ -63,9 +173,7 @@ export function App() {
   };
 
   const importGpx = async (file: File) => {
-    const text = await file.text();
-    await api.importGpx(text);
-    await refresh();
+    await api.importGpx(await file.text());
   };
 
   const saveApiBase = () => {
@@ -74,10 +182,15 @@ export function App() {
     refresh();
   };
 
+  const liveList = Object.values(liveUsers);
+
   return (
     <div className="app">
       <header>
-        <h1>🛰️ MonCap GPS</h1>
+        <h1>
+          🛰️ MonCap GPS{" "}
+          <span className={`dot ${connected ? "on" : "off"}`} title={connected ? "Temps réel connecté" : "Déconnecté"} />
+        </h1>
         <div className="apibar">
           <input
             value={apiBase}
@@ -90,19 +203,30 @@ export function App() {
 
       {error && <div className="error">{error}</div>}
 
-      <MapView positions={positions} onAddPoint={addPoint} />
+      <MapView positions={positions} liveUsers={liveList} alerts={alerts} onAddPoint={addPoint} />
 
       <section className="controls">
         <p className="hint">Astuce : clique sur la carte pour ajouter une position.</p>
+
+        <div className="row">
+          <button className={sharing ? "active" : ""} onClick={toggleSharing}>
+            {sharing ? "🟢 Partage en direct…" : "📍 Partager ma position"}
+          </button>
+          {liveList.length > 0 && <span className="badge">{liveList.length} en direct</span>}
+        </div>
+
+        <div className="row alerts-row">
+          {ALERT_TYPES.map((a) => (
+            <button key={a.category} className="alert-btn" onClick={() => report(a.category, a.label)}>
+              {a.emoji} {a.label}
+            </button>
+          ))}
+        </div>
+
         <div className="row">
           <label>
             Vitesse (km/h)
-            <input
-              type="number"
-              min={1}
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value) || 1)}
-            />
+            <input type="number" min={1} value={speed} onChange={(e) => setSpeed(Number(e.target.value) || 1)} />
           </label>
           <button onClick={computeRoute} disabled={positions.length < 2}>
             Itinéraire complet

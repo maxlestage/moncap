@@ -35,3 +35,22 @@ export interface Stats {
   bbox: BBox | null;
   centroid: Coord | null;
 }
+
+/** Position GPS en direct d'un autre utilisateur. */
+export interface LiveUser {
+  id: number;
+  lat: number;
+  lon: number;
+  label: string;
+  ts: number;
+}
+
+/** Signalement façon Waze. */
+export interface Alert {
+  id: number;
+  category: string;
+  lat: number;
+  lon: number;
+  label: string;
+  ts: number;
+}
