@@ -66,3 +66,64 @@ struct Stats: Codable {
     let bbox: BBox?
     let centroid: Coord?
 }
+
+// MARK: - Temps réel (WebSocket)
+
+/// Position GPS en direct d'un utilisateur (voiture).
+struct LiveUser: Identifiable {
+    let id: Int
+    let lat: Double
+    let lon: Double
+    let label: String
+    var lastSeen: Date = Date()
+}
+
+/// Signalement façon Waze.
+struct Alert: Identifiable, Codable {
+    let id: Int
+    let category: String
+    let lat: Double
+    let lon: Double
+    let label: String
+    let ts: Double
+}
+
+/// Événement reçu du serveur via WebSocket (enum « tagué » par `kind`).
+enum ServerEvent {
+    case positionsChanged
+    case live(LiveUser)
+    case liveGone(Int)
+    case alert(Alert)
+    case alerts([Alert])
+}
+
+extension ServerEvent: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case kind, id, lat, lon, label, alerts
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        switch try c.decode(String.self, forKey: .kind) {
+        case "positions_changed":
+            self = .positionsChanged
+        case "live":
+            self = .live(
+                LiveUser(
+                    id: try c.decode(Int.self, forKey: .id),
+                    lat: try c.decode(Double.self, forKey: .lat),
+                    lon: try c.decode(Double.self, forKey: .lon),
+                    label: try c.decode(String.self, forKey: .label)
+                ))
+        case "live_gone":
+            self = .liveGone(try c.decode(Int.self, forKey: .id))
+        case "alert":
+            // Les champs de l'alerte sont au même niveau que `kind`.
+            self = .alert(try Alert(from: decoder))
+        case "alerts":
+            self = .alerts(try c.decode([Alert].self, forKey: .alerts))
+        default:
+            self = .positionsChanged
+        }
+    }
+}

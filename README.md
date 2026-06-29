@@ -166,9 +166,19 @@ docker run -p 3000:3000 \
 
 App iOS qui affiche une carte (MapKit), la position de l'appareil
 (CoreLocation), les positions enregistrées et l'itinéraire qui les relie
-(polyligne). Boutons pour enregistrer la position courante, calculer la
-distance et la durée de l'itinéraire, exporter les positions en GPX
-(feuille de partage) ; liste avec suppression par glissement.
+(polyligne). Fonctions : enregistrer sa position, itinéraire (distance +
+durée), export GPX (feuille de partage), liste avec suppression.
+
+**Temps réel (WebSocket)** façon Waze :
+
+- 🟢 synchro instantanée des positions entre tous les appareils
+- 🚗 partage de sa position GPS en direct (voitures des autres sur la carte)
+- 🚨 signalements **police / accident / bouchon / danger** diffusés à tous
+- pastille de connexion dans la barre de navigation
+
+`APIClient.baseURL` pointe par défaut sur l'app Heroku
+(`https://moncap-c41a5aaf07e8.herokuapp.com`) → l'app marche sans backend
+local ; mets `http://localhost:3000` pour développer en local.
 
 ### Mise en place dans Xcode
 
@@ -176,16 +186,15 @@ distance et la durée de l'itinéraire, exporter les positions en GPX
 2. Remplacer les fichiers générés par ceux de `frontend/MonCapGPS/`.
 3. Dans les réglages de la cible, ajouter la clé
    `NSLocationWhenInUseUsageDescription` (déjà présente dans `Info.plist`).
-4. Lancer le backend, puis l'app dans le simulateur : `localhost:3000`
-   pointe vers votre Mac.
-5. En production, remplacer `baseURL` dans `APIClient.swift` par l'URL
-   Heroku (ex. `https://moncap-gps.herokuapp.com`).
+4. Lancer sur un appareil/simulateur : l'app se connecte directement au
+   backend Heroku (HTTPS + WebSocket sécurisé `wss`).
 
 Fichiers Swift :
 
 - `MonCapGPSApp.swift` — point d'entrée de l'app
-- `ContentView.swift` — carte + contrôles
+- `ContentView.swift` — carte + contrôles + temps réel
 - `LocationManager.swift` — accès GPS via CoreLocation
+- `RealtimeClient.swift` — connexion WebSocket (positions live, voitures, alertes)
 - `APIClient.swift` — appels HTTP au backend
 - `Models.swift` — modèles partagés avec le backend
 - `ShareSheet.swift` — feuille de partage pour l'export GPX
