@@ -1,15 +1,18 @@
 import Foundation
 
-/// Une position GPS, identique au modèle du backend Rust.
+/// Une position renvoyée par le backend (avec son identifiant).
 struct Position: Codable, Identifiable {
-    var id = UUID()
+    let id: Int
     let lat: Double
     let lon: Double
     let label: String
+}
 
-    enum CodingKeys: String, CodingKey {
-        case lat, lon, label
-    }
+/// Données envoyées pour créer une position (sans identifiant).
+struct NewPosition: Codable {
+    let lat: Double
+    let lon: Double
+    let label: String
 }
 
 /// Une coordonnée simple envoyée au backend.

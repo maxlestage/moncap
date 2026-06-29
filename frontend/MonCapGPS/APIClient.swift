@@ -12,13 +12,20 @@ struct APIClient {
     }
 
     /// POST /positions
-    func add(_ position: Position) async throws -> Position {
+    func add(_ position: NewPosition) async throws -> Position {
         var req = URLRequest(url: baseURL.appendingPathComponent("positions"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(position)
         let (data, _) = try await URLSession.shared.data(for: req)
         return try JSONDecoder().decode(Position.self, from: data)
+    }
+
+    /// DELETE /positions/:id
+    func delete(id: Int) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("positions/\(id)"))
+        req.httpMethod = "DELETE"
+        _ = try await URLSession.shared.data(for: req)
     }
 
     /// POST /route

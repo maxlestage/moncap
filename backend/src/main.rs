@@ -1,7 +1,7 @@
 mod entity;
 
 use axum::{
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -57,6 +57,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/positions", get(list_positions).post(add_position))
+        .route("/positions/:id", axum::routing::delete(delete_position))
         .route("/route", post(compute_route))
         .layer(CorsLayer::permissive())
         .with_state(db);
@@ -105,6 +106,19 @@ async fn add_position(
     .insert(&db)
     .await?;
     Ok(Json(saved))
+}
+
+/// DELETE /positions/:id — supprime une position.
+async fn delete_position(
+    State(db): State<DatabaseConnection>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, AppError> {
+    let res = position::Entity::delete_by_id(id).exec(&db).await?;
+    if res.rows_affected == 0 {
+        Ok(StatusCode::NOT_FOUND)
+    } else {
+        Ok(StatusCode::NO_CONTENT)
+    }
 }
 
 /// POST /route — calcule distance et cap entre deux points.
