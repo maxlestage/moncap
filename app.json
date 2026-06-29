@@ -1,0 +1,8 @@
+{
+  "name": "moncap-gps",
+  "description": "API GPS minimale (Rust + Axum) avec Postgres.",
+  "stack": "container",
+  "addons": [
+    "heroku-postgresql:essential-0"
+  ]
+}
