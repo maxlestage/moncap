@@ -1,0 +1,14 @@
+# Rust
+/backend/target/
+**/*.rs.bk
+
+# Env
+.env
+
+# Swift / Xcode
+.DS_Store
+xcuserdata/
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+build/
+DerivedData/
