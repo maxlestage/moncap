@@ -59,10 +59,11 @@ async fn main() {
         .layer(CorsLayer::permissive())
         .with_state(db);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .unwrap();
-    println!("moncap-gps écoute sur http://0.0.0.0:3000");
+    // Heroku impose le port via la variable d'environnement PORT.
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let addr = format!("0.0.0.0:{port}");
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    println!("moncap-gps écoute sur http://{addr}");
     axum::serve(listener, app).await.unwrap();
 }
 

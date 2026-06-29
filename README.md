@@ -63,6 +63,37 @@ curl -X POST localhost:3000/route \
 # {"distance_km":391.5,"bearing_deg":150.5}
 ```
 
+## Déploiement Heroku
+
+Le backend se déploie via le **container stack** (Docker) : `heroku.yml`
+construit `backend/Dockerfile`, et l'app écoute sur `$PORT`. L'addon
+Heroku Postgres fournit automatiquement `DATABASE_URL`.
+
+```bash
+# 1. Créer l'app en mode conteneur
+heroku create moncap-gps --stack container
+
+# 2. Provisionner Postgres (fournit DATABASE_URL)
+heroku addons:create heroku-postgresql:essential-0 -a moncap-gps
+
+# 3. Déployer
+git push heroku claude/gps-app-rust-swift-1k3yq3:main
+
+# 4. Vérifier
+heroku open -a moncap-gps        # /health renvoie "ok"
+heroku logs --tail -a moncap-gps
+```
+
+Fichiers utilisés par Heroku :
+
+- `heroku.yml` — build Docker du service `web`
+- `backend/Dockerfile` — build multi-étapes (binaire Rust optimisé)
+- `app.json` — stack conteneur + addon Postgres (déploiement « Deploy to Heroku »)
+- `.dockerignore` — exclut `target/`, `frontend/`, etc.
+
+La table `positions` est créée automatiquement au démarrage ; aucune
+migration manuelle n'est requise.
+
 ## Front (Swift / SwiftUI)
 
 App iOS qui affiche une carte (MapKit), la position de l'appareil
@@ -77,6 +108,8 @@ position courante et calculer un trajet vers la première position.
    `NSLocationWhenInUseUsageDescription` (déjà présente dans `Info.plist`).
 4. Lancer le backend, puis l'app dans le simulateur : `localhost:3000`
    pointe vers votre Mac.
+5. En production, remplacer `baseURL` dans `APIClient.swift` par l'URL
+   Heroku (ex. `https://moncap-gps.herokuapp.com`).
 
 Fichiers Swift :
 
