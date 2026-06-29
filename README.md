@@ -180,14 +180,22 @@ durée), export GPX (feuille de partage), liste avec suppression.
 (`https://moncap-c41a5aaf07e8.herokuapp.com`) → l'app marche sans backend
 local ; mets `http://localhost:3000` pour développer en local.
 
-### Mise en place dans Xcode
+### Ouvrir et lancer (projet Xcode prêt à l'emploi)
 
-1. Xcode → **File ▸ New ▸ Project ▸ iOS App** (SwiftUI), nom `MonCapGPS`.
-2. Remplacer les fichiers générés par ceux de `frontend/MonCapGPS/`.
-3. Dans les réglages de la cible, ajouter la clé
-   `NSLocationWhenInUseUsageDescription` (déjà présente dans `Info.plist`).
-4. Lancer sur un appareil/simulateur : l'app se connecte directement au
-   backend Heroku (HTTPS + WebSocket sécurisé `wss`).
+Un vrai projet Xcode est fourni : **`frontend/MonCapGPS.xcodeproj`**.
+
+1. Ouvre `frontend/MonCapGPS.xcodeproj` dans **Xcode 16+**.
+2. Sélectionne ta cible (simulateur iPhone ou ton appareil). Pour un
+   appareil réel : onglet **Signing & Capabilities** → choisis ton équipe
+   (signature automatique). Le `Bundle Identifier` est `com.maxlestage.moncap`.
+3. **Cmd + R** pour lancer.
+
+L'app se connecte directement au backend Heroku (HTTPS + WebSocket `wss`),
+l'icône est le logo MonCap, et l'autorisation de localisation est déjà
+configurée (via les réglages de build). iOS 17 minimum.
+
+> Le projet utilise un *groupe synchronisé* : tout fichier ajouté dans
+> `frontend/MonCapGPS/` est inclus automatiquement.
 
 Fichiers Swift :
 
