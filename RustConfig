@@ -1,0 +1,2 @@
+# Utilisé par le buildpack Rust Heroku (emk/heroku-buildpack-rust).
+VERSION=stable

@@ -1,7 +1,11 @@
 {
   "name": "moncap-gps",
-  "description": "API GPS minimale (Rust + Axum) avec Postgres.",
-  "stack": "container",
+  "description": "API GPS (Rust + Axum) avec Postgres — déploiement buildpack.",
+  "repository": "https://github.com/maxlestage/moncap",
+  "keywords": ["rust", "axum", "gps", "postgres"],
+  "buildpacks": [
+    { "url": "https://github.com/emk/heroku-buildpack-rust.git" }
+  ],
   "addons": [
     "heroku-postgresql:essential-0"
   ]

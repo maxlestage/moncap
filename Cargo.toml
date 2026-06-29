@@ -19,8 +19,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 name = "moncap-gps"
 path = "src/main.rs"
 
-# Binaire de production : plus petit et plus rapide.
+# Binaire de production : symboles retirés (plus léger). On évite le LTO
+# agressif pour rester sous la limite de temps de build des buildpacks Heroku.
 [profile.release]
-lto = "thin"
-codegen-units = 1
 strip = true
