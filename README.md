@@ -169,7 +169,8 @@ App iOS qui affiche une carte (MapKit), la position de l'appareil
 (polyligne). Fonctions : enregistrer sa position, **itinéraire routier le plus simple
 tracé en vert** (MapKit `MKDirections`, distance + durée), **navigation
 turn-by-turn avec annonces vocales** (depuis ta position vers la
-destination, carte qui suit le cap), export GPX, liste avec suppression.
+destination, carte qui suit le cap, **recalcul automatique si tu sors de la
+route**), export GPX, liste avec suppression.
 
 **Temps réel (WebSocket)** façon Waze :
 
