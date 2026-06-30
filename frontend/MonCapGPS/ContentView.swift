@@ -12,7 +12,21 @@ private func emoji(for category: String) -> String {
     alertTypes.first { $0.category == category }?.emoji ?? "⚠️"
 }
 
+/// Point d'entrée : écran de connexion ou carte selon l'authentification.
 struct ContentView: View {
+    @StateObject private var auth = AuthStore()
+
+    var body: some View {
+        if auth.isAuthenticated {
+            MapHomeView(auth: auth)
+        } else {
+            LoginView(auth: auth)
+        }
+    }
+}
+
+struct MapHomeView: View {
+    @ObservedObject var auth: AuthStore
     @StateObject private var location = LocationManager()
     @StateObject private var realtime = RealtimeClient(url: APIClient().wsURL)
     @StateObject private var nav = NavigationManager()
@@ -293,6 +307,15 @@ struct ContentView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                Section("Compte") {
+                    Label(auth.username, systemImage: "person.crop.circle")
+                    Button(role: .destructive) {
+                        showPlaces = false
+                        auth.logout()
+                    } label: {
+                        Label("Déconnexion", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                }
             }
             .navigationTitle("MonCap GPS")
             .toolbar {
@@ -343,9 +366,15 @@ struct ContentView: View {
     // MARK: - Actions
 
     private func refresh() async {
-        positions = (try? await api.positions()) ?? []
-        stats = try? await api.stats()
-        await updateRoute()
+        do {
+            positions = try await api.positions()
+            stats = try? await api.stats()
+            await updateRoute()
+        } catch APIError.unauthorized {
+            auth.logout()
+        } catch {
+            // Réseau indisponible : on garde l'état courant.
+        }
     }
 
     /// Calcule l'itinéraire routier le plus simple (vert) et son résumé.
