@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { avatarUrl } from "./avatars";
 import type { Alert, Coord, LiveUser, Position } from "./types";
 
 interface Props {
@@ -75,13 +76,14 @@ export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
     if (!layer) return;
     layer.clearLayers();
     for (const u of liveUsers) {
-      L.circleMarker([u.lat, u.lon], {
-        radius: 8,
-        color: "#16a34a",
-        fillColor: "#22c55e",
-        fillOpacity: 0.9,
-      })
-        .bindPopup(`🚗 ${esc(u.label)}`)
+      const icon = L.divIcon({
+        html: `<img src="${avatarUrl(u.avatar)}" class="van-marker" alt="" />`,
+        className: "",
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      });
+      L.marker([u.lat, u.lon], { icon })
+        .bindPopup(esc(u.label))
         .addTo(layer);
     }
   }, [liveUsers]);

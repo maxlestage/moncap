@@ -72,7 +72,13 @@ struct Alert {
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ClientEvent {
     /// Position GPS en direct de l'utilisateur.
-    Live { lat: f64, lon: f64, label: String },
+    Live {
+        lat: f64,
+        lon: f64,
+        label: String,
+        #[serde(default)]
+        avatar: String,
+    },
     /// Nouveau signalement.
     Alert {
         category: String,
@@ -95,6 +101,7 @@ enum ServerEvent {
         lat: f64,
         lon: f64,
         label: String,
+        avatar: String,
     },
     /// Un utilisateur live s'est déconnecté.
     LiveGone { id: u64 },
@@ -626,7 +633,12 @@ fn handle_client_msg(state: &AppState, id: u64, text: &str) {
         return;
     };
     match ev {
-        ClientEvent::Live { lat, lon, label } => {
+        ClientEvent::Live {
+            lat,
+            lon,
+            label,
+            avatar,
+        } => {
             if !valid_coord(lat, lon) {
                 return;
             }
@@ -637,6 +649,7 @@ fn handle_client_msg(state: &AppState, id: u64, text: &str) {
                     lat,
                     lon,
                     label: clean_label(&label),
+                    avatar: clean_label(&avatar),
                 },
             );
         }

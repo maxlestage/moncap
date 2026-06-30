@@ -9,6 +9,7 @@ import {
   wsUrl,
 } from "./api";
 import { AuthView } from "./AuthView";
+import { AVATARS, avatarUrl, getAvatar, setAvatar } from "./avatars";
 import { MapView } from "./MapView";
 import type { Alert, Coord, LiveUser, Position, Stats } from "./types";
 
@@ -38,6 +39,7 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [avatar, setAvatarState] = useState(getAvatar());
   const [liveUsers, setLiveUsers] = useState<Record<number, LiveUser>>({});
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
@@ -84,7 +86,14 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
         case "live":
           setLiveUsers((prev) => ({
             ...prev,
-            [ev.id]: { id: ev.id, lat: ev.lat, lon: ev.lon, label: ev.label, ts: Date.now() },
+            [ev.id]: {
+              id: ev.id,
+              lat: ev.lat,
+              lon: ev.lon,
+              label: ev.label,
+              avatar: ev.avatar ?? "green",
+              ts: Date.now(),
+            },
           }));
           break;
         case "live_gone":
@@ -166,7 +175,7 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
       (p) => {
         const c = { lat: p.coords.latitude, lon: p.coords.longitude };
         myPos.current = c;
-        send({ kind: "live", lat: c.lat, lon: c.lon, label });
+        send({ kind: "live", lat: c.lat, lon: c.lon, label, avatar });
       },
       () => setError("Partage de position refusé."),
       { enableHighAccuracy: true, maximumAge: 2000 },
@@ -236,7 +245,9 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
           <span className={`dot ${connected ? "on" : "off"}`} title={connected ? "Temps réel connecté" : "Déconnecté"} />
         </h1>
         <div className="apibar">
-          <span className="user">👤 {getUsername()}</span>
+          <span className="user">
+            <img className="user-avatar" src={avatarUrl(avatar)} alt="" /> {getUsername()}
+          </span>
           <button onClick={signOut}>Déconnexion</button>
         </div>
       </header>
@@ -247,6 +258,23 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
 
       <section className="controls">
         <p className="hint">Astuce : clique sur la carte pour ajouter une position.</p>
+
+        <div className="row avatars">
+          <span className="avatars-label">Mon avatar :</span>
+          {AVATARS.map((a) => (
+            <button
+              key={a.id}
+              className={`avatar-pick ${avatar === a.id ? "selected" : ""}`}
+              title={a.label}
+              onClick={() => {
+                setAvatar(a.id);
+                setAvatarState(a.id);
+              }}
+            >
+              <img src={a.url} alt={a.label} />
+            </button>
+          ))}
+        </div>
 
         <div className="row">
           <button className={sharing ? "active" : ""} onClick={toggleSharing}>
