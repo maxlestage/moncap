@@ -12,6 +12,11 @@ import yarisWhite from "./avatars/yarisWhite.png";
 import yarisBlue from "./avatars/yarisBlue.png";
 import abarthWhite from "./avatars/abarthWhite.png";
 import abarthRed from "./avatars/abarthRed.png";
+import vwOrange from "./avatars/vwOrange.png";
+import vwTeal from "./avatars/vwTeal.png";
+import vwMint from "./avatars/vwMint.png";
+import vwGreen from "./avatars/vwGreen.png";
+import vwSurf from "./avatars/vwSurf.png";
 
 export interface Avatar {
   id: string;
@@ -35,6 +40,11 @@ export const AVATARS: Avatar[] = [
   { id: "yarisBlue", url: yarisBlue, label: "GR Yaris bleu" },
   { id: "abarthWhite", url: abarthWhite, label: "Abarth 500 blanc" },
   { id: "abarthRed", url: abarthRed, label: "Abarth 595 rouge" },
+  { id: "vwOrange", url: vwOrange, label: "VW T2 orange" },
+  { id: "vwTeal", url: vwTeal, label: "VW T2 turquoise" },
+  { id: "vwMint", url: vwMint, label: "VW T2 vert d'eau" },
+  { id: "vwGreen", url: vwGreen, label: "VW T2 vert" },
+  { id: "vwSurf", url: vwSurf, label: "VW T2 surf" },
 ];
 
 export function avatarUrl(id: string): string {

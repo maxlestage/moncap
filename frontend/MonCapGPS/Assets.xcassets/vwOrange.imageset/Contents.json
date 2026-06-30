@@ -1,0 +1,6 @@
+{
+  "images" : [
+    { "filename" : "vwOrange.png", "idiom" : "universal" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}

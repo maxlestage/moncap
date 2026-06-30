@@ -7,6 +7,7 @@ enum Avatars {
         "green", "orange", "blue", "mint",
         "ferrari", "alpine", "merc1", "merc2", "red1",
         "yarisGrey", "yarisWhite", "yarisBlue", "abarthWhite", "abarthRed",
+        "vwOrange", "vwTeal", "vwMint", "vwGreen", "vwSurf",
     ]
 
     static let labels: [String: String] = [
@@ -16,6 +17,8 @@ enum Avatars {
         "yarisGrey": "GR Yaris gris", "yarisWhite": "GR Yaris blanc",
         "yarisBlue": "GR Yaris bleu", "abarthWhite": "Abarth 500 blanc",
         "abarthRed": "Abarth 595 rouge",
+        "vwOrange": "VW T2 orange", "vwTeal": "VW T2 turquoise",
+        "vwMint": "VW T2 vert d'eau", "vwGreen": "VW T2 vert", "vwSurf": "VW T2 surf",
     ]
 
     /// Nom de l'image dans Assets.xcassets pour chaque `id`.
@@ -26,6 +29,8 @@ enum Avatars {
         "yarisGrey": "carYarisGrey", "yarisWhite": "carYarisWhite",
         "yarisBlue": "carYarisBlue", "abarthWhite": "carAbarthWhite",
         "abarthRed": "carAbarthRed",
+        "vwOrange": "vwOrange", "vwTeal": "vwTeal", "vwMint": "vwMint",
+        "vwGreen": "vwGreen", "vwSurf": "vwSurf",
     ]
 
     /// Nom de l'image dans Assets.xcassets (ex. "green" → "vanGreen").
