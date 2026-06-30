@@ -216,6 +216,7 @@ Fichiers Swift :
 - `MonCapGPSApp.swift` — point d'entrée de l'app
 - `ContentView.swift` — connexion → carte + contrôles + temps réel
 - `LoginView.swift` / `AuthStore.swift` — écran de connexion/inscription + session (jeton)
+- `Avatars.swift` + `Assets.xcassets/van*` — avatars « combi » (sélecteur + marqueur live)
 - `LocationManager.swift` — accès GPS + vitesse via CoreLocation
 - `RouteService.swift` — itinéraire routier MapKit (`MKDirections`)
 - `NavigationManager.swift` — navigation turn-by-turn + voix (`AVSpeechSynthesizer`)
