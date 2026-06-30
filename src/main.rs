@@ -1,14 +1,16 @@
 mod auth;
 mod entity;
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    extract::{FromRef, Path, Query, State},
-    http::StatusCode,
+    extract::{FromRef, Path, Query, Request, State},
+    http::{HeaderMap, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -111,6 +113,63 @@ fn now_ms() -> u64 {
 fn broadcast_event(tx: &broadcast::Sender<String>, ev: &ServerEvent) {
     if let Ok(json) = serde_json::to_string(ev) {
         let _ = tx.send(json);
+    }
+}
+
+/// Limiteur de débit par IP (fenêtre fixe, en mémoire).
+struct RateLimiter {
+    hits: Mutex<HashMap<String, (u64, u32)>>,
+    limit: u32,
+    window_secs: u64,
+}
+
+impl RateLimiter {
+    fn new(limit: u32, window_secs: u64) -> Self {
+        Self {
+            hits: Mutex::new(HashMap::new()),
+            limit,
+            window_secs,
+        }
+    }
+
+    /// Renvoie `true` si la requête est autorisée pour cette clé.
+    fn allow(&self, key: &str) -> bool {
+        let now = now_ms() / 1000;
+        let mut map = self.hits.lock().unwrap();
+        // Purge grossière pour éviter une croissance illimitée.
+        if map.len() > 50_000 {
+            map.retain(|_, (start, _)| now.saturating_sub(*start) < self.window_secs);
+        }
+        let entry = map.entry(key.to_owned()).or_insert((now, 0));
+        if now.saturating_sub(entry.0) >= self.window_secs {
+            *entry = (now, 0);
+        }
+        entry.1 += 1;
+        entry.1 <= self.limit
+    }
+}
+
+/// IP du client : premier élément de `X-Forwarded-For` (Heroku), sinon inconnu.
+fn client_ip(headers: &HeaderMap) -> String {
+    headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Middleware de limitation de débit basé sur l'IP client.
+async fn rate_limit(limiter: Arc<RateLimiter>, req: Request, next: Next) -> Response {
+    if limiter.allow(&client_ip(req.headers())) {
+        next.run(req).await
+    } else {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            "trop de requêtes, réessaie plus tard",
+        )
+            .into_response()
     }
 }
 
@@ -269,6 +328,18 @@ async fn main() {
     // avec index.html en repli (SPA).
     let web = ServeDir::new("web/dist").not_found_service(ServeFile::new("web/dist/index.html"));
 
+    // Limiteurs : général (par IP) + strict sur l'authentification (anti brute-force).
+    let general = Arc::new(RateLimiter::new(300, 60));
+    let auth_rl = Arc::new(RateLimiter::new(20, 60));
+
+    // Routes d'auth, sous limite stricte.
+    let auth_routes = Router::new()
+        .route("/auth/signup", post(signup))
+        .route("/auth/login", post(login))
+        .layer(middleware::from_fn(move |req, next| {
+            rate_limit(auth_rl.clone(), req, next)
+        }));
+
     // Routes volontairement minimales.
     let app = Router::new()
         .route("/health", get(|| async { "ok" }))
@@ -283,10 +354,12 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
-        .route("/auth/signup", post(signup))
-        .route("/auth/login", post(login))
         .route("/ws", get(ws_handler))
+        .merge(auth_routes)
         .fallback_service(web)
+        .layer(middleware::from_fn(move |req, next| {
+            rate_limit(general.clone(), req, next)
+        }))
         .layer(TraceLayer::new_for_http())
         .layer(cors_layer())
         .with_state(state);
@@ -1056,6 +1129,16 @@ mod tests {
         assert_eq!(parsed[0].label, "Paris & <Co>");
         assert!((parsed[0].lat - 48.8566).abs() < 1e-9);
         assert!((parsed[1].lon - 4.8357).abs() < 1e-9);
+    }
+
+    #[test]
+    fn rate_limiter_blocks_over_limit() {
+        let rl = RateLimiter::new(3, 60);
+        assert!(rl.allow("1.2.3.4"));
+        assert!(rl.allow("1.2.3.4"));
+        assert!(rl.allow("1.2.3.4"));
+        assert!(!rl.allow("1.2.3.4")); // 4e dépasse la limite
+        assert!(rl.allow("9.9.9.9")); // autre IP : indépendante
     }
 
     #[test]

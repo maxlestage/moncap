@@ -75,6 +75,10 @@ sont **isolées par utilisateur**. Définis `JWT_SECRET` en production (Heroku
 config var) ; le WebSocket et l'export GPX acceptent le jeton en query
 (`?token=`).
 
+**Limitation de débit** par IP (clé sur `X-Forwarded-For` derrière Heroku) :
+~300 req/min en général et 20 req/min sur `/auth` (anti brute-force) → `429`
+au-delà.
+
 Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
 (défaut : `info,sqlx=warn`). Les calculs de distances (`/stats`,
 `/positions/nearest`, `/route/multi`) sont parallélisés avec **rayon**, et
