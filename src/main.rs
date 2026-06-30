@@ -17,7 +17,7 @@ use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, E
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tower_http::{
-    cors::CorsLayer,
+    cors::{AllowOrigin, Any, CorsLayer},
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
 };
@@ -107,6 +107,37 @@ fn broadcast_event(tx: &broadcast::Sender<String>, ev: &ServerEvent) {
     if let Ok(json) = serde_json::to_string(ev) {
         let _ = tx.send(json);
     }
+}
+
+/// CORS restreint : autorise `localhost` (dev), `*.herokuapp.com` (prod) et
+/// toute origine listée dans `ALLOWED_ORIGINS` (séparées par des virgules).
+fn cors_layer() -> CorsLayer {
+    let extra: Vec<String> = std::env::var("ALLOWED_ORIGINS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let allow = AllowOrigin::predicate(
+        move |origin: &axum::http::HeaderValue, _req: &axum::http::request::Parts| {
+            let o = origin.to_str().unwrap_or("");
+            o.starts_with("http://localhost")
+                || o.starts_with("http://127.0.0.1")
+                || o.strip_prefix("https://").is_some_and(|host| {
+                    host.split('/')
+                        .next()
+                        .unwrap_or("")
+                        .ends_with(".herokuapp.com")
+                })
+                || extra.iter().any(|e| e == o)
+        },
+    );
+
+    CorsLayer::new()
+        .allow_methods(Any)
+        .allow_headers(Any)
+        .allow_origin(allow)
 }
 
 /// Données d'une nouvelle position envoyée par le client.
@@ -250,7 +281,7 @@ async fn main() {
         .route("/ws", get(ws_handler))
         .fallback_service(web)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive())
+        .layer(cors_layer())
         .with_state(state);
 
     // Heroku impose le port via la variable d'environnement PORT.
