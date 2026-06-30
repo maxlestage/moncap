@@ -8,8 +8,10 @@ réel, avec **Xcode sur Mac**. Aucune ligne de commande nécessaire.
 - Un **Mac** avec **Xcode 16** ou plus récent (App Store, gratuit).
 - Un **iPhone** sous **iOS 17** ou plus (le projet cible iOS 17).
 - Un câble pour brancher l'iPhone au Mac (ou Wi-Fi même réseau).
-- Un **identifiant Apple** (gratuit suffit pour tester 7 jours sur ton
-  propre appareil — pas besoin du compte développeur payant).
+- Un **identifiant Apple**. Un **compte développeur payant** permet en plus
+  la distribution **TestFlight** (voir §7) — idéal si tu n'as le Mac que le
+  week-end : tu construis une fois, puis tu testes sur ton iPhone toute la
+  semaine **sans le Mac**.
 
 ## 1. Récupérer le projet
 
@@ -56,7 +58,36 @@ L'app utilise le backend déjà déployé :
 - Sur l'écran de connexion, choisis **Pas de compte ? S'inscrire**, crée un
   identifiant + mot de passe, et c'est parti.
 
-## 6. À tester ce week-end
+## 6. (Recommandé) Distribuer via TestFlight — tester sans le Mac
+
+Tu as un compte développeur Apple : construis l'app **une fois** sur le Mac
+ce week-end, envoie-la sur TestFlight, puis installe-la et teste-la depuis
+ton iPhone **toute la semaine, sans le Mac**.
+
+1. **Créer la fiche app** sur [App Store Connect](https://appstoreconnect.apple.com)
+   → *Apps* → **＋** → *Nouvelle app* :
+   - Plateforme **iOS**, nom (ex. « MonCap GPS »), langue, et **Bundle ID**
+     `com.maxlestage.moncap` (le même que dans Xcode ; crée-le d'abord dans
+     *Certificates, Identifiers & Profiles* s'il n'apparaît pas).
+   - SKU : n'importe quoi d'unique (ex. `moncap`).
+2. **Archiver** dans Xcode :
+   - Destination en haut → **Any iOS Device (arm64)**.
+   - Menu **Product → Archive** (attends la fin de la compilation).
+3. Dans l'**Organizer** qui s'ouvre : **Distribute App** →
+   *App Store Connect* → *Upload* → laisse les options par défaut (signature
+   automatique) → **Upload**.
+4. Patiente ~10–30 min : le build apparaît dans App Store Connect →
+   onglet **TestFlight**. (La clé *export compliance* est déjà réglée dans le
+   projet, donc pas de question à ce sujet.)
+5. Ajoute-toi comme testeur : **TestFlight → Test interne → ＋** → ton adresse.
+6. Sur l'iPhone : installe l'app **TestFlight** (App Store), connecte-toi avec
+   le même identifiant Apple, et installe **MonCap GPS**. Tu peux maintenant
+   tester quand tu veux, sans le Mac. 🚐
+
+> Chaque nouvelle version : incrémente *Build* (ex. 1 → 2) dans Xcode, puis
+> refais **Archive → Upload**.
+
+## 7. À tester ce week-end
 
 - [ ] **Inscription / connexion** (puis déconnexion via la feuille « Lieux »).
 - [ ] **Position en direct** : ton point bleu sur la carte, la **vitesse**
