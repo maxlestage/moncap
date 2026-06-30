@@ -1,3 +1,4 @@
+mod auth;
 mod entity;
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,7 +14,10 @@ use axum::{
     Json, Router,
 };
 use rayon::prelude::*;
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
+    QueryFilter, Set,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tower_http::{
@@ -22,7 +26,8 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use entity::position;
+use auth::AuthUser;
+use entity::{position, user};
 
 /// Identifiant unique attribué à chaque connexion live et à chaque alerte.
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -278,6 +283,8 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
+        .route("/auth/signup", post(signup))
+        .route("/auth/login", post(login))
         .route("/ws", get(ws_handler))
         .fallback_service(web)
         .layer(TraceLayer::new_for_http())
@@ -292,8 +299,16 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-/// Crée la table `positions` si elle n'existe pas.
+/// Crée les tables `users` et `positions` si besoin.
 async fn ensure_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
+    db.execute_unprepared(
+        "CREATE TABLE IF NOT EXISTS users (\
+            id SERIAL PRIMARY KEY,\
+            username TEXT UNIQUE NOT NULL,\
+            password_hash TEXT NOT NULL\
+        )",
+    )
+    .await?;
     db.execute_unprepared(
         "CREATE TABLE IF NOT EXISTS positions (\
             id SERIAL PRIMARY KEY,\
@@ -303,7 +318,78 @@ async fn ensure_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
         )",
     )
     .await?;
+    // Rattache les positions à un utilisateur (colonne ajoutée si absente).
+    db.execute_unprepared(
+        "ALTER TABLE positions ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 0",
+    )
+    .await?;
     Ok(())
+}
+
+/// Identifiants envoyés à l'inscription / connexion.
+#[derive(Deserialize)]
+struct Credentials {
+    username: String,
+    password: String,
+}
+
+/// Réponse d'authentification : jeton + nom d'utilisateur.
+#[derive(Serialize)]
+struct AuthResponse {
+    token: String,
+    username: String,
+}
+
+/// POST /auth/signup — crée un compte et renvoie un jeton.
+async fn signup(
+    State(db): State<DatabaseConnection>,
+    Json(c): Json<Credentials>,
+) -> Result<Json<AuthResponse>, AppError> {
+    let username = c.username.trim().to_string();
+    if username.chars().count() < 3 || c.password.len() < 6 {
+        return Err(AppError::BadRequest(
+            "nom (≥3) et mot de passe (≥6) requis".into(),
+        ));
+    }
+    if user::Entity::find()
+        .filter(user::Column::Username.eq(&username))
+        .one(&db)
+        .await?
+        .is_some()
+    {
+        return Err(AppError::BadRequest("nom d'utilisateur déjà pris".into()));
+    }
+    let saved = user::ActiveModel {
+        username: Set(username.clone()),
+        password_hash: Set(auth::hash_password(&c.password)?),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await?;
+    Ok(Json(AuthResponse {
+        token: auth::make_token(saved.id)?,
+        username,
+    }))
+}
+
+/// POST /auth/login — vérifie les identifiants et renvoie un jeton.
+async fn login(
+    State(db): State<DatabaseConnection>,
+    Json(c): Json<Credentials>,
+) -> Result<Json<AuthResponse>, AppError> {
+    let username = c.username.trim().to_string();
+    let found = user::Entity::find()
+        .filter(user::Column::Username.eq(&username))
+        .one(&db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    if !auth::verify_password(&c.password, &found.password_hash) {
+        return Err(AppError::Unauthorized);
+    }
+    Ok(Json(AuthResponse {
+        token: auth::make_token(found.id)?,
+        username,
+    }))
 }
 
 /// Ajoute `sslmode=require` pour les bases distantes (ex. Heroku Postgres
@@ -318,16 +404,21 @@ fn normalize_pg_url(url: String) -> String {
     }
 }
 
-/// GET /positions — renvoie toutes les positions.
+/// GET /positions — renvoie les positions de l'utilisateur.
 async fn list_positions(
+    AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
 ) -> Result<Json<Vec<position::Model>>, AppError> {
-    let items = position::Entity::find().all(&db).await?;
+    let items = position::Entity::find()
+        .filter(position::Column::UserId.eq(uid))
+        .all(&db)
+        .await?;
     Ok(Json(items))
 }
 
-/// POST /positions — ajoute une position.
+/// POST /positions — ajoute une position pour l'utilisateur.
 async fn add_position(
+    AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
     State(tx): State<broadcast::Sender<String>>,
     Json(input): Json<NewPosition>,
@@ -337,6 +428,7 @@ async fn add_position(
         lat: Set(input.lat),
         lon: Set(input.lon),
         label: Set(clean_label(&input.label)),
+        user_id: Set(uid),
         ..Default::default()
     }
     .insert(&db)
@@ -345,15 +437,20 @@ async fn add_position(
     Ok(Json(saved))
 }
 
-/// PUT /positions/:id — met à jour une position (renommer/déplacer).
+/// PUT /positions/:id — met à jour une position de l'utilisateur.
 async fn update_position(
+    AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
     State(tx): State<broadcast::Sender<String>>,
     Path(id): Path<i32>,
     Json(input): Json<NewPosition>,
 ) -> Result<Response, AppError> {
     check_coord(input.lat, input.lon)?;
-    if position::Entity::find_by_id(id).one(&db).await?.is_none() {
+    let owned = position::Entity::find_by_id(id)
+        .filter(position::Column::UserId.eq(uid))
+        .one(&db)
+        .await?;
+    if owned.is_none() {
         return Ok(StatusCode::NOT_FOUND.into_response());
     }
     let updated = position::ActiveModel {
@@ -361,6 +458,7 @@ async fn update_position(
         lat: Set(input.lat),
         lon: Set(input.lon),
         label: Set(clean_label(&input.label)),
+        user_id: Set(uid),
     }
     .update(&db)
     .await?;
@@ -368,13 +466,18 @@ async fn update_position(
     Ok(Json(updated).into_response())
 }
 
-/// DELETE /positions/:id — supprime une position.
+/// DELETE /positions/:id — supprime une position de l'utilisateur.
 async fn delete_position(
+    AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
     State(tx): State<broadcast::Sender<String>>,
     Path(id): Path<i32>,
 ) -> Result<StatusCode, AppError> {
-    let res = position::Entity::delete_by_id(id).exec(&db).await?;
+    let res = position::Entity::delete_many()
+        .filter(position::Column::Id.eq(id))
+        .filter(position::Column::UserId.eq(uid))
+        .exec(&db)
+        .await?;
     if res.rows_affected == 0 {
         Ok(StatusCode::NOT_FOUND)
     } else {
@@ -385,6 +488,7 @@ async fn delete_position(
 
 /// POST /positions/import — importe des positions depuis un document GPX.
 async fn import_gpx(
+    AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
     State(tx): State<broadcast::Sender<String>>,
     body: String,
@@ -400,6 +504,7 @@ async fn import_gpx(
             lat: Set(wpt.lat),
             lon: Set(wpt.lon),
             label: Set(clean_label(&wpt.label)),
+            user_id: Set(uid),
             ..Default::default()
         }
         .insert(&db)
@@ -412,9 +517,23 @@ async fn import_gpx(
     Ok(Json(created))
 }
 
-/// GET /ws — connexion WebSocket temps réel (positions, live, alertes).
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+/// Jeton passé en query du WebSocket (les navigateurs ne peuvent pas poser
+/// d'en-tête Authorization sur une connexion WebSocket).
+#[derive(Deserialize)]
+struct WsAuth {
+    token: String,
+}
+
+/// GET /ws?token=... — connexion WebSocket temps réel (positions, live, alertes).
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    Query(q): Query<WsAuth>,
+    State(state): State<AppState>,
+) -> Result<Response, AppError> {
+    if auth::verify_token(&q.token).is_none() {
+        return Err(AppError::Unauthorized);
+    }
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state)))
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
@@ -511,9 +630,15 @@ fn prune_alerts(alerts: &Arc<Mutex<Vec<Alert>>>) -> Vec<Alert> {
     a.clone()
 }
 
-/// GET /stats — vue d'ensemble des positions enregistrées.
-async fn stats(State(db): State<DatabaseConnection>) -> Result<Json<Stats>, AppError> {
-    let items = position::Entity::find().all(&db).await?;
+/// GET /stats — vue d'ensemble des positions de l'utilisateur.
+async fn stats(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<Stats>, AppError> {
+    let items = position::Entity::find()
+        .filter(position::Column::UserId.eq(uid))
+        .all(&db)
+        .await?;
 
     // Réductions parallèles (rayon) hors du runtime async.
     let stats = tokio::task::spawn_blocking(move || compute_stats(&items))
@@ -577,6 +702,7 @@ fn compute_stats(items: &[position::Model]) -> Stats {
 
 /// GET /positions/nearest?lat=&lon= — la position enregistrée la plus proche.
 async fn nearest_position(
+    AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
     Query(q): Query<NearestQuery>,
 ) -> Result<Json<NearestResponse>, AppError> {
@@ -585,7 +711,10 @@ async fn nearest_position(
         lat: q.lat,
         lon: q.lon,
     };
-    let items = position::Entity::find().all(&db).await?;
+    let items = position::Entity::find()
+        .filter(position::Column::UserId.eq(uid))
+        .all(&db)
+        .await?;
 
     // Calcul parallèle (rayon) sur le pool dédié via spawn_blocking, pour ne
     // pas bloquer le runtime async. Bénéfice réel quand `items` est grand.
@@ -654,8 +783,16 @@ fn duration_min(km: f64, speed_kmh: f64) -> f64 {
 }
 
 /// GET /positions.gpx — exporte les positions au format GPX.
-async fn export_gpx(State(db): State<DatabaseConnection>) -> Result<Response, AppError> {
-    let items = position::Entity::find().all(&db).await?;
+async fn export_gpx(
+    State(db): State<DatabaseConnection>,
+    Query(q): Query<WsAuth>,
+) -> Result<Response, AppError> {
+    // Téléchargé via un lien : le jeton passe en query (?token=...).
+    let uid = auth::verify_token(&q.token).ok_or(AppError::Unauthorized)?;
+    let items = position::Entity::find()
+        .filter(position::Column::UserId.eq(uid))
+        .all(&db)
+        .await?;
     let body = to_gpx(&items);
     Ok((
         [(axum::http::header::CONTENT_TYPE, "application/gpx+xml")],
@@ -765,13 +902,17 @@ fn bearing_deg(a: &Coord, b: &Coord) -> f64 {
 
 /// Erreurs de l'API converties en réponses HTTP.
 #[derive(thiserror::Error, Debug)]
-enum AppError {
+pub(crate) enum AppError {
     #[error("erreur base de données: {0}")]
     Database(#[from] sea_orm::DbErr),
     #[error("{0}")]
     NotFound(String),
     #[error("{0}")]
     BadRequest(String),
+    #[error("non autorisé")]
+    Unauthorized,
+    #[error("erreur interne")]
+    Internal,
 }
 
 impl IntoResponse for AppError {
@@ -784,6 +925,12 @@ impl IntoResponse for AppError {
             }
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg).into_response(),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            AppError::Unauthorized => {
+                (StatusCode::UNAUTHORIZED, "authentification requise").into_response()
+            }
+            AppError::Internal => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "erreur interne").into_response()
+            }
         }
     }
 }
@@ -878,6 +1025,7 @@ mod tests {
             lat: 48.0,
             lon: 2.0,
             label: "A & <B>".to_string(),
+            user_id: 1,
         }];
         let gpx = to_gpx(&positions);
         assert!(gpx.contains("<wpt lat=\"48\" lon=\"2\">"));
@@ -893,12 +1041,14 @@ mod tests {
                 lat: 48.8566,
                 lon: 2.3522,
                 label: "Paris & <Co>".to_string(),
+                user_id: 1,
             },
             position::Model {
                 id: 2,
                 lat: 45.764,
                 lon: 4.8357,
                 label: "Lyon".to_string(),
+                user_id: 1,
             },
         ];
         let parsed = parse_gpx_waypoints(&to_gpx(&positions));
