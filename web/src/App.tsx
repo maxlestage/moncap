@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, getApiBase, setApiBase, wsUrl } from "./api";
+import {
+  api,
+  getApiBase,
+  getToken,
+  getUsername,
+  logout,
+  Unauthorized,
+  wsUrl,
+} from "./api";
+import { AuthView } from "./AuthView";
 import { MapView } from "./MapView";
 import type { Alert, Coord, LiveUser, Position, Stats } from "./types";
 
@@ -14,11 +23,18 @@ const LIVE_TTL = 15_000; // une voiture live disparaît après 15 s sans nouvell
 const ALERT_TTL = 30 * 60_000; // un signalement expire après 30 min
 
 export function App() {
+  const [authed, setAuthed] = useState(!!getToken());
+  if (!authed) {
+    return <AuthView onAuthed={() => setAuthed(true)} />;
+  }
+  return <MapApp onLogout={() => setAuthed(false)} />;
+}
+
+function MapApp({ onLogout }: { onLogout: () => void }) {
   const [positions, setPositions] = useState<Position[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [routeInfo, setRouteInfo] = useState("");
   const [speed, setSpeed] = useState(50);
-  const [apiBase, setApiBaseState] = useState(getApiBase());
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -29,16 +45,25 @@ export function App() {
   const myPos = useRef<Coord | null>(null);
   const watchId = useRef<number | null>(null);
 
+  const signOut = useCallback(() => {
+    logout();
+    onLogout();
+  }, [onLogout]);
+
   const refresh = useCallback(async () => {
     try {
       setError("");
       const [pos, st] = await Promise.all([api.positions(), api.stats()]);
       setPositions(pos);
       setStats(st);
-    } catch {
-      setError(`Impossible de joindre l'API (${getApiBase() || "même serveur"}).`);
+    } catch (e) {
+      if (e instanceof Unauthorized) {
+        signOut();
+      } else {
+        setError(`Impossible de joindre l'API (${getApiBase() || "même serveur"}).`);
+      }
     }
-  }, []);
+  }, [signOut]);
 
   useEffect(() => {
     refresh();
@@ -103,7 +128,7 @@ export function App() {
       if (timer) clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [apiBase, refresh]);
+  }, [refresh]);
 
   // Purge des voitures live et signalements expirés.
   useEffect(() => {
@@ -201,12 +226,6 @@ export function App() {
     await api.importGpx(await file.text());
   };
 
-  const saveApiBase = () => {
-    setApiBase(apiBase);
-    setApiBaseState(getApiBase());
-    refresh();
-  };
-
   const liveList = Object.values(liveUsers);
 
   return (
@@ -217,12 +236,8 @@ export function App() {
           <span className={`dot ${connected ? "on" : "off"}`} title={connected ? "Temps réel connecté" : "Déconnecté"} />
         </h1>
         <div className="apibar">
-          <input
-            value={apiBase}
-            onChange={(e) => setApiBaseState(e.target.value)}
-            placeholder="URL de l'API (vide = même serveur)"
-          />
-          <button onClick={saveApiBase}>Connecter</button>
+          <span className="user">👤 {getUsername()}</span>
+          <button onClick={signOut}>Déconnexion</button>
         </div>
       </header>
 

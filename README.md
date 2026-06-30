@@ -69,6 +69,12 @@ La connexion est configurable via la variable d'environnement
 `DATABASE_URL` (valeur par défaut :
 `postgres://postgres:postgres@localhost:5432/moncap`).
 
+**Comptes** : `POST /auth/signup` et `POST /auth/login` renvoient un jeton
+**JWT** (Bearer) ; toutes les routes `positions*`/`stats` exigent ce jeton et
+sont **isolées par utilisateur**. Définis `JWT_SECRET` en production (Heroku
+config var) ; le WebSocket et l'export GPX acceptent le jeton en query
+(`?token=`).
+
 Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
 (défaut : `info,sqlx=warn`). Les calculs de distances (`/stats`,
 `/positions/nearest`, `/route/multi`) sont parallélisés avec **rayon**, et

@@ -9,6 +9,9 @@ pub struct Model {
     pub lat: f64,
     pub lon: f64,
     pub label: String,
+    /// Propriétaire de la position (non exposé dans le JSON).
+    #[serde(skip)]
+    pub user_id: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
