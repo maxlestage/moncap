@@ -301,10 +301,11 @@ async fn add_position(
     State(tx): State<broadcast::Sender<String>>,
     Json(input): Json<NewPosition>,
 ) -> Result<Json<position::Model>, AppError> {
+    check_coord(input.lat, input.lon)?;
     let saved = position::ActiveModel {
         lat: Set(input.lat),
         lon: Set(input.lon),
-        label: Set(input.label),
+        label: Set(clean_label(&input.label)),
         ..Default::default()
     }
     .insert(&db)
@@ -320,6 +321,7 @@ async fn update_position(
     Path(id): Path<i32>,
     Json(input): Json<NewPosition>,
 ) -> Result<Response, AppError> {
+    check_coord(input.lat, input.lon)?;
     if position::Entity::find_by_id(id).one(&db).await?.is_none() {
         return Ok(StatusCode::NOT_FOUND.into_response());
     }
@@ -327,7 +329,7 @@ async fn update_position(
         id: Set(id),
         lat: Set(input.lat),
         lon: Set(input.lon),
-        label: Set(input.label),
+        label: Set(clean_label(&input.label)),
     }
     .update(&db)
     .await?;
@@ -357,11 +359,16 @@ async fn import_gpx(
     body: String,
 ) -> Result<Json<Vec<position::Model>>, AppError> {
     let mut created = Vec::new();
-    for wpt in parse_gpx_waypoints(&body) {
+    // On ignore les waypoints invalides et on plafonne à 1000 imports.
+    for wpt in parse_gpx_waypoints(&body)
+        .into_iter()
+        .filter(|w| valid_coord(w.lat, w.lon))
+        .take(1000)
+    {
         let saved = position::ActiveModel {
             lat: Set(wpt.lat),
             lon: Set(wpt.lon),
-            label: Set(wpt.label),
+            label: Set(clean_label(&wpt.label)),
             ..Default::default()
         }
         .insert(&db)
@@ -422,13 +429,16 @@ fn handle_client_msg(state: &AppState, id: u64, text: &str) {
     };
     match ev {
         ClientEvent::Live { lat, lon, label } => {
+            if !valid_coord(lat, lon) {
+                return;
+            }
             broadcast_event(
                 &state.tx,
                 &ServerEvent::Live {
                     id,
                     lat,
                     lon,
-                    label,
+                    label: clean_label(&label),
                 },
             );
         }
@@ -438,12 +448,15 @@ fn handle_client_msg(state: &AppState, id: u64, text: &str) {
             lon,
             label,
         } => {
+            if !valid_coord(lat, lon) {
+                return;
+            }
             let alert = Alert {
                 id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-                category,
+                category: clean_label(&category),
                 lat,
                 lon,
-                label,
+                label: clean_label(&label),
                 ts: now_ms(),
             };
             {
@@ -536,6 +549,7 @@ async fn nearest_position(
     State(db): State<DatabaseConnection>,
     Query(q): Query<NearestQuery>,
 ) -> Result<Json<NearestResponse>, AppError> {
+    check_coord(q.lat, q.lon)?;
     let from = Coord {
         lat: q.lat,
         lon: q.lon,
@@ -574,22 +588,29 @@ async fn nearest_position(
 }
 
 /// POST /route — calcule distance et cap entre deux points.
-async fn compute_route(Json(req): Json<RouteRequest>) -> Json<RouteResponse> {
-    Json(RouteResponse {
+async fn compute_route(Json(req): Json<RouteRequest>) -> Result<Json<RouteResponse>, AppError> {
+    check_coord(req.from.lat, req.from.lon)?;
+    check_coord(req.to.lat, req.to.lon)?;
+    Ok(Json(RouteResponse {
         distance_km: haversine_km(&req.from, &req.to),
         bearing_deg: bearing_deg(&req.from, &req.to),
-    })
+    }))
 }
 
 /// POST /route/multi — distance totale d'un itinéraire à plusieurs points.
-async fn compute_multi_route(Json(req): Json<MultiRouteRequest>) -> Json<MultiRouteResponse> {
+async fn compute_multi_route(
+    Json(req): Json<MultiRouteRequest>,
+) -> Result<Json<MultiRouteResponse>, AppError> {
+    if req.points.iter().any(|p| !valid_coord(p.lat, p.lon)) {
+        return Err(AppError::BadRequest("coordonnées invalides".into()));
+    }
     let legs_km = route_legs_km(&req.points);
     let total_km: f64 = legs_km.iter().sum();
-    Json(MultiRouteResponse {
+    Ok(Json(MultiRouteResponse {
         duration_min: duration_min(total_km, req.speed_kmh),
         total_km,
         legs_km,
-    })
+    }))
 }
 
 /// Durée en minutes pour parcourir `km` à `speed_kmh` (0 si vitesse invalide).
@@ -718,6 +739,8 @@ enum AppError {
     Database(#[from] sea_orm::DbErr),
     #[error("{0}")]
     NotFound(String),
+    #[error("{0}")]
+    BadRequest(String),
 }
 
 impl IntoResponse for AppError {
@@ -729,7 +752,33 @@ impl IntoResponse for AppError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "erreur interne").into_response()
             }
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg).into_response(),
+            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
         }
+    }
+}
+
+/// Longueur maximale d'un libellé.
+const MAX_LABEL: usize = 120;
+
+/// Vrai si les coordonnées sont finies et dans les plages valides.
+fn valid_coord(lat: f64, lon: f64) -> bool {
+    lat.is_finite()
+        && lon.is_finite()
+        && (-90.0..=90.0).contains(&lat)
+        && (-180.0..=180.0).contains(&lon)
+}
+
+/// Nettoie un libellé : trim + troncature à MAX_LABEL caractères.
+fn clean_label(s: &str) -> String {
+    s.trim().chars().take(MAX_LABEL).collect()
+}
+
+/// Valide des coordonnées, renvoie 400 sinon.
+fn check_coord(lat: f64, lon: f64) -> Result<(), AppError> {
+    if valid_coord(lat, lon) {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest("coordonnées invalides".into()))
     }
 }
 
@@ -826,6 +875,22 @@ mod tests {
         assert_eq!(parsed[0].label, "Paris & <Co>");
         assert!((parsed[0].lat - 48.8566).abs() < 1e-9);
         assert!((parsed[1].lon - 4.8357).abs() < 1e-9);
+    }
+
+    #[test]
+    fn coord_validation() {
+        assert!(valid_coord(48.85, 2.35));
+        assert!(valid_coord(-90.0, 180.0));
+        assert!(!valid_coord(91.0, 0.0));
+        assert!(!valid_coord(0.0, 200.0));
+        assert!(!valid_coord(f64::NAN, 0.0));
+        assert!(!valid_coord(0.0, f64::INFINITY));
+    }
+
+    #[test]
+    fn label_is_trimmed_and_capped() {
+        assert_eq!(clean_label("  Paris  "), "Paris");
+        assert_eq!(clean_label(&"a".repeat(500)).chars().count(), MAX_LABEL);
     }
 
     #[test]
