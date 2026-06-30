@@ -1,0 +1,72 @@
+import SwiftUI
+
+/// Écran de connexion / inscription.
+struct LoginView: View {
+    @ObservedObject var auth: AuthStore
+
+    @State private var signupMode = false
+    @State private var username = ""
+    @State private var password = ""
+    @State private var error = ""
+    @State private var busy = false
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Text("🛰️ MonCap GPS").font(.largeTitle.bold())
+            Text(signupMode ? "Créer un compte" : "Connexion")
+                .foregroundStyle(.secondary)
+
+            TextField("Nom d'utilisateur", text: $username)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textFieldStyle(.roundedBorder)
+
+            SecureField("Mot de passe", text: $password)
+                .textFieldStyle(.roundedBorder)
+
+            if !error.isEmpty {
+                Text(error).font(.footnote).foregroundStyle(.red)
+            }
+
+            Button(action: submit) {
+                if busy {
+                    ProgressView()
+                } else {
+                    Text(signupMode ? "S'inscrire" : "Se connecter")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(busy || username.isEmpty || password.isEmpty)
+
+            Button(signupMode ? "Déjà un compte ? Se connecter" : "Pas de compte ? S'inscrire") {
+                signupMode.toggle()
+                error = ""
+            }
+            .font(.footnote)
+
+            Spacer()
+        }
+        .padding(24)
+    }
+
+    private func submit() {
+        busy = true
+        error = ""
+        Task {
+            do {
+                if signupMode {
+                    try await auth.signup(username, password)
+                } else {
+                    try await auth.login(username, password)
+                }
+            } catch APIError.server(let msg) {
+                error = msg.isEmpty ? "Échec de l'authentification" : msg
+            } catch {
+                error = "Échec de l'authentification"
+            }
+            busy = false
+        }
+    }
+}

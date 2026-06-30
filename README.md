@@ -209,7 +209,8 @@ configurée (via les réglages de build). iOS 17 minimum.
 Fichiers Swift :
 
 - `MonCapGPSApp.swift` — point d'entrée de l'app
-- `ContentView.swift` — carte + contrôles + temps réel
+- `ContentView.swift` — connexion → carte + contrôles + temps réel
+- `LoginView.swift` / `AuthStore.swift` — écran de connexion/inscription + session (jeton)
 - `LocationManager.swift` — accès GPS + vitesse via CoreLocation
 - `RouteService.swift` — itinéraire routier MapKit (`MKDirections`)
 - `NavigationManager.swift` — navigation turn-by-turn + voix (`AVSpeechSynthesizer`)
