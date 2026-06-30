@@ -1,5 +1,6 @@
 mod auth;
 mod entity;
+mod migration;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -17,8 +18,7 @@ use axum::{
 };
 use rayon::prelude::*;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
-    QueryFilter, Set,
+    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, Set,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -30,6 +30,8 @@ use tower_http::{
 
 use auth::AuthUser;
 use entity::{position, user};
+use migration::Migrator;
+use sea_orm_migration::MigratorTrait;
 
 /// Identifiant unique attribué à chaque connexion live et à chaque alerte.
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -311,9 +313,9 @@ async fn main() {
         "connexion Postgres impossible — vérifie que l'addon Heroku Postgres est ajouté \
          (DATABASE_URL doit être défini)",
     );
-    ensure_schema(&db)
+    Migrator::up(&db, None)
         .await
-        .expect("création du schéma impossible");
+        .expect("migrations impossibles");
 
     // Canal de diffusion temps réel (WebSocket).
     let (tx, _rx) = broadcast::channel::<String>(256);
@@ -370,33 +372,6 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     tracing::info!("moncap-gps écoute sur http://{addr}");
     axum::serve(listener, app).await.unwrap();
-}
-
-/// Crée les tables `users` et `positions` si besoin.
-async fn ensure_schema(db: &DatabaseConnection) -> Result<(), sea_orm::DbErr> {
-    db.execute_unprepared(
-        "CREATE TABLE IF NOT EXISTS users (\
-            id SERIAL PRIMARY KEY,\
-            username TEXT UNIQUE NOT NULL,\
-            password_hash TEXT NOT NULL\
-        )",
-    )
-    .await?;
-    db.execute_unprepared(
-        "CREATE TABLE IF NOT EXISTS positions (\
-            id SERIAL PRIMARY KEY,\
-            lat DOUBLE PRECISION NOT NULL,\
-            lon DOUBLE PRECISION NOT NULL,\
-            label TEXT NOT NULL\
-        )",
-    )
-    .await?;
-    // Rattache les positions à un utilisateur (colonne ajoutée si absente).
-    db.execute_unprepared(
-        "ALTER TABLE positions ADD COLUMN IF NOT EXISTS user_id INTEGER NOT NULL DEFAULT 0",
-    )
-    .await?;
-    Ok(())
 }
 
 /// Identifiants envoyés à l'inscription / connexion.

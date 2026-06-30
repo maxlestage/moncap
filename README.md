@@ -48,9 +48,10 @@ Les routes sont volontairement aussi simples que possible :
 Le client envoie `{"kind":"live", lat, lon, label}` ou
 `{"kind":"alert", category, lat, lon, label}`.
 
-Les positions sont persistées dans **Postgres** via **SeaORM** (table
-`positions`, créée automatiquement au démarrage). Le calcul de trajet
-utilise la formule de Haversine pour la distance et le cap initial.
+Les données sont persistées dans **Postgres** via **SeaORM**. Le schéma est
+géré par des **migrations versionnées** (`sea-orm-migration`, dossier
+`src/migration/`) appliquées automatiquement au démarrage. Le calcul de
+trajet utilise la formule de Haversine pour la distance et le cap initial.
 
 ### Lancer le backend
 
