@@ -75,6 +75,7 @@ struct LiveUser: Identifiable {
     let lat: Double
     let lon: Double
     let label: String
+    var avatar: String = "green"
     var lastSeen: Date = Date()
 }
 
@@ -99,7 +100,7 @@ enum ServerEvent {
 
 extension ServerEvent: Decodable {
     enum CodingKeys: String, CodingKey {
-        case kind, id, lat, lon, label, alerts
+        case kind, id, lat, lon, label, alerts, avatar
     }
 
     init(from decoder: Decoder) throws {
@@ -113,7 +114,8 @@ extension ServerEvent: Decodable {
                     id: try c.decode(Int.self, forKey: .id),
                     lat: try c.decode(Double.self, forKey: .lat),
                     lon: try c.decode(Double.self, forKey: .lon),
-                    label: try c.decode(String.self, forKey: .label)
+                    label: try c.decode(String.self, forKey: .label),
+                    avatar: (try? c.decode(String.self, forKey: .avatar)) ?? "green"
                 ))
         case "live_gone":
             self = .liveGone(try c.decode(Int.self, forKey: .id))
