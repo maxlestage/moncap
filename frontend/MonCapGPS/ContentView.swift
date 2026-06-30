@@ -41,6 +41,7 @@ struct MapHomeView: View {
     @State private var gpxFile: IdentifiableURL?
     @State private var sharing = false
     @State private var driverName = "Moi"
+    @State private var avatar = Session.avatar
     @State private var routeCoords: [CLLocationCoordinate2D] = []
 
     private var liveCars: [LiveUser] { Array(realtime.liveUsers.values) }
@@ -82,7 +83,7 @@ struct MapHomeView: View {
         .onReceive(location.$coordinate) { coord in
             guard let c = coord else { return }
             if sharing {
-                realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName)
+                realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: avatar)
             }
             if nav.active {
                 nav.update(c)
@@ -114,7 +115,11 @@ struct MapHomeView: View {
             }
             ForEach(liveCars) { u in
                 Annotation(u.label, coordinate: .init(latitude: u.lat, longitude: u.lon)) {
-                    Text("🚗").font(.title)
+                    Image(Avatars.asset(u.avatar))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 44, height: 44)
+                        .shadow(radius: 2)
                 }
             }
             ForEach(realtime.alerts) { a in
@@ -307,6 +312,29 @@ struct MapHomeView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                Section("Mon avatar") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Avatars.all, id: \.self) { id in
+                                Image(Avatars.asset(id))
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 54, height: 54)
+                                    .padding(6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(avatar == id ? Color.blue : Color.gray.opacity(0.3),
+                                                    lineWidth: avatar == id ? 3 : 1)
+                                    )
+                                    .onTapGesture {
+                                        avatar = id
+                                        Session.avatar = id
+                                    }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
                 Section("Compte") {
                     Label(auth.username, systemImage: "person.crop.circle")
                     Button(role: .destructive) {
@@ -436,7 +464,7 @@ struct MapHomeView: View {
     private func toggleSharing() {
         sharing.toggle()
         if sharing, let c = location.coordinate {
-            realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName)
+            realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: avatar)
         }
     }
 

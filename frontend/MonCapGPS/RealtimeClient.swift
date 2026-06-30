@@ -55,8 +55,8 @@ final class RealtimeClient: ObservableObject {
     }
 
     /// Envoie ma position GPS en direct.
-    func sendLive(lat: Double, lon: Double, label: String) {
-        send(["kind": "live", "lat": lat, "lon": lon, "label": label])
+    func sendLive(lat: Double, lon: Double, label: String, avatar: String) {
+        send(["kind": "live", "lat": lat, "lon": lon, "label": label, "avatar": avatar])
     }
 
     /// Envoie un signalement.

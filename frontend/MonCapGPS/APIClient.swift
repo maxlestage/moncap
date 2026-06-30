@@ -5,9 +5,16 @@ enum Session {
     private static let tokenKey = "moncap.token"
     private static let userKey = "moncap.username"
 
+    private static let avatarKey = "moncap.avatar"
+
     static var token: String { UserDefaults.standard.string(forKey: tokenKey) ?? "" }
     static var username: String { UserDefaults.standard.string(forKey: userKey) ?? "" }
     static var isAuthenticated: Bool { !token.isEmpty }
+
+    static var avatar: String {
+        get { UserDefaults.standard.string(forKey: avatarKey) ?? "green" }
+        set { UserDefaults.standard.set(newValue, forKey: avatarKey) }
+    }
 
     static func save(token: String, username: String) {
         UserDefaults.standard.set(token, forKey: tokenKey)
