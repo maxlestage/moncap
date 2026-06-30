@@ -15,6 +15,16 @@ const ALERT_EMOJI: Record<string, string> = {
   danger: "⚠️",
 };
 
+/** Échappe le HTML : les popups Leaflet interprètent le HTML (anti-XSS). */
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /** Carte Leaflet : positions enregistrées + voitures live + signalements. */
 export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,7 +56,7 @@ export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
     if (!map || !layer) return;
     layer.clearLayers();
     for (const p of positions) {
-      L.marker([p.lat, p.lon]).bindPopup(p.label).addTo(layer);
+      L.marker([p.lat, p.lon]).bindPopup(esc(p.label)).addTo(layer);
     }
     if (positions.length >= 2) {
       const line = L.polyline(
@@ -71,7 +81,7 @@ export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
         fillColor: "#22c55e",
         fillOpacity: 0.9,
       })
-        .bindPopup(`🚗 ${u.label}`)
+        .bindPopup(`🚗 ${esc(u.label)}`)
         .addTo(layer);
     }
   }, [liveUsers]);
@@ -90,7 +100,7 @@ export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
         iconAnchor: [15, 15],
       });
       L.marker([a.lat, a.lon], { icon })
-        .bindPopup(`${emoji} ${a.label || a.category}`)
+        .bindPopup(`${emoji} ${esc(a.label || a.category)}`)
         .addTo(layer);
     }
   }, [alerts]);
