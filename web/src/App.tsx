@@ -46,11 +46,11 @@ export function App() {
 
   // Connexion WebSocket temps réel (reconnecte si l'URL d'API change).
   useEffect(() => {
-    const ws = new WebSocket(wsUrl());
-    wsRef.current = ws;
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-    ws.onmessage = (e) => {
+    let closedByUs = false;
+    let retry = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const handle = (e: MessageEvent) => {
       const ev = JSON.parse(e.data as string);
       switch (ev.kind) {
         case "positions_changed":
@@ -77,7 +77,32 @@ export function App() {
           break;
       }
     };
-    return () => ws.close();
+
+    // Connexion avec reconnexion automatique (backoff exponentiel, max 15 s).
+    const connect = () => {
+      const ws = new WebSocket(wsUrl());
+      wsRef.current = ws;
+      ws.onopen = () => {
+        retry = 0;
+        setConnected(true);
+      };
+      ws.onmessage = handle;
+      ws.onerror = () => ws.close();
+      ws.onclose = () => {
+        setConnected(false);
+        if (closedByUs) return;
+        const delay = Math.min(1000 * 2 ** retry, 15000);
+        retry += 1;
+        timer = setTimeout(connect, delay);
+      };
+    };
+    connect();
+
+    return () => {
+      closedByUs = true;
+      if (timer) clearTimeout(timer);
+      wsRef.current?.close();
+    };
   }, [apiBase, refresh]);
 
   // Purge des voitures live et signalements expirés.

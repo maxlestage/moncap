@@ -17,24 +17,41 @@ final class RealtimeClient: ObservableObject {
     private let url: URL
     private var task: URLSessionWebSocketTask?
     private var pruneTimer: Timer?
+    private var shouldReconnect = false
 
     init(url: URL) {
         self.url = url
     }
 
     func connect() {
+        shouldReconnect = true
+        startPruning()
+        openSocket()
+    }
+
+    func disconnect() {
+        shouldReconnect = false
+        pruneTimer?.invalidate()
+        task?.cancel(with: .goingAway, reason: nil)
+        connected = false
+    }
+
+    private func openSocket() {
         let task = URLSession.shared.webSocketTask(with: url)
         self.task = task
         task.resume()
         connected = true
         receive()
-        startPruning()
     }
 
-    func disconnect() {
-        pruneTimer?.invalidate()
-        task?.cancel(with: .goingAway, reason: nil)
+    /// Reconnexion automatique après une coupure (3 s).
+    private func handleDisconnect() {
         connected = false
+        guard shouldReconnect else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if shouldReconnect { openSocket() }
+        }
     }
 
     /// Envoie ma position GPS en direct.
@@ -61,7 +78,7 @@ final class RealtimeClient: ObservableObject {
             guard let self else { return }
             switch result {
             case .failure:
-                Task { @MainActor in self.connected = false }
+                Task { @MainActor in self.handleDisconnect() }
             case .success(let message):
                 if case .string(let text) = message {
                     Task { @MainActor in self.handle(text) }
