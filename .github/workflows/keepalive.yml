@@ -1,0 +1,21 @@
+name: Keep-alive backend
+
+# Ping régulier de l'app Heroku pour éviter qu'elle ne s'endorme (eco dyno)
+# pendant les sessions de test. Léger : ne compile rien, fait juste un GET.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # toutes les 5 min (minimum autorisé par GitHub)
+  workflow_dispatch: # déclenchement manuel possible
+
+jobs:
+  ping:
+    name: Ping
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: |
+          curl -fsS --max-time 30 --retry 2 \
+            https://moncap-c41a5aaf07e8.herokuapp.com/ -o /dev/null \
+            && echo "Backend réveillé ✅" \
+            || echo "Ping échoué (l'app se réveille peut-être)"
