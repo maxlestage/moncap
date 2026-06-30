@@ -42,6 +42,7 @@ export interface LiveUser {
   lat: number;
   lon: number;
   label: string;
+  avatar: string;
   ts: number;
 }
 
