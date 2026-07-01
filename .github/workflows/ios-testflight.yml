@@ -1,0 +1,38 @@
+name: iOS TestFlight
+
+# Archive l'app iOS et l'envoie sur TestFlight depuis un runner macOS.
+# Déclenchement manuel (onglet Actions) ou en poussant un tag `ios-v*`.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["ios-v*"]
+
+jobs:
+  testflight:
+    name: Build & upload TestFlight
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sélectionne Xcode (dernière version stable)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Ruby + bundler (fastlane)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: frontend
+
+      - name: Archive et upload TestFlight
+        run: bundle exec fastlane beta
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
