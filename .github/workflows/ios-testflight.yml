@@ -1,12 +1,27 @@
 name: iOS TestFlight
 
 # Archive l'app iOS et l'envoie sur TestFlight depuis un runner macOS.
-# Déclenchement manuel (onglet Actions) ou en poussant un tag `ios-v*`.
+# - Automatique : à chaque push sur `master` touchant l'app iOS.
+# - Manuel : onglet Actions → Run workflow.
+# - Tag : en poussant un tag `ios-v*`.
 
 on:
-  workflow_dispatch:
   push:
+    branches: ["master"]
+    paths:
+      - "frontend/MonCapGPS/**"
+      - "frontend/MonCapGPS.xcodeproj/**"
+      - "frontend/fastlane/**"
+      - "frontend/Gemfile"
+      - ".github/workflows/ios-testflight.yml"
     tags: ["ios-v*"]
+  workflow_dispatch:
+
+# Sérialise les envois : jamais deux uploads en parallèle (évite les
+# collisions de numéro de build). On ne coupe pas un envoi en cours.
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
 
 jobs:
   testflight:
@@ -18,12 +33,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Sans les secrets App Store Connect, on s'arrête proprement (pas d'échec
+      # rouge) — utile tant que les secrets ne sont pas encore configurés.
+      - name: Vérifie la présence des secrets
+        id: guard
+        working-directory: .
+        run: |
+          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_CONTENT }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secrets App Store Connect absents — build TestFlight ignoré. Ajoute ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_CONTENT dans Settings → Secrets."
+          fi
+
       - name: Sélectionne Xcode (dernière version stable)
+        if: steps.guard.outputs.ready == 'true'
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
       - name: Ruby + bundler (fastlane)
+        if: steps.guard.outputs.ready == 'true'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
@@ -31,6 +61,7 @@ jobs:
           working-directory: frontend
 
       - name: Archive et upload TestFlight
+        if: steps.guard.outputs.ready == 'true'
         run: bundle exec fastlane beta
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
