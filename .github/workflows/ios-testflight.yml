@@ -40,12 +40,13 @@ jobs:
         id: guard
         working-directory: .
         run: |
-          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_P8 }}" ]; then
+          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_P8 }}" ] \
+             && [ -n "${{ secrets.MATCH_PASSWORD }}" ] && [ -n "${{ secrets.MATCH_GIT_URL }}" ] && [ -n "${{ secrets.MATCH_GIT_TOKEN }}" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
-            echo "Les 3 secrets attendus sont présents ✅"
+            echo "Tous les secrets requis sont présents ✅"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Secrets App Store Connect absents — build TestFlight ignoré. Attendus : ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8."
+            echo "::warning::Secrets manquants — build TestFlight ignoré. Requis : ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, MATCH_PASSWORD, MATCH_GIT_URL, MATCH_GIT_TOKEN."
           fi
 
       - name: Sélectionne Xcode (dernière version stable)
@@ -64,8 +65,16 @@ jobs:
 
       - name: Archive et upload TestFlight
         if: steps.guard.outputs.ready == 'true'
-        run: bundle exec fastlane beta
+        run: |
+          # Auth git pour le dépôt de certificats (match), sans exposer le jeton.
+          AUTH="$(printf 'x-access-token:%s' "$MATCH_GIT_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$AUTH"
+          export MATCH_GIT_BASIC_AUTHORIZATION="$AUTH"
+          bundle exec fastlane beta
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_P8 }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}

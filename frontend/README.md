@@ -107,25 +107,42 @@ App Store Connect → **Apps → ＋ → Nouvelle app** : plateforme iOS, nom, l
 **Bundle ID** `com.maxlestage.moncap`, SKU au choix. (Sinon le tout premier
 upload échouera, faute d'app existante.)
 
+### b bis) Créer le dépôt privé de certificats (fastlane match)
+
+La signature en CI a besoin d'un certificat **persistant** (limite Apple).
+`fastlane match` le génère une fois et le stocke, **chiffré**, dans un petit
+dépôt privé réutilisé à chaque build.
+
+1. Crée un **nouveau dépôt privé vide** sur GitHub, ex. `moncap-ios-certs`
+   (Repositories → *New* → coche **Private**, sans README).
+2. Crée un **jeton d'accès** GitHub pouvant écrire dans ce dépôt :
+   *Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate* → donne accès à **ce dépôt**, permission
+   **Contents: Read and write**. Copie le jeton.
+
 ### c) Ajouter les secrets GitHub
 
-Dépôt GitHub → **Settings → Secrets and variables → Actions → New repository
-secret**. Crée exactement ces trois secrets :
+Dépôt `moncap` → **Settings → Secrets and variables → Actions → New repository
+secret**. Crée ces secrets :
 
 | Nom | Valeur |
 |-----|--------|
 | `ASC_KEY_ID` | le **Key ID** de l'étape (a) |
 | `ASC_ISSUER_ID` | l'**Issuer ID** de l'étape (a) |
-| `ASC_KEY_CONTENT` | le contenu du `.p8` **encodé en base64** (voir ci-dessous) |
+| `ASC_KEY_P8` | le contenu du `.p8` (brut **ou** base64 — les deux marchent) |
+| `MATCH_GIT_URL` | l'URL HTTPS du dépôt de certificats, ex. `https://github.com/maxlestage/moncap-ios-certs.git` |
+| `MATCH_GIT_TOKEN` | le **jeton** de l'étape (b bis) |
+| `MATCH_PASSWORD` | un **mot de passe de chiffrement** au choix (garde-le : il protège les certificats) |
 
-Pour obtenir le base64 du `.p8` **sans Mac/terminal** : ouvre
-[base64.guru/converter/encode/file](https://base64.guru/converter/encode/file),
-choisis ton fichier `.p8`, copie la sortie et colle-la dans `ASC_KEY_CONTENT`.
-*(Ou, si tu as un terminal : `base64 -i AuthKey_XXXX.p8 | pbcopy`.)*
+Pour `ASC_KEY_P8` sans Mac : ouvre le `.p8` avec un éditeur de texte et colle
+tout son contenu (`-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----`),
+ou encode-le en base64 via
+[base64.guru](https://base64.guru/converter/encode/file) — les deux formats
+sont acceptés automatiquement.
 
 ### d) Builds automatiques (et manuels)
 
-Une fois les 3 secrets en place, **c'est automatique** : chaque changement de
+Une fois les secrets en place, **c'est automatique** : chaque changement de
 l'app iOS mergé dans `master` (fichiers `frontend/MonCapGPS/**`, le projet
 Xcode ou la config fastlane) déclenche un build + upload TestFlight, sans
 rien faire. Le numéro de build s'incrémente tout seul à chaque fois.
