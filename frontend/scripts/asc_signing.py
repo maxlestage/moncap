@@ -102,11 +102,17 @@ def main():
        "-inkey", key_path, "-in", pem_path,
        "-out", p12_path, "-passout", f"pass:{password}")
 
-    # 5) Identifiant de la fiche app (bundleId)
+    # 5) Bundle ID (App ID) : on le récupère, ou on l'enregistre via l'API.
     bundles = req("GET", f"/bundleIds?filter[identifier]={BUNDLE_ID}&limit=1", token)
-    if not bundles.get("data"):
-        die(f"Aucun bundle id « {BUNDLE_ID} » sur le compte : crée d'abord la fiche app.")
-    bundle_uid = bundles["data"][0]["id"]
+    if bundles.get("data"):
+        bundle_uid = bundles["data"][0]["id"]
+    else:
+        body = {"data": {"type": "bundleIds",
+                         "attributes": {"identifier": BUNDLE_ID,
+                                        "name": "MonCap GPS", "platform": "IOS"}}}
+        created = req("POST", "/bundleIds", token, data=json.dumps(body))
+        bundle_uid = created["data"]["id"]
+        print(f"Bundle ID enregistré : {BUNDLE_ID}")
 
     # 6) Profil App Store : supprime l'ancien de même nom, puis recrée
     profs = req("GET", "/profiles?filter[profileType]=IOS_APP_STORE&limit=200", token)
