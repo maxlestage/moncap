@@ -87,6 +87,52 @@ ton iPhone **toute la semaine, sans le Mac**.
 > Chaque nouvelle version : incrémente *Build* (ex. 1 → 2) dans Xcode, puis
 > refais **Archive → Upload**.
 
+## 6 bis. (Automatique) Upload TestFlight via GitHub Actions — sans Mac
+
+Un pipeline CI (`.github/workflows/ios-testflight.yml` + `fastlane/`) archive,
+signe et envoie l'app sur TestFlight depuis un runner macOS — **aucun Mac
+requis de ton côté**. Configuration en **une seule fois**, au navigateur :
+
+### a) Créer une clé App Store Connect API
+
+1. [App Store Connect](https://appstoreconnect.apple.com) → **Users and Access**
+   → onglet **Integrations** (ou *Keys*) → **App Store Connect API**.
+2. Génère une clé avec le rôle **App Manager**.
+3. Note l'**Issuer ID** (en haut) et le **Key ID**, puis **télécharge le
+   fichier `.p8`** (⚠️ téléchargeable une seule fois).
+
+### b) Créer la fiche de l'app (une fois)
+
+App Store Connect → **Apps → ＋ → Nouvelle app** : plateforme iOS, nom, langue,
+**Bundle ID** `com.maxlestage.moncap`, SKU au choix. (Sinon le tout premier
+upload échouera, faute d'app existante.)
+
+### c) Ajouter les secrets GitHub
+
+Dépôt GitHub → **Settings → Secrets and variables → Actions → New repository
+secret**. Crée exactement ces trois secrets :
+
+| Nom | Valeur |
+|-----|--------|
+| `ASC_KEY_ID` | le **Key ID** de l'étape (a) |
+| `ASC_ISSUER_ID` | l'**Issuer ID** de l'étape (a) |
+| `ASC_KEY_CONTENT` | le contenu du `.p8` **encodé en base64** (voir ci-dessous) |
+
+Pour obtenir le base64 du `.p8` **sans Mac/terminal** : ouvre
+[base64.guru/converter/encode/file](https://base64.guru/converter/encode/file),
+choisis ton fichier `.p8`, copie la sortie et colle-la dans `ASC_KEY_CONTENT`.
+*(Ou, si tu as un terminal : `base64 -i AuthKey_XXXX.p8 | pbcopy`.)*
+
+### d) Lancer
+
+GitHub → onglet **Actions → iOS TestFlight → Run workflow**. Le job compile,
+signe (signature auto via la clé API) et pousse la build sur TestFlight.
+Tu peux aussi déclencher en poussant un tag `ios-v1`, `ios-v2`, …
+
+Ensuite : App Store Connect → **TestFlight** → ajoute-toi en testeur interne,
+installe l'app **TestFlight** sur l'iPhone, et teste. À chaque nouvel upload,
+le numéro de build s'incrémente tout seul.
+
 ## 7. À tester ce week-end
 
 - [ ] **Inscription / connexion** (puis déconnexion via la feuille « Lieux »).
