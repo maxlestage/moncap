@@ -107,39 +107,28 @@ Configuration en **une seule fois**.
 App Store Connect → **Apps → ＋ → Nouvelle app** : plateforme iOS, nom, langue,
 **Bundle ID** `com.maxlestage.moncap`, SKU au choix.
 
-### b bis) Récupérer le certificat de distribution + le profil (Mac, une fois)
-
-La signature en CI a besoin d'un certificat **persistant** (un runner est
-jeté après chaque build, la limite Apple interdit d'en recréer à l'infini).
-On l'exporte **une fois** sur le Mac :
-
-1. **Certificat** : Xcode → *Settings → Accounts →* ton compte *→ Manage
-   Certificates → ＋ → Apple Distribution*. Puis **Trousseau d'accès** →
-   clic droit sur *« Apple Distribution : … »* → **Exporter** → format
-   **Personal Information Exchange (.p12)** → mets un mot de passe.
-2. **Profil** : [developer.apple.com](https://developer.apple.com/account) →
-   *Profiles → ＋ → App Store Connect (App Store)* → App ID
-   `com.maxlestage.moncap` → choisis le certificat ci-dessus → **Download**
-   (fichier `.mobileprovision`).
-3. **Encode les deux en base64** (Terminal Mac) :
-   ```
-   base64 -i Certificats.p12 | pbcopy      # colle dans DIST_CERT_P12
-   base64 -i MonCap.mobileprovision | pbcopy # colle dans PROVISION_PROFILE
-   ```
-
 ### c) Ajouter les secrets GitHub
 
 Dépôt `moncap` → **Settings → Secrets and variables → Actions → New repository
-secret**. Crée ces secrets :
+secret**. **Seuls ces 3 secrets** sont nécessaires :
 
 | Nom | Valeur |
 |-----|--------|
 | `ASC_KEY_ID` | le **Key ID** de l'étape (a) |
 | `ASC_ISSUER_ID` | l'**Issuer ID** de l'étape (a) |
 | `ASC_KEY_P8` | le contenu du `.p8` (brut **ou** base64) |
-| `DIST_CERT_P12` | le `.p12` **en base64** (étape b bis) |
-| `DIST_CERT_PASSWORD` | le mot de passe du `.p12` |
-| `PROVISION_PROFILE` | le `.mobileprovision` **en base64** (étape b bis) |
+
+> **Aucun certificat à fournir.** Le pipeline crée automatiquement, via l'API
+> App Store Connect, un certificat de distribution et un profil App Store à
+> chaque build (`frontend/scripts/asc_signing.py`). Pour rester sous la limite
+> Apple, il **révoque d'abord les anciens** certificats de distribution — donc
+> ce compte est géré uniquement par cette CI (n'y ajoute pas de signature
+> manuelle en parallèle).
+
+Pour `ASC_KEY_P8` sans ordinateur : ouvre le `.p8` avec un éditeur de texte et
+colle tout son contenu, ou encode-le en base64 via
+[base64.guru](https://base64.guru/converter/encode/file) — les deux formats
+sont acceptés automatiquement.
 
 ### d) Builds automatiques (et manuels)
 

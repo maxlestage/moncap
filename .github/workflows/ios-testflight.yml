@@ -1,7 +1,9 @@
 name: iOS TestFlight
 
 # Archive l'app iOS et l'envoie sur TestFlight depuis un runner macOS, avec
-# les outils Apple natifs (xcodebuild + altool), sans fastlane.
+# les outils Apple natifs (xcodebuild + altool), sans fastlane. Le certificat
+# de distribution et le profil App Store sont générés en ligne via l'API
+# App Store Connect — aucun Mac ni certificat à fournir.
 # - Automatique : à chaque push sur `master` touchant l'app iOS.
 # - Manuel : onglet Actions → Run workflow.
 # - Tag : en poussant un tag `ios-v*`.
@@ -12,6 +14,7 @@ on:
     paths:
       - "frontend/MonCapGPS/**"
       - "frontend/MonCapGPS.xcodeproj/**"
+      - "frontend/scripts/**"
       - ".github/workflows/ios-testflight.yml"
     tags: ["ios-v*"]
   workflow_dispatch:
@@ -34,18 +37,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Sans les secrets requis, on s'arrête proprement (pas d'échec rouge).
+      # Seuls les secrets App Store Connect sont nécessaires (le reste est
+      # généré en ligne). Sans eux, on s'arrête proprement.
       - name: Vérifie la présence des secrets
         id: guard
         working-directory: .
         run: |
-          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_P8 }}" ] \
-             && [ -n "${{ secrets.DIST_CERT_P12 }}" ] && [ -n "${{ secrets.DIST_CERT_PASSWORD }}" ] && [ -n "${{ secrets.PROVISION_PROFILE }}" ]; then
+          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_P8 }}" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
-            echo "Tous les secrets requis sont présents ✅"
+            echo "Secrets App Store Connect présents ✅"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Secrets manquants — build TestFlight ignoré. Requis : ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, DIST_CERT_P12, DIST_CERT_PASSWORD, PROVISION_PROFILE."
+            echo "::warning::Secrets absents — build TestFlight ignoré. Requis : ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8."
           fi
 
       - name: Sélectionne Xcode (dernière version stable)
@@ -54,12 +57,24 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Installe le certificat et le profil
+      - name: Python
+        if: steps.guard.outputs.ready == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Génère le certificat et le profil (API App Store Connect)
         if: steps.guard.outputs.ready == 'true'
         env:
-          DIST_CERT_P12: ${{ secrets.DIST_CERT_P12 }}
-          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
-          PROVISION_PROFILE: ${{ secrets.PROVISION_PROFILE }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          python -m pip install --quiet requests "pyjwt[crypto]"
+          python scripts/asc_signing.py
+
+      - name: Installe le certificat et le profil
+        if: steps.guard.outputs.ready == 'true'
         run: |
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/app.keychain-db"
@@ -68,20 +83,19 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KPWD" "$KEYCHAIN"
 
-          echo "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -P "$DIST_CERT_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          # Intermédiaire Apple WWDR (chaîne de signature complète).
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
+            -o "$RUNNER_TEMP/wwdr.cer"
+          security import "$RUNNER_TEMP/wwdr.cer" -k "$KEYCHAIN" -t cert -f der -A || true
+
+          security import "$P12_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple: -k "$KPWD" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
 
           PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES"
-          echo "$PROVISION_PROFILE" | base64 --decode > "$RUNNER_TEMP/pp.mobileprovision"
-          security cms -D -i "$RUNNER_TEMP/pp.mobileprovision" > "$RUNNER_TEMP/pp.plist"
-          UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/pp.plist")"
-          NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/pp.plist")"
-          cp "$RUNNER_TEMP/pp.mobileprovision" "$PROFILES/$UUID.mobileprovision"
-          echo "PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
+          UUID="$(security cms -D -i "$PP_PATH" | /usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin)"
+          cp "$PP_PATH" "$PROFILES/$UUID.mobileprovision"
 
       - name: Archive
         if: steps.guard.outputs.ready == 'true'
