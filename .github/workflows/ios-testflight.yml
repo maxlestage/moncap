@@ -35,20 +35,17 @@ jobs:
 
       # Sans les secrets App Store Connect, on s'arrête proprement (pas d'échec
       # rouge) — utile tant que les secrets ne sont pas encore configurés.
+      # Le contenu de la clé .p8 est lu depuis ASC_KEY_P8.
       - name: Vérifie la présence des secrets
         id: guard
         working-directory: .
-        env:
-          ALL_SECRETS: ${{ toJSON(secrets) }}
         run: |
-          echo "Noms des secrets configurés dans ce repo (valeurs jamais affichées) :"
-          printf '%s' "$ALL_SECRETS" | grep -oE '"[A-Za-z0-9_]+"[[:space:]]*:' | tr -d '":' | tr -d ' ' | sort | sed 's/^/  - /'
-          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_CONTENT }}" ]; then
+          if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_P8 }}" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "Les 3 secrets attendus sont présents ✅"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Secrets App Store Connect absents ou mal nommés — build TestFlight ignoré. Attendus (exacts) : ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_CONTENT."
+            echo "::warning::Secrets App Store Connect absents — build TestFlight ignoré. Attendus : ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8."
           fi
 
       - name: Sélectionne Xcode (dernière version stable)
@@ -71,4 +68,4 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_P8 }}
