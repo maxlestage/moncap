@@ -7,7 +7,7 @@ struct LoginView: View {
     @State private var signupMode = false
     @State private var username = ""
     @State private var password = ""
-    @State private var error = ""
+    @State private var errorMessage = ""
     @State private var busy = false
 
     var body: some View {
@@ -25,8 +25,8 @@ struct LoginView: View {
             SecureField("Mot de passe", text: $password)
                 .textFieldStyle(.roundedBorder)
 
-            if !error.isEmpty {
-                Text(error).font(.footnote).foregroundStyle(.red)
+            if !errorMessage.isEmpty {
+                Text(errorMessage).font(.footnote).foregroundStyle(.red)
             }
 
             Button(action: submit) {
@@ -42,7 +42,7 @@ struct LoginView: View {
 
             Button(signupMode ? "Déjà un compte ? Se connecter" : "Pas de compte ? S'inscrire") {
                 signupMode.toggle()
-                error = ""
+                errorMessage = ""
             }
             .font(.footnote)
 
@@ -53,7 +53,7 @@ struct LoginView: View {
 
     private func submit() {
         busy = true
-        error = ""
+        errorMessage = ""
         Task {
             do {
                 if signupMode {
@@ -62,9 +62,9 @@ struct LoginView: View {
                     try await auth.login(username, password)
                 }
             } catch APIError.server(let msg) {
-                error = msg.isEmpty ? "Échec de l'authentification" : msg
+                errorMessage = msg.isEmpty ? "Échec de l'authentification" : msg
             } catch {
-                error = "Échec de l'authentification"
+                errorMessage = "Échec de l'authentification"
             }
             busy = false
         }
