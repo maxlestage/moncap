@@ -1,22 +1,37 @@
 default_platform(:ios)
 
+require "base64"
+require "shellwords"
+
 APP_IDENTIFIER = "com.maxlestage.moncap"
 
 platform :ios do
   desc "Archive et envoie une build sur TestFlight"
   lane :beta do
-    # Authentification via clé App Store Connect API (aucun mot de passe, ni 2FA).
-    # Les 3 valeurs viennent des secrets GitHub (voir README).
+    key_id = ENV.fetch("ASC_KEY_ID")
+    issuer_id = ENV.fetch("ASC_ISSUER_ID")
     key_content = ENV.fetch("ASC_KEY_CONTENT")
     # Détecte automatiquement si le secret contient le .p8 brut ou du base64.
     is_base64 = !key_content.include?("BEGIN PRIVATE KEY")
+
+    # Authentification via clé App Store Connect API (aucun mot de passe, ni 2FA).
     api_key = app_store_connect_api_key(
-      key_id: ENV.fetch("ASC_KEY_ID"),
-      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_id: key_id,
+      issuer_id: issuer_id,
       key_content: key_content,
       is_key_content_base64: is_base64,
       in_house: false
     )
+
+    # Écrit la clé .p8 sur disque : xcodebuild en a besoin (chemin) pour créer
+    # certificat + profil automatiquement via l'API (signature auto sur CI).
+    p8 = is_base64 ? Base64.decode64(key_content) : key_content
+    key_path = File.expand_path("AuthKey_#{key_id}.p8", Dir.pwd)
+    File.write(key_path, p8)
+    auth = "-allowProvisioningUpdates " \
+           "-authenticationKeyPath #{key_path.shellescape} " \
+           "-authenticationKeyID #{key_id} " \
+           "-authenticationKeyIssuerID #{issuer_id}"
 
     # Numéro de build = dernier sur TestFlight + 1 (0 si l'app n'a pas encore
     # de build). Évite les collisions de numéro de build.
@@ -31,8 +46,9 @@ platform :ios do
     end
     build_number = latest + 1
 
-    # Archive en Release. La signature est gérée automatiquement par Xcode via
-    # la clé API (-allowProvisioningUpdates), donc aucun certificat à fournir.
+    # Archive en Release, signature automatique via la clé API (aucun
+    # certificat à fournir). On passe les paramètres d'auth à l'archive ET à
+    # l'export.
     build_app(
       project: "MonCapGPS.xcodeproj",
       scheme: "MonCapGPS",
@@ -40,7 +56,8 @@ platform :ios do
       export_method: "app-store",
       clean: true,
       output_directory: "build",
-      xcargs: "-allowProvisioningUpdates CURRENT_PROJECT_VERSION=#{build_number}"
+      xcargs: "#{auth} CURRENT_PROJECT_VERSION=#{build_number}",
+      export_xcargs: auth
     )
 
     upload_to_testflight(
@@ -49,5 +66,7 @@ platform :ios do
       skip_waiting_for_build_processing: true,
       distribute_external: false
     )
+  ensure
+    File.delete(key_path) if defined?(key_path) && key_path && File.exist?(key_path)
   end
 end
