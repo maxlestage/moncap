@@ -123,15 +123,25 @@ Pour obtenir le base64 du `.p8` **sans Mac/terminal** : ouvre
 choisis ton fichier `.p8`, copie la sortie et colle-la dans `ASC_KEY_CONTENT`.
 *(Ou, si tu as un terminal : `base64 -i AuthKey_XXXX.p8 | pbcopy`.)*
 
-### d) Lancer
+### d) Builds automatiques (et manuels)
 
-GitHub → onglet **Actions → iOS TestFlight → Run workflow**. Le job compile,
-signe (signature auto via la clé API) et pousse la build sur TestFlight.
-Tu peux aussi déclencher en poussant un tag `ios-v1`, `ios-v2`, …
+Une fois les 3 secrets en place, **c'est automatique** : chaque changement de
+l'app iOS mergé dans `master` (fichiers `frontend/MonCapGPS/**`, le projet
+Xcode ou la config fastlane) déclenche un build + upload TestFlight, sans
+rien faire. Le numéro de build s'incrémente tout seul à chaque fois.
+
+Tu peux aussi le lancer :
+- **à la main** : onglet **Actions → iOS TestFlight → Run workflow** ;
+- **par un tag** : pousse `ios-v1`, `ios-v2`, …
+
+> Tant que les secrets ne sont pas configurés, le workflow ne fait rien (il
+> s'arrête proprement avec un avertissement, sans échec rouge).
+>
+> Un build touchant seulement le backend, le web ou la doc **ne déclenche pas**
+> de build iOS (pour économiser les minutes macOS, facturées ×10).
 
 Ensuite : App Store Connect → **TestFlight** → ajoute-toi en testeur interne,
-installe l'app **TestFlight** sur l'iPhone, et teste. À chaque nouvel upload,
-le numéro de build s'incrémente tout seul.
+installe l'app **TestFlight** sur l'iPhone, et teste.
 
 ## 7. À tester ce week-end
 
