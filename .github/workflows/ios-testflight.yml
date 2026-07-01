@@ -83,10 +83,11 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KPWD" "$KEYCHAIN"
 
-          # Intermédiaire Apple WWDR (chaîne de signature complète).
+          # Intermédiaire Apple WWDR (chaîne de signature complète). Non bloquant :
+          # l'intermédiaire est en général déjà présent sur le runner.
           curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer \
-            -o "$RUNNER_TEMP/wwdr.cer"
-          security import "$RUNNER_TEMP/wwdr.cer" -k "$KEYCHAIN" -t cert -f der -A || true
+            -o "$RUNNER_TEMP/wwdr.cer" || true
+          security import "$RUNNER_TEMP/wwdr.cer" -k "$KEYCHAIN" -A || true
 
           security import "$P12_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
           security set-key-partition-list -S apple-tool:,apple: -k "$KPWD" "$KEYCHAIN" >/dev/null
@@ -94,7 +95,8 @@ jobs:
 
           PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES"
-          UUID="$(security cms -D -i "$PP_PATH" | /usr/libexec/PlistBuddy -c 'Print :UUID' /dev/stdin)"
+          security cms -D -i "$PP_PATH" > "$RUNNER_TEMP/pp.plist"
+          UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/pp.plist")"
           cp "$PP_PATH" "$PROFILES/$UUID.mobileprovision"
 
       - name: Archive
