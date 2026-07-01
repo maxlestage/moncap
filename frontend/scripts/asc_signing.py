@@ -98,7 +98,7 @@ def main():
     # 4) .p12 (clé + certificat) avec mot de passe aléatoire
     password = base64.urlsafe_b64encode(os.urandom(18)).decode()
     p12_path = f"{RUNNER_TEMP}/dist.p12"
-    sh("openssl", "pkcs12", "-export", "-legacy",
+    sh("openssl", "pkcs12", "-export",
        "-inkey", key_path, "-in", pem_path,
        "-out", p12_path, "-passout", f"pass:{password}")
 
