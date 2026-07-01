@@ -1,6 +1,7 @@
 name: iOS TestFlight
 
-# Archive l'app iOS et l'envoie sur TestFlight depuis un runner macOS.
+# Archive l'app iOS et l'envoie sur TestFlight depuis un runner macOS, avec
+# les outils Apple natifs (xcodebuild + altool), sans fastlane.
 # - Automatique : à chaque push sur `master` touchant l'app iOS.
 # - Manuel : onglet Actions → Run workflow.
 # - Tag : en poussant un tag `ios-v*`.
@@ -11,17 +12,17 @@ on:
     paths:
       - "frontend/MonCapGPS/**"
       - "frontend/MonCapGPS.xcodeproj/**"
-      - "frontend/fastlane/**"
-      - "frontend/Gemfile"
       - ".github/workflows/ios-testflight.yml"
     tags: ["ios-v*"]
   workflow_dispatch:
 
-# Sérialise les envois : jamais deux uploads en parallèle (évite les
-# collisions de numéro de build). On ne coupe pas un envoi en cours.
 concurrency:
   group: ios-testflight
   cancel-in-progress: false
+
+env:
+  BUNDLE_ID: com.maxlestage.moncap
+  TEAM_ID: 2FW8T4UX4L
 
 jobs:
   testflight:
@@ -33,20 +34,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Sans les secrets App Store Connect, on s'arrête proprement (pas d'échec
-      # rouge) — utile tant que les secrets ne sont pas encore configurés.
-      # Le contenu de la clé .p8 est lu depuis ASC_KEY_P8.
+      # Sans les secrets requis, on s'arrête proprement (pas d'échec rouge).
       - name: Vérifie la présence des secrets
         id: guard
         working-directory: .
         run: |
           if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_P8 }}" ] \
-             && [ -n "${{ secrets.MATCH_PASSWORD }}" ] && [ -n "${{ secrets.MATCH_GIT_URL }}" ] && [ -n "${{ secrets.MATCH_GIT_TOKEN }}" ]; then
+             && [ -n "${{ secrets.DIST_CERT_P12 }}" ] && [ -n "${{ secrets.DIST_CERT_PASSWORD }}" ] && [ -n "${{ secrets.PROVISION_PROFILE }}" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "Tous les secrets requis sont présents ✅"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Secrets manquants — build TestFlight ignoré. Requis : ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, MATCH_PASSWORD, MATCH_GIT_URL, MATCH_GIT_TOKEN."
+            echo "::warning::Secrets manquants — build TestFlight ignoré. Requis : ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, DIST_CERT_P12, DIST_CERT_PASSWORD, PROVISION_PROFILE."
           fi
 
       - name: Sélectionne Xcode (dernière version stable)
@@ -55,26 +54,85 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Ruby + bundler (fastlane)
+      - name: Installe le certificat et le profil
         if: steps.guard.outputs.ready == 'true'
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-          bundler-cache: true
-          working-directory: frontend
+        env:
+          DIST_CERT_P12: ${{ secrets.DIST_CERT_P12 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+          PROVISION_PROFILE: ${{ secrets.PROVISION_PROFILE }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/app.keychain-db"
+          KPWD="$(uuidgen)"
+          security create-keychain -p "$KPWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KPWD" "$KEYCHAIN"
 
-      - name: Archive et upload TestFlight
+          echo "$DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$DIST_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KPWD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+          PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES"
+          echo "$PROVISION_PROFILE" | base64 --decode > "$RUNNER_TEMP/pp.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/pp.mobileprovision" > "$RUNNER_TEMP/pp.plist"
+          UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/pp.plist")"
+          NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/pp.plist")"
+          cp "$RUNNER_TEMP/pp.mobileprovision" "$PROFILES/$UUID.mobileprovision"
+          echo "PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
+
+      - name: Archive
         if: steps.guard.outputs.ready == 'true'
         run: |
-          # Auth git pour le dépôt de certificats (match), sans exposer le jeton.
-          AUTH="$(printf 'x-access-token:%s' "$MATCH_GIT_TOKEN" | base64 | tr -d '\n')"
-          echo "::add-mask::$AUTH"
-          export MATCH_GIT_BASIC_AUTHORIZATION="$AUTH"
-          bundle exec fastlane beta
+          set -euo pipefail
+          xcodebuild -project MonCapGPS.xcodeproj -scheme MonCapGPS \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/MonCapGPS.xcarchive" \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            clean archive
+
+      - name: Exporte l'IPA
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+            <key>destination</key><string>export</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/MonCapGPS.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Envoie sur TestFlight
+        if: steps.guard.outputs.ready == 'true'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_P8 }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
-          MATCH_GIT_TOKEN: ${{ secrets.MATCH_GIT_TOKEN }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          KEYDIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEYDIR"
+          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN PRIVATE KEY'; then
+            printf '%s' "$ASC_KEY_P8" > "$KEYDIR/AuthKey_${ASC_KEY_ID}.p8"
+          else
+            printf '%s' "$ASC_KEY_P8" | base64 --decode > "$KEYDIR/AuthKey_${ASC_KEY_ID}.p8"
+          fi
+          IPA="$(ls "$RUNNER_TEMP"/export/*.ipa | head -1)"
+          echo "Envoi de $IPA"
+          xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

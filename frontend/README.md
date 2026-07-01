@@ -87,38 +87,45 @@ ton iPhone **toute la semaine, sans le Mac**.
 > Chaque nouvelle version : incrémente *Build* (ex. 1 → 2) dans Xcode, puis
 > refais **Archive → Upload**.
 
-## 6 bis. (Automatique) Upload TestFlight via GitHub Actions — sans Mac
+## 6 bis. (Automatique) Upload TestFlight via GitHub Actions — sans Mac, sans fastlane
 
-Un pipeline CI (`.github/workflows/ios-testflight.yml` + `fastlane/`) archive,
-signe et envoie l'app sur TestFlight depuis un runner macOS — **aucun Mac
-requis de ton côté**. Configuration en **une seule fois**, au navigateur :
+Un pipeline CI (`.github/workflows/ios-testflight.yml`) archive, signe et
+envoie l'app sur TestFlight depuis un runner macOS, avec les **outils Apple
+natifs** (`xcodebuild` + `altool`) — **aucun Mac requis** ensuite.
+Configuration en **une seule fois**.
 
 ### a) Créer une clé App Store Connect API
 
 1. [App Store Connect](https://appstoreconnect.apple.com) → **Users and Access**
    → onglet **Integrations** (ou *Keys*) → **App Store Connect API**.
 2. Génère une clé avec le rôle **App Manager**.
-3. Note l'**Issuer ID** (en haut) et le **Key ID**, puis **télécharge le
-   fichier `.p8`** (⚠️ téléchargeable une seule fois).
+3. Note l'**Issuer ID** et le **Key ID**, puis **télécharge le `.p8`**
+   (⚠️ téléchargeable une seule fois).
 
 ### b) Créer la fiche de l'app (une fois)
 
 App Store Connect → **Apps → ＋ → Nouvelle app** : plateforme iOS, nom, langue,
-**Bundle ID** `com.maxlestage.moncap`, SKU au choix. (Sinon le tout premier
-upload échouera, faute d'app existante.)
+**Bundle ID** `com.maxlestage.moncap`, SKU au choix.
 
-### b bis) Créer le dépôt privé de certificats (fastlane match)
+### b bis) Récupérer le certificat de distribution + le profil (Mac, une fois)
 
-La signature en CI a besoin d'un certificat **persistant** (limite Apple).
-`fastlane match` le génère une fois et le stocke, **chiffré**, dans un petit
-dépôt privé réutilisé à chaque build.
+La signature en CI a besoin d'un certificat **persistant** (un runner est
+jeté après chaque build, la limite Apple interdit d'en recréer à l'infini).
+On l'exporte **une fois** sur le Mac :
 
-1. Crée un **nouveau dépôt privé vide** sur GitHub, ex. `moncap-ios-certs`
-   (Repositories → *New* → coche **Private**, sans README).
-2. Crée un **jeton d'accès** GitHub pouvant écrire dans ce dépôt :
-   *Settings → Developer settings → Personal access tokens →
-   Fine-grained tokens → Generate* → donne accès à **ce dépôt**, permission
-   **Contents: Read and write**. Copie le jeton.
+1. **Certificat** : Xcode → *Settings → Accounts →* ton compte *→ Manage
+   Certificates → ＋ → Apple Distribution*. Puis **Trousseau d'accès** →
+   clic droit sur *« Apple Distribution : … »* → **Exporter** → format
+   **Personal Information Exchange (.p12)** → mets un mot de passe.
+2. **Profil** : [developer.apple.com](https://developer.apple.com/account) →
+   *Profiles → ＋ → App Store Connect (App Store)* → App ID
+   `com.maxlestage.moncap` → choisis le certificat ci-dessus → **Download**
+   (fichier `.mobileprovision`).
+3. **Encode les deux en base64** (Terminal Mac) :
+   ```
+   base64 -i Certificats.p12 | pbcopy      # colle dans DIST_CERT_P12
+   base64 -i MonCap.mobileprovision | pbcopy # colle dans PROVISION_PROFILE
+   ```
 
 ### c) Ajouter les secrets GitHub
 
@@ -129,23 +136,17 @@ secret**. Crée ces secrets :
 |-----|--------|
 | `ASC_KEY_ID` | le **Key ID** de l'étape (a) |
 | `ASC_ISSUER_ID` | l'**Issuer ID** de l'étape (a) |
-| `ASC_KEY_P8` | le contenu du `.p8` (brut **ou** base64 — les deux marchent) |
-| `MATCH_GIT_URL` | l'URL HTTPS du dépôt de certificats, ex. `https://github.com/maxlestage/moncap-ios-certs.git` |
-| `MATCH_GIT_TOKEN` | le **jeton** de l'étape (b bis) |
-| `MATCH_PASSWORD` | un **mot de passe de chiffrement** au choix (garde-le : il protège les certificats) |
-
-Pour `ASC_KEY_P8` sans Mac : ouvre le `.p8` avec un éditeur de texte et colle
-tout son contenu (`-----BEGIN PRIVATE KEY----- … -----END PRIVATE KEY-----`),
-ou encode-le en base64 via
-[base64.guru](https://base64.guru/converter/encode/file) — les deux formats
-sont acceptés automatiquement.
+| `ASC_KEY_P8` | le contenu du `.p8` (brut **ou** base64) |
+| `DIST_CERT_P12` | le `.p12` **en base64** (étape b bis) |
+| `DIST_CERT_PASSWORD` | le mot de passe du `.p12` |
+| `PROVISION_PROFILE` | le `.mobileprovision` **en base64** (étape b bis) |
 
 ### d) Builds automatiques (et manuels)
 
 Une fois les secrets en place, **c'est automatique** : chaque changement de
-l'app iOS mergé dans `master` (fichiers `frontend/MonCapGPS/**`, le projet
-Xcode ou la config fastlane) déclenche un build + upload TestFlight, sans
-rien faire. Le numéro de build s'incrémente tout seul à chaque fois.
+l'app iOS mergé dans `master` (fichiers `frontend/MonCapGPS/**` ou le projet
+Xcode) déclenche un build + upload TestFlight. Le numéro de build =
+le numéro du run, unique à chaque fois.
 
 Tu peux aussi le lancer :
 - **à la main** : onglet **Actions → iOS TestFlight → Run workflow** ;
