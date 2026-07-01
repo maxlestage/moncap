@@ -38,12 +38,17 @@ jobs:
       - name: Vérifie la présence des secrets
         id: guard
         working-directory: .
+        env:
+          ALL_SECRETS: ${{ toJSON(secrets) }}
         run: |
+          echo "Noms des secrets configurés dans ce repo (valeurs jamais affichées) :"
+          printf '%s' "$ALL_SECRETS" | grep -oE '"[A-Za-z0-9_]+"[[:space:]]*:' | tr -d '":' | tr -d ' ' | sort | sed 's/^/  - /'
           if [ -n "${{ secrets.ASC_KEY_ID }}" ] && [ -n "${{ secrets.ASC_ISSUER_ID }}" ] && [ -n "${{ secrets.ASC_KEY_CONTENT }}" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Les 3 secrets attendus sont présents ✅"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Secrets App Store Connect absents — build TestFlight ignoré. Ajoute ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_CONTENT dans Settings → Secrets."
+            echo "::warning::Secrets App Store Connect absents ou mal nommés — build TestFlight ignoré. Attendus (exacts) : ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_CONTENT."
           fi
 
       - name: Sélectionne Xcode (dernière version stable)
