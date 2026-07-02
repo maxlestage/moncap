@@ -12,6 +12,19 @@ private func emoji(for category: String) -> String {
     alertTypes.first { $0.category == category }?.emoji ?? "⚠️"
 }
 
+/// Un trajet coloré affiché sur la carte (vers un point enregistré).
+struct ColoredRoute: Identifiable {
+    let id = UUID()
+    let coordinates: [CLLocationCoordinate2D]
+    let color: Color
+    let label: String
+}
+
+/// Palette de couleurs pour distinguer les trajets simultanés.
+private let routePalette: [Color] = [
+    .green, .blue, .orange, .purple, .red, .teal, .pink, .indigo, .brown, .cyan,
+]
+
 /// Point d'entrée : écran de connexion ou carte selon l'authentification.
 struct ContentView: View {
     @StateObject private var auth = AuthStore()
@@ -46,6 +59,7 @@ struct MapHomeView: View {
     @State private var driverName = "Moi"
     @State private var avatar = Session.avatar
     @State private var routeCoords: [CLLocationCoordinate2D] = []
+    @State private var multiRoutes: [ColoredRoute] = []
 
     private var liveCars: [LiveUser] { Array(realtime.liveUsers.values) }
 
@@ -72,6 +86,8 @@ struct MapHomeView: View {
             VStack(spacing: 12) {
                 if nav.active {
                     etaCard
+                } else if !multiRoutes.isEmpty {
+                    multiRouteCard
                 } else if let info = routeInfo {
                     routeCard(info)
                 }
@@ -115,8 +131,14 @@ struct MapHomeView: View {
             ForEach(positions) { p in
                 Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
             }
-            // Itinéraire routier le plus simple, en vert.
-            if !displayedRoute.isEmpty {
+            // Plusieurs trajets simultanés (un par point), chacun sa couleur.
+            if !multiRoutes.isEmpty && !nav.active {
+                ForEach(multiRoutes) { r in
+                    MapPolyline(coordinates: r.coordinates)
+                        .stroke(r.color, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                }
+            } else if !displayedRoute.isEmpty {
+                // Itinéraire routier le plus simple, en vert.
                 MapPolyline(coordinates: displayedRoute)
                     .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
             } else if positions.count >= 2 {
@@ -235,6 +257,29 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
+    /// Carte listant les trajets simultanés affichés (avec leur couleur).
+    private var multiRouteCard: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(multiRoutes.count) trajets affichés")
+                    .font(.subheadline.weight(.semibold))
+                ForEach(multiRoutes) { r in
+                    HStack(spacing: 8) {
+                        Circle().fill(r.color).frame(width: 10, height: 10)
+                        Text(r.label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+            Spacer()
+            Button { multiRoutes = [] } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+    }
+
     private var bottomBar: some View {
         HStack(alignment: .bottom) {
             speedPill
@@ -334,6 +379,7 @@ struct MapHomeView: View {
     private func startSearchNavigation(to item: MKMapItem) {
         let dest = item.placemark.coordinate
         showSearch = false
+        multiRoutes = []
         Task {
             guard let from = location.coordinate,
                 let route = await drivingRoute(from: from, to: dest)
@@ -367,6 +413,15 @@ struct MapHomeView: View {
                         Label("Itinéraire le plus simple", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                     }
                     .disabled(positions.count < 2)
+                    Button {
+                        Task {
+                            await showAllRoutes()
+                            showPlaces = false
+                        }
+                    } label: {
+                        Label("Un trajet vers chaque point", systemImage: "arrow.triangle.branch")
+                    }
+                    .disabled(location.coordinate == nil || positions.isEmpty)
                 }
                 if let s = stats {
                     Section("Statistiques") {
@@ -496,6 +551,7 @@ struct MapHomeView: View {
 
     /// Calcule l'itinéraire routier le plus simple (vert) et son résumé.
     private func updateRoute() async {
+        multiRoutes = []
         let pts = positions.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
         guard pts.count >= 2 else {
             routeCoords = []
@@ -508,9 +564,49 @@ struct MapHomeView: View {
         }
     }
 
+    /// Calcule et affiche un trajet vers CHAQUE point enregistré, chacun d'une
+    /// couleur différente (plusieurs trajets simultanés sur la carte).
+    private func showAllRoutes() async {
+        guard let from = location.coordinate else { return }
+        routeCoords = []
+        routeInfo = nil
+        var routes: [ColoredRoute] = []
+        for (i, p) in positions.enumerated() {
+            let to = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
+            if let r = await drivingRoute(from: from, to: to) {
+                routes.append(
+                    ColoredRoute(
+                        coordinates: r.polyline.coordinates,
+                        color: routePalette[i % routePalette.count],
+                        label: p.label))
+            }
+        }
+        multiRoutes = routes
+        var all = routes.flatMap { $0.coordinates }
+        all.append(from)
+        fitCoordinates(all)
+    }
+
+    /// Cadre la carte pour englober un ensemble de coordonnées.
+    private func fitCoordinates(_ pts: [CLLocationCoordinate2D]) {
+        guard pts.count >= 2 else { return }
+        let lats = pts.map(\.latitude)
+        let lons = pts.map(\.longitude)
+        let center = CLLocationCoordinate2D(
+            latitude: (lats.min()! + lats.max()!) / 2,
+            longitude: (lons.min()! + lons.max()!) / 2)
+        let span = MKCoordinateSpan(
+            latitudeDelta: (lats.max()! - lats.min()!) * 1.4 + 0.01,
+            longitudeDelta: (lons.max()! - lons.min()!) * 1.4 + 0.01)
+        withAnimation {
+            camera = .region(MKCoordinateRegion(center: center, span: span))
+        }
+    }
+
     /// Démarre la navigation depuis ma position vers une destination.
     private func startNavigation(to dest: Position) async {
         guard let from = location.coordinate else { return }
+        multiRoutes = []
         let to = CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon)
         guard let route = await drivingRoute(from: from, to: to) else { return }
         nav.start(route: route, destination: to)
