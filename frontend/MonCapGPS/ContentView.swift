@@ -60,6 +60,7 @@ struct MapHomeView: View {
     @State private var avatar = Session.avatar
     @State private var routeCoords: [CLLocationCoordinate2D] = []
     @State private var multiRoutes: [ColoredRoute] = []
+    @State private var selectedIDs: Set<Int> = []
 
     private var liveCars: [LiveUser] { Array(realtime.liveUsers.values) }
 
@@ -415,13 +416,24 @@ struct MapHomeView: View {
                     .disabled(positions.count < 2)
                     Button {
                         Task {
-                            await showAllRoutes()
+                            await showRoutes(for: positions)
                             showPlaces = false
                         }
                     } label: {
                         Label("Un trajet vers chaque point", systemImage: "arrow.triangle.branch")
                     }
                     .disabled(location.coordinate == nil || positions.isEmpty)
+                    Button {
+                        Task {
+                            await showRoutes(for: positions.filter { selectedIDs.contains($0.id) })
+                            showPlaces = false
+                        }
+                    } label: {
+                        Label(
+                            "Afficher les trajets cochés (\(selectedIDs.count))",
+                            systemImage: "checklist")
+                    }
+                    .disabled(location.coordinate == nil || selectedIDs.isEmpty)
                 }
                 if let s = stats {
                     Section("Statistiques") {
@@ -430,25 +442,45 @@ struct MapHomeView: View {
                     }
                 }
                 Section("Destinations") {
+                    if !positions.isEmpty {
+                        Text("Coche des points pour tracer plusieurs trajets à la fois.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     ForEach(positions) { p in
-                        Button {
-                            Task { await startNavigation(to: p) }
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(p.label).font(.headline)
-                                    Text(String(format: "%.4f, %.4f", p.lat, p.lon))
-                                        .font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            Button {
+                                if selectedIDs.contains(p.id) {
+                                    selectedIDs.remove(p.id)
+                                } else {
+                                    selectedIDs.insert(p.id)
                                 }
-                                Spacer()
-                                Label("Y aller", systemImage: "location.north.line.fill")
-                                    .labelStyle(.iconOnly)
-                                    .foregroundStyle(.green)
+                            } label: {
+                                Image(systemName: selectedIDs.contains(p.id)
+                                    ? "checkmark.circle.fill" : "circle")
+                                    .imageScale(.large)
+                                    .foregroundStyle(selectedIDs.contains(p.id) ? .blue : .secondary)
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.borderless)
+
+                            Button {
+                                Task { await startNavigation(to: p) }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(p.label).font(.headline)
+                                        Text(String(format: "%.4f, %.4f", p.lat, p.lon))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Label("Y aller", systemImage: "location.north.line.fill")
+                                        .labelStyle(.iconOnly)
+                                        .foregroundStyle(.green)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(location.coordinate == nil)
                         }
-                        .buttonStyle(.plain)
-                        .disabled(location.coordinate == nil)
                     }
                     .onDelete(perform: deletePositions)
                     if positions.isEmpty {
@@ -564,14 +596,14 @@ struct MapHomeView: View {
         }
     }
 
-    /// Calcule et affiche un trajet vers CHAQUE point enregistré, chacun d'une
-    /// couleur différente (plusieurs trajets simultanés sur la carte).
-    private func showAllRoutes() async {
-        guard let from = location.coordinate else { return }
+    /// Calcule et affiche un trajet vers chacun des points donnés, chacun
+    /// d'une couleur différente (plusieurs trajets simultanés sur la carte).
+    private func showRoutes(for points: [Position]) async {
+        guard let from = location.coordinate, !points.isEmpty else { return }
         routeCoords = []
         routeInfo = nil
         var routes: [ColoredRoute] = []
-        for (i, p) in positions.enumerated() {
+        for (i, p) in points.enumerated() {
             let to = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
             if let r = await drivingRoute(from: from, to: to) {
                 routes.append(
