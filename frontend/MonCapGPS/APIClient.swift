@@ -153,6 +153,23 @@ struct APIClient {
                 contentType: "application/json"))
     }
 
+    // MARK: - Trajets parcourus (historique)
+
+    func trips() async throws -> [Trip] {
+        try await send(authedRequest("trips"))
+    }
+
+    func saveTrip(_ trip: NewTrip) async throws -> Trip {
+        try await send(
+            authedRequest(
+                "trips", method: "POST",
+                body: try JSONEncoder().encode(trip), contentType: "application/json"))
+    }
+
+    func deleteTrip(id: Int) async throws {
+        _ = try await URLSession.shared.data(for: authedRequest("trips/\(id)", method: "DELETE"))
+    }
+
     func nearest(lat: Double, lon: Double) async throws -> NearestResponse {
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("positions/nearest"), resolvingAgainstBaseURL: false)!

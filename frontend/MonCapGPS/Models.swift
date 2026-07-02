@@ -45,6 +45,38 @@ struct MultiRouteResponse: Codable {
     let duration_min: Double
 }
 
+/// Un trajet parcouru et enregistré en base.
+struct Trip: Codable, Identifiable {
+    let id: Int
+    let label: String
+    let distance_km: Double
+    let duration_min: Double
+    /// Tracé encodé `lat,lon;lat,lon;…`.
+    let polyline: String
+    /// Date d'enregistrement (secondes Unix).
+    let created_at: Double
+
+    var date: Date { Date(timeIntervalSince1970: created_at) }
+
+    /// Décode le tracé en coordonnées exploitables par MapKit.
+    var coordinates: [Coord] {
+        polyline.split(separator: ";").compactMap { part in
+            let xy = part.split(separator: ",")
+            guard xy.count == 2, let lat = Double(xy[0]), let lon = Double(xy[1]) else {
+                return nil
+            }
+            return Coord(lat: lat, lon: lon)
+        }
+    }
+}
+
+/// Données envoyées pour enregistrer un trajet parcouru.
+struct NewTrip: Codable {
+    let label: String
+    let points: [Coord]
+    let duration_min: Double
+}
+
 /// Réponse « position la plus proche ».
 struct NearestResponse: Codable {
     let position: Position
