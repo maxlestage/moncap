@@ -30,6 +30,7 @@ struct MapHomeView: View {
     @StateObject private var location = LocationManager()
     @StateObject private var realtime = RealtimeClient(url: APIClient().wsURL)
     @StateObject private var nav = NavigationManager()
+    @StateObject private var placeSearch = PlaceSearch()
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -37,6 +38,8 @@ struct MapHomeView: View {
     @State private var routeInfo: String?
     @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var showPlaces = false
+    @State private var showSearch = false
+    @State private var destQuery = ""
     @State private var showReports = false
     @State private var gpxFile: IdentifiableURL?
     @State private var sharing = false
@@ -52,7 +55,14 @@ struct MapHomeView: View {
 
             // Haut : bannière de navigation ou barre de recherche.
             VStack {
-                if nav.active { navBanner } else { searchBar }
+                if nav.active {
+                    navBanner
+                } else {
+                    HStack(spacing: 10) {
+                        searchBar
+                        menuButton
+                    }
+                }
                 Spacer()
             }
             .padding(.horizontal)
@@ -71,6 +81,7 @@ struct MapHomeView: View {
             .padding(.bottom, 6)
         }
         .sheet(isPresented: $showPlaces) { placesSheet }
+        .sheet(isPresented: $showSearch) { searchSheet }
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
         .task {
@@ -150,7 +161,19 @@ struct MapHomeView: View {
         .padding(.horizontal, 16)
         .background(.regularMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
-        .onTapGesture { showPlaces = true }
+        .onTapGesture { showSearch = true }
+    }
+
+    /// Bouton menu (lieux enregistrés, avatar, compte, partage…).
+    private var menuButton: some View {
+        Button { showPlaces = true } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.title3)
+                .foregroundStyle(.blue)
+                .frame(width: 52, height: 52)
+                .background(.regularMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+        }
     }
 
     private var navBanner: some View {
@@ -253,6 +276,72 @@ struct MapHomeView: View {
                 .frame(width: 48, height: 48)
                 .background(.regularMaterial, in: Circle())
                 .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+    }
+
+    // MARK: - Feuille « Destination » (recherche d'adresse/lieu)
+
+    private var searchSheet: some View {
+        NavigationStack {
+            List {
+                if placeSearch.results.isEmpty {
+                    Text("Tape une adresse ou un lieu, puis choisis une destination.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(Array(placeSearch.results.enumerated()), id: \.offset) { _, item in
+                    Button {
+                        startSearchNavigation(to: item)
+                    } label: {
+                        HStack {
+                            Image(systemName: "mappin.circle.fill").foregroundStyle(.red)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name ?? "Destination").font(.headline)
+                                if let sub = item.placemark.title {
+                                    Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                            Label("Y aller", systemImage: "location.north.line.fill")
+                                .labelStyle(.iconOnly)
+                                .foregroundStyle(.green)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(location.coordinate == nil)
+                }
+            }
+            .navigationTitle("Où allez-vous ?")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $destQuery,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Adresse ou lieu")
+            .onChange(of: destQuery) { _, value in
+                placeSearch.center = location.coordinate
+                placeSearch.search(value)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fermer") { showSearch = false }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    /// Démarre la navigation vers un résultat de recherche.
+    private func startSearchNavigation(to item: MKMapItem) {
+        let dest = item.placemark.coordinate
+        showSearch = false
+        Task {
+            guard let from = location.coordinate,
+                let route = await drivingRoute(from: from, to: dest)
+            else { return }
+            nav.start(route: route, destination: dest)
+            withAnimation {
+                camera = .userLocation(followsHeading: true, fallback: .automatic)
+            }
         }
     }
 
