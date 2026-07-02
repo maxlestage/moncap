@@ -2,10 +2,18 @@ import { useEffect, useRef } from "react";
 import { avatarUrl } from "./avatars";
 import type { Alert, Coord, LiveUser, Position } from "./types";
 
+interface Destination {
+  lat: number;
+  lon: number;
+  label: string;
+}
+
 interface Props {
   positions: Position[];
   liveUsers: LiveUser[];
   alerts: Alert[];
+  me: Coord | null;
+  destination: Destination | null;
   onAddPoint: (coord: Coord) => void;
 }
 
@@ -27,12 +35,14 @@ function esc(s: string): string {
 }
 
 /** Carte Leaflet : positions enregistrées + voitures live + signalements. */
-export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
+export function MapView({ positions, liveUsers, alerts, me, destination, onAddPoint }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const posLayer = useRef<any>(null);
   const liveLayer = useRef<any>(null);
   const alertLayer = useRef<any>(null);
+  const destLayer = useRef<any>(null);
+  const fittedDest = useRef<string>("");
 
   // Initialise la carte une seule fois.
   useEffect(() => {
@@ -46,6 +56,7 @@ export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
     posLayer.current = L.layerGroup().addTo(map);
     liveLayer.current = L.layerGroup().addTo(map);
     alertLayer.current = L.layerGroup().addTo(map);
+    destLayer.current = L.layerGroup().addTo(map);
     map.on("click", (e: any) => onAddPoint({ lat: e.latlng.lat, lon: e.latlng.lng }));
     mapRef.current = map;
   }, [onAddPoint]);
@@ -87,6 +98,47 @@ export function MapView({ positions, liveUsers, alerts, onAddPoint }: Props) {
         .addTo(layer);
     }
   }, [liveUsers]);
+
+  // Destination choisie : marqueur « drapeau » + trait depuis ma position.
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = destLayer.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    if (!destination) {
+      fittedDest.current = "";
+      return;
+    }
+    const icon = L.divIcon({
+      html: `<div class="dest-pin">🎯</div>`,
+      className: "",
+      iconSize: [30, 30],
+      iconAnchor: [15, 30],
+    });
+    L.marker([destination.lat, destination.lon], { icon })
+      .bindPopup(esc(destination.label))
+      .addTo(layer);
+    let line: any = null;
+    if (me) {
+      line = L.polyline(
+        [
+          [me.lat, me.lon],
+          [destination.lat, destination.lon],
+        ],
+        { color: "#16a34a", weight: 4, dashArray: "8 8" },
+      ).addTo(layer);
+    }
+    // On ne recadre la carte qu'une fois par destination (pas à chaque relevé GPS).
+    const key = `${destination.lat},${destination.lon}`;
+    if (fittedDest.current !== key) {
+      fittedDest.current = key;
+      if (line) {
+        map.fitBounds(line.getBounds(), { padding: [50, 50], maxZoom: 13 });
+      } else {
+        map.setView([destination.lat, destination.lon], 12);
+      }
+    }
+  }, [destination, me]);
 
   // Signalements (façon Waze).
   useEffect(() => {
