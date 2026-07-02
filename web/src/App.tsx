@@ -158,6 +158,25 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   };
 
+  // Démarre le partage de ma position en direct. Nom affiché = mon e-mail de
+  // connexion (sauf si on en fournit un autre).
+  const startSharing = useCallback(
+    (label: string = getUsername() || "Moi") => {
+      if (!navigator.geolocation || watchId.current != null) return;
+      watchId.current = navigator.geolocation.watchPosition(
+        (p) => {
+          const c = { lat: p.coords.latitude, lon: p.coords.longitude };
+          myPos.current = c;
+          send({ kind: "live", lat: c.lat, lon: c.lon, label, avatar });
+        },
+        () => setError("Partage de position refusé."),
+        { enableHighAccuracy: true, maximumAge: 2000 },
+      );
+      setSharing(true);
+    },
+    [avatar],
+  );
+
   // Active/désactive le partage de ma position en direct.
   const toggleSharing = () => {
     if (sharing) {
@@ -170,18 +189,19 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
       setError("Géolocalisation indisponible.");
       return;
     }
-    const label = prompt("Ton nom de conducteur ?", "Moi") ?? "Moi";
-    watchId.current = navigator.geolocation.watchPosition(
-      (p) => {
-        const c = { lat: p.coords.latitude, lon: p.coords.longitude };
-        myPos.current = c;
-        send({ kind: "live", lat: c.lat, lon: c.lon, label, avatar });
-      },
-      () => setError("Partage de position refusé."),
-      { enableHighAccuracy: true, maximumAge: 2000 },
-    );
-    setSharing(true);
+    startSharing();
   };
+
+  // Partage automatique au chargement : tout le monde apparaît sur la carte.
+  useEffect(() => {
+    startSharing();
+    return () => {
+      if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
+      watchId.current = null;
+    };
+    // Ne s'exécute qu'une fois au montage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Envoie un signalement à ma position courante.
   const report = (category: string, label: string) => {
