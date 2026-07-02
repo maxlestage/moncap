@@ -18,7 +18,8 @@ use axum::{
 };
 use rayon::prelude::*;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
+    QueryOrder, Set,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -29,7 +30,7 @@ use tower_http::{
 };
 
 use auth::AuthUser;
-use entity::{position, user};
+use entity::{position, trip, user};
 use migration::Migrator;
 use sea_orm_migration::MigratorTrait;
 
@@ -221,6 +222,18 @@ struct NewPosition {
     label: String,
 }
 
+/// Trajet parcouru envoyé par le client pour être enregistré.
+#[derive(Deserialize)]
+struct NewTrip {
+    #[serde(default)]
+    label: String,
+    /// Points parcourus (dans l'ordre). La distance est recalculée côté serveur.
+    points: Vec<Coord>,
+    /// Durée réelle du trajet en minutes (mesurée par le client).
+    #[serde(default)]
+    duration_min: f64,
+}
+
 /// Deux points pour calculer un trajet.
 #[derive(Deserialize)]
 struct RouteRequest {
@@ -363,6 +376,8 @@ async fn main() {
         .route("/stats", get(stats))
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
+        .route("/trips", get(list_trips).post(add_trip))
+        .route("/trips/:id", axum::routing::delete(delete_trip))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
         .fallback_service(web)
@@ -539,6 +554,88 @@ async fn delete_position(
         broadcast_event(&tx, &ServerEvent::PositionsChanged);
         Ok(StatusCode::NO_CONTENT)
     }
+}
+
+/// GET /trips — renvoie les trajets enregistrés de l'utilisateur (récents d'abord).
+async fn list_trips(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<Vec<trip::Model>>, AppError> {
+    let items = trip::Entity::find()
+        .filter(trip::Column::UserId.eq(uid))
+        .order_by_desc(trip::Column::CreatedAt)
+        .all(&db)
+        .await?;
+    Ok(Json(items))
+}
+
+/// POST /trips — enregistre un trajet parcouru par l'utilisateur.
+async fn add_trip(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+    Json(input): Json<NewTrip>,
+) -> Result<Json<trip::Model>, AppError> {
+    // Au moins deux points valides pour former un tracé.
+    let points: Vec<Coord> = input
+        .points
+        .into_iter()
+        .filter(|p| valid_coord(p.lat, p.lon))
+        .take(10_000)
+        .collect();
+    if points.len() < 2 {
+        return Err(AppError::BadRequest(
+            "un trajet requiert au moins deux points".into(),
+        ));
+    }
+    let distance_km = route_legs_km(&points).iter().sum::<f64>() + 0.0;
+    let label = {
+        let l = clean_label(&input.label);
+        if l.is_empty() {
+            format!("Trajet de {:.1} km", distance_km)
+        } else {
+            l
+        }
+    };
+    let polyline = encode_polyline(&points);
+    let saved = trip::ActiveModel {
+        label: Set(label),
+        distance_km: Set(distance_km),
+        duration_min: Set(input.duration_min.max(0.0)),
+        polyline: Set(polyline),
+        created_at: Set((now_ms() / 1000) as i64),
+        user_id: Set(uid),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await?;
+    Ok(Json(saved))
+}
+
+/// DELETE /trips/:id — supprime un trajet de l'utilisateur.
+async fn delete_trip(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, AppError> {
+    let res = trip::Entity::delete_many()
+        .filter(trip::Column::Id.eq(id))
+        .filter(trip::Column::UserId.eq(uid))
+        .exec(&db)
+        .await?;
+    if res.rows_affected == 0 {
+        Ok(StatusCode::NOT_FOUND)
+    } else {
+        Ok(StatusCode::NO_CONTENT)
+    }
+}
+
+/// Encode un tracé en `lat,lon;lat,lon;…` (6 décimales, ~0,1 m de précision).
+fn encode_polyline(points: &[Coord]) -> String {
+    points
+        .iter()
+        .map(|c| format!("{:.6},{:.6}", c.lat, c.lon))
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 /// POST /positions/import — importe des positions depuis un document GPX.
