@@ -17,9 +17,11 @@ struct LoginView: View {
             Text(signupMode ? "Créer un compte" : "Connexion")
                 .foregroundStyle(.secondary)
 
-            TextField("Nom d'utilisateur", text: $username)
+            TextField("E-mail", text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
                 .textFieldStyle(.roundedBorder)
 
             SecureField("Mot de passe", text: $password)
