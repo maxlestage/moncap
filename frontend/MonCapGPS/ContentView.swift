@@ -20,6 +20,17 @@ struct ColoredRoute: Identifiable {
     let label: String
 }
 
+/// Une option d'itinéraire vers une destination (le plus simple + alternatives).
+struct RouteOption: Identifiable {
+    let id = UUID()
+    let route: MKRoute
+    let coordinates: [CLLocationCoordinate2D]
+    let minutes: Double
+    let km: Double
+    let turns: Int
+    var isSimplest = false
+}
+
 /// Palette de couleurs pour distinguer les trajets simultanés.
 private let routePalette: [Color] = [
     .green, .blue, .orange, .purple, .red, .teal, .pink, .indigo, .brown, .cyan,
@@ -61,6 +72,8 @@ struct MapHomeView: View {
     @State private var routeCoords: [CLLocationCoordinate2D] = []
     @State private var multiRoutes: [ColoredRoute] = []
     @State private var selectedIDs: Set<Int> = []
+    @State private var routeOptions: [RouteOption] = []
+    @State private var pendingDestination: CLLocationCoordinate2D?
 
     private var liveCars: [LiveUser] { Array(realtime.liveUsers.values) }
 
@@ -87,6 +100,8 @@ struct MapHomeView: View {
             VStack(spacing: 12) {
                 if nav.active {
                     etaCard
+                } else if !routeOptions.isEmpty {
+                    routeOptionsCard
                 } else if !multiRoutes.isEmpty {
                     multiRouteCard
                 } else if let info = routeInfo {
@@ -129,11 +144,31 @@ struct MapHomeView: View {
     private var map: some View {
         Map(position: $camera) {
             UserAnnotation()
+            // Mon avatar affiché à ma position (hors navigation).
+            if let me = location.coordinate, !nav.active {
+                Annotation("Moi", coordinate: me) {
+                    Image(Avatars.asset(avatar))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 40, height: 40)
+                        .shadow(radius: 2)
+                }
+            }
             ForEach(positions) { p in
                 Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
             }
-            // Plusieurs trajets simultanés (un par point), chacun sa couleur.
-            if !multiRoutes.isEmpty && !nav.active {
+            // Options d'itinéraire : le plus simple en vert, alternatives en gris.
+            if !routeOptions.isEmpty && !nav.active {
+                ForEach(routeOptions.filter { !$0.isSimplest }) { o in
+                    MapPolyline(coordinates: o.coordinates)
+                        .stroke(.gray, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                }
+                ForEach(routeOptions.filter { $0.isSimplest }) { o in
+                    MapPolyline(coordinates: o.coordinates)
+                        .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                }
+            } else if !multiRoutes.isEmpty && !nav.active {
+                // Plusieurs trajets simultanés (un par point), chacun sa couleur.
                 ForEach(multiRoutes) { r in
                     MapPolyline(coordinates: r.coordinates)
                         .stroke(r.color, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
@@ -251,6 +286,46 @@ struct MapHomeView: View {
             Spacer()
             Button { routeInfo = nil } label: {
                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+    }
+
+    /// Carte de choix d'itinéraire : le plus simple (vert) + alternatives.
+    private var routeOptionsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Choisis un itinéraire").font(.subheadline.weight(.bold))
+                Spacer()
+                Button {
+                    routeOptions = []
+                    pendingDestination = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+            }
+            ForEach(routeOptions) { o in
+                Button {
+                    startNavigation(option: o)
+                } label: {
+                    HStack(spacing: 10) {
+                        Circle().fill(o.isSimplest ? .green : .gray).frame(width: 12, height: 12)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(o.isSimplest ? "Le plus simple" : "Alternative")
+                                .font(.subheadline.weight(.semibold))
+                            Text("\(o.turns) virages")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(String(format: "%.0f min · %.1f km", o.minutes, o.km))
+                            .font(.caption).foregroundStyle(.secondary)
+                        Image(systemName: "play.circle.fill").foregroundStyle(.green)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(14)
@@ -376,20 +451,11 @@ struct MapHomeView: View {
         .presentationDetents([.large])
     }
 
-    /// Démarre la navigation vers un résultat de recherche.
+    /// Propose les itinéraires vers un résultat de recherche.
     private func startSearchNavigation(to item: MKMapItem) {
         let dest = item.placemark.coordinate
         showSearch = false
-        multiRoutes = []
-        Task {
-            guard let from = location.coordinate,
-                let route = await drivingRoute(from: from, to: dest)
-            else { return }
-            nav.start(route: route, destination: dest)
-            withAnimation {
-                camera = .userLocation(followsHeading: true, fallback: .automatic)
-            }
-        }
+        Task { await presentRouteOptions(to: dest) }
     }
 
     // MARK: - Feuille « Lieux »
@@ -434,6 +500,14 @@ struct MapHomeView: View {
                             systemImage: "checklist")
                     }
                     .disabled(location.coordinate == nil || selectedIDs.isEmpty)
+                    Button(role: .destructive) {
+                        Task { await deleteSelected() }
+                    } label: {
+                        Label(
+                            "Supprimer les points cochés (\(selectedIDs.count))",
+                            systemImage: "trash")
+                    }
+                    .disabled(selectedIDs.isEmpty)
                 }
                 if let s = stats {
                     Section("Statistiques") {
@@ -463,7 +537,11 @@ struct MapHomeView: View {
                             .buttonStyle(.borderless)
 
                             Button {
-                                Task { await startNavigation(to: p) }
+                                showPlaces = false
+                                Task {
+                                    await presentRouteOptions(
+                                        to: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon))
+                                }
                             } label: {
                                 HStack {
                                     VStack(alignment: .leading) {
@@ -489,6 +567,16 @@ struct MapHomeView: View {
                     }
                 }
                 Section("Mon avatar") {
+                    HStack(spacing: 12) {
+                        Image(Avatars.asset(avatar))
+                            .resizable().scaledToFit()
+                            .frame(width: 60, height: 60)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Avatar actuel").font(.subheadline.weight(.semibold))
+                            Text(Avatars.labels[avatar] ?? avatar)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(Avatars.all, id: \.self) { id in
@@ -584,6 +672,7 @@ struct MapHomeView: View {
     /// Calcule l'itinéraire routier le plus simple (vert) et son résumé.
     private func updateRoute() async {
         multiRoutes = []
+        routeOptions = []
         let pts = positions.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
         guard pts.count >= 2 else {
             routeCoords = []
@@ -602,6 +691,7 @@ struct MapHomeView: View {
         guard let from = location.coordinate, !points.isEmpty else { return }
         routeCoords = []
         routeInfo = nil
+        routeOptions = []
         var routes: [ColoredRoute] = []
         for (i, p) in points.enumerated() {
             let to = CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon)
@@ -644,6 +734,53 @@ struct MapHomeView: View {
         nav.start(route: route, destination: to)
         showPlaces = false
         // Vue « conduite » : la carte suit et tourne dans le sens de la marche.
+        withAnimation {
+            camera = .userLocation(followsHeading: true, fallback: .automatic)
+        }
+    }
+
+    /// Calcule plusieurs itinéraires vers une destination et les propose :
+    /// le plus simple (moins de virages) est mis en avant en vert.
+    private func presentRouteOptions(to dest: CLLocationCoordinate2D) async {
+        guard let from = location.coordinate else { return }
+        multiRoutes = []
+        routeCoords = []
+        routeInfo = nil
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: dest))
+        request.transportType = .automobile
+        request.requestsAlternateRoutes = true
+        guard let routes = try? await MKDirections(request: request).calculate().routes,
+            !routes.isEmpty
+        else { return }
+
+        // Le « plus simple » = celui qui a le moins de manœuvres.
+        let simplest = routes.min { $0.steps.count < $1.steps.count }
+        var options = routes.map { r in
+            RouteOption(
+                route: r,
+                coordinates: r.polyline.coordinates,
+                minutes: r.expectedTravelTime / 60,
+                km: r.distance / 1000,
+                turns: max(r.steps.count - 1, 0),
+                isSimplest: r === simplest)
+        }
+        // Le plus simple d'abord, puis par durée.
+        options.sort {
+            ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes)
+        }
+        pendingDestination = dest
+        routeOptions = options
+        fitCoordinates(options.flatMap { $0.coordinates } + [from])
+    }
+
+    /// Lance la navigation sur l'option d'itinéraire choisie.
+    private func startNavigation(option: RouteOption) {
+        guard let dest = pendingDestination else { return }
+        nav.start(route: option.route, destination: dest)
+        routeOptions = []
+        pendingDestination = nil
         withAnimation {
             camera = .userLocation(followsHeading: true, fallback: .automatic)
         }
@@ -698,7 +835,20 @@ struct MapHomeView: View {
 
     private func deletePositions(at offsets: IndexSet) {
         let ids = offsets.map { positions[$0].id }
-        Task { for id in ids { try? await api.delete(id: id) } }
+        Task {
+            for id in ids { try? await api.delete(id: id) }
+            selectedIDs.subtract(ids)
+            await refresh()
+        }
+    }
+
+    /// Supprime tous les points cochés.
+    private func deleteSelected() async {
+        let ids = Array(selectedIDs)
+        for id in ids { try? await api.delete(id: id) }
+        selectedIDs.removeAll()
+        multiRoutes = []
+        await refresh()
     }
 
     /// Cadre la carte sur l'itinéraire calculé.
