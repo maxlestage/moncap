@@ -30,7 +30,7 @@ env:
 jobs:
   testflight:
     name: Build & upload TestFlight
-    runs-on: macos-14
+    runs-on: macos-latest
     defaults:
       run:
         working-directory: frontend
