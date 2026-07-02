@@ -67,6 +67,22 @@ def sh(*args, **kw):
 def main():
     token = make_token()
 
+    # 0) Diagnostic : liste les apps que cette clé API voit réellement, avec
+    #    leur bundle ID. Permet de repérer un décalage de compte / bundle ID.
+    apps = req("GET", "/apps?limit=200&fields[apps]=bundleId,name", token)
+    data = apps.get("data", [])
+    print(f"Apps visibles par cette clé API ({len(data)}) :")
+    found = False
+    for a in data:
+        bid = a["attributes"].get("bundleId")
+        print(f"  - {bid}  ({a['attributes'].get('name')})")
+        if bid == BUNDLE_ID:
+            found = True
+    if not found:
+        print(f"::warning::La fiche « {BUNDLE_ID} » n'est PAS visible par cette clé "
+              f"API. Crée l'app avec ce bundle ID sur le compte de la clé, ou "
+              f"vérifie que la clé appartient au bon compte.")
+
     # 1) Révoque les certificats de distribution existants (leurs clés privées
     #    sont perdues de toute façon), pour rester sous la limite Apple.
     certs = req("GET", "/certificates?filter[certificateType]=IOS_DISTRIBUTION&limit=200", token)
