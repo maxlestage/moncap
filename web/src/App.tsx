@@ -23,6 +23,54 @@ const ALERT_TYPES = [
 const LIVE_TTL = 15_000; // une voiture live disparaît après 15 s sans nouvelle
 const ALERT_TTL = 30 * 60_000; // un signalement expire après 30 min
 
+/** Une destination choisie (nom + coordonnées). */
+interface Destination {
+  lat: number;
+  lon: number;
+  label: string;
+}
+
+/** Résultat de géocodage renvoyé par Nominatim (OpenStreetMap). */
+interface GeoResult {
+  display_name: string;
+  lat: string;
+  lon: string;
+}
+
+/** Distance en km entre deux points (formule de Haversine). */
+function haversineKm(a: Coord, b: Coord): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const la1 = (a.lat * Math.PI) / 180;
+  const la2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Point cardinal (français) du cap entre deux points. */
+function compass(a: Coord, b: Coord): string {
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const la1 = (a.lat * Math.PI) / 180;
+  const la2 = (b.lat * Math.PI) / 180;
+  const y = Math.sin(dLon) * Math.cos(la2);
+  const x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLon);
+  const deg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  const dirs = ["Nord", "Nord-Est", "Est", "Sud-Est", "Sud", "Sud-Ouest", "Ouest", "Nord-Ouest"];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+/** Géocode une adresse/lieu via Nominatim (OpenStreetMap), priorité France. */
+async function geocode(query: string): Promise<GeoResult[]> {
+  const url =
+    "https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=fr" +
+    `&countrycodes=fr&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { "Accept-Language": "fr" } });
+  if (!res.ok) return [];
+  return (await res.json()) as GeoResult[];
+}
+
 export function App() {
   const [authed, setAuthed] = useState(!!getToken());
   if (!authed) {
@@ -42,6 +90,10 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
   const [avatar, setAvatarState] = useState(getAvatar());
   const [liveUsers, setLiveUsers] = useState<Record<number, LiveUser>>({});
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [me, setMe] = useState<Coord | null>(null);
+  const [destQuery, setDestQuery] = useState("");
+  const [destResults, setDestResults] = useState<GeoResult[]>([]);
+  const [destination, setDestination] = useState<Destination | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const myPos = useRef<Coord | null>(null);
@@ -153,6 +205,39 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
     return () => clearInterval(t);
   }, []);
 
+  // Recherche de destination (anti-rebond 350 ms) via géocodage Nominatim.
+  useEffect(() => {
+    const q = destQuery.trim();
+    if (q.length < 3) {
+      setDestResults([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const results = await geocode(q);
+        if (!cancelled) setDestResults(results);
+      } catch {
+        if (!cancelled) setDestResults([]);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [destQuery]);
+
+  // Choisit une destination parmi les résultats de recherche.
+  const chooseDestination = (r: GeoResult) => {
+    setDestination({
+      lat: Number(r.lat),
+      lon: Number(r.lon),
+      label: r.display_name,
+    });
+    setDestResults([]);
+    setDestQuery("");
+  };
+
   const send = (msg: unknown) => {
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -167,6 +252,7 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
         (p) => {
           const c = { lat: p.coords.latitude, lon: p.coords.longitude };
           myPos.current = c;
+          setMe(c);
           send({ kind: "live", lat: c.lat, lon: c.lon, label, avatar });
         },
         () => setError("Partage de position refusé."),
@@ -272,9 +358,55 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
         </div>
       </header>
 
+      <div className="dest">
+        <div className="dest-search">
+          <span className="dest-icon">🔎</span>
+          <input
+            type="text"
+            placeholder="Où allez-vous ? (adresse ou lieu)"
+            value={destQuery}
+            onChange={(e) => setDestQuery(e.target.value)}
+          />
+          {destination && (
+            <button className="dest-clear" title="Effacer" onClick={() => setDestination(null)}>
+              ✕
+            </button>
+          )}
+        </div>
+        {destResults.length > 0 && (
+          <ul className="dest-results">
+            {destResults.map((r, i) => (
+              <li key={i}>
+                <button onClick={() => chooseDestination(r)}>
+                  📍 {r.display_name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {destination && (
+          <div className="dest-banner">
+            🎯 <strong>Vers :</strong> {destination.label.split(",").slice(0, 3).join(",")}
+            {me && (
+              <span className="dest-meta">
+                {" · "}
+                {haversineKm(me, destination).toFixed(1)} km · direction {compass(me, destination)}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
       {error && <div className="error">{error}</div>}
 
-      <MapView positions={positions} liveUsers={liveList} alerts={alerts} onAddPoint={addPoint} />
+      <MapView
+        positions={positions}
+        liveUsers={liveList}
+        alerts={alerts}
+        me={me}
+        destination={destination}
+        onAddPoint={addPoint}
+      />
 
       <section className="controls">
         <p className="hint">Astuce : clique sur la carte pour ajouter une position.</p>
