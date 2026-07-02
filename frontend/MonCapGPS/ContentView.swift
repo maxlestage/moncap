@@ -66,8 +66,10 @@ struct MapHomeView: View {
     @State private var destQuery = ""
     @State private var showReports = false
     @State private var gpxFile: IdentifiableURL?
-    @State private var sharing = false
-    @State private var driverName = "Moi"
+    // Partagé automatiquement pour que tout le monde apparaisse sur la carte.
+    @State private var sharing = true
+    // Nom affiché aux autres : l'e-mail de connexion.
+    @State private var driverName = Session.username.isEmpty ? "Moi" : Session.username
     @State private var avatar = Session.avatar
     @State private var routeCoords: [CLLocationCoordinate2D] = []
     @State private var multiRoutes: [ColoredRoute] = []
