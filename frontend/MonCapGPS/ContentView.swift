@@ -75,6 +75,15 @@ struct MapHomeView: View {
     @State private var routeOptions: [RouteOption] = []
     @State private var pendingDestination: CLLocationCoordinate2D?
 
+    // Historique des trajets parcourus.
+    @State private var trips: [Trip] = []
+    @State private var showTrips = false
+    @State private var displayedTrip: Trip?
+    /// Points réellement parcourus pendant la navigation en cours.
+    @State private var recordedTrack: [CLLocationCoordinate2D] = []
+    /// Heure de départ de la navigation en cours (pour la durée réelle).
+    @State private var tripStart: Date?
+
     private var liveCars: [LiveUser] { Array(realtime.liveUsers.values) }
 
     var body: some View {
@@ -115,6 +124,7 @@ struct MapHomeView: View {
         .sheet(isPresented: $showPlaces) { placesSheet }
         .sheet(isPresented: $showSearch) { searchSheet }
         .sheet(isPresented: $showReports) { reportsSheet }
+        .sheet(isPresented: $showTrips) { tripsSheet }
         .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
         .task {
             location.start()
@@ -122,6 +132,7 @@ struct MapHomeView: View {
             nav.onReroute = { Task { await recomputeRoute() } }
             realtime.connect()
             await refresh()
+            await loadTrips()
         }
         .onReceive(location.$coordinate) { coord in
             guard let c = coord else { return }
@@ -130,8 +141,49 @@ struct MapHomeView: View {
             }
             if nav.active {
                 nav.update(c)
+                recordTrackPoint(c)
             }
         }
+        .onChange(of: nav.active) { wasActive, isActive in
+            // Fin de navigation (arrivée ou « Quitter ») → on enregistre le trajet.
+            if wasActive && !isActive {
+                Task { await saveRecordedTrip() }
+            }
+            // Début de navigation → nouvel enregistrement.
+            if !wasActive && isActive {
+                recordedTrack = location.coordinate.map { [$0] } ?? []
+                tripStart = Date()
+            }
+        }
+    }
+
+    /// Ajoute un point au tracé en cours, en filtrant les points trop proches
+    /// (≥ 12 m) pour limiter la taille du tracé enregistré.
+    private func recordTrackPoint(_ c: CLLocationCoordinate2D) {
+        if let last = recordedTrack.last {
+            let d = CLLocation(latitude: last.latitude, longitude: last.longitude)
+                .distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
+            guard d >= 12 else { return }
+        }
+        recordedTrack.append(c)
+    }
+
+    /// Enregistre en base le trajet qui vient d'être parcouru.
+    private func saveRecordedTrip() async {
+        let track = recordedTrack
+        let start = tripStart
+        recordedTrack = []
+        tripStart = nil
+        guard track.count >= 2 else { return }
+        let duration = start.map { Date().timeIntervalSince($0) / 60 } ?? 0
+        let points = track.map { Coord(lat: $0.latitude, lon: $0.longitude) }
+        let new = NewTrip(label: "", points: points, duration_min: duration)
+        _ = try? await api.saveTrip(new)
+        await loadTrips()
+    }
+
+    private func loadTrips() async {
+        trips = (try? await api.trips()) ?? trips
     }
 
     /// Itinéraire affiché : celui de la navigation en cours, sinon le calcul multi-points.
@@ -181,6 +233,18 @@ struct MapHomeView: View {
                 // Repli : tracé direct si le routage n'a rien renvoyé.
                 MapPolyline(coordinates: positions.map { .init(latitude: $0.lat, longitude: $0.lon) })
                     .stroke(.green.opacity(0.5), style: StrokeStyle(lineWidth: 5, dash: [8, 6]))
+            }
+            // Trajet enregistré sélectionné dans l'historique (en indigo).
+            if let t = displayedTrip, !nav.active {
+                let coords = t.coordinates.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+                MapPolyline(coordinates: coords)
+                    .stroke(.indigo, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                if let start = coords.first {
+                    Marker("Départ", systemImage: "flag.fill", coordinate: start).tint(.indigo)
+                }
+                if let end = coords.last {
+                    Marker("Arrivée", systemImage: "flag.checkered", coordinate: end).tint(.indigo)
+                }
             }
             ForEach(liveCars) { u in
                 Annotation(u.label, coordinate: .init(latitude: u.lat, longitude: u.lon)) {
@@ -508,6 +572,13 @@ struct MapHomeView: View {
                             systemImage: "trash")
                     }
                     .disabled(selectedIDs.isEmpty)
+                    Button {
+                        showPlaces = false
+                        showTrips = true
+                        Task { await loadTrips() }
+                    } label: {
+                        Label("Mes trajets (\(trips.count))", systemImage: "clock.arrow.circlepath")
+                    }
                 }
                 if let s = stats {
                     Section("Statistiques") {
@@ -653,6 +724,77 @@ struct MapHomeView: View {
         }
         .padding(.bottom, 16)
         .presentationDetents([.height(280)])
+    }
+
+    // MARK: - Feuille « Mes trajets » (historique)
+
+    private var tripsSheet: some View {
+        NavigationStack {
+            List {
+                if trips.isEmpty {
+                    Text("Aucun trajet enregistré pour l'instant. Lance une navigation : ton trajet sera sauvegardé automatiquement à l'arrivée.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(trips) { t in
+                    Button {
+                        showTrip(t)
+                    } label: {
+                        HStack {
+                            Image(systemName: "map.fill").foregroundStyle(.indigo)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(t.label).font(.headline)
+                                Text(tripSubtitle(t))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "eye").foregroundStyle(.indigo)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .onDelete(perform: deleteTrips)
+            }
+            .navigationTitle("Mes trajets")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Fermer") { showTrips = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    /// Résumé d'un trajet : date, distance et durée.
+    private func tripSubtitle(_ t: Trip) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "d MMM yyyy, HH:mm"
+        let when = f.string(from: t.date)
+        return String(format: "%@ · %.1f km · %.0f min", when, t.distance_km, t.duration_min)
+    }
+
+    /// Affiche un trajet enregistré sur la carte.
+    private func showTrip(_ t: Trip) {
+        displayedTrip = t
+        showTrips = false
+        multiRoutes = []
+        routeOptions = []
+        routeInfo = nil
+        let coords = t.coordinates.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+        fitCoordinates(coords)
+    }
+
+    private func deleteTrips(at offsets: IndexSet) {
+        let ids = offsets.map { trips[$0].id }
+        Task {
+            for id in ids { try? await api.deleteTrip(id: id) }
+            if let shown = displayedTrip, ids.contains(shown.id) {
+                displayedTrip = nil
+            }
+            await loadTrips()
+        }
     }
 
     // MARK: - Actions
