@@ -8,6 +8,9 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     @Published var coordinate: CLLocationCoordinate2D?
     /// Vitesse instantanée en km/h (0 si inconnue).
     @Published var speedKmh: Double = 0
+    /// Cap de déplacement en degrés (0 = nord). Conserve la dernière valeur
+    /// valide (CoreLocation renvoie -1 à l'arrêt).
+    @Published var course: Double = 0
 
     override init() {
         super.init()
@@ -25,6 +28,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         guard let loc = locations.last else { return }
         coordinate = loc.coordinate
         speedKmh = max(0, loc.speed) * 3.6
+        if loc.course >= 0 { course = loc.course }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
