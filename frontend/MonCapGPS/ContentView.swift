@@ -34,6 +34,13 @@ struct RouteOption: Identifiable {
     var color: Color = .gray
 }
 
+/// Étiquette d'un itinéraire (le plus simple / rapide / court…).
+fileprivate struct RouteTag: Identifiable {
+    var id: String { text }
+    let text: String
+    let color: Color
+}
+
 /// Tronçon calculé : tracé + étapes + métriques (assemblable).
 fileprivate struct RouteBuild {
     let coords: [CLLocationCoordinate2D]
@@ -493,15 +500,44 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    /// Résumé compact d'un itinéraire : durée, distance, virages.
-    private func routeMetrics(_ o: RouteOption) -> String {
-        String(format: "%.0f min · %.1f km · %d virages", o.minutes, o.km, o.turns)
+    /// Heure d'arrivée estimée (maintenant + durée).
+    private func routeArrival(_ minutes: Double) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "HH:mm"
+        return f.string(from: Date().addingTimeInterval(minutes * 60))
     }
 
-    /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi sur une
-    /// ligne) qu'on déroule pour comparer toute la liste, puis « Démarrer ».
+    /// Étiquettes d'un itinéraire (le plus simple / rapide / court).
+    private func routeTags(_ o: RouteOption, fastestID: UUID?, shortestID: UUID?) -> [RouteTag] {
+        var tags: [RouteTag] = []
+        if o.isSimplest { tags.append(RouteTag(text: "Le plus simple", color: .green)) }
+        if o.id == fastestID { tags.append(RouteTag(text: "Le plus rapide", color: .blue)) }
+        if o.id == shortestID { tags.append(RouteTag(text: "Le plus court", color: .orange)) }
+        if tags.isEmpty { tags.append(RouteTag(text: "Alternative", color: .gray)) }
+        return tags
+    }
+
+    /// Ligne d'infos détaillées d'un itinéraire : durée, distance, virages, arrivée.
+    private func routeDetails(_ o: RouteOption) -> some View {
+        HStack(spacing: 12) {
+            Label(String(format: "%.0f min", o.minutes), systemImage: "clock")
+            Label(String(format: "%.1f km", o.km), systemImage: "ruler")
+            Label("\(o.turns) virages", systemImage: "arrow.triangle.turn.up.right.diamond")
+            Label("arr. \(routeArrival(o.minutes))", systemImage: "flag.checkered")
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+    }
+
+    /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi) qu'on
+    /// déroule pour comparer toutes les infos, puis « Démarrer ».
     private var routeOptionsCard: some View {
         let selected = routeOptions.first { $0.id == selectedRouteID } ?? routeOptions.first
+        let fastestID = routeOptions.min { $0.minutes < $1.minutes }?.id
+        let shortestID = routeOptions.min { $0.km < $1.km }?.id
         return VStack(alignment: .leading, spacing: 8) {
             // En-tête = menu déroulant montrant l'itinéraire sélectionné.
             Button {
@@ -509,36 +545,49 @@ struct MapHomeView: View {
             } label: {
                 HStack(spacing: 10) {
                     Circle().fill(selected?.color ?? .green).frame(width: 12, height: 12)
-                    Text(selected?.isSimplest == true ? "Le plus simple" : "Alternative")
-                        .font(.subheadline.weight(.semibold)).lineLimit(1)
-                    Spacer(minLength: 6)
                     if let o = selected {
-                        Text(routeMetrics(o)).font(.caption).foregroundStyle(.secondary)
-                            .lineLimit(1).minimumScaleFactor(0.75)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(routeTags(o, fastestID: fastestID, shortestID: shortestID).first?.text ?? "Itinéraire")
+                                .font(.subheadline.weight(.semibold)).lineLimit(1)
+                            routeDetails(o)
+                        }
                     }
+                    Spacer(minLength: 6)
                     Image(systemName: routesExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                        .font(.subheadline.weight(.bold)).foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // Liste déroulée : tous les itinéraires, compacte et scrollable.
+            // Liste déroulée : tous les itinéraires avec toutes leurs infos.
             if routesExpanded {
                 ScrollView {
-                    VStack(spacing: 2) {
-                        ForEach(routeOptions) { o in
+                    VStack(spacing: 4) {
+                        ForEach(Array(routeOptions.enumerated()), id: \.element.id) { idx, o in
                             let isSel = o.id == selectedRouteID
                             Button {
                                 withAnimation { selectedRouteID = o.id; routesExpanded = false }
                             } label: {
                                 HStack(spacing: 10) {
-                                    Circle().fill(o.color).frame(width: 11, height: 11)
-                                    Text(o.isSimplest ? "Le plus simple" : "Alternative")
-                                        .font(.subheadline).lineLimit(1)
+                                    VStack(spacing: 2) {
+                                        Circle().fill(o.color).frame(width: 12, height: 12)
+                                        Text("#\(idx + 1)").font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        // Étiquettes (le plus simple / rapide / court).
+                                        HStack(spacing: 4) {
+                                            ForEach(routeTags(o, fastestID: fastestID, shortestID: shortestID)) { tag in
+                                                Text(tag.text)
+                                                    .font(.caption2.weight(.semibold))
+                                                    .foregroundStyle(tag.color)
+                                                    .padding(.vertical, 2).padding(.horizontal, 6)
+                                                    .background(tag.color.opacity(0.14), in: Capsule())
+                                            }
+                                        }
+                                        routeDetails(o)
+                                    }
                                     Spacer(minLength: 6)
-                                    Text(routeMetrics(o)).font(.caption).foregroundStyle(.secondary)
-                                        .lineLimit(1).minimumScaleFactor(0.75)
                                     Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
                                         .foregroundStyle(isSel ? o.color : .secondary)
                                 }
@@ -552,7 +601,7 @@ struct MapHomeView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 190)
+                .frame(maxHeight: 260)
             }
 
             HStack(spacing: 10) {
