@@ -80,6 +80,8 @@ struct MapHomeView: View {
     @State private var routeOptions: [RouteOption] = []
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
     @State private var selectedRouteID: UUID?
+    /// Liste déroulée ou repliée (bandeau compact par défaut).
+    @State private var routesExpanded = false
     @State private var pendingDestination: CLLocationCoordinate2D?
 
     // Historique des trajets parcourus.
@@ -368,61 +370,93 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    /// Carte de choix d'itinéraire : on compare (chaque tracé sa couleur), on
-    /// prévisualise en touchant une ligne, puis on décide avec « Démarrer ».
+    /// Résumé compact d'un itinéraire : durée, distance, virages.
+    private func routeMetrics(_ o: RouteOption) -> String {
+        String(format: "%.0f min · %.1f km · %d virages", o.minutes, o.km, o.turns)
+    }
+
+    /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi sur une
+    /// ligne) qu'on déroule pour comparer toute la liste, puis « Démarrer ».
     private var routeOptionsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Compare les itinéraires").font(.subheadline.weight(.bold))
-                Spacer()
+        let selected = routeOptions.first { $0.id == selectedRouteID } ?? routeOptions.first
+        return VStack(alignment: .leading, spacing: 8) {
+            // En-tête = menu déroulant montrant l'itinéraire sélectionné.
+            Button {
+                withAnimation { routesExpanded.toggle() }
+            } label: {
+                HStack(spacing: 10) {
+                    Circle().fill(selected?.color ?? .green).frame(width: 12, height: 12)
+                    Text(selected?.isSimplest == true ? "Le plus simple" : "Alternative")
+                        .font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Spacer(minLength: 6)
+                    if let o = selected {
+                        Text(routeMetrics(o)).font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.75)
+                    }
+                    Image(systemName: routesExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Liste déroulée : tous les itinéraires, compacte et scrollable.
+            if routesExpanded {
+                ScrollView {
+                    VStack(spacing: 2) {
+                        ForEach(routeOptions) { o in
+                            let isSel = o.id == selectedRouteID
+                            Button {
+                                withAnimation { selectedRouteID = o.id; routesExpanded = false }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Circle().fill(o.color).frame(width: 11, height: 11)
+                                    Text(o.isSimplest ? "Le plus simple" : "Alternative")
+                                        .font(.subheadline).lineLimit(1)
+                                    Spacer(minLength: 6)
+                                    Text(routeMetrics(o)).font(.caption).foregroundStyle(.secondary)
+                                        .lineLimit(1).minimumScaleFactor(0.75)
+                                    Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(isSel ? o.color : .secondary)
+                                }
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 6).padding(.horizontal, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(isSel ? o.color.opacity(0.12) : .clear))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(maxHeight: 190)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    if let o = selected { startNavigation(option: o) }
+                } label: {
+                    Label("Démarrer", systemImage: "location.north.line.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .disabled(selected == nil)
+
                 Button {
                     routeOptions = []
                     selectedRouteID = nil
+                    routesExpanded = false
                     pendingDestination = nil
                 } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    Image(systemName: "xmark")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 40, height: 34)
                 }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
             }
-            ForEach(routeOptions) { o in
-                let isSel = o.id == selectedRouteID
-                Button {
-                    withAnimation { selectedRouteID = o.id }
-                } label: {
-                    HStack(spacing: 10) {
-                        Circle().fill(o.color).frame(width: 12, height: 12)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(o.isSimplest ? "Le plus simple" : "Alternative")
-                                .font(.subheadline.weight(.semibold))
-                            Text("\(o.turns) virages")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text(String(format: "%.0f min · %.1f km", o.minutes, o.km))
-                            .font(.caption).foregroundStyle(.secondary)
-                        Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(isSel ? o.color : .secondary)
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.vertical, 4)
-                    .padding(.horizontal, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(isSel ? o.color.opacity(0.12) : .clear))
-                }
-                .buttonStyle(.plain)
-            }
-            Button {
-                if let o = routeOptions.first(where: { $0.id == selectedRouteID }) {
-                    startNavigation(option: o)
-                }
-            } label: {
-                Label("Démarrer", systemImage: "location.north.line.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
-            .disabled(selectedRouteID == nil)
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -1057,8 +1091,9 @@ struct MapHomeView: View {
         }
         pendingDestination = dest
         routeOptions = options
-        // Par défaut, on prévisualise le plus simple.
+        // Par défaut, on prévisualise le plus simple, bandeau replié.
         selectedRouteID = options.first { $0.isSimplest }?.id ?? options.first?.id
+        routesExpanded = false
         fitCoordinates(options.flatMap { $0.coordinates } + [from])
     }
 
