@@ -77,9 +77,26 @@ struct NewTrip: Codable {
     let duration_min: Double
 }
 
-/// Une recherche de destination récente (mémorisée sur l'appareil).
+/// Une recherche de destination récente (synchronisée avec le backend, avec
+/// repli local hors ligne).
 struct RecentSearch: Codable, Identifiable {
-    var id: String { "\(name)|\(lat),\(lon)" }
+    /// Identifiant serveur (absent pour une entrée locale pas encore synchronisée).
+    var serverId: Int? = nil
+    let name: String
+    let subtitle: String
+    let lat: Double
+    let lon: Double
+
+    var id: String { serverId.map(String.init) ?? "\(name)|\(lat),\(lon)" }
+
+    enum CodingKeys: String, CodingKey {
+        case serverId = "id"
+        case name, subtitle, lat, lon
+    }
+}
+
+/// Données envoyées pour mémoriser une recherche (sans identifiant serveur).
+struct NewSearch: Codable {
     let name: String
     let subtitle: String
     let lat: Double

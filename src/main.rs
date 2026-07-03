@@ -30,7 +30,7 @@ use tower_http::{
 };
 
 use auth::AuthUser;
-use entity::{position, trip, user};
+use entity::{position, search, trip, user};
 use migration::Migrator;
 use sea_orm_migration::MigratorTrait;
 
@@ -234,6 +234,19 @@ struct NewTrip {
     duration_min: f64,
 }
 
+/// Recherche de destination envoyée par le client pour être mémorisée.
+#[derive(Deserialize)]
+struct NewSearch {
+    name: String,
+    #[serde(default)]
+    subtitle: String,
+    lat: f64,
+    lon: f64,
+}
+
+/// Nombre maximal de recherches récentes conservées par utilisateur.
+const MAX_RECENTS: usize = 12;
+
 /// Deux points pour calculer un trajet.
 #[derive(Deserialize)]
 struct RouteRequest {
@@ -378,6 +391,8 @@ async fn main() {
         .route("/route/multi", post(compute_multi_route))
         .route("/trips", get(list_trips).post(add_trip))
         .route("/trips/:id", axum::routing::delete(delete_trip))
+        .route("/searches", get(list_searches).post(add_search).delete(clear_searches))
+        .route("/searches/:id", axum::routing::delete(delete_search))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
         .fallback_service(web)
@@ -636,6 +651,129 @@ fn encode_polyline(points: &[Coord]) -> String {
         .map(|c| format!("{:.6},{:.6}", c.lat, c.lon))
         .collect::<Vec<_>>()
         .join(";")
+}
+
+/// GET /searches — recherches de destination récentes de l'utilisateur.
+async fn list_searches(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<Vec<search::Model>>, AppError> {
+    let items = search::Entity::find()
+        .filter(search::Column::UserId.eq(uid))
+        .order_by_desc(search::Column::CreatedAt)
+        .order_by_desc(search::Column::Id)
+        .all(&db)
+        .await?;
+    Ok(Json(items))
+}
+
+/// POST /searches — mémorise une recherche (dédoublonne et plafonne la liste).
+async fn add_search(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+    Json(input): Json<NewSearch>,
+) -> Result<Json<search::Model>, AppError> {
+    check_coord(input.lat, input.lon)?;
+    let name = clean_label(&input.name);
+    if name.is_empty() {
+        return Err(AppError::BadRequest("nom de recherche vide".into()));
+    }
+    let saved = search::ActiveModel {
+        name: Set(name),
+        subtitle: Set(clean_label(&input.subtitle)),
+        lat: Set(input.lat),
+        lon: Set(input.lon),
+        created_at: Set((now_ms() / 1000) as i64),
+        user_id: Set(uid),
+        ..Default::default()
+    }
+    .insert(&db)
+    .await?;
+
+    // Dédoublonne (même lieu) et ne garde que les MAX_RECENTS plus récentes.
+    let all = search::Entity::find()
+        .filter(search::Column::UserId.eq(uid))
+        .order_by_desc(search::Column::CreatedAt)
+        .order_by_desc(search::Column::Id)
+        .all(&db)
+        .await?;
+    let prune = recents_to_prune(&all, saved.id, MAX_RECENTS);
+    if !prune.is_empty() {
+        search::Entity::delete_many()
+            .filter(search::Column::UserId.eq(uid))
+            .filter(search::Column::Id.is_in(prune))
+            .exec(&db)
+            .await?;
+    }
+    Ok(Json(saved))
+}
+
+/// DELETE /searches/:id — supprime une recherche récente de l'utilisateur.
+async fn delete_search(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, AppError> {
+    let res = search::Entity::delete_many()
+        .filter(search::Column::Id.eq(id))
+        .filter(search::Column::UserId.eq(uid))
+        .exec(&db)
+        .await?;
+    if res.rows_affected == 0 {
+        Ok(StatusCode::NOT_FOUND)
+    } else {
+        Ok(StatusCode::NO_CONTENT)
+    }
+}
+
+/// DELETE /searches — efface toutes les recherches récentes de l'utilisateur.
+async fn clear_searches(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<StatusCode, AppError> {
+    search::Entity::delete_many()
+        .filter(search::Column::UserId.eq(uid))
+        .exec(&db)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Clé de dédoublonnage d'une recherche : nom normalisé (minuscules, espaces
+/// internes réduits) + coordonnées arrondies (~10 m). Deux recherches de même
+/// clé désignent le même lieu.
+fn recent_key(name: &str, lat: f64, lon: f64) -> String {
+    let norm = name.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    format!("{}|{:.4},{:.4}", norm, lat, lon)
+}
+
+/// À partir des recherches d'un utilisateur (les plus récentes d'abord),
+/// renvoie les identifiants à supprimer : doublons d'un lieu déjà vu et tout
+/// ce qui dépasse `max`. L'entrée `keep_id` (celle qu'on vient d'insérer) est
+/// toujours conservée et fait autorité : un doublon plus ancien du même lieu
+/// est élagué, quel que soit l'ordre des égalités de date.
+fn recents_to_prune(items: &[search::Model], keep_id: i32, max: usize) -> Vec<i32> {
+    let mut seen = std::collections::HashSet::new();
+    let mut kept = 0usize;
+    // On amorce avec l'entrée conservée pour que ses doublons plus anciens
+    // soient élagués même si l'ordre par date les place avant elle.
+    if let Some(k) = items.iter().find(|i| i.id == keep_id) {
+        seen.insert(recent_key(&k.name, k.lat, k.lon));
+        kept = 1;
+    }
+    let mut prune = Vec::new();
+    for it in items {
+        if it.id == keep_id {
+            continue;
+        }
+        let key = recent_key(&it.name, it.lat, it.lon);
+        // Doublon d'un lieu déjà retenu, ou dépassement du plafond → à élaguer.
+        if !seen.insert(key) || kept >= max {
+            prune.push(it.id);
+        } else {
+            kept += 1;
+        }
+    }
+    prune
 }
 
 /// POST /positions/import — importe des positions depuis un document GPX.
@@ -1272,6 +1410,63 @@ mod tests {
             normalize_pg_url("postgres://u@host/d?sslmode=disable".into()),
             "postgres://u@host/d?sslmode=disable"
         );
+    }
+
+    fn mk_search(id: i32, name: &str, lat: f64, lon: f64) -> search::Model {
+        search::Model {
+            id,
+            name: name.to_string(),
+            subtitle: String::new(),
+            lat,
+            lon,
+            created_at: id as i64,
+            user_id: 1,
+        }
+    }
+
+    #[test]
+    fn recents_prune_removes_duplicate_place() {
+        // Plus récentes d'abord ; id=5 vient d'être inséré (keep_id).
+        let items = vec![
+            mk_search(5, "124 Rue Billaudel", 44.83, -0.57),
+            mk_search(4, "Gare", 44.82, -0.55),
+            mk_search(3, " 124  RUE  billaudel ", 44.83, -0.57), // doublon (casse + espaces)
+            mk_search(2, "Parc", 44.84, -0.58),
+        ];
+        // Le doublon plus ancien (id=3) est supprimé ; le neuf (id=5) reste.
+        assert_eq!(recents_to_prune(&items, 5, 12), vec![3]);
+    }
+
+    #[test]
+    fn recents_prune_caps_to_max() {
+        let items = vec![
+            mk_search(3, "A", 1.0, 1.0),
+            mk_search(2, "B", 2.0, 2.0),
+            mk_search(1, "C", 3.0, 3.0),
+        ];
+        // max=2 : on garde le neuf (id=3) + un autre, on élague le plus ancien.
+        assert_eq!(recents_to_prune(&items, 3, 2), vec![1]);
+    }
+
+    #[test]
+    fn recents_prune_keeps_new_entry_even_if_old_duplicate() {
+        // L'entrée fraîche (keep_id=2) est un doublon d'une plus ancienne (id=1).
+        let items = vec![
+            mk_search(2, "Lieu", 10.0, 10.0),
+            mk_search(1, "lieu", 10.0, 10.0),
+        ];
+        // C'est l'ancienne (id=1) qui part, pas la nouvelle.
+        assert_eq!(recents_to_prune(&items, 2, 12), vec![1]);
+    }
+
+    #[test]
+    fn recents_prune_nothing_when_all_unique_under_cap() {
+        let items = vec![
+            mk_search(3, "A", 1.0, 1.0),
+            mk_search(2, "B", 2.0, 2.0),
+            mk_search(1, "C", 3.0, 3.0),
+        ];
+        assert!(recents_to_prune(&items, 3, 12).is_empty());
     }
 
     #[test]
