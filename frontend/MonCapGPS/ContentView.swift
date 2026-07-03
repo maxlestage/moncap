@@ -71,6 +71,18 @@ fileprivate func buildRoutes(
     }
 }
 
+/// Itinéraire passant par un point de passage : deux tronçons assemblés.
+fileprivate func viaRoute(
+    from: CLLocationCoordinate2D, via: CLLocationCoordinate2D, to: CLLocationCoordinate2D
+) async -> RouteBuild? {
+    guard let a = await buildRoutes(from: from, to: via, alternates: false).first,
+        let b = await buildRoutes(from: via, to: to, alternates: false).first
+    else { return nil }
+    return RouteBuild(
+        coords: a.coords + b.coords, steps: a.steps + b.steps,
+        km: a.km + b.km, minutes: a.minutes + b.minutes)
+}
+
 /// Point de passage décalé perpendiculairement au trajet direct, pour
 /// diversifier les itinéraires (fraction de la distance, côté ±1).
 fileprivate func offsetVia(
@@ -524,11 +536,11 @@ struct MapHomeView: View {
                o.minutes, o.km, o.turns, routeArrival(o.minutes))
     }
 
-    /// Ligne d'infos détaillées (un seul texte, affiché en entier).
+    /// Ligne d'infos détaillées (un seul texte foncé, affiché en entier).
     private func routeDetails(_ o: RouteOption, compact: Bool = false) -> some View {
         Text(routeInfoText(o))
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(compact ? .caption : .caption.weight(.medium))
+            .foregroundStyle(.primary)
             .lineLimit(compact ? 1 : 2)
             .minimumScaleFactor(compact ? 0.6 : 0.85)
             .fixedSize(horizontal: false, vertical: !compact)
@@ -574,7 +586,8 @@ struct MapHomeView: View {
                                 HStack(spacing: 10) {
                                     VStack(spacing: 2) {
                                         Circle().fill(o.color).frame(width: 12, height: 12)
-                                        Text("#\(idx + 1)").font(.caption2).foregroundStyle(.secondary)
+                                        Text("#\(idx + 1)").font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.primary)
                                     }
                                     VStack(alignment: .leading, spacing: 4) {
                                         // Étiquettes (le plus simple / rapide / court).
@@ -1261,23 +1274,26 @@ struct MapHomeView: View {
         var builds = await buildRoutes(from: from, to: dest, alternates: true)
 
         // 2) Diversifie via des points de passage décalés de part et d'autre du
-        //    trajet direct, calculés en parallèle, pour obtenir une dizaine de choix.
+        //    trajet direct, pour viser une quinzaine de choix. Calcul en parallèle
+        //    mais borné (anti-throttling d'Apple).
         var vias: [CLLocationCoordinate2D] = []
-        for f in [0.13, 0.27, 0.42] {
+        for f in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
             for s in [1.0, -1.0] { vias.append(offsetVia(from: from, to: dest, fraction: f, side: s)) }
         }
         await withTaskGroup(of: RouteBuild?.self) { group in
-            for via in vias {
-                group.addTask {
-                    guard let a = await buildRoutes(from: from, to: via, alternates: false).first,
-                        let b = await buildRoutes(from: via, to: dest, alternates: false).first
-                    else { return nil }
-                    return RouteBuild(
-                        coords: a.coords + b.coords, steps: a.steps + b.steps,
-                        km: a.km + b.km, minutes: a.minutes + b.minutes)
+            var next = 0
+            let maxConcurrent = min(6, vias.count)
+            while next < maxConcurrent {
+                let via = vias[next]; next += 1
+                group.addTask { await viaRoute(from: from, via: via, to: dest) }
+            }
+            for await r in group {
+                if let r { builds.append(r) }
+                if next < vias.count {
+                    let via = vias[next]; next += 1
+                    group.addTask { await viaRoute(from: from, via: via, to: dest) }
                 }
             }
-            for await r in group { if let r { builds.append(r) } }
         }
         guard !builds.isEmpty else { return }
 
@@ -1303,12 +1319,14 @@ struct MapHomeView: View {
         }) {
             options[best].isSimplest = true
         }
-        // Le plus simple d'abord, puis par durée ; on plafonne à 10.
+        // Le plus simple d'abord, puis par durée ; on plafonne à 15.
         options.sort { ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes) }
-        options = Array(options.prefix(10))
+        options = Array(options.prefix(15))
 
         // Couleur par itinéraire : vert pour le plus simple, palette pour les autres.
-        let altColors: [Color] = [.blue, .orange, .purple, .pink, .teal, .red, .brown, .cyan, .indigo]
+        let altColors: [Color] = [
+            .blue, .orange, .purple, .pink, .teal, .red, .brown, .cyan, .indigo, .mint, .yellow,
+        ]
         var alt = 0
         options = options.map { o in
             var oo = o
