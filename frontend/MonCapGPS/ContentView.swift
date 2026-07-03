@@ -136,6 +136,7 @@ struct MapHomeView: View {
             realtime.connect()
             await refresh()
             await loadTrips()
+            await loadRecents()
         }
         .onReceive(location.$coordinate) { coord in
             guard let c = coord else { return }
@@ -535,6 +536,7 @@ struct MapHomeView: View {
                                 Button("Tout effacer") {
                                     Session.clearRecents()
                                     recents = []
+                                    Task { try? await api.clearSearches() }
                                 }
                                 .font(.caption)
                             }
@@ -564,35 +566,62 @@ struct MapHomeView: View {
     /// Propose les itinéraires vers un résultat de recherche.
     private func startSearchNavigation(to item: MKMapItem) {
         let dest = item.placemark.coordinate
-        // Mémorise la recherche pour la reproposer plus tard.
-        Session.addRecent(RecentSearch(
+        destQuery = ""
+        showSearch = false
+        saveRecent(NewSearch(
             name: item.name ?? "Destination",
             subtitle: item.placemark.title ?? "",
             lat: dest.latitude, lon: dest.longitude))
-        recents = Session.recentSearches
-        destQuery = ""
-        showSearch = false
         Task { await presentRouteOptions(to: dest) }
     }
 
-    /// Relance un itinéraire vers une recherche récente.
+    /// Relance un itinéraire vers une recherche récente (et la remonte en tête).
     private func goToRecent(_ r: RecentSearch) {
-        Session.addRecent(r) // remonte en tête
-        recents = Session.recentSearches
         destQuery = ""
         showSearch = false
+        saveRecent(NewSearch(name: r.name, subtitle: r.subtitle, lat: r.lat, lon: r.lon))
         Task {
             await presentRouteOptions(
                 to: CLLocationCoordinate2D(latitude: r.lat, longitude: r.lon))
         }
     }
 
-    /// Supprime des recherches récentes (par balayage).
+    /// Charge les recherches récentes depuis le serveur, avec repli sur le cache
+    /// local si le réseau est indisponible.
+    private func loadRecents() async {
+        if let remote = try? await api.searches() {
+            recents = remote
+            Session.recentSearches = remote
+        } else {
+            recents = Session.recentSearches
+        }
+    }
+
+    /// Mémorise une recherche : mise à jour locale immédiate + envoi au serveur,
+    /// puis rechargement pour refléter le dédoublonnage côté serveur.
+    private func saveRecent(_ s: NewSearch) {
+        // Optimiste : affichage immédiat même hors ligne.
+        Session.addRecent(RecentSearch(
+            name: s.name, subtitle: s.subtitle, lat: s.lat, lon: s.lon))
+        recents = Session.recentSearches
+        Task {
+            _ = try? await api.saveSearch(s)
+            await loadRecents()
+        }
+    }
+
+    /// Supprime des recherches récentes (par balayage), en base et localement.
     private func deleteRecents(at offsets: IndexSet) {
+        let removed = offsets.map { recents[$0] }
         var list = recents
         list.remove(atOffsets: offsets)
         Session.recentSearches = list
         recents = list
+        Task {
+            for r in removed {
+                if let sid = r.serverId { try? await api.deleteSearch(id: sid) }
+            }
+        }
     }
 
     // MARK: - Feuille « Lieux »
