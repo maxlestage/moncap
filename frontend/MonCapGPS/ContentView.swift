@@ -29,6 +29,8 @@ struct RouteOption: Identifiable {
     let km: Double
     let turns: Int
     var isSimplest = false
+    /// Couleur du tracé sur la carte (verte pour le plus simple).
+    var color: Color = .gray
 }
 
 /// Palette de couleurs pour distinguer les trajets simultanés.
@@ -76,6 +78,8 @@ struct MapHomeView: View {
     @State private var multiRoutes: [ColoredRoute] = []
     @State private var selectedIDs: Set<Int> = []
     @State private var routeOptions: [RouteOption] = []
+    /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
+    @State private var selectedRouteID: UUID?
     @State private var pendingDestination: CLLocationCoordinate2D?
 
     // Historique des trajets parcourus.
@@ -213,15 +217,18 @@ struct MapHomeView: View {
             ForEach(positions) { p in
                 Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
             }
-            // Options d'itinéraire : le plus simple en vert, alternatives en gris.
+            // Options d'itinéraire : chacune sa couleur ; celle prévisualisée
+            // est mise en avant (plus épaisse, opaque) et dessinée par-dessus.
             if !routeOptions.isEmpty && !nav.active {
-                ForEach(routeOptions.filter { !$0.isSimplest }) { o in
+                ForEach(routeOptions.filter { $0.id != selectedRouteID }) { o in
                     MapPolyline(coordinates: o.coordinates)
-                        .stroke(.gray, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                        .stroke(o.color.opacity(0.45),
+                                style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 }
-                ForEach(routeOptions.filter { $0.isSimplest }) { o in
+                ForEach(routeOptions.filter { $0.id == selectedRouteID }) { o in
                     MapPolyline(coordinates: o.coordinates)
-                        .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                        .stroke(o.color,
+                                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
                 }
             } else if !multiRoutes.isEmpty && !nav.active {
                 // Plusieurs trajets simultanés (un par point), chacun sa couleur.
@@ -361,25 +368,28 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    /// Carte de choix d'itinéraire : le plus simple (vert) + alternatives.
+    /// Carte de choix d'itinéraire : on compare (chaque tracé sa couleur), on
+    /// prévisualise en touchant une ligne, puis on décide avec « Démarrer ».
     private var routeOptionsCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Choisis un itinéraire").font(.subheadline.weight(.bold))
+                Text("Compare les itinéraires").font(.subheadline.weight(.bold))
                 Spacer()
                 Button {
                     routeOptions = []
+                    selectedRouteID = nil
                     pendingDestination = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
             }
             ForEach(routeOptions) { o in
+                let isSel = o.id == selectedRouteID
                 Button {
-                    startNavigation(option: o)
+                    withAnimation { selectedRouteID = o.id }
                 } label: {
                     HStack(spacing: 10) {
-                        Circle().fill(o.isSimplest ? .green : .gray).frame(width: 12, height: 12)
+                        Circle().fill(o.color).frame(width: 12, height: 12)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(o.isSimplest ? "Le plus simple" : "Alternative")
                                 .font(.subheadline.weight(.semibold))
@@ -389,12 +399,30 @@ struct MapHomeView: View {
                         Spacer()
                         Text(String(format: "%.0f min · %.1f km", o.minutes, o.km))
                             .font(.caption).foregroundStyle(.secondary)
-                        Image(systemName: "play.circle.fill").foregroundStyle(.green)
+                        Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isSel ? o.color : .secondary)
                     }
                     .contentShape(Rectangle())
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(isSel ? o.color.opacity(0.12) : .clear))
                 }
                 .buttonStyle(.plain)
             }
+            Button {
+                if let o = routeOptions.first(where: { $0.id == selectedRouteID }) {
+                    startNavigation(option: o)
+                }
+            } label: {
+                Label("Démarrer", systemImage: "location.north.line.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
+            .disabled(selectedRouteID == nil)
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -1014,8 +1042,23 @@ struct MapHomeView: View {
         options.sort {
             ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes)
         }
+        // Couleur par itinéraire : vert pour le plus simple, palette pour les autres.
+        let altColors: [Color] = [.blue, .orange, .purple, .pink, .teal]
+        var alt = 0
+        options = options.map { o in
+            var oo = o
+            if o.isSimplest {
+                oo.color = .green
+            } else {
+                oo.color = altColors[alt % altColors.count]
+                alt += 1
+            }
+            return oo
+        }
         pendingDestination = dest
         routeOptions = options
+        // Par défaut, on prévisualise le plus simple.
+        selectedRouteID = options.first { $0.isSimplest }?.id ?? options.first?.id
         fitCoordinates(options.flatMap { $0.coordinates } + [from])
     }
 
@@ -1024,6 +1067,7 @@ struct MapHomeView: View {
         guard let dest = pendingDestination else { return }
         nav.start(route: option.route, destination: dest)
         routeOptions = []
+        selectedRouteID = nil
         pendingDestination = nil
         withAnimation {
             camera = .userLocation(followsHeading: true, fallback: .automatic)
