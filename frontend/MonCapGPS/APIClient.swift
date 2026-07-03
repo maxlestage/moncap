@@ -201,6 +201,27 @@ struct APIClient {
         _ = try await URLSession.shared.data(for: authedRequest("trips/\(id)", method: "DELETE"))
     }
 
+    // MARK: - Recherches récentes (synchronisées)
+
+    func searches() async throws -> [RecentSearch] {
+        try await send(authedRequest("searches"))
+    }
+
+    func saveSearch(_ s: NewSearch) async throws -> RecentSearch {
+        try await send(
+            authedRequest(
+                "searches", method: "POST",
+                body: try JSONEncoder().encode(s), contentType: "application/json"))
+    }
+
+    func deleteSearch(id: Int) async throws {
+        _ = try await URLSession.shared.data(for: authedRequest("searches/\(id)", method: "DELETE"))
+    }
+
+    func clearSearches() async throws {
+        _ = try await URLSession.shared.data(for: authedRequest("searches", method: "DELETE"))
+    }
+
     func nearest(lat: Double, lon: Double) async throws -> NearestResponse {
         var comps = URLComponents(
             url: baseURL.appendingPathComponent("positions/nearest"), resolvingAgainstBaseURL: false)!
