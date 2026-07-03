@@ -123,14 +123,17 @@ struct MapHomeView: View {
             VStack(spacing: 12) {
                 if nav.active {
                     etaCard
-                } else if !routeOptions.isEmpty {
-                    routeOptionsCard
                 } else if !multiRoutes.isEmpty {
                     multiRouteCard
                 } else if let info = routeInfo {
                     routeCard(info)
                 }
                 bottomBar
+                // Comparateur d'itinéraires calé tout en bas (sous les boutons)
+                // pour dégager la vue sur les tracés.
+                if !nav.active && !routeOptions.isEmpty {
+                    routeOptionsCard
+                }
             }
             .padding(.horizontal)
             .padding(.bottom, 6)
