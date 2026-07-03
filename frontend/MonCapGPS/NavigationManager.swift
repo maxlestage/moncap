@@ -1,6 +1,13 @@
 import AVFoundation
 import MapKit
 
+/// Une étape de navigation : texte d'instruction + point de la manœuvre.
+/// Permet d'assembler des itinéraires composés de plusieurs tronçons.
+struct NavStep {
+    let text: String
+    let coord: CLLocationCoordinate2D
+}
+
 /// Navigation turn-by-turn avec annonces vocales et recalcul automatique
 /// quand on sort de l'itinéraire.
 @MainActor
@@ -18,7 +25,7 @@ final class NavigationManager: ObservableObject {
     /// Déclenché quand un recalcul est nécessaire (l'UI relance MKDirections).
     var onReroute: (() -> Void)?
 
-    private var steps: [MKRoute.Step] = []
+    private var steps: [NavStep] = []
     private var stepIndex = 0
     private var spokenApproach = false
     private var spokenImminent = false
@@ -27,19 +34,42 @@ final class NavigationManager: ObservableObject {
 
     private let synth = AVSpeechSynthesizer()
 
-    /// Démarre la navigation vers une destination.
+    /// Démarre la navigation vers une destination (à partir d'un MKRoute).
     func start(route: MKRoute, destination: CLLocationCoordinate2D) {
+        start(steps: Self.navSteps(from: route),
+              coordinates: route.polyline.coordinates,
+              distanceKm: route.distance / 1000,
+              etaMinutes: route.expectedTravelTime / 60,
+              destination: destination)
+    }
+
+    /// Démarre la navigation à partir d'étapes et d'un tracé déjà assemblés
+    /// (utile pour un itinéraire composé de plusieurs tronçons).
+    func start(steps: [NavStep], coordinates: [CLLocationCoordinate2D],
+               distanceKm: Double, etaMinutes: Double,
+               destination: CLLocationCoordinate2D) {
         self.destination = destination
         configureAudio()
-        load(route, announceStart: true)
+        load(steps: steps, coords: coordinates, km: distanceKm, min: etaMinutes,
+             announceStart: true)
         active = true
     }
 
     /// Applique un itinéraire recalculé (sans annonce « Départ »).
     func applyReroute(route: MKRoute) {
-        load(route, announceStart: false)
+        load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
+             km: route.distance / 1000, min: route.expectedTravelTime / 60,
+             announceStart: false)
         rerouting = false
         speak("Nouvel itinéraire.")
+    }
+
+    /// Convertit les étapes d'un MKRoute en NavStep.
+    private static func navSteps(from route: MKRoute) -> [NavStep] {
+        route.steps.map {
+            NavStep(text: $0.instructions,
+                    coord: $0.polyline.coordinates.last ?? $0.polyline.coordinate)
+        }
     }
 
     func stop() {
@@ -72,8 +102,7 @@ final class NavigationManager: ObservableObject {
 
         guard !rerouting, stepIndex < steps.count else { return }
 
-        let maneuver = maneuverCoordinate(steps[stepIndex])
-        let d = distance(coord, maneuver)
+        let d = distance(coord, steps[stepIndex].coord)
         distanceToNext = d
         instruction = stepText(steps[stepIndex])
 
@@ -101,12 +130,13 @@ final class NavigationManager: ObservableObject {
         onReroute?()
     }
 
-    private func load(_ route: MKRoute, announceStart: Bool) {
-        steps = route.steps
-        routeCoords = route.polyline.coordinates
-        remainingKm = route.distance / 1000
-        etaMinutes = route.expectedTravelTime / 60
-        stepIndex = steps.firstIndex { !$0.instructions.isEmpty } ?? 0
+    private func load(steps: [NavStep], coords: [CLLocationCoordinate2D],
+                      km: Double, min: Double, announceStart: Bool) {
+        self.steps = steps
+        routeCoords = coords
+        remainingKm = km
+        etaMinutes = min
+        stepIndex = steps.firstIndex { !$0.text.isEmpty } ?? 0
         spokenApproach = false
         spokenImminent = false
         if stepIndex < steps.count {
@@ -125,12 +155,8 @@ final class NavigationManager: ObservableObject {
         }
     }
 
-    private func stepText(_ step: MKRoute.Step) -> String {
-        step.instructions.isEmpty ? "Continuez tout droit" : step.instructions
-    }
-
-    private func maneuverCoordinate(_ step: MKRoute.Step) -> CLLocationCoordinate2D {
-        step.polyline.coordinates.last ?? step.polyline.coordinate
+    private func stepText(_ step: NavStep) -> String {
+        step.text.isEmpty ? "Continuez tout droit" : step.text
     }
 
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
