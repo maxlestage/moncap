@@ -23,14 +23,66 @@ struct ColoredRoute: Identifiable {
 /// Une option d'itinéraire vers une destination (le plus simple + alternatives).
 struct RouteOption: Identifiable {
     let id = UUID()
-    let route: MKRoute
     let coordinates: [CLLocationCoordinate2D]
+    /// Étapes pour la navigation (assemblées si l'itinéraire a plusieurs tronçons).
+    let steps: [NavStep]
     let minutes: Double
     let km: Double
     let turns: Int
     var isSimplest = false
     /// Couleur du tracé sur la carte (verte pour le plus simple).
     var color: Color = .gray
+}
+
+/// Tronçon calculé : tracé + étapes + métriques (assemblable).
+fileprivate struct RouteBuild {
+    let coords: [CLLocationCoordinate2D]
+    let steps: [NavStep]
+    let km: Double
+    let minutes: Double
+}
+
+/// Calcule un ou plusieurs itinéraires voiture entre deux points.
+fileprivate func buildRoutes(
+    from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, alternates: Bool
+) async -> [RouteBuild] {
+    let req = MKDirections.Request()
+    req.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
+    req.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
+    req.transportType = .automobile
+    req.requestsAlternateRoutes = alternates
+    guard let routes = try? await MKDirections(request: req).calculate().routes else { return [] }
+    return routes.map { r in
+        RouteBuild(
+            coords: r.polyline.coordinates,
+            steps: r.steps.map {
+                NavStep(text: $0.instructions,
+                        coord: $0.polyline.coordinates.last ?? $0.polyline.coordinate)
+            },
+            km: r.distance / 1000,
+            minutes: r.expectedTravelTime / 60)
+    }
+}
+
+/// Point de passage décalé perpendiculairement au trajet direct, pour
+/// diversifier les itinéraires (fraction de la distance, côté ±1).
+fileprivate func offsetVia(
+    from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D,
+    fraction: Double, side: Double
+) -> CLLocationCoordinate2D {
+    let midLat = (a.latitude + b.latitude) / 2
+    let mPerLat = 111_320.0
+    let mPerLon = 111_320.0 * cos(midLat * .pi / 180)
+    let ax = a.longitude * mPerLon, ay = a.latitude * mPerLat
+    let bx = b.longitude * mPerLon, by = b.latitude * mPerLat
+    let mx = (ax + bx) / 2, my = (ay + by) / 2
+    let dx = bx - ax, dy = by - ay
+    let len = max(1, (dx * dx + dy * dy).squareRoot())
+    let px = -dy / len, py = dx / len
+    let off = len * fraction * side
+    return CLLocationCoordinate2D(
+        latitude: (my + py * off) / mPerLat,
+        longitude: (mx + px * off) / mPerLon)
 }
 
 /// Palette de couleurs pour distinguer les trajets simultanés.
@@ -1153,32 +1205,59 @@ struct MapHomeView: View {
         multiRoutes = []
         routeCoords = []
         routeInfo = nil
-        let request = MKDirections.Request()
-        request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
-        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: dest))
-        request.transportType = .automobile
-        request.requestsAlternateRoutes = true
-        guard let routes = try? await MKDirections(request: request).calculate().routes,
-            !routes.isEmpty
-        else { return }
 
-        // Le « plus simple » = celui qui a le moins de manœuvres.
-        let simplest = routes.min { $0.steps.count < $1.steps.count }
-        var options = routes.map { r in
+        // 1) Alternatives directes d'Apple (souvent 2–3).
+        var builds = await buildRoutes(from: from, to: dest, alternates: true)
+
+        // 2) Diversifie via des points de passage décalés de part et d'autre du
+        //    trajet direct, calculés en parallèle, pour obtenir une dizaine de choix.
+        var vias: [CLLocationCoordinate2D] = []
+        for f in [0.13, 0.27, 0.42] {
+            for s in [1.0, -1.0] { vias.append(offsetVia(from: from, to: dest, fraction: f, side: s)) }
+        }
+        await withTaskGroup(of: RouteBuild?.self) { group in
+            for via in vias {
+                group.addTask {
+                    guard let a = await buildRoutes(from: from, to: via, alternates: false).first,
+                        let b = await buildRoutes(from: via, to: dest, alternates: false).first
+                    else { return nil }
+                    return RouteBuild(
+                        coords: a.coords + b.coords, steps: a.steps + b.steps,
+                        km: a.km + b.km, minutes: a.minutes + b.minutes)
+                }
+            }
+            for await r in group { if let r { builds.append(r) } }
+        }
+        guard !builds.isEmpty else { return }
+
+        // Dédoublonne (distance + point médian arrondis).
+        var seen = Set<String>()
+        var unique: [RouteBuild] = []
+        for b in builds where b.coords.count >= 2 {
+            let mid = b.coords[b.coords.count / 2]
+            let key = String(format: "%.1f|%.3f,%.3f",
+                             (b.km * 2).rounded() / 2, mid.latitude, mid.longitude)
+            if seen.insert(key).inserted { unique.append(b) }
+        }
+
+        var options = unique.map { b in
             RouteOption(
-                route: r,
-                coordinates: r.polyline.coordinates,
-                minutes: r.expectedTravelTime / 60,
-                km: r.distance / 1000,
-                turns: max(r.steps.count - 1, 0),
-                isSimplest: r === simplest)
+                coordinates: b.coords, steps: b.steps,
+                minutes: b.minutes, km: b.km,
+                turns: max(b.steps.count - 1, 0))
         }
-        // Le plus simple d'abord, puis par durée.
-        options.sort {
-            ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes)
+        // Le « plus simple » = le moins de manœuvres (puis le plus rapide).
+        if let best = options.indices.min(by: {
+            (options[$0].turns, options[$0].minutes) < (options[$1].turns, options[$1].minutes)
+        }) {
+            options[best].isSimplest = true
         }
+        // Le plus simple d'abord, puis par durée ; on plafonne à 10.
+        options.sort { ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes) }
+        options = Array(options.prefix(10))
+
         // Couleur par itinéraire : vert pour le plus simple, palette pour les autres.
-        let altColors: [Color] = [.blue, .orange, .purple, .pink, .teal]
+        let altColors: [Color] = [.blue, .orange, .purple, .pink, .teal, .red, .brown, .cyan, .indigo]
         var alt = 0
         options = options.map { o in
             var oo = o
@@ -1190,9 +1269,9 @@ struct MapHomeView: View {
             }
             return oo
         }
+
         pendingDestination = dest
         routeOptions = options
-        // Par défaut, on prévisualise le plus simple, bandeau replié.
         selectedRouteID = options.first { $0.isSimplest }?.id ?? options.first?.id
         routesExpanded = false
         fitCoordinates(options.flatMap { $0.coordinates } + [from])
@@ -1203,7 +1282,8 @@ struct MapHomeView: View {
         guard let dest = pendingDestination else { return }
         previewTask?.cancel()
         previewing = false
-        nav.start(route: option.route, destination: dest)
+        nav.start(steps: option.steps, coordinates: option.coordinates,
+                  distanceKm: option.km, etaMinutes: option.minutes, destination: dest)
         routeOptions = []
         selectedRouteID = nil
         routesExpanded = false
