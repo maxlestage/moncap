@@ -16,6 +16,37 @@ enum Session {
         set { UserDefaults.standard.set(newValue, forKey: avatarKey) }
     }
 
+    // MARK: - Recherches récentes
+
+    private static let recentsKey = "moncap.recents"
+    private static let maxRecents = 12
+
+    /// Recherches de destination récentes (les plus récentes d'abord).
+    static var recentSearches: [RecentSearch] {
+        get {
+            guard let data = UserDefaults.standard.data(forKey: recentsKey),
+                let list = try? JSONDecoder().decode([RecentSearch].self, from: data)
+            else { return [] }
+            return list
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue) {
+                UserDefaults.standard.set(data, forKey: recentsKey)
+            }
+        }
+    }
+
+    /// Ajoute une recherche en tête, sans doublon, et plafonne la liste.
+    static func addRecent(_ r: RecentSearch) {
+        var list = recentSearches.filter { $0.id != r.id }
+        list.insert(r, at: 0)
+        recentSearches = Array(list.prefix(maxRecents))
+    }
+
+    static func clearRecents() {
+        UserDefaults.standard.removeObject(forKey: recentsKey)
+    }
+
     static func save(token: String, username: String) {
         UserDefaults.standard.set(token, forKey: tokenKey)
         UserDefaults.standard.set(username, forKey: userKey)

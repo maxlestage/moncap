@@ -77,6 +77,15 @@ struct NewTrip: Codable {
     let duration_min: Double
 }
 
+/// Une recherche de destination récente (mémorisée sur l'appareil).
+struct RecentSearch: Codable, Identifiable {
+    var id: String { "\(name)|\(lat),\(lon)" }
+    let name: String
+    let subtitle: String
+    let lat: Double
+    let lon: Double
+}
+
 /// Réponse « position la plus proche ».
 struct NearestResponse: Codable {
     let position: Position

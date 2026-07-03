@@ -64,6 +64,7 @@ struct MapHomeView: View {
     @State private var showPlaces = false
     @State private var showSearch = false
     @State private var destQuery = ""
+    @State private var recents: [RecentSearch] = Session.recentSearches
     @State private var showReports = false
     @State private var gpxFile: IdentifiableURL?
     // Partagé automatiquement pour que tout le monde apparaisse sur la carte.
@@ -471,10 +472,7 @@ struct MapHomeView: View {
     private var searchSheet: some View {
         NavigationStack {
             List {
-                if placeSearch.results.isEmpty {
-                    Text("Tape une adresse ou un lieu, puis choisis une destination.")
-                        .foregroundStyle(.secondary)
-                }
+                // Résultats de la recherche en cours.
                 ForEach(Array(placeSearch.results.enumerated()), id: \.offset) { _, item in
                     Button {
                         startSearchNavigation(to: item)
@@ -496,6 +494,52 @@ struct MapHomeView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(location.coordinate == nil)
+                }
+
+                // Champ vide : on propose les recherches récentes.
+                if placeSearch.results.isEmpty {
+                    if recents.isEmpty {
+                        Text("Tape une adresse ou un lieu, puis choisis une destination.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Section {
+                            ForEach(recents) { r in
+                                Button {
+                                    goToRecent(r)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                            .foregroundStyle(.secondary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(r.name).font(.headline)
+                                            if !r.subtitle.isEmpty {
+                                                Text(r.subtitle).font(.caption)
+                                                    .foregroundStyle(.secondary).lineLimit(1)
+                                            }
+                                        }
+                                        Spacer()
+                                        Label("Y aller", systemImage: "location.north.line.fill")
+                                            .labelStyle(.iconOnly)
+                                            .foregroundStyle(.green)
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(location.coordinate == nil)
+                            }
+                            .onDelete(perform: deleteRecents)
+                        } header: {
+                            HStack {
+                                Text("Récentes")
+                                Spacer()
+                                Button("Tout effacer") {
+                                    Session.clearRecents()
+                                    recents = []
+                                }
+                                .font(.caption)
+                            }
+                        }
+                    }
                 }
             }
             .navigationTitle("Où allez-vous ?")
@@ -520,8 +564,35 @@ struct MapHomeView: View {
     /// Propose les itinéraires vers un résultat de recherche.
     private func startSearchNavigation(to item: MKMapItem) {
         let dest = item.placemark.coordinate
+        // Mémorise la recherche pour la reproposer plus tard.
+        Session.addRecent(RecentSearch(
+            name: item.name ?? "Destination",
+            subtitle: item.placemark.title ?? "",
+            lat: dest.latitude, lon: dest.longitude))
+        recents = Session.recentSearches
+        destQuery = ""
         showSearch = false
         Task { await presentRouteOptions(to: dest) }
+    }
+
+    /// Relance un itinéraire vers une recherche récente.
+    private func goToRecent(_ r: RecentSearch) {
+        Session.addRecent(r) // remonte en tête
+        recents = Session.recentSearches
+        destQuery = ""
+        showSearch = false
+        Task {
+            await presentRouteOptions(
+                to: CLLocationCoordinate2D(latitude: r.lat, longitude: r.lon))
+        }
+    }
+
+    /// Supprime des recherches récentes (par balayage).
+    private func deleteRecents(at offsets: IndexSet) {
+        var list = recents
+        list.remove(atOffsets: offsets)
+        Session.recentSearches = list
+        recents = list
     }
 
     // MARK: - Feuille « Lieux »
