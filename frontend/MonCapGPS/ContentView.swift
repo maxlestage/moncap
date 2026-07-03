@@ -220,6 +220,7 @@ struct MapHomeView: View {
     // MARK: - Carte
 
     private var map: some View {
+        MapReader { proxy in
         Map(position: $camera) {
             UserAnnotation()
             // Mon avatar affiché à ma position (hors navigation).
@@ -295,6 +296,60 @@ struct MapHomeView: View {
             }
         }
         .mapControls { MapCompass() }
+        // Toucher (près d')un tracé le sélectionne directement sur la carte.
+        .onTapGesture(coordinateSpace: .local) { point in
+            handleMapTap(point, proxy: proxy)
+        }
+        }
+    }
+
+    /// Sélectionne l'itinéraire dont le tracé est le plus proche du point touché.
+    private func handleMapTap(_ point: CGPoint, proxy: MapProxy) {
+        guard !nav.active, !routeOptions.isEmpty,
+            let tapped = proxy.convert(point, from: .local)
+        else { return }
+        // Tolérance ≈ largeur d'un doigt, convertie en mètres au zoom courant.
+        let offset = proxy.convert(CGPoint(x: point.x + 24, y: point.y), from: .local)
+        let tolerance = offset.map { distanceMeters(tapped, $0) } ?? 80
+
+        var best: (id: UUID, dist: Double)?
+        for o in routeOptions {
+            let d = distanceToPolyline(tapped, o.coordinates)
+            if best == nil || d < best!.dist { best = (o.id, d) }
+        }
+        if let b = best, b.dist <= max(tolerance, 40) {
+            withAnimation { selectedRouteID = b.id }
+        }
+    }
+
+    /// Distance (m) entre deux coordonnées.
+    private func distanceMeters(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+    }
+
+    /// Distance minimale (m) d'un point à une polyligne (projection locale).
+    private func distanceToPolyline(_ p: CLLocationCoordinate2D,
+                                    _ coords: [CLLocationCoordinate2D]) -> Double {
+        guard coords.count >= 2 else {
+            return coords.first.map { distanceMeters(p, $0) } ?? .greatestFiniteMagnitude
+        }
+        let mPerDegLat = 111_320.0
+        let mPerDegLon = 111_320.0 * cos(p.latitude * .pi / 180)
+        func xy(_ c: CLLocationCoordinate2D) -> (Double, Double) {
+            ((c.longitude - p.longitude) * mPerDegLon, (c.latitude - p.latitude) * mPerDegLat)
+        }
+        var best = Double.greatestFiniteMagnitude
+        for i in 0..<(coords.count - 1) {
+            let (ax, ay) = xy(coords[i])
+            let (bx, by) = xy(coords[i + 1])
+            let dx = bx - ax, dy = by - ay
+            let len2 = dx * dx + dy * dy
+            let t = len2 == 0 ? 0 : max(0, min(1, -(ax * dx + ay * dy) / len2))
+            let cx = ax + t * dx, cy = ay + t * dy
+            best = min(best, (cx * cx + cy * cy).squareRoot())
+        }
+        return best
     }
 
     // MARK: - Superpositions
