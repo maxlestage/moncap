@@ -518,18 +518,20 @@ struct MapHomeView: View {
         return tags
     }
 
-    /// Ligne d'infos détaillées d'un itinéraire : durée, distance, virages, arrivée.
-    private func routeDetails(_ o: RouteOption) -> some View {
-        HStack(spacing: 12) {
-            Label(String(format: "%.0f min", o.minutes), systemImage: "clock")
-            Label(String(format: "%.1f km", o.km), systemImage: "ruler")
-            Label("\(o.turns) virages", systemImage: "arrow.triangle.turn.up.right.diamond")
-            Label("arr. \(routeArrival(o.minutes))", systemImage: "flag.checkered")
-        }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
+    /// Infos détaillées d'un itinéraire en texte : durée, distance, virages, arrivée.
+    private func routeInfoText(_ o: RouteOption) -> String {
+        String(format: "%.0f min · %.1f km · %d virages · arr. %@",
+               o.minutes, o.km, o.turns, routeArrival(o.minutes))
+    }
+
+    /// Ligne d'infos détaillées (un seul texte, affiché en entier).
+    private func routeDetails(_ o: RouteOption, compact: Bool = false) -> some View {
+        Text(routeInfoText(o))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(compact ? 1 : 2)
+            .minimumScaleFactor(compact ? 0.6 : 0.85)
+            .fixedSize(horizontal: false, vertical: !compact)
     }
 
     /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi) qu'on
@@ -549,7 +551,7 @@ struct MapHomeView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(routeTags(o, fastestID: fastestID, shortestID: shortestID).first?.text ?? "Itinéraire")
                                 .font(.subheadline.weight(.semibold)).lineLimit(1)
-                            routeDetails(o)
+                            routeDetails(o, compact: true)
                         }
                     }
                     Spacer(minLength: 6)
