@@ -83,6 +83,11 @@ struct MapHomeView: View {
     /// Liste déroulée ou repliée (bandeau compact par défaut).
     @State private var routesExpanded = false
     @State private var pendingDestination: CLLocationCoordinate2D?
+    /// Carte inclinée en 3D si l'utilisateur l'active.
+    @State private var is3D = false
+    /// Prévisualisation (survol) de l'itinéraire en cours.
+    @State private var previewing = false
+    @State private var previewTask: Task<Void, Never>?
 
     // Historique des trajets parcourus.
     @State private var trips: [Trip] = []
@@ -152,6 +157,14 @@ struct MapHomeView: View {
             if nav.active {
                 nav.update(c)
                 recordTrackPoint(c)
+                // Vue conduite 3D : la caméra suit, inclinée, dans le sens de la marche.
+                if is3D, !previewing {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        camera = .camera(MapCamera(
+                            centerCoordinate: c, distance: 500,
+                            heading: location.course, pitch: 60))
+                    }
+                }
             }
         }
         .onChange(of: nav.active) { wasActive, isActive in
@@ -444,7 +457,18 @@ struct MapHomeView: View {
                 .tint(.green)
                 .disabled(selected == nil)
 
+                Button { previewRoute() } label: {
+                    Image(systemName: previewing ? "stop.fill" : "eye.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 40, height: 34)
+                }
+                .buttonStyle(.bordered)
+                .tint(.blue)
+                .disabled(selected == nil)
+
                 Button {
+                    previewTask?.cancel()
+                    previewing = false
                     routeOptions = []
                     selectedRouteID = nil
                     routesExpanded = false
@@ -491,9 +515,28 @@ struct MapHomeView: View {
             speedPill
             Spacer()
             VStack(spacing: 14) {
+                map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
             }
+        }
+    }
+
+    /// Bascule 2D / 3D de la carte.
+    private var map3DButton: some View {
+        Button { toggle3D() } label: {
+            Image(systemName: "view.3d")
+                .font(.title3)
+                .foregroundStyle(is3D ? Color.white : .blue)
+                .frame(width: 48, height: 48)
+                .background {
+                    if is3D {
+                        Circle().fill(Color.blue)
+                    } else {
+                        Circle().fill(.regularMaterial)
+                    }
+                }
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
 
@@ -1100,12 +1143,20 @@ struct MapHomeView: View {
     /// Lance la navigation sur l'option d'itinéraire choisie.
     private func startNavigation(option: RouteOption) {
         guard let dest = pendingDestination else { return }
+        previewTask?.cancel()
+        previewing = false
         nav.start(route: option.route, destination: dest)
         routeOptions = []
         selectedRouteID = nil
+        routesExpanded = false
         pendingDestination = nil
         withAnimation {
-            camera = .userLocation(followsHeading: true, fallback: .automatic)
+            if is3D, let c = location.coordinate {
+                camera = .camera(MapCamera(centerCoordinate: c, distance: 500,
+                                           heading: location.course, pitch: 60))
+            } else {
+                camera = .userLocation(followsHeading: true, fallback: .automatic)
+            }
         }
     }
 
@@ -1129,12 +1180,88 @@ struct MapHomeView: View {
 
     private func recenter() {
         if nav.active {
-            withAnimation { camera = .userLocation(followsHeading: true, fallback: .automatic) }
+            if is3D, let c = location.coordinate {
+                withAnimation {
+                    camera = .camera(MapCamera(
+                        centerCoordinate: c, distance: 500,
+                        heading: location.course, pitch: 60))
+                }
+            } else {
+                withAnimation { camera = .userLocation(followsHeading: true, fallback: .automatic) }
+            }
             return
         }
         guard let c = location.coordinate else { return }
-        withAnimation {
-            camera = .region(MKCoordinateRegion(center: c, latitudinalMeters: 1200, longitudinalMeters: 1200))
+        withAnimation { camera = userCamera(c) }
+    }
+
+    /// Caméra centrée sur un point, inclinée si le mode 3D est actif.
+    private func userCamera(_ c: CLLocationCoordinate2D, distance: Double = 1200) -> MapCameraPosition {
+        if is3D {
+            return .camera(MapCamera(centerCoordinate: c, distance: distance, heading: 0, pitch: 60))
+        }
+        return .region(MKCoordinateRegion(
+            center: c, latitudinalMeters: distance, longitudinalMeters: distance))
+    }
+
+    /// Active/désactive la vue 3D et l'applique immédiatement.
+    private func toggle3D() {
+        is3D.toggle()
+        guard let c = location.coordinate else { return }
+        if nav.active {
+            withAnimation {
+                camera = is3D
+                    ? .camera(MapCamera(centerCoordinate: c, distance: 500,
+                                        heading: location.course, pitch: 60))
+                    : .userLocation(followsHeading: true, fallback: .automatic)
+            }
+        } else {
+            withAnimation { camera = userCamera(c) }
+        }
+    }
+
+    /// Cap (0 = nord) d'un point vers un autre.
+    private func bearingBetween(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
+        let dLon = (b.longitude - a.longitude) * .pi / 180
+        let y = sin(dLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+        return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+    }
+
+    /// Prévisualise (survole) l'itinéraire sélectionné, caméra le long du tracé.
+    private func previewRoute() {
+        if previewing {
+            previewTask?.cancel()
+            previewing = false
+            return
+        }
+        guard let o = routeOptions.first(where: { $0.id == selectedRouteID }) ?? routeOptions.first
+        else { return }
+        let coords = o.coordinates
+        guard coords.count > 1 else { return }
+        previewing = true
+        previewTask?.cancel()
+        previewTask = Task { @MainActor in
+            let n = coords.count
+            let step = max(1, n / 60)
+            var i = 0
+            while i < n && !Task.isCancelled {
+                let c = coords[i]
+                let j = min(i + step, n - 1)
+                let heading = bearingBetween(c, coords[j])
+                withAnimation(.linear(duration: 0.3)) {
+                    camera = .camera(MapCamera(
+                        centerCoordinate: c, distance: 700,
+                        heading: heading, pitch: is3D ? 70 : 45))
+                }
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                i += step
+            }
+            if !Task.isCancelled {
+                withAnimation { fitCoordinates(coords) }
+            }
+            previewing = false
         }
     }
 
