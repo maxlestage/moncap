@@ -27,6 +27,9 @@ final class NavigationManager: ObservableObject {
 
     private var steps: [NavStep] = []
     private var stepIndex = 0
+    /// Distance et durée totales de l'itinéraire (pour estimer le restant).
+    private var totalKm = 0.0
+    private var totalMin = 0.0
     private var spokenApproach = false
     private var spokenImminent = false
     private var offRouteHits = 0
@@ -86,6 +89,9 @@ final class NavigationManager: ObservableObject {
     func update(_ coord: CLLocationCoordinate2D) {
         guard active else { return }
 
+        // Met à jour en temps réel la distance et la durée restantes.
+        updateRemaining(coord)
+
         // Détection de sortie d'itinéraire (anti-rebond : 3 relevés de suite).
         if !rerouting {
             let deviation = distanceToRoute(coord)
@@ -134,6 +140,8 @@ final class NavigationManager: ObservableObject {
                       km: Double, min: Double, announceStart: Bool) {
         self.steps = steps
         routeCoords = coords
+        totalKm = km
+        totalMin = min
         remainingKm = km
         etaMinutes = min
         stepIndex = steps.firstIndex { !$0.text.isEmpty } ?? 0
@@ -162,6 +170,50 @@ final class NavigationManager: ObservableObject {
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
         CLLocation(latitude: a.latitude, longitude: a.longitude)
             .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+    }
+
+    /// Recalcule la distance et la durée restantes depuis la position courante.
+    private func updateRemaining(_ coord: CLLocationCoordinate2D) {
+        guard routeCoords.count >= 2 else { return }
+        remainingKm = remainingDistance(from: coord) / 1000
+        // Vitesse moyenne de l'itinéraire pour une ETA cohérente.
+        let avgKmh = totalMin > 0 ? totalKm / (totalMin / 60) : 40
+        etaMinutes = avgKmh > 0 ? remainingKm / avgKmh * 60 : 0
+    }
+
+    /// Distance (m) restante le long de l'itinéraire depuis un point (projeté
+    /// sur le segment le plus proche, puis somme jusqu'à l'arrivée).
+    private func remainingDistance(from p: CLLocationCoordinate2D) -> Double {
+        let coords = routeCoords
+        guard coords.count >= 2 else { return 0 }
+        let mLat = 111_320.0
+        let mLon = 111_320.0 * cos(p.latitude * .pi / 180)
+        func xy(_ c: CLLocationCoordinate2D) -> (Double, Double) {
+            ((c.longitude - p.longitude) * mLon, (c.latitude - p.latitude) * mLat)
+        }
+        var bestI = 0, bestT = 0.0, best = Double.greatestFiniteMagnitude
+        for i in 0..<(coords.count - 1) {
+            let (ax, ay) = xy(coords[i])
+            let (bx, by) = xy(coords[i + 1])
+            let dx = bx - ax, dy = by - ay
+            let len2 = dx * dx + dy * dy
+            let t = len2 == 0 ? 0 : max(0, min(1, -(ax * dx + ay * dy) / len2))
+            let cx = ax + t * dx, cy = ay + t * dy
+            let d = (cx * cx + cy * cy).squareRoot()
+            if d < best { best = d; bestI = i; bestT = t }
+        }
+        // De la projection jusqu'à la fin du segment courant, puis les suivants.
+        let a = coords[bestI], b = coords[bestI + 1]
+        let proj = CLLocationCoordinate2D(
+            latitude: a.latitude + (b.latitude - a.latitude) * bestT,
+            longitude: a.longitude + (b.longitude - a.longitude) * bestT)
+        var rem = distance(proj, b)
+        var i = bestI + 1
+        while i < coords.count - 1 {
+            rem += distance(coords[i], coords[i + 1])
+            i += 1
+        }
+        return rem
     }
 
     /// Distance minimale (m) entre un point et la polyligne de l'itinéraire.
