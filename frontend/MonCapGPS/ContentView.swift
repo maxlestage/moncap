@@ -292,6 +292,13 @@ struct MapHomeView: View {
                 followsRoute = true
             }
         }
+        .onChange(of: selectedRouteID) { _, id in
+            // Prévient (vibration) quand l'itinéraire choisi a une grosse
+            // côte / descente, si le dénivelé est déjà connu.
+            if let o = routeOptions.first(where: { $0.id == id }), routeWarning(o) != nil {
+                warnHaptic()
+            }
+        }
     }
 
     /// Ajoute un point au tracé en cours, en filtrant les points trop proches
@@ -588,6 +595,31 @@ struct MapHomeView: View {
         return String(format: "↗ %.0f m de côte · ↘ %.0f m de descente", up, down)
     }
 
+    /// Seuil au-delà duquel une côte / descente est jugée « grosse » (mètres).
+    private let bigElevation = 150.0
+
+    /// Avertissement si l'itinéraire présente une grosse côte / descente.
+    private func routeWarning(_ o: RouteOption) -> String? {
+        let bigUp = (o.climb ?? 0) >= bigElevation
+        let bigDown = (o.descent ?? 0) >= bigElevation
+        switch (bigUp, bigDown) {
+        case (true, true):
+            return String(format: "⚠️ Forte côte (%.0f m) et forte descente (%.0f m)",
+                          o.climb ?? 0, o.descent ?? 0)
+        case (true, false):
+            return String(format: "⚠️ Forte côte (%.0f m)", o.climb ?? 0)
+        case (false, true):
+            return String(format: "⚠️ Forte descente (%.0f m)", o.descent ?? 0)
+        default:
+            return nil
+        }
+    }
+
+    /// Vibration d'alerte (grosse côte / descente).
+    private func warnHaptic() {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+
     /// Infos détaillées : ligne principale + dénivelé sur une ligne à part.
     private func routeDetails(_ o: RouteOption, compact: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -598,6 +630,13 @@ struct MapHomeView: View {
                 Text(elev)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+            }
+            if let warning = routeWarning(o) {
+                Text(warning)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .font(compact ? .caption : .caption.weight(.medium))
@@ -1422,6 +1461,12 @@ struct MapHomeView: View {
             if let idx = routeOptions.firstIndex(where: { $0.id == o.id }) {
                 routeOptions[idx].climb = up
                 routeOptions[idx].descent = down
+                // Prévient si l'itinéraire sélectionné se révèle avoir une
+                // grosse côte / descente (dénivelé arrivé après coup).
+                if routeOptions[idx].id == selectedRouteID,
+                    routeWarning(routeOptions[idx]) != nil {
+                    warnHaptic()
+                }
             }
         }
     }
