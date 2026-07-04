@@ -24,6 +24,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tower_http::{
+    compression::CompressionLayer,
     cors::{AllowOrigin, Any, CorsLayer},
     services::{ServeDir, ServeFile},
     trace::TraceLayer,
@@ -413,6 +414,9 @@ async fn main() {
             rate_limit(general.clone(), req, next)
         }))
         .layer(TraceLayer::new_for_http())
+        // Compresse les réponses (gzip/brotli) selon Accept-Encoding — utile
+        // surtout pour les payloads texte (listes JSON, export GPX).
+        .layer(CompressionLayer::new())
         .layer(cors_layer())
         .with_state(state);
 
@@ -1112,17 +1116,22 @@ async fn export_gpx(
 
 /// Construit un document GPX (waypoints) à partir des positions.
 fn to_gpx(positions: &[position::Model]) -> String {
-    let mut gpx = String::from(
+    use std::fmt::Write;
+    // Pré-dimensionné pour éviter les réallocations ; write! écrit directement
+    // dans le tampon (pas de String temporaire par waypoint).
+    let mut gpx = String::with_capacity(160 + positions.len() * 96);
+    gpx.push_str(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
          <gpx version=\"1.1\" creator=\"moncap-gps\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n",
     );
     for p in positions {
-        gpx.push_str(&format!(
-            "  <wpt lat=\"{}\" lon=\"{}\"><name>{}</name></wpt>\n",
+        let _ = writeln!(
+            gpx,
+            "  <wpt lat=\"{}\" lon=\"{}\"><name>{}</name></wpt>",
             p.lat,
             p.lon,
             xml_escape(&p.label),
-        ));
+        );
     }
     gpx.push_str("</gpx>\n");
     gpx
