@@ -576,25 +576,33 @@ struct MapHomeView: View {
         return tags
     }
 
-    /// Infos détaillées d'un itinéraire en texte : durée, distance, virages,
-    /// arrivée, et dénivelé (côte ↗ / descente ↘) dès qu'il est connu.
-    private func routeInfoText(_ o: RouteOption) -> String {
-        var s = String(format: "%.0f min · %.1f km · %d virages · arr. %@",
-                       o.minutes, o.km, o.turns, routeArrival(o.minutes))
-        if let up = o.climb, let down = o.descent, up >= 5 || down >= 5 {
-            s += String(format: " · ↗ %.0f m · ↘ %.0f m", up, down)
-        }
-        return s
+    /// Infos principales d'un itinéraire : durée, distance, virages, arrivée.
+    private func routeCoreText(_ o: RouteOption) -> String {
+        String(format: "%.0f min · %.1f km · %d virages · arr. %@",
+               o.minutes, o.km, o.turns, routeArrival(o.minutes))
     }
 
-    /// Ligne d'infos détaillées (un seul texte foncé, affiché en entier).
+    /// Dénivelé (côte ↗ / descente ↘) si connu.
+    private func routeElevationText(_ o: RouteOption) -> String? {
+        guard let up = o.climb, let down = o.descent, up >= 5 || down >= 5 else { return nil }
+        return String(format: "↗ %.0f m de côte · ↘ %.0f m de descente", up, down)
+    }
+
+    /// Infos détaillées : ligne principale + dénivelé sur une ligne à part.
     private func routeDetails(_ o: RouteOption, compact: Bool = false) -> some View {
-        Text(routeInfoText(o))
-            .font(compact ? .caption : .caption.weight(.medium))
-            .foregroundStyle(.primary)
-            .lineLimit(compact ? 1 : 2)
-            .minimumScaleFactor(compact ? 0.6 : 0.85)
-            .fixedSize(horizontal: false, vertical: !compact)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(routeCoreText(o))
+                .lineLimit(compact ? 1 : 2)
+                .minimumScaleFactor(compact ? 0.6 : 0.85)
+            if let elev = routeElevationText(o) {
+                Text(elev)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+        }
+        .font(compact ? .caption : .caption.weight(.medium))
+        .foregroundStyle(.primary)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi) qu'on
