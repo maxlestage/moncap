@@ -156,6 +156,9 @@ struct MapHomeView: View {
     @State private var pendingDestination: CLLocationCoordinate2D?
     /// Carte inclinée en 3D si l'utilisateur l'active.
     @State private var is3D = false
+    /// Suivi automatique de la position en navigation (désactivé si on déplace
+    /// la carte à la main ; réactivé via le bouton de recentrage).
+    @State private var followsRoute = true
     /// Prévisualisation (survol) de l'itinéraire en cours.
     @State private var previewing = false
     @State private var previewTask: Task<Void, Never>?
@@ -190,19 +193,21 @@ struct MapHomeView: View {
             .padding(.horizontal)
             .padding(.top, 8)
 
-            // Bas : carte ETA/itinéraire + barre d'actions.
+            // Bas : cartes d'info + barre d'actions. Les bandeaux ETA et
+            // comparateur sont calés tout en bas (sous les boutons) pour
+            // dégager la vue sur la route.
             VStack(spacing: 12) {
-                if nav.active {
-                    etaCard
-                } else if !multiRoutes.isEmpty {
-                    multiRouteCard
-                } else if let info = routeInfo {
-                    routeCard(info)
+                if !nav.active {
+                    if !multiRoutes.isEmpty {
+                        multiRouteCard
+                    } else if let info = routeInfo {
+                        routeCard(info)
+                    }
                 }
                 bottomBar
-                // Comparateur d'itinéraires calé tout en bas (sous les boutons)
-                // pour dégager la vue sur les tracés.
-                if !nav.active && !routeOptions.isEmpty {
+                if nav.active {
+                    etaCard
+                } else if !routeOptions.isEmpty {
                     routeOptionsCard
                 }
             }
@@ -231,8 +236,9 @@ struct MapHomeView: View {
             if nav.active {
                 nav.update(c)
                 recordTrackPoint(c)
-                // Vue conduite 3D : la caméra suit, inclinée, dans le sens de la marche.
-                if is3D, !previewing {
+                // Vue conduite 3D : la caméra suit, inclinée, dans le sens de la
+                // marche — sauf si on a déplacé la carte à la main.
+                if is3D, !previewing, followsRoute {
                     withAnimation(.easeOut(duration: 0.4)) {
                         camera = .camera(MapCamera(
                             centerCoordinate: c, distance: 500,
@@ -246,10 +252,11 @@ struct MapHomeView: View {
             if wasActive && !isActive {
                 Task { await saveRecordedTrip() }
             }
-            // Début de navigation → nouvel enregistrement.
+            // Début de navigation → nouvel enregistrement + suivi actif.
             if !wasActive && isActive {
                 recordedTrack = location.coordinate.map { [$0] } ?? []
                 tripStart = Date()
+                followsRoute = true
             }
         }
     }
@@ -371,6 +378,12 @@ struct MapHomeView: View {
         .onTapGesture(coordinateSpace: .local) { point in
             handleMapTap(point, proxy: proxy)
         }
+        // Déplacer la carte à la main débraye le suivi automatique.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 8).onChanged { _ in
+                if followsRoute { followsRoute = false }
+            }
+        )
         }
     }
 
@@ -1351,6 +1364,7 @@ struct MapHomeView: View {
         guard let dest = pendingDestination else { return }
         previewTask?.cancel()
         previewing = false
+        followsRoute = true
         nav.start(steps: option.steps, coordinates: option.coordinates,
                   distanceKm: option.km, etaMinutes: option.minutes, destination: dest)
         routeOptions = []
@@ -1386,6 +1400,7 @@ struct MapHomeView: View {
     }
 
     private func recenter() {
+        followsRoute = true
         if nav.active {
             if is3D, let c = location.coordinate {
                 withAnimation {
@@ -1414,6 +1429,7 @@ struct MapHomeView: View {
     /// Active/désactive la vue 3D et l'applique immédiatement.
     private func toggle3D() {
         is3D.toggle()
+        followsRoute = true
         guard let c = location.coordinate else { return }
         if nav.active {
             withAnimation {
