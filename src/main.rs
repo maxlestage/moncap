@@ -18,8 +18,8 @@ use axum::{
 };
 use rayon::prelude::*;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, Set,
+    ActiveModelTrait, ColumnTrait, ConnectOptions, Database, DatabaseConnection, EntityTrait,
+    QueryFilter, QueryOrder, Set,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -342,7 +342,20 @@ async fn main() {
             "postgres://postgres:postgres@localhost:5432/moncap".to_string()
         }
     };
-    let db = Database::connect(&db_url).await.expect(
+    // Pool borné : Heroku Postgres limite le nombre de connexions (~20 sur les
+    // petits plans, partagé entre dynos). On plafonne pour éviter l'épuisement,
+    // ajustable via DATABASE_MAX_CONNECTIONS.
+    let max_conns = std::env::var("DATABASE_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let mut opt = ConnectOptions::new(db_url);
+    opt.max_connections(max_conns)
+        .min_connections(1)
+        .acquire_timeout(std::time::Duration::from_secs(8))
+        .idle_timeout(std::time::Duration::from_secs(300))
+        .sqlx_logging(false);
+    let db = Database::connect(opt).await.expect(
         "connexion Postgres impossible — vérifie que l'addon Heroku Postgres est ajouté \
          (DATABASE_URL doit être défini)",
     );
