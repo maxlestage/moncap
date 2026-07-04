@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 private let alertTypes: [(category: String, emoji: String, label: String, color: Color)] = [
     ("police", "🚓", "Police", .blue),
@@ -32,6 +33,36 @@ struct RouteOption: Identifiable {
     var isSimplest = false
     /// Couleur du tracé sur la carte (verte pour le plus simple).
     var color: Color = .gray
+    /// Dénivelé positif (côte) et négatif (descente) en mètres, si connus.
+    var climb: Double?
+    var descent: Double?
+}
+
+/// Profil d'altitude d'une suite de points via l'API open-meteo (gratuite,
+/// sans clé). Renvoie une altitude (m) par point, ou nil si indisponible.
+fileprivate func elevationProfile(_ coords: [CLLocationCoordinate2D]) async -> [Double]? {
+    guard !coords.isEmpty else { return nil }
+    let lats = coords.map { String(format: "%.5f", $0.latitude) }.joined(separator: ",")
+    let lons = coords.map { String(format: "%.5f", $0.longitude) }.joined(separator: ",")
+    var comps = URLComponents(string: "https://api.open-meteo.com/v1/elevation")!
+    comps.queryItems = [
+        URLQueryItem(name: "latitude", value: lats),
+        URLQueryItem(name: "longitude", value: lons),
+    ]
+    guard let url = comps.url,
+        let (data, _) = try? await URLSession.shared.data(from: url)
+    else { return nil }
+    struct Resp: Decodable { let elevation: [Double] }
+    return (try? JSONDecoder().decode(Resp.self, from: data))?.elevation
+}
+
+/// Échantillonne au plus `n` points répartis le long d'un tracé.
+fileprivate func sampleCoords(_ coords: [CLLocationCoordinate2D], max n: Int)
+    -> [CLLocationCoordinate2D]
+{
+    guard coords.count > n, n > 1 else { return coords }
+    let step = Double(coords.count - 1) / Double(n - 1)
+    return (0..<n).map { coords[Int((Double($0) * step).rounded())] }
 }
 
 /// Étiquette d'un itinéraire (le plus simple / rapide / court…).
@@ -248,6 +279,8 @@ struct MapHomeView: View {
             }
         }
         .onChange(of: nav.active) { wasActive, isActive in
+            // Empêche la mise en veille de l'écran pendant la navigation.
+            UIApplication.shared.isIdleTimerDisabled = isActive
             // Fin de navigation (arrivée ou « Quitter ») → on enregistre le trajet.
             if wasActive && !isActive {
                 Task { await saveRecordedTrip() }
@@ -543,10 +576,15 @@ struct MapHomeView: View {
         return tags
     }
 
-    /// Infos détaillées d'un itinéraire en texte : durée, distance, virages, arrivée.
+    /// Infos détaillées d'un itinéraire en texte : durée, distance, virages,
+    /// arrivée, et dénivelé (côte ↗ / descente ↘) dès qu'il est connu.
     private func routeInfoText(_ o: RouteOption) -> String {
-        String(format: "%.0f min · %.1f km · %d virages · arr. %@",
-               o.minutes, o.km, o.turns, routeArrival(o.minutes))
+        var s = String(format: "%.0f min · %.1f km · %d virages · arr. %@",
+                       o.minutes, o.km, o.turns, routeArrival(o.minutes))
+        if let up = o.climb, let down = o.descent, up >= 5 || down >= 5 {
+            s += String(format: " · ↗ %.0f m · ↘ %.0f m", up, down)
+        }
+        return s
     }
 
     /// Ligne d'infos détaillées (un seul texte foncé, affiché en entier).
@@ -1357,6 +1395,27 @@ struct MapHomeView: View {
         selectedRouteID = options.first { $0.isSimplest }?.id ?? options.first?.id
         routesExpanded = false
         fitCoordinates(options.flatMap { $0.coordinates } + [from])
+
+        // Enrichit chaque itinéraire avec son dénivelé (en tâche de fond).
+        Task { await loadElevations(for: options) }
+    }
+
+    /// Récupère le dénivelé (côte / descente) de chaque itinéraire et met à jour
+    /// les infos au fur et à mesure.
+    private func loadElevations(for options: [RouteOption]) async {
+        for o in options {
+            let sampled = sampleCoords(o.coordinates, max: 40)
+            guard let elev = await elevationProfile(sampled), elev.count >= 2 else { continue }
+            var up = 0.0, down = 0.0
+            for i in 1..<elev.count {
+                let d = elev[i] - elev[i - 1]
+                if d > 1 { up += d } else if d < -1 { down += -d }
+            }
+            if let idx = routeOptions.firstIndex(where: { $0.id == o.id }) {
+                routeOptions[idx].climb = up
+                routeOptions[idx].descent = down
+            }
+        }
     }
 
     /// Lance la navigation sur l'option d'itinéraire choisie.
