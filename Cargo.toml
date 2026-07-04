@@ -8,7 +8,7 @@ axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tower-http = { version = "0.5", features = ["cors", "trace", "fs"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs", "compression-gzip", "compression-br"] }
 sea-orm = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
 sea-orm-migration = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
 async-trait = "0.1"
@@ -23,7 +23,12 @@ jsonwebtoken = "9"
 name = "moncap-gps"
 path = "src/main.rs"
 
-# Binaire de production : symboles retirés (plus léger). On évite le LTO
-# agressif pour rester sous la limite de temps de build des buildpacks Heroku.
+# Binaire de production : symboles retirés + optimisations d'édition de liens.
+# LTO « thin » (bon compromis perf / temps de build, contrairement au « fat »
+# qui risquerait de dépasser la limite de build des buildpacks Heroku) et une
+# seule unité de codegen pour un meilleur inlining. opt-level 3 est déjà le
+# défaut en release.
 [profile.release]
 strip = true
+lto = "thin"
+codegen-units = 1
