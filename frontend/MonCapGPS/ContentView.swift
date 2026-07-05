@@ -118,6 +118,69 @@ fileprivate func viaRoute(
         km: a.km + b.km, minutes: a.minutes + b.minutes)
 }
 
+/// Itinéraires vélo réels (pistes cyclables) via BRouter — moteur open-source,
+/// serveur public gratuit, sans clé API. Renvoie jusqu'à 3 alternatives.
+fileprivate func bikeRoutes(
+    from: CLLocationCoordinate2D, to: CLLocationCoordinate2D
+) async -> [RouteBuild] {
+    var out: [RouteBuild] = []
+    var seen = Set<Int>()
+    for alt in 0..<3 {
+        guard let b = await brouterRoute(from: from, to: to, alt: alt) else { continue }
+        // BRouter peut renvoyer le même tracé pour un idx sans alternative.
+        let key = Int(b.km * 100)
+        if seen.insert(key).inserted { out.append(b) }
+    }
+    return out
+}
+
+/// Un itinéraire vélo via BRouter (profil « trekking »), format GeoJSON.
+fileprivate func brouterRoute(
+    from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, alt: Int
+) async -> RouteBuild? {
+    // Attention : BRouter attend lon,lat (et non lat,lon).
+    let lonlats = String(
+        format: "%.6f,%.6f|%.6f,%.6f",
+        from.longitude, from.latitude, to.longitude, to.latitude)
+    var comps = URLComponents(string: "https://brouter.de/brouter")!
+    comps.queryItems = [
+        URLQueryItem(name: "lonlats", value: lonlats),
+        URLQueryItem(name: "profile", value: "trekking"),
+        URLQueryItem(name: "alternativeidx", value: String(alt)),
+        URLQueryItem(name: "format", value: "geojson"),
+    ]
+    guard let url = comps.url,
+        let (data, _) = try? await URLSession.shared.data(from: url)
+    else { return nil }
+
+    struct FC: Decodable { let features: [Feature] }
+    struct Feature: Decodable { let geometry: Geom; let properties: Props }
+    struct Geom: Decodable { let coordinates: [[Double]] }
+    struct Props: Decodable {
+        let trackLength: String?
+        let totalTime: String?
+        enum CodingKeys: String, CodingKey {
+            case trackLength = "track-length"
+            case totalTime = "total-time"
+        }
+    }
+    guard let fc = try? JSONDecoder().decode(FC.self, from: data),
+        let f = fc.features.first
+    else { return nil }
+    let coords = f.geometry.coordinates.compactMap { c -> CLLocationCoordinate2D? in
+        c.count >= 2 ? CLLocationCoordinate2D(latitude: c[1], longitude: c[0]) : nil
+    }
+    guard coords.count >= 2 else { return nil }
+    let km = (Double(f.properties.trackLength ?? "") ?? 0) / 1000
+    let minutes = (Double(f.properties.totalTime ?? "") ?? 0) / 60
+    // Pas d'instructions détaillées : une consigne générique vers l'arrivée.
+    let steps = [NavStep(text: "Suivez la piste cyclable", coord: coords.last ?? to)]
+    return RouteBuild(
+        coords: coords, steps: steps,
+        km: km > 0 ? km : 0,
+        minutes: minutes > 0 ? minutes : km / 16 * 60)
+}
+
 /// Point de passage décalé perpendiculairement au trajet direct, pour
 /// diversifier les itinéraires (fraction de la distance, côté ±1).
 fileprivate func offsetVia(
@@ -1428,44 +1491,52 @@ struct MapHomeView: View {
         routeCoords = []
         routeInfo = nil
 
-        let tt = travelMode.transportType
-
-        // 1) Alternatives directes d'Apple (souvent 2–3).
-        var builds = await buildRoutes(from: from, to: dest, alternates: true, transportType: tt)
-
-        // 2) En voiture, diversifie via des points de passage décalés de part et
-        //    d'autre du trajet direct, pour viser une quinzaine de choix (calcul
-        //    parallèle borné, anti-throttling). À pied / à vélo on garde les
-        //    alternatives directes (les petits chemins suffisent).
-        if travelMode == .car {
-            var vias: [CLLocationCoordinate2D] = []
-            for f in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
-                for s in [1.0, -1.0] { vias.append(offsetVia(from: from, to: dest, fraction: f, side: s)) }
+        var builds: [RouteBuild]
+        if travelMode == .bike {
+            // Vélo : vrai routage cyclable (pistes) via BRouter, sans clé API.
+            builds = await bikeRoutes(from: from, to: dest)
+            if builds.isEmpty {
+                // Repli si BRouter indisponible : tracé piéton, durée à ~16 km/h.
+                builds = (await buildRoutes(from: from, to: dest, alternates: true,
+                                            transportType: .walking))
+                    .map {
+                        RouteBuild(coords: $0.coords, steps: $0.steps, km: $0.km,
+                                   minutes: $0.km / (travelMode.speedKmh ?? 16) * 60)
+                    }
             }
-            await withTaskGroup(of: RouteBuild?.self) { group in
-                var next = 0
-                let maxConcurrent = min(6, vias.count)
-                while next < maxConcurrent {
-                    let via = vias[next]; next += 1
-                    group.addTask { await viaRoute(from: from, via: via, to: dest, transportType: tt) }
+        } else {
+            let tt = travelMode.transportType
+            // Alternatives directes d'Apple (souvent 2–3).
+            builds = await buildRoutes(from: from, to: dest, alternates: true, transportType: tt)
+            // En voiture, diversifie via des points de passage décalés de part et
+            // d'autre du trajet direct, pour viser une quinzaine de choix (calcul
+            // parallèle borné, anti-throttling). À pied, les alternatives directes
+            // suffisent.
+            if travelMode == .car {
+                var vias: [CLLocationCoordinate2D] = []
+                for f in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
+                    for s in [1.0, -1.0] {
+                        vias.append(offsetVia(from: from, to: dest, fraction: f, side: s))
+                    }
                 }
-                for await r in group {
-                    if let r { builds.append(r) }
-                    if next < vias.count {
+                await withTaskGroup(of: RouteBuild?.self) { group in
+                    var next = 0
+                    let maxConcurrent = min(6, vias.count)
+                    while next < maxConcurrent {
                         let via = vias[next]; next += 1
                         group.addTask { await viaRoute(from: from, via: via, to: dest, transportType: tt) }
+                    }
+                    for await r in group {
+                        if let r { builds.append(r) }
+                        if next < vias.count {
+                            let via = vias[next]; next += 1
+                            group.addTask { await viaRoute(from: from, via: via, to: dest, transportType: tt) }
+                        }
                     }
                 }
             }
         }
         guard !builds.isEmpty else { return }
-
-        // Vélo : MapKit ne le route pas → durée recalculée à la vitesse du mode.
-        if let speed = travelMode.speedKmh, speed > 0 {
-            builds = builds.map {
-                RouteBuild(coords: $0.coords, steps: $0.steps, km: $0.km, minutes: $0.km / speed * 60)
-            }
-        }
 
         // Dédoublonne (distance + point médian arrondis).
         var seen = Set<String>()
