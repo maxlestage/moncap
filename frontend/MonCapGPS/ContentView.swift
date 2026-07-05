@@ -113,8 +113,12 @@ fileprivate func viaRoute(
         let b = await buildRoutes(from: via, to: to, alternates: false,
                                   transportType: transportType).first
     else { return nil }
+    // On retire l'« arrivée » du 1er tronçon et le « départ » du 2nd pour ne
+    // pas annoncer « Vous êtes arrivé » au point de passage, tout en gardant
+    // les instructions Apple (avec noms de rue) des deux tronçons.
+    let steps = Array(a.steps.dropLast()) + Array(b.steps.dropFirst())
     return RouteBuild(
-        coords: a.coords + b.coords, steps: a.steps + b.steps,
+        coords: a.coords + b.coords, steps: steps,
         km: a.km + b.km, minutes: a.minutes + b.minutes)
 }
 
