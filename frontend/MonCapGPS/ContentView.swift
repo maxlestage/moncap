@@ -118,6 +118,50 @@ fileprivate func viaRoute(
         km: a.km + b.km, minutes: a.minutes + b.minutes)
 }
 
+/// Cap (0 = nord) d'un point vers un autre.
+fileprivate func courseBetween(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+    let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
+    let dLon = (b.longitude - a.longitude) * .pi / 180
+    let y = sin(dLon) * cos(lat2)
+    let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
+    return (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+}
+
+fileprivate func metersBetween(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+    CLLocation(latitude: a.latitude, longitude: a.longitude)
+        .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+}
+
+/// Génère un virage-par-virage à partir d'un tracé, en détectant les
+/// changements de cap à chaque sommet. Utile pour les itinéraires sans
+/// instructions fournies (ex. vélo BRouter).
+fileprivate func turnSteps(from coords: [CLLocationCoordinate2D]) -> [NavStep] {
+    guard coords.count >= 3 else {
+        return coords.last.map { [NavStep(text: "Continuez tout droit", coord: $0)] } ?? []
+    }
+    var steps: [NavStep] = []
+    var lastStep = coords.first!
+    for i in 1..<(coords.count - 1) {
+        let inb = courseBetween(coords[i - 1], coords[i])
+        let outb = courseBetween(coords[i], coords[i + 1])
+        var delta = outb - inb
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        let mag = abs(delta)
+        // Ignore les petites courbes et les sommets trop rapprochés.
+        guard mag >= 30, metersBetween(lastStep, coords[i]) >= 20 else { continue }
+        let side = delta > 0 ? "à droite" : "à gauche"
+        let text: String
+        if mag >= 105 { text = "Tournez fortement \(side)" }
+        else if mag >= 55 { text = "Tournez \(side)" }
+        else { text = "Légèrement \(side)" }
+        steps.append(NavStep(text: text, coord: coords[i]))
+        lastStep = coords[i]
+    }
+    steps.append(NavStep(text: "Arrivée à destination", coord: coords.last!))
+    return steps
+}
+
 /// Itinéraires vélo réels (pistes cyclables) via BRouter — moteur open-source,
 /// serveur public gratuit, sans clé API. Renvoie jusqu'à 3 alternatives.
 fileprivate func bikeRoutes(
@@ -173,8 +217,8 @@ fileprivate func brouterRoute(
     guard coords.count >= 2 else { return nil }
     let km = (Double(f.properties.trackLength ?? "") ?? 0) / 1000
     let minutes = (Double(f.properties.totalTime ?? "") ?? 0) / 60
-    // Pas d'instructions détaillées : une consigne générique vers l'arrivée.
-    let steps = [NavStep(text: "Suivez la piste cyclable", coord: coords.last ?? to)]
+    // Virage-par-virage généré depuis la géométrie du tracé.
+    let steps = turnSteps(from: coords)
     return RouteBuild(
         coords: coords, steps: steps,
         km: km > 0 ? km : 0,
