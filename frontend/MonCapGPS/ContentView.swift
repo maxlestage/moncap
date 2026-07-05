@@ -411,7 +411,7 @@ struct MapHomeView: View {
         .onReceive(location.$coordinate) { coord in
             guard let c = coord else { return }
             if sharing {
-                realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: avatar)
+                realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: liveAvatar)
             }
             if nav.active {
                 nav.update(c)
@@ -493,11 +493,7 @@ struct MapHomeView: View {
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
                 Annotation("Moi", coordinate: me) {
-                    Image(Avatars.asset(avatar))
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 40, height: 40)
-                        .shadow(radius: 2)
+                    avatarMarker(liveAvatar, size: 40)
                 }
             }
             ForEach(positions) { p in
@@ -545,11 +541,7 @@ struct MapHomeView: View {
             }
             ForEach(liveCars) { u in
                 Annotation(u.label, coordinate: .init(latitude: u.lat, longitude: u.lon)) {
-                    Image(Avatars.asset(u.avatar))
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 44, height: 44)
-                        .shadow(radius: 2)
+                    avatarMarker(u.avatar, size: 44)
                 }
             }
             ForEach(realtime.alerts) { a in
@@ -623,6 +615,43 @@ struct MapHomeView: View {
             best = min(best, (cx * cx + cy * cy).squareRoot())
         }
         return best
+    }
+
+    /// Avatar diffusé/affiché selon le mode : voiture = avatar choisi ;
+    /// à pied / à vélo = pictogramme dédié (pas la voiture).
+    private var liveAvatar: String {
+        switch travelMode {
+        case .car: return avatar
+        case .walk: return "walk"
+        case .bike: return "bike"
+        }
+    }
+
+    /// Marqueur d'un utilisateur sur la carte : image d'avatar, ou pictogramme
+    /// piéton / vélo selon l'identifiant spécial.
+    @ViewBuilder
+    private func avatarMarker(_ id: String, size: CGFloat) -> some View {
+        if id == "walk" {
+            Image(systemName: "figure.walk")
+                .font(.system(size: size * 0.52, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(Color.green, in: Circle())
+                .shadow(radius: 2)
+        } else if id == "bike" {
+            Image(systemName: "bicycle")
+                .font(.system(size: size * 0.5, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .background(Color.blue, in: Circle())
+                .shadow(radius: 2)
+        } else {
+            Image(Avatars.asset(id))
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .shadow(radius: 2)
+        }
     }
 
     // MARK: - Superpositions
@@ -1799,7 +1828,7 @@ struct MapHomeView: View {
     private func toggleSharing() {
         sharing.toggle()
         if sharing, let c = location.coordinate {
-            realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: avatar)
+            realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: liveAvatar)
         }
     }
 
