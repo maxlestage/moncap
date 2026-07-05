@@ -901,6 +901,15 @@ struct MapHomeView: View {
     private var searchSheet: some View {
         NavigationStack {
             List {
+                // Mode de déplacement : à pied / vélo / voiture.
+                Section {
+                    Picker("Mode", selection: $travelMode) {
+                        ForEach(TravelMode.allCases) { m in
+                            Label(m.label, systemImage: m.icon).tag(m)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
                 // Résultats de la recherche en cours.
                 ForEach(Array(placeSearch.results.enumerated()), id: \.offset) { _, item in
                     Button {
