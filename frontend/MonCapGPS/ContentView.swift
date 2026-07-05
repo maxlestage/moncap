@@ -80,14 +80,15 @@ fileprivate struct RouteBuild {
     let minutes: Double
 }
 
-/// Calcule un ou plusieurs itinéraires voiture entre deux points.
+/// Calcule un ou plusieurs itinéraires entre deux points, selon le mode.
 fileprivate func buildRoutes(
-    from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, alternates: Bool
+    from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, alternates: Bool,
+    transportType: MKDirectionsTransportType
 ) async -> [RouteBuild] {
     let req = MKDirections.Request()
     req.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
     req.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
-    req.transportType = .automobile
+    req.transportType = transportType
     req.requestsAlternateRoutes = alternates
     guard let routes = try? await MKDirections(request: req).calculate().routes else { return [] }
     return routes.map { r in
@@ -104,10 +105,13 @@ fileprivate func buildRoutes(
 
 /// Itinéraire passant par un point de passage : deux tronçons assemblés.
 fileprivate func viaRoute(
-    from: CLLocationCoordinate2D, via: CLLocationCoordinate2D, to: CLLocationCoordinate2D
+    from: CLLocationCoordinate2D, via: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+    transportType: MKDirectionsTransportType
 ) async -> RouteBuild? {
-    guard let a = await buildRoutes(from: from, to: via, alternates: false).first,
-        let b = await buildRoutes(from: via, to: to, alternates: false).first
+    guard let a = await buildRoutes(from: from, to: via, alternates: false,
+                                    transportType: transportType).first,
+        let b = await buildRoutes(from: via, to: to, alternates: false,
+                                  transportType: transportType).first
     else { return nil }
     return RouteBuild(
         coords: a.coords + b.coords, steps: a.steps + b.steps,
@@ -139,6 +143,38 @@ fileprivate func offsetVia(
 private let routePalette: [Color] = [
     .green, .blue, .orange, .purple, .red, .teal, .pink, .indigo, .brown, .cyan,
 ]
+
+/// Mode de déplacement : à pied, à vélo, en voiture.
+enum TravelMode: String, CaseIterable, Identifiable {
+    case walk, bike, car
+    var id: String { rawValue }
+
+    /// MapKit ne calcule pas d'itinéraire vélo : on l'approxime avec le tracé
+    /// piéton (petits chemins, pas d'autoroute) et une durée recalculée.
+    var transportType: MKDirectionsTransportType {
+        self == .car ? .automobile : .walking
+    }
+
+    /// Vitesse imposée pour recalculer la durée (vélo ≈ 16 km/h). nil = durée
+    /// renvoyée par MapKit (voiture, marche).
+    var speedKmh: Double? { self == .bike ? 16 : nil }
+
+    var icon: String {
+        switch self {
+        case .walk: return "figure.walk"
+        case .bike: return "bicycle"
+        case .car: return "car.fill"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .walk: return "À pied"
+        case .bike: return "Vélo"
+        case .car: return "Voiture"
+        }
+    }
+}
 
 /// Point d'entrée : écran de connexion ou carte selon l'authentification.
 struct ContentView: View {
@@ -180,6 +216,8 @@ struct MapHomeView: View {
     @State private var multiRoutes: [ColoredRoute] = []
     @State private var selectedIDs: Set<Int> = []
     @State private var routeOptions: [RouteOption] = []
+    /// Mode de déplacement choisi (à pied / vélo / voiture).
+    @State private var travelMode: TravelMode = .car
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
     @State private var selectedRouteID: UUID?
     /// Liste déroulée ou repliée (bandeau compact par défaut).
@@ -651,6 +689,19 @@ struct MapHomeView: View {
         let fastestID = routeOptions.min { $0.minutes < $1.minutes }?.id
         let shortestID = routeOptions.min { $0.km < $1.km }?.id
         return VStack(alignment: .leading, spacing: 8) {
+            // Choix du mode : à pied / vélo / voiture (recalcule les itinéraires).
+            Picker("Mode", selection: $travelMode) {
+                ForEach(TravelMode.allCases) { m in
+                    Label(m.label, systemImage: m.icon).tag(m)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: travelMode) { _, _ in
+                if let dest = pendingDestination {
+                    Task { await presentRouteOptions(to: dest) }
+                }
+            }
+
             // En-tête = menu déroulant montrant l'itinéraire sélectionné.
             Button {
                 withAnimation { routesExpanded.toggle() }
@@ -1368,32 +1419,44 @@ struct MapHomeView: View {
         routeCoords = []
         routeInfo = nil
 
-        // 1) Alternatives directes d'Apple (souvent 2–3).
-        var builds = await buildRoutes(from: from, to: dest, alternates: true)
+        let tt = travelMode.transportType
 
-        // 2) Diversifie via des points de passage décalés de part et d'autre du
-        //    trajet direct, pour viser une quinzaine de choix. Calcul en parallèle
-        //    mais borné (anti-throttling d'Apple).
-        var vias: [CLLocationCoordinate2D] = []
-        for f in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
-            for s in [1.0, -1.0] { vias.append(offsetVia(from: from, to: dest, fraction: f, side: s)) }
-        }
-        await withTaskGroup(of: RouteBuild?.self) { group in
-            var next = 0
-            let maxConcurrent = min(6, vias.count)
-            while next < maxConcurrent {
-                let via = vias[next]; next += 1
-                group.addTask { await viaRoute(from: from, via: via, to: dest) }
+        // 1) Alternatives directes d'Apple (souvent 2–3).
+        var builds = await buildRoutes(from: from, to: dest, alternates: true, transportType: tt)
+
+        // 2) En voiture, diversifie via des points de passage décalés de part et
+        //    d'autre du trajet direct, pour viser une quinzaine de choix (calcul
+        //    parallèle borné, anti-throttling). À pied / à vélo on garde les
+        //    alternatives directes (les petits chemins suffisent).
+        if travelMode == .car {
+            var vias: [CLLocationCoordinate2D] = []
+            for f in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
+                for s in [1.0, -1.0] { vias.append(offsetVia(from: from, to: dest, fraction: f, side: s)) }
             }
-            for await r in group {
-                if let r { builds.append(r) }
-                if next < vias.count {
+            await withTaskGroup(of: RouteBuild?.self) { group in
+                var next = 0
+                let maxConcurrent = min(6, vias.count)
+                while next < maxConcurrent {
                     let via = vias[next]; next += 1
-                    group.addTask { await viaRoute(from: from, via: via, to: dest) }
+                    group.addTask { await viaRoute(from: from, via: via, to: dest, transportType: tt) }
+                }
+                for await r in group {
+                    if let r { builds.append(r) }
+                    if next < vias.count {
+                        let via = vias[next]; next += 1
+                        group.addTask { await viaRoute(from: from, via: via, to: dest, transportType: tt) }
+                    }
                 }
             }
         }
         guard !builds.isEmpty else { return }
+
+        // Vélo : MapKit ne le route pas → durée recalculée à la vitesse du mode.
+        if let speed = travelMode.speedKmh, speed > 0 {
+            builds = builds.map {
+                RouteBuild(coords: $0.coords, steps: $0.steps, km: $0.km, minutes: $0.km / speed * 60)
+            }
+        }
 
         // Dédoublonne (distance + point médian arrondis).
         var seen = Set<String>()
@@ -1493,20 +1556,25 @@ struct MapHomeView: View {
         }
     }
 
-    /// Recalcule l'itinéraire depuis la position actuelle (sortie de route).
+    /// Recalcule l'itinéraire depuis la position actuelle (sortie de route),
+    /// dans le mode de déplacement courant.
     private func recomputeRoute() async {
         guard let from = location.coordinate, let to = nav.destination else { return }
-        if let route = await drivingRoute(from: from, to: to) {
+        if let route = await drivingRoute(from: from, to: to,
+                                          transportType: travelMode.transportType) {
             nav.applyReroute(route: route)
         }
     }
 
-    /// Itinéraire voiture le plus simple entre deux points.
-    private func drivingRoute(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) async -> MKRoute? {
+    /// Itinéraire le plus simple entre deux points, selon le mode donné.
+    private func drivingRoute(
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+        transportType: MKDirectionsTransportType = .automobile
+    ) async -> MKRoute? {
         let request = MKDirections.Request()
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
-        request.transportType = .automobile
+        request.transportType = transportType
         request.requestsAlternateRoutes = false
         return try? await MKDirections(request: request).calculate().routes.first
     }
