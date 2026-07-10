@@ -255,6 +255,50 @@ private let routePalette: [Color] = [
     .green, .blue, .orange, .purple, .red, .teal, .pink, .indigo, .brown, .cyan,
 ]
 
+/// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
+enum POIKind: String, CaseIterable, Identifiable {
+    case fastFood, restaurant, hotel, tourism, hangout
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .fastFood: return "Fast-food"
+        case .restaurant: return "Restaurants"
+        case .hotel: return "Hôtels"
+        case .tourism: return "Tourisme"
+        case .hangout: return "Sorties"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .fastFood: return "🍔"
+        case .restaurant: return "🍽️"
+        case .hotel: return "🏨"
+        case .tourism: return "🏛️"
+        case .hangout: return "🎉"
+        }
+    }
+
+    /// Requête MKLocalSearch correspondante.
+    var query: String {
+        switch self {
+        case .fastFood: return "fast food"
+        case .restaurant: return "restaurant"
+        case .hotel: return "hôtel"
+        case .tourism: return "site touristique"
+        case .hangout: return "bar café"
+        }
+    }
+}
+
+/// Un lieu affiché sur la carte (résultat de recherche par catégorie).
+struct POI: Identifiable {
+    let id = UUID()
+    let name: String
+    let coordinate: CLLocationCoordinate2D
+}
+
 /// Mode de déplacement : à pied, à vélo, en voiture.
 enum TravelMode: String, CaseIterable, Identifiable {
     case walk, bike, car
@@ -329,6 +373,12 @@ struct MapHomeView: View {
     @State private var routeOptions: [RouteOption] = []
     /// Mode de déplacement choisi (à pied / vélo / voiture).
     @State private var travelMode: TravelMode = .car
+    /// Catégorie de lieux affichée sur la carte (nil = aucune).
+    @State private var poiKind: POIKind?
+    /// Lieux trouvés pour la catégorie choisie.
+    @State private var pois: [POI] = []
+    /// Région actuellement visible (pour chercher les lieux dans la zone).
+    @State private var visibleRegion: MKCoordinateRegion?
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
     @State private var selectedRouteID: UUID?
     /// Liste déroulée ou repliée (bandeau compact par défaut).
@@ -367,6 +417,7 @@ struct MapHomeView: View {
                         searchBar
                         menuButton
                     }
+                    poiBar
                 }
                 Spacer()
             }
@@ -499,6 +550,24 @@ struct MapHomeView: View {
             ForEach(positions) { p in
                 Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
             }
+            // Lieux de la catégorie choisie : un appui propose les itinéraires.
+            if !nav.active {
+                ForEach(pois) { p in
+                    Annotation(p.name, coordinate: p.coordinate) {
+                        Button {
+                            Task { await presentRouteOptions(to: p.coordinate) }
+                        } label: {
+                            ZStack {
+                                Circle().fill(.white)
+                                    .frame(width: 34, height: 34)
+                                    .shadow(radius: 2)
+                                Text(poiKind?.emoji ?? "📍").font(.body)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
             // Options d'itinéraire : chacune sa couleur ; celle prévisualisée
             // est mise en avant (plus épaisse, opaque) et dessinée par-dessus.
             if !routeOptions.isEmpty && !nav.active {
@@ -555,6 +624,14 @@ struct MapHomeView: View {
             }
         }
         .mapControls { MapCompass() }
+        // Suit la zone visible ; recharge les lieux de la catégorie active
+        // quand on déplace la carte (fin de geste uniquement).
+        .onMapCameraChange(frequency: .onEnd) { ctx in
+            visibleRegion = ctx.region
+            if let kind = poiKind, !nav.active {
+                Task { await loadPOIs(kind) }
+            }
+        }
         // Toucher (près d')un tracé le sélectionne directement sur la carte.
         .onTapGesture(coordinateSpace: .local) { point in
             handleMapTap(point, proxy: proxy)
@@ -670,6 +747,70 @@ struct MapHomeView: View {
         .background(.regularMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
         .onTapGesture { showSearch = true }
+    }
+
+    /// Pastilles de catégories de lieux (fast-food, hôtels, tourisme…).
+    private var poiBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(POIKind.allCases) { kind in
+                    let isOn = poiKind == kind
+                    Button {
+                        togglePOIKind(kind)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(kind.emoji)
+                            Text(kind.label).font(.caption.weight(.semibold))
+                            if isOn && !pois.isEmpty {
+                                Text("\(pois.count)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6).padding(.vertical, 1)
+                                    .background(Color.blue, in: Capsule())
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(isOn ? AnyShapeStyle(Color.blue.opacity(0.18))
+                                         : AnyShapeStyle(.regularMaterial),
+                                    in: Capsule())
+                        .overlay(Capsule().stroke(isOn ? Color.blue : .clear, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    /// Active/désactive une catégorie de lieux et charge les résultats.
+    private func togglePOIKind(_ kind: POIKind) {
+        if poiKind == kind {
+            poiKind = nil
+            pois = []
+            return
+        }
+        poiKind = kind
+        Task { await loadPOIs(kind) }
+    }
+
+    /// Cherche les lieux de la catégorie dans la zone visible de la carte.
+    private func loadPOIs(_ kind: POIKind) async {
+        let region = visibleRegion
+            ?? location.coordinate.map {
+                MKCoordinateRegion(center: $0, latitudinalMeters: 4000, longitudinalMeters: 4000)
+            }
+        guard let region else { return }
+        let req = MKLocalSearch.Request()
+        req.naturalLanguageQuery = kind.query
+        req.region = region
+        req.resultTypes = .pointOfInterest
+        let resp = try? await MKLocalSearch(request: req).start()
+        // La catégorie a pu changer pendant la recherche.
+        guard poiKind == kind else { return }
+        pois = (resp?.mapItems ?? []).prefix(25).map {
+            POI(name: $0.name ?? "Lieu", coordinate: $0.placemark.coordinate)
+        }
     }
 
     /// Bouton menu (lieux enregistrés, avatar, compte, partage…).
