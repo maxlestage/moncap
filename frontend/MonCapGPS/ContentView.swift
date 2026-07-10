@@ -379,6 +379,8 @@ struct MapHomeView: View {
     @State private var pois: [POI] = []
     /// Région actuellement visible (pour chercher les lieux dans la zone).
     @State private var visibleRegion: MKCoordinateRegion?
+    /// Lieu Apple natif touché directement sur la carte (resto, hôtel, musée…).
+    @State private var selectedFeature: MapFeature?
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
     @State private var selectedRouteID: UUID?
     /// Liste déroulée ou repliée (bandeau compact par défaut).
@@ -499,6 +501,12 @@ struct MapHomeView: View {
                 warnHaptic()
             }
         }
+        .onChange(of: selectedFeature) { _, feature in
+            // Un lieu Apple touché sur la carte → propose les itinéraires.
+            guard let feature, !nav.active else { return }
+            selectedFeature = nil
+            Task { await presentRouteOptions(to: feature.coordinate) }
+        }
     }
 
     /// Ajoute un point au tracé en cours, en filtrant les points trop proches
@@ -539,7 +547,7 @@ struct MapHomeView: View {
 
     private var map: some View {
         MapReader { proxy in
-        Map(position: $camera) {
+        Map(position: $camera, selection: $selectedFeature) {
             UserAnnotation()
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
@@ -624,6 +632,9 @@ struct MapHomeView: View {
             }
         }
         .mapControls { MapCompass() }
+        // Tous les lieux Apple (restos, hôtels, musées…) visibles en permanence
+        // sur la carte, et tapables pour y aller.
+        .mapStyle(.standard(pointsOfInterest: .all))
         // Suit la zone visible ; recharge les lieux de la catégorie active
         // quand on déplace la carte (fin de geste uniquement).
         .onMapCameraChange(frequency: .onEnd) { ctx in
