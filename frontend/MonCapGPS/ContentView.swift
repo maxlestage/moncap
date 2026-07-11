@@ -80,6 +80,18 @@ fileprivate struct RouteBuild {
     let minutes: Double
 }
 
+/// Préférences d'itinéraire voiture (péages / autoroutes), lues au moment du
+/// calcul depuis les réglages persistés.
+fileprivate func routePreferences(_ req: MKDirections.Request) {
+    guard req.transportType == .automobile else { return }
+    if UserDefaults.standard.bool(forKey: "moncap.avoidTolls") {
+        req.tollPreference = .avoid
+    }
+    if UserDefaults.standard.bool(forKey: "moncap.avoidHighways") {
+        req.highwayPreference = .avoid
+    }
+}
+
 /// Calcule un ou plusieurs itinéraires entre deux points, selon le mode.
 fileprivate func buildRoutes(
     from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, alternates: Bool,
@@ -90,6 +102,7 @@ fileprivate func buildRoutes(
     req.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
     req.transportType = transportType
     req.requestsAlternateRoutes = alternates
+    routePreferences(req)
     guard let routes = try? await MKDirections(request: req).calculate().routes else { return [] }
     return routes.map { r in
         RouteBuild(
@@ -391,6 +404,13 @@ struct MapHomeView: View {
     @State private var etaShare: IdentifiableText?
     /// Dernier avertissement de dépassement de vitesse (anti-spam).
     @State private var lastSpeedWarning = Date.distantPast
+    /// Infos du compte (points de contribution).
+    @State private var accountInfo: AccountInfo?
+    /// Confirmation de suppression du compte.
+    @State private var confirmDelete = false
+    /// Préférences d'itinéraire voiture.
+    @AppStorage("moncap.avoidTolls") private var avoidTolls = false
+    @AppStorage("moncap.avoidHighways") private var avoidHighways = false
     /// Signalements déjà annoncés vocalement pendant cette navigation.
     @State private var announcedAlertIDs: Set<Int> = []
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
@@ -548,6 +568,14 @@ struct MapHomeView: View {
             selectedFeature = nil
             Task { await presentRouteOptions(to: feature.coordinate) }
         }
+        .onChange(of: avoidTolls) { _, _ in reroutePreferencesChanged() }
+        .onChange(of: avoidHighways) { _, _ in reroutePreferencesChanged() }
+    }
+
+    /// Recalcule les itinéraires affichés quand une préférence change.
+    private func reroutePreferencesChanged() {
+        guard !nav.active, let dest = pendingDestination else { return }
+        Task { await presentRouteOptions(to: dest) }
     }
 
     /// Vrai si la vitesse actuelle dépasse la limite connue (marge 5 km/h).
@@ -1324,6 +1352,14 @@ struct MapHomeView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    if travelMode == .car {
+                        Toggle(isOn: $avoidTolls) {
+                            Label("Éviter les péages", systemImage: "eurosign.circle")
+                        }
+                        Toggle(isOn: $avoidHighways) {
+                            Label("Éviter les autoroutes", systemImage: "road.lanes")
+                        }
+                    }
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
@@ -1692,11 +1728,41 @@ struct MapHomeView: View {
                 }
                 Section("Compte") {
                     Label(auth.username, systemImage: "person.crop.circle")
+                    if let info = accountInfo {
+                        HStack {
+                            Label("\(info.points) points", systemImage: "trophy.fill")
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Text("\(info.alerts) signalements · \(info.trips) trajets")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Link(destination: api.privacyURL) {
+                        Label("Politique de confidentialité", systemImage: "hand.raised")
+                    }
                     Button(role: .destructive) {
                         showPlaces = false
                         auth.logout()
                     } label: {
                         Label("Déconnexion", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    Button(role: .destructive) {
+                        confirmDelete = true
+                    } label: {
+                        Label("Supprimer mon compte", systemImage: "trash")
+                    }
+                    .confirmationDialog(
+                        "Supprimer définitivement ton compte et toutes tes données (positions, trajets, recherches, signalements) ?",
+                        isPresented: $confirmDelete, titleVisibility: .visible
+                    ) {
+                        Button("Tout supprimer définitivement", role: .destructive) {
+                            Task {
+                                try? await api.deleteAccount()
+                                showPlaces = false
+                                auth.logout()
+                            }
+                        }
+                        Button("Annuler", role: .cancel) {}
                     }
                 }
             }
@@ -1823,6 +1889,7 @@ struct MapHomeView: View {
         do {
             positions = try await api.positions()
             stats = try? await api.stats()
+            accountInfo = try? await api.accountInfo()
             await updateRoute()
         } catch APIError.unauthorized {
             auth.logout()
@@ -2074,6 +2141,7 @@ struct MapHomeView: View {
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
         request.transportType = transportType
         request.requestsAlternateRoutes = false
+        routePreferences(request)
         return try? await MKDirections(request: request).calculate().routes.first
     }
 
