@@ -19,7 +19,7 @@ use axum::{
 use rayon::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectOptions, Database, DatabaseConnection, EntityTrait,
-    QueryFilter, QueryOrder, Set,
+    PaginatorTrait, QueryFilter, QueryOrder, Set,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -432,6 +432,8 @@ async fn main() {
         .route("/searches/:id", axum::routing::delete(delete_search))
         .route("/alerts", get(list_alerts))
         .route("/alerts/:id/vote", post(vote_alert))
+        .route("/account", get(account_info).delete(delete_account))
+        .route("/privacy", get(privacy_page))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
         .fallback_service(web)
@@ -1034,6 +1036,127 @@ async fn vote_alert(
     }
     Ok(StatusCode::NO_CONTENT)
 }
+
+/// Vue d'ensemble du compte : compteurs et points (gamification légère).
+#[derive(Serialize)]
+struct AccountInfo {
+    username: String,
+    points: i64,
+    alerts: u64,
+    trips: u64,
+    positions: u64,
+    searches: u64,
+}
+
+/// Barème des points : signaler rapporte le plus (c'est ce qui aide les autres).
+fn score(alerts: u64, trips: u64, positions: u64, searches: u64) -> i64 {
+    (alerts * 10 + trips * 5 + positions * 2 + searches) as i64
+}
+
+/// GET /account — infos du compte et points de contribution.
+async fn account_info(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<AccountInfo>, AppError> {
+    let found = user::Entity::find_by_id(uid)
+        .one(&db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    let alerts = alert::Entity::find()
+        .filter(alert::Column::UserId.eq(uid))
+        .count(&db)
+        .await?;
+    let trips = trip::Entity::find()
+        .filter(trip::Column::UserId.eq(uid))
+        .count(&db)
+        .await?;
+    let positions = position::Entity::find()
+        .filter(position::Column::UserId.eq(uid))
+        .count(&db)
+        .await?;
+    let searches = search::Entity::find()
+        .filter(search::Column::UserId.eq(uid))
+        .count(&db)
+        .await?;
+    Ok(Json(AccountInfo {
+        username: found.username,
+        points: score(alerts, trips, positions, searches),
+        alerts,
+        trips,
+        positions,
+        searches,
+    }))
+}
+
+/// DELETE /account — supprime le compte et TOUTES ses données (RGPD /
+/// exigence App Store). Les signalements supprimés sont notifiés en direct.
+async fn delete_account(
+    AuthUser(uid): AuthUser,
+    State(state): State<AppState>,
+) -> Result<StatusCode, AppError> {
+    let db = &state.db;
+    // Signalements : on prévient les clients connectés avant de supprimer.
+    let my_alerts = alert::Entity::find()
+        .filter(alert::Column::UserId.eq(uid))
+        .all(db)
+        .await?;
+    alert::Entity::delete_many()
+        .filter(alert::Column::UserId.eq(uid))
+        .exec(db)
+        .await?;
+    for a in &my_alerts {
+        broadcast_event(&state.tx, &ServerEvent::AlertGone { id: a.id as i64 });
+    }
+    position::Entity::delete_many()
+        .filter(position::Column::UserId.eq(uid))
+        .exec(db)
+        .await?;
+    trip::Entity::delete_many()
+        .filter(trip::Column::UserId.eq(uid))
+        .exec(db)
+        .await?;
+    search::Entity::delete_many()
+        .filter(search::Column::UserId.eq(uid))
+        .exec(db)
+        .await?;
+    user::Entity::delete_by_id(uid).exec(db).await?;
+    broadcast_event(&state.tx, &ServerEvent::PositionsChanged);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// GET /privacy — politique de confidentialité (publique, exigée pour la
+/// distribution App Store).
+async fn privacy_page() -> axum::response::Html<&'static str> {
+    axum::response::Html(PRIVACY_HTML)
+}
+
+const PRIVACY_HTML: &str = r#"<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MonCap GPS — Politique de confidentialité</title>
+<style>body{font-family:-apple-system,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#1a1d21}h1{font-size:1.5rem}h2{font-size:1.1rem;margin-top:1.5rem}</style>
+</head><body>
+<h1>🛰️ MonCap GPS — Politique de confidentialité</h1>
+<h2>Données collectées</h2>
+<p>MonCap GPS stocke : votre adresse e-mail de connexion, un mot de passe haché
+(Argon2, jamais en clair), vos positions enregistrées, vos trajets parcourus,
+vos recherches récentes et vos signalements (avec votes).</p>
+<h2>Position en temps réel</h2>
+<p>Pendant l'utilisation, votre position et le nom associé à votre compte sont
+diffusés en direct aux autres utilisateurs connectés. Cette diffusion n'est pas
+conservée. Le bouton « Stop partage » l'interrompt à tout moment.</p>
+<h2>Services tiers</h2>
+<p>Le calcul d'itinéraires et la recherche de lieux utilisent Apple Plans ;
+le vélo utilise BRouter (OpenStreetMap) ; le dénivelé utilise open-meteo ;
+les limitations de vitesse utilisent Overpass (OpenStreetMap). Seules des
+coordonnées géographiques leur sont transmises, jamais votre identité.</p>
+<h2>Conservation et suppression</h2>
+<p>Vos données sont conservées tant que votre compte existe. Vous pouvez
+supprimer définitivement votre compte et l'ensemble de vos données depuis
+l'application : menu ▸ Compte ▸ « Supprimer mon compte ».</p>
+<h2>Partage</h2>
+<p>Vos données ne sont ni vendues ni transmises à des tiers.</p>
+</body></html>"#;
 
 /// GET /stats — vue d'ensemble des positions de l'utilisateur.
 async fn stats(
