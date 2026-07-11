@@ -18,6 +18,10 @@ const ALERT_TYPES = [
   { category: "accident", emoji: "💥", label: "Accident" },
   { category: "bouchon", emoji: "🚧", label: "Bouchon" },
   { category: "danger", emoji: "⚠️", label: "Danger" },
+  { category: "vehicule", emoji: "🚘", label: "Véhicule arrêté" },
+  { category: "objet", emoji: "📦", label: "Objet sur la route" },
+  { category: "travaux", emoji: "🏗️", label: "Travaux" },
+  { category: "brouillard", emoji: "🌫️", label: "Brouillard" },
 ];
 
 const LIVE_TTL = 15_000; // une voiture live disparaît après 15 s sans nouvelle
