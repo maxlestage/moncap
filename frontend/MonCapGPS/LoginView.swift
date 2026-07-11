@@ -17,15 +17,21 @@ struct LoginView: View {
             Text(signupMode ? "Créer un compte" : "Connexion")
                 .foregroundStyle(.secondary)
 
-            TextField("E-mail", text: $username)
+            // Champs exclus du .textCase(.lowercase) de l'écran : le texte
+            // saisi s'affiche exactement tel qu'il est tapé (casse respectée),
+            // sans quoi le champ montrait « max@x.com » pour « Max@X.com ».
+            // Placeholders déjà en minuscules pour garder l'aspect « en petit ».
+            TextField("e-mail", text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.emailAddress)
                 .textContentType(.emailAddress)
                 .textFieldStyle(.roundedBorder)
+                .textCase(nil)
 
-            SecureField("Mot de passe", text: $password)
+            SecureField("mot de passe", text: $password)
                 .textFieldStyle(.roundedBorder)
+                .textCase(nil)
 
             if !errorMessage.isEmpty {
                 Text(errorMessage).font(.footnote).foregroundStyle(.red)
