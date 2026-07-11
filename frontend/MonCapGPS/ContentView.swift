@@ -446,8 +446,13 @@ struct MapHomeView: View {
     /// Carte inclinée en 3D si l'utilisateur l'active.
     @State private var is3D = false
     /// Suivi automatique de la position en navigation (désactivé si on déplace
-    /// la carte à la main ; réactivé via le bouton de recentrage).
+    /// la carte à la main ; réactivé après 8 s ou via le bouton de recentrage).
     @State private var followsRoute = true
+    /// Dernière manipulation manuelle de la carte.
+    @State private var lastMapInteraction = Date.distantPast
+    /// Dernière caméra 3D appliquée (anti-tremblement à l'arrêt).
+    @State private var lastCamCoord: CLLocationCoordinate2D?
+    @State private var lastCamHeading: Double = -1
     /// Prévisualisation (survol) de l'itinéraire en cours.
     @State private var previewing = false
     @State private var previewTask: Task<Void, Never>?
@@ -563,13 +568,32 @@ struct MapHomeView: View {
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
                 maybeCheckFasterRoute(from: c)
-                // Vue conduite 3D : la caméra suit, inclinée, dans le sens de la
-                // marche — sauf si on a déplacé la carte à la main.
+                // Recentre en permanence : si on a touché la carte, le suivi
+                // reprend tout seul après 8 s (façon Waze) — 3D comme 2D.
+                if !followsRoute, Date().timeIntervalSince(lastMapInteraction) > 8 {
+                    followsRoute = true
+                    if !is3D {
+                        withAnimation {
+                            camera = .userLocation(followsHeading: true, fallback: .automatic)
+                        }
+                    }
+                }
+                // Vue conduite 3D : caméra fluide (animation linéaire continue),
+                // mise à jour seulement en cas de vrai mouvement pour éviter les
+                // tremblements dus au bruit GPS à l'arrêt.
                 if is3D, !previewing, followsRoute {
-                    withAnimation(.easeOut(duration: 0.4)) {
-                        camera = .camera(MapCamera(
-                            centerCoordinate: c, distance: 500,
-                            heading: location.course, pitch: 60))
+                    let heading = location.course
+                    let moved = lastCamCoord.map { metersBetween($0, c) } ?? .infinity
+                    var headingDelta = abs(heading - lastCamHeading)
+                    if headingDelta > 180 { headingDelta = 360 - headingDelta }
+                    if moved >= 2 || headingDelta >= 3 {
+                        lastCamCoord = c
+                        lastCamHeading = heading
+                        withAnimation(.linear(duration: 1.0)) {
+                            camera = .camera(MapCamera(
+                                centerCoordinate: c, distance: 500,
+                                heading: heading, pitch: 60))
+                        }
                     }
                 }
             }
@@ -858,7 +882,7 @@ struct MapHomeView: View {
         .mapControls { MapCompass() }
         // Tous les lieux Apple (restos, hôtels, musées…) visibles en permanence
         // sur la carte, et tapables pour y aller.
-        .mapStyle(.standard(pointsOfInterest: .all))
+        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .all))
         // Suit la zone visible ; recharge les lieux de la catégorie active
         // quand on déplace la carte (fin de geste uniquement).
         .onMapCameraChange(frequency: .onEnd) { ctx in
@@ -872,9 +896,11 @@ struct MapHomeView: View {
         .onTapGesture(coordinateSpace: .local) { point in
             handleMapTap(point, proxy: proxy)
         }
-        // Déplacer la carte à la main débraye le suivi automatique.
+        // Déplacer la carte à la main débraye le suivi automatique ; il
+        // reprend tout seul 8 s après le dernier geste (en navigation).
         .simultaneousGesture(
             DragGesture(minimumDistance: 8).onChanged { _ in
+                lastMapInteraction = Date()
                 if followsRoute { followsRoute = false }
             }
         )
