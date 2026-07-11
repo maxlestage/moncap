@@ -18,6 +18,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 argon2 = "0.5"
 jsonwebtoken = "9"
+# Pont pub/sub multi-instances (optionnel : activé si REDIS_URL est défini).
+# rustls + insecure : Heroku Redis impose TLS avec certificat auto-signé.
+redis = { version = "0.27", features = ["tokio-rustls-comp", "tls-rustls-insecure"] }
+futures-util = "0.3"
 
 [[bin]]
 name = "moncap-gps"

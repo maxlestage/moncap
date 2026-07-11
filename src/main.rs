@@ -147,11 +147,109 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Diffuse un événement à tous les clients connectés.
+/// Diffuse un événement à tous les clients connectés — de cette instance,
+/// et des autres via le pont Redis s'il est actif.
 fn broadcast_event(tx: &broadcast::Sender<String>, ev: &ServerEvent) {
     if let Ok(json) = serde_json::to_string(ev) {
-        let _ = tx.send(json);
+        let _ = tx.send(json.clone());
+        if let Some(publisher) = REDIS_PUB.get() {
+            let _ = publisher.send(json);
+        }
     }
+}
+
+/// Canal vers la tâche de publication Redis (None = mono-instance).
+static REDIS_PUB: std::sync::OnceLock<tokio::sync::mpsc::UnboundedSender<String>> =
+    std::sync::OnceLock::new();
+
+/// Canal Redis pub/sub partagé par toutes les instances.
+const REDIS_CHANNEL: &str = "moncap:events";
+
+/// URL Redis : préfère REDIS_TLS_URL, sinon REDIS_URL. Heroku Redis utilise un
+/// certificat auto-signé → on suffixe `#insecure` (recommandation Heroku pour
+/// redis-rs) pour désactiver la vérification du certificat, pas le TLS.
+fn redis_url() -> Option<String> {
+    let url = std::env::var("REDIS_TLS_URL")
+        .or_else(|_| std::env::var("REDIS_URL"))
+        .ok()?;
+    if url.starts_with("rediss://") && !url.contains('#') {
+        Some(format!("{url}#insecure"))
+    } else {
+        Some(url)
+    }
+}
+
+/// Démarre le pont Redis pub/sub (si REDIS_URL est défini) : les événements
+/// émis ici sont publiés vers les autres instances, et ceux des autres
+/// instances sont rediffusés aux clients locaux. Anti-écho par identifiant
+/// d'instance ; reconnexion automatique.
+fn start_redis_bridge(tx: broadcast::Sender<String>) {
+    let Some(url) = redis_url() else {
+        tracing::info!("Redis non configuré : temps réel mono-instance");
+        return;
+    };
+    let client = match redis::Client::open(url) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("Redis ignoré (URL invalide) : {e}");
+            return;
+        }
+    };
+    let instance = format!("{}-{}", std::process::id(), now_ms());
+    let (pub_tx, mut pub_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let _ = REDIS_PUB.set(pub_tx);
+
+    // Publication : événements locaux → Redis (enveloppe "instance|json").
+    let pub_client = client.clone();
+    let pub_instance = instance.clone();
+    tokio::spawn(async move {
+        loop {
+            match pub_client.get_multiplexed_async_connection().await {
+                Ok(mut conn) => {
+                    while let Some(json) = pub_rx.recv().await {
+                        let payload = format!("{pub_instance}|{json}");
+                        let sent: Result<(), _> = redis::cmd("PUBLISH")
+                            .arg(REDIS_CHANNEL)
+                            .arg(&payload)
+                            .query_async(&mut conn)
+                            .await;
+                        if sent.is_err() {
+                            break; // connexion perdue → on retentera
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!("Redis (publication) indisponible : {e}"),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
+    });
+
+    // Abonnement : événements des autres instances → clients locaux.
+    tokio::spawn(async move {
+        use futures_util::StreamExt;
+        loop {
+            match client.get_async_pubsub().await {
+                Ok(mut pubsub) => {
+                    if pubsub.subscribe(REDIS_CHANNEL).await.is_ok() {
+                        tracing::info!("Pont Redis pub/sub actif (multi-instances)");
+                        let mut stream = pubsub.on_message();
+                        while let Some(msg) = stream.next().await {
+                            let Ok(payload) = msg.get_payload::<String>() else {
+                                continue;
+                            };
+                            if let Some((src, json)) = payload.split_once('|') {
+                                if src != instance && !json.is_empty() {
+                                    let _ = tx.send(json.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!("Redis (abonnement) indisponible : {e}"),
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
+    });
 }
 
 /// Limiteur de débit par IP (fenêtre fixe, en mémoire).
@@ -393,6 +491,8 @@ async fn main() {
 
     // Canal de diffusion temps réel (WebSocket).
     let (tx, _rx) = broadcast::channel::<String>(256);
+    // Pont Redis pub/sub (optionnel) : partage le temps réel entre instances.
+    start_redis_bridge(tx.clone());
     let state = AppState { db, tx };
 
     // Front web statique (React + Bun, voir web/). Servi en repli : toute
