@@ -123,6 +123,15 @@ export const api = {
       body: gpx,
     }).then(json<Position[]>),
 
+  // Vote sur un signalement : « toujours là » (up) ou « plus là ».
+  voteAlert: async (id: number, up: boolean): Promise<void> => {
+    await fetch(`${getApiBase()}/alerts/${id}/vote`, {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ up }),
+    });
+  },
+
   // Téléchargé via un lien : le jeton passe en query.
   gpxUrl: (): string =>
     `${getApiBase()}/positions.gpx?token=${encodeURIComponent(getToken())}`,

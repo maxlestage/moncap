@@ -231,6 +231,29 @@ button.danger {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+/* Popup de signalement : votes 👍 / 👎 */
+.alert-popup {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+  font-weight: 600;
+}
+.alert-votes {
+  color: #6b7280;
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+.alert-popup button {
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.alert-popup button:hover {
+  background: #eef2f7;
+}
+
 /* Indicateur de connexion temps réel */
 .dot {
   display: inline-block;
