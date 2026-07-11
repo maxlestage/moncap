@@ -30,6 +30,12 @@ final class NavigationManager: ObservableObject {
     /// Distance et durée totales de l'itinéraire (pour estimer le restant).
     private var totalKm = 0.0
     private var totalMin = 0.0
+    /// Pré-annonce à 1 km déjà faite pour l'étape courante.
+    private var spokenFar = false
+    /// Annonce d'enchaînement en attente (juste après une manœuvre).
+    private var chainAnnouncePending = false
+    /// Dernier point d'étape vocal (heure d'arrivée).
+    private var lastEtaSpoken = Date()
     private var spokenApproach = false
     private var spokenImminent = false
     private var offRouteHits = 0
@@ -126,6 +132,21 @@ final class NavigationManager: ObservableObject {
         distanceToNext = d
         instruction = stepText(steps[stepIndex])
 
+        // Juste après une manœuvre : on enchaîne avec la suivante, pour
+        // conduire à l'oreille sans regarder l'écran.
+        if chainAnnouncePending {
+            chainAnnouncePending = false
+            if d > 2500 {
+                speak(String(format: "Continuez tout droit sur %.0f kilomètres.", d / 1000))
+            } else {
+                speak("Ensuite, \(distancePhrase(d)), \(instruction)")
+            }
+        }
+        // Pré-annonce à 1 kilomètre.
+        if d < 1100, d >= 400, !spokenFar {
+            speak("Dans 1 kilomètre, \(instruction)")
+            spokenFar = true
+        }
         if d < 250, !spokenApproach {
             speak("Dans \(roundedMeters(d)) mètres, \(instruction)")
             spokenApproach = true
@@ -137,6 +158,30 @@ final class NavigationManager: ObservableObject {
         if d < 25 {
             advance()
         }
+
+        // Point d'étape régulier : heure d'arrivée annoncée toutes les 10 min.
+        if Date().timeIntervalSince(lastEtaSpoken) > 600 {
+            lastEtaSpoken = Date()
+            speak("Arrivée prévue vers \(Self.arrivalString(inMinutes: etaMinutes)).")
+        }
+    }
+
+    /// « dans X kilomètres » / « dans X mètres » selon la distance.
+    private func distancePhrase(_ d: Double) -> String {
+        if d >= 950 {
+            let km = (d / 100).rounded() / 10
+            return km < 1.95
+                ? "dans 1 kilomètre" : String(format: "dans %.0f kilomètres", km.rounded())
+        }
+        return "dans \(roundedMeters(d)) mètres"
+    }
+
+    /// Heure d'arrivée estimée (« 18:32 »).
+    private static func arrivalString(inMinutes minutes: Double) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "HH:mm"
+        return f.string(from: Date().addingTimeInterval(minutes * 60))
     }
 
     // MARK: - Privé
@@ -161,6 +206,9 @@ final class NavigationManager: ObservableObject {
         stepIndex = steps.firstIndex { !$0.text.isEmpty } ?? 0
         spokenApproach = false
         spokenImminent = false
+        spokenFar = false
+        chainAnnouncePending = false
+        lastEtaSpoken = Date()
         if stepIndex < steps.count {
             instruction = stepText(steps[stepIndex])
             if announceStart { speak("Départ. " + instruction) }
@@ -171,9 +219,13 @@ final class NavigationManager: ObservableObject {
         stepIndex += 1
         spokenApproach = false
         spokenImminent = false
+        spokenFar = false
         if stepIndex >= steps.count {
             speak("Vous êtes arrivé à destination.")
             active = false
+        } else {
+            // À la prochaine position, annonce l'étape suivante à l'oreille.
+            chainAnnouncePending = true
         }
     }
 
