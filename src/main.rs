@@ -570,28 +570,21 @@ struct AuthResponse {
     username: String,
 }
 
-/// Filtre `username` sans tenir compte de la casse (`LOWER(username) = …`),
-/// pour qu'une adresse saisie « Max@X.com » corresponde à « max@x.com ».
-fn username_matches(username: &str) -> sea_orm::sea_query::SimpleExpr {
-    use sea_orm::sea_query::{Expr, Func};
-    Expr::expr(Func::lower(Expr::col(user::Column::Username))).eq(username.to_lowercase())
-}
-
 /// POST /auth/signup — crée un compte et renvoie un jeton.
 async fn signup(
     State(db): State<DatabaseConnection>,
     Json(c): Json<Credentials>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    // Normalise l'identifiant : sans espaces superflus ni casse, pour éviter
-    // les doublons « Max » / « max » et les échecs de connexion liés à la casse.
-    let username = c.username.trim().to_lowercase();
+    // Espaces superflus retirés, mais la casse est conservée : l'auth est
+    // sensible à la casse (« Max » ≠ « max »).
+    let username = c.username.trim().to_string();
     if username.chars().count() < 3 || c.password.len() < 6 {
         return Err(AppError::BadRequest(
             "nom (≥3) et mot de passe (≥6) requis".into(),
         ));
     }
     if user::Entity::find()
-        .filter(username_matches(&username))
+        .filter(user::Column::Username.eq(&username))
         .one(&db)
         .await?
         .is_some()
@@ -616,9 +609,10 @@ async fn login(
     State(db): State<DatabaseConnection>,
     Json(c): Json<Credentials>,
 ) -> Result<Json<AuthResponse>, AppError> {
+    // Correspondance exacte : la casse compte (« Max » ≠ « max »).
     let username = c.username.trim();
     let found = user::Entity::find()
-        .filter(username_matches(username))
+        .filter(user::Column::Username.eq(username))
         .one(&db)
         .await?;
     match found {

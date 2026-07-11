@@ -67,10 +67,10 @@ final class AuthStore: ObservableObject {
         isAuthenticated = false
     }
 
-    /// Normalise un identifiant : sans espaces superflus et en minuscules, pour
-    /// que la casse de l'e-mail n'empêche jamais la connexion.
+    /// Nettoie un identifiant : espaces superflus retirés. La casse est
+    /// conservée car l'auth est sensible à la casse côté backend.
     static func normalize(_ s: String) -> String {
-        s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Validation d'e-mail volontairement simple : `local@domaine.tld`.
