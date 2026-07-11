@@ -279,11 +279,12 @@ private let routePalette: [Color] = [
 
 /// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
 enum POIKind: String, CaseIterable, Identifiable {
-    case fastFood, restaurant, hotel, tourism, hangout
+    case water, fastFood, restaurant, hotel, tourism, hangout
     var id: String { rawValue }
 
     var label: String {
         switch self {
+        case .water: return "Points d'eau"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
         case .hotel: return "Hôtels"
@@ -294,6 +295,7 @@ enum POIKind: String, CaseIterable, Identifiable {
 
     var emoji: String {
         switch self {
+        case .water: return "💧"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
         case .hotel: return "🏨"
@@ -302,9 +304,11 @@ enum POIKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Requête MKLocalSearch correspondante.
+    /// Requête MKLocalSearch correspondante (les points d'eau passent par
+    /// OpenStreetMap, pas par MKLocalSearch).
     var query: String {
         switch self {
+        case .water: return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
         case .hotel: return "hôtel"
@@ -1030,6 +1034,15 @@ struct MapHomeView: View {
                 MKCoordinateRegion(center: $0, latitudinalMeters: 4000, longitudinalMeters: 4000)
             }
         guard let region else { return }
+
+        // Points d'eau : fontaines à eau potable d'OpenStreetMap.
+        if kind == .water {
+            let found = await fetchWaterPoints(in: region)
+            guard poiKind == kind else { return }
+            pois = found
+            return
+        }
+
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = kind.query
         req.region = region
@@ -1039,6 +1052,36 @@ struct MapHomeView: View {
         guard poiKind == kind else { return }
         pois = (resp?.mapItems ?? []).prefix(25).map {
             POI(name: $0.name ?? "Lieu", coordinate: $0.placemark.coordinate)
+        }
+    }
+
+    /// Fontaines à eau potable (OSM `drinking_water` + robinets publics) dans
+    /// la zone visible — précieuses l'été 🥵.
+    private func fetchWaterPoints(in region: MKCoordinateRegion) async -> [POI] {
+        let south = region.center.latitude - region.span.latitudeDelta / 2
+        let north = region.center.latitude + region.span.latitudeDelta / 2
+        let west = region.center.longitude - region.span.longitudeDelta / 2
+        let east = region.center.longitude + region.span.longitudeDelta / 2
+        let bbox = "(\(south),\(west),\(north),\(east))"
+        let q = "[out:json][timeout:10];("
+            + "node[\"amenity\"=\"drinking_water\"]\(bbox);"
+            + "node[\"man_made\"=\"water_tap\"]\(bbox);"
+            + ");out 60;"
+        var comps = URLComponents(string: "https://overpass-api.de/api/interpreter")!
+        comps.queryItems = [URLQueryItem(name: "data", value: q)]
+        guard let url = comps.url,
+            let (data, _) = try? await URLSession.shared.data(from: url)
+        else { return [] }
+        struct Resp: Decodable { let elements: [Element] }
+        struct Element: Decodable {
+            let lat: Double
+            let lon: Double
+            let tags: [String: String]?
+        }
+        guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return [] }
+        return resp.elements.map {
+            POI(name: $0.tags?["name"] ?? "Point d'eau",
+                coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon))
         }
     }
 
