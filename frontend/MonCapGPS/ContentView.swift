@@ -614,6 +614,8 @@ struct MapHomeView: View {
             let saved = nav.etaMinutes - route.expectedTravelTime / 60
             if saved >= 2, nav.active {
                 nav.applyFasterRoute(route: route, savedMinutes: Int(saved.rounded()))
+                // Les limites de vitesse suivent le nouveau tracé.
+                speedLimit.preload(along: route.polyline.coordinates)
             }
         }
     }
@@ -2197,6 +2199,8 @@ struct MapHomeView: View {
         if let route = await drivingRoute(from: from, to: to,
                                           transportType: travelMode.transportType) {
             nav.applyReroute(route: route)
+            // Les limites de vitesse suivent le nouveau tracé.
+            speedLimit.preload(along: route.polyline.coordinates)
         }
     }
 
