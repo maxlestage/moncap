@@ -63,10 +63,16 @@ struct LoginView: View {
                 } else {
                     try await auth.login(username, password)
                 }
+            } catch let e as AuthError {
+                errorMessage = e.errorDescription ?? "Saisie invalide."
+            } catch APIError.unauthorized {
+                errorMessage = signupMode
+                    ? "Impossible de créer le compte."
+                    : "E-mail ou mot de passe incorrect."
             } catch APIError.server(let msg) {
                 errorMessage = msg.isEmpty ? "Échec de l'authentification" : msg
             } catch {
-                errorMessage = "Échec de l'authentification"
+                errorMessage = "Serveur injoignable. Réessaie."
             }
             busy = false
         }
