@@ -77,6 +77,16 @@ struct NewTrip: Codable {
     let duration_min: Double
 }
 
+/// Infos du compte : points de contribution et compteurs.
+struct AccountInfo: Codable {
+    let username: String
+    let points: Int
+    let alerts: Int
+    let trips: Int
+    let positions: Int
+    let searches: Int
+}
+
 /// Un lieu favori (Domicile / Travail), mémorisé sur l'appareil.
 struct FavoritePlace: Codable {
     let lat: Double

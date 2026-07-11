@@ -247,6 +247,20 @@ struct APIClient {
         _ = try await URLSession.shared.data(for: authedRequest("searches", method: "DELETE"))
     }
 
+    // MARK: - Compte
+
+    /// Page de politique de confidentialité (servie par le backend).
+    var privacyURL: URL { baseURL.appendingPathComponent("privacy") }
+
+    func accountInfo() async throws -> AccountInfo {
+        try await send(authedRequest("account"))
+    }
+
+    /// Supprime définitivement le compte et toutes ses données.
+    func deleteAccount() async throws {
+        _ = try await URLSession.shared.data(for: authedRequest("account", method: "DELETE"))
+    }
+
     // MARK: - Signalements (persistés, votes)
 
     func alerts() async throws -> [Alert] {
