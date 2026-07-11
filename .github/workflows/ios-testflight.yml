@@ -14,6 +14,7 @@ on:
     paths:
       - "frontend/MonCapGPS/**"
       - "frontend/MonCapGPS.xcodeproj/**"
+      - "frontend/Config/**"
       - "frontend/scripts/**"
       - ".github/workflows/ios-testflight.yml"
     tags: ["ios-v*"]

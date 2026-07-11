@@ -350,6 +350,7 @@ struct MapHomeView: View {
     @StateObject private var realtime = RealtimeClient(url: APIClient().wsURL)
     @StateObject private var nav = NavigationManager()
     @StateObject private var placeSearch = PlaceSearch()
+    @StateObject private var speedLimit = SpeedLimitService()
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -381,6 +382,17 @@ struct MapHomeView: View {
     @State private var visibleRegion: MKCoordinateRegion?
     /// Lieu Apple natif touché directement sur la carte (resto, hôtel, musée…).
     @State private var selectedFeature: MapFeature?
+    /// Signalement touché sur la carte (pour voter 👍/👎).
+    @State private var alertToVote: Alert?
+    /// Favoris Domicile / Travail (stockés sur l'appareil).
+    @State private var homePlace = Session.home
+    @State private var workPlace = Session.work
+    /// Texte d'ETA à partager (« J'arrive vers HH:MM »).
+    @State private var etaShare: IdentifiableText?
+    /// Dernier avertissement de dépassement de vitesse (anti-spam).
+    @State private var lastSpeedWarning = Date.distantPast
+    /// Signalements déjà annoncés vocalement pendant cette navigation.
+    @State private var announcedAlertIDs: Set<Int> = []
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
     @State private var selectedRouteID: UUID?
     /// Liste déroulée ou repliée (bandeau compact par défaut).
@@ -452,6 +464,28 @@ struct MapHomeView: View {
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
         .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
+        .sheet(item: $etaShare) { share in ShareSheet(items: [share.text]) }
+        // Vote sur un signalement touché : toujours là / plus là.
+        .confirmationDialog(
+            alertToVote.map { "\(emoji(for: $0.category)) \($0.label.isEmpty ? $0.category : $0.label)" }
+                ?? "Signalement",
+            isPresented: Binding(
+                get: { alertToVote != nil },
+                set: { if !$0 { alertToVote = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("👍 Toujours là") {
+                if let a = alertToVote { Task { try? await api.voteAlert(id: a.id, up: true) } }
+            }
+            Button("👎 Plus là", role: .destructive) {
+                if let a = alertToVote { Task { try? await api.voteAlert(id: a.id, up: false) } }
+            }
+            Button("Annuler", role: .cancel) {}
+        } message: {
+            if let a = alertToVote {
+                Text("Confirmé \(a.confirms ?? 0) fois · infirmé \(a.denies ?? 0) fois")
+            }
+        }
         .task {
             location.start()
             realtime.onPositionsChanged = { Task { await refresh() } }
@@ -469,6 +503,9 @@ struct MapHomeView: View {
             if nav.active {
                 nav.update(c)
                 recordTrackPoint(c)
+                announceNearbyAlerts(from: c)
+                speedLimit.update(c)
+                checkOverspeed()
                 // Vue conduite 3D : la caméra suit, inclinée, dans le sens de la
                 // marche — sauf si on a déplacé la carte à la main.
                 if is3D, !previewing, followsRoute {
@@ -483,6 +520,9 @@ struct MapHomeView: View {
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
             UIApplication.shared.isIdleTimerDisabled = isActive
+            // GPS + guidage vocal continuent en arrière-plan / écran verrouillé.
+            location.setBackgroundTracking(isActive)
+            if !isActive { speedLimit.reset() }
             // Fin de navigation (arrivée ou « Quitter ») → on enregistre le trajet.
             if wasActive && !isActive {
                 Task { await saveRecordedTrip() }
@@ -492,6 +532,7 @@ struct MapHomeView: View {
                 recordedTrack = location.coordinate.map { [$0] } ?? []
                 tripStart = Date()
                 followsRoute = true
+                announcedAlertIDs = []
             }
         }
         .onChange(of: selectedRouteID) { _, id in
@@ -506,6 +547,47 @@ struct MapHomeView: View {
             guard let feature, !nav.active else { return }
             selectedFeature = nil
             Task { await presentRouteOptions(to: feature.coordinate) }
+        }
+    }
+
+    /// Vrai si la vitesse actuelle dépasse la limite connue (marge 5 km/h).
+    private var isOverspeeding: Bool {
+        guard let lim = speedLimit.limitKmh else { return false }
+        return location.speedKmh > Double(lim) + 5
+    }
+
+    /// Avertit (vibration + voix) en cas de dépassement, au plus toutes les 20 s.
+    private func checkOverspeed() {
+        guard isOverspeeding, let lim = speedLimit.limitKmh,
+            Date().timeIntervalSince(lastSpeedWarning) > 20
+        else { return }
+        lastSpeedWarning = Date()
+        warnHaptic()
+        nav.announce("Attention, vous dépassez la limite de \(lim) kilomètres heure.")
+    }
+
+    /// Compose et partage l'heure d'arrivée estimée.
+    private func shareETA() {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fr_FR")
+        f.dateFormat = "HH:mm"
+        let eta = f.string(from: Date().addingTimeInterval(nav.etaMinutes * 60))
+        etaShare = IdentifiableText(text: String(
+            format: "J'arrive vers %@ (%.1f km restants) — MonCap GPS 🛰️",
+            eta, nav.remainingKm))
+    }
+
+    /// Annonce vocalement (une seule fois chacun) les signalements à moins de
+    /// 800 m pendant la navigation.
+    private func announceNearbyAlerts(from c: CLLocationCoordinate2D) {
+        for a in realtime.alerts where !announcedAlertIDs.contains(a.id) {
+            let d = CLLocation(latitude: c.latitude, longitude: c.longitude)
+                .distance(from: CLLocation(latitude: a.lat, longitude: a.lon))
+            guard d < 800 else { continue }
+            announcedAlertIDs.insert(a.id)
+            let what = a.label.isEmpty ? a.category : a.label
+            let meters = max(50, Int((d / 50).rounded()) * 50)
+            nav.announce("Attention : \(what) à \(meters) mètres.")
         }
     }
 
@@ -624,10 +706,24 @@ struct MapHomeView: View {
             ForEach(realtime.alerts) { a in
                 Annotation(a.label.isEmpty ? a.category : a.label,
                            coordinate: .init(latitude: a.lat, longitude: a.lon)) {
-                    ZStack {
-                        Circle().fill(.white).frame(width: 34, height: 34).shadow(radius: 2)
-                        Text(emoji(for: a.category)).font(.body)
+                    // Toucher un signalement permet de le confirmer/infirmer.
+                    Button { alertToVote = a } label: {
+                        ZStack(alignment: .topTrailing) {
+                            ZStack {
+                                Circle().fill(.white).frame(width: 34, height: 34).shadow(radius: 2)
+                                Text(emoji(for: a.category)).font(.body)
+                            }
+                            if let up = a.confirms, up > 0 {
+                                Text("\(up)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4).padding(.vertical, 1)
+                                    .background(Color.green, in: Capsule())
+                                    .offset(x: 8, y: -6)
+                            }
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -868,6 +964,14 @@ struct MapHomeView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            // Partage de l'heure d'arrivée (« J'arrive vers HH:MM »).
+            Button { shareETA() } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.blue)
+                    .frame(width: 40, height: 38)
+                    .background(.thinMaterial, in: Capsule())
+            }
             Button { nav.stop() } label: {
                 Text("Quitter")
                     .font(.subheadline.weight(.semibold))
@@ -1157,12 +1261,31 @@ struct MapHomeView: View {
 
     private var speedPill: some View {
         VStack(spacing: 0) {
-            Text("\(Int(location.speedKmh))").font(.title2.weight(.bold))
+            Text("\(Int(location.speedKmh))")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(isOverspeeding ? .red : .primary)
             Text("km/h").font(.caption2).foregroundStyle(.secondary)
         }
         .frame(width: 70, height: 70)
         .background(.regularMaterial, in: Circle())
+        .overlay(Circle().stroke(isOverspeeding ? Color.red : .clear, lineWidth: 3))
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+        // Panneau de limitation (données OSM) pendant la navigation.
+        .overlay(alignment: .topTrailing) {
+            if nav.active, let lim = speedLimit.limitKmh {
+                ZStack {
+                    Circle().fill(.white)
+                    Circle().stroke(Color.red, lineWidth: 4).padding(2)
+                    Text("\(lim)")
+                        .font(.caption.weight(.heavy))
+                        .foregroundStyle(.black)
+                        .minimumScaleFactor(0.6)
+                }
+                .frame(width: 36, height: 36)
+                .shadow(radius: 2)
+                .offset(x: 8, y: -8)
+            }
+        }
     }
 
     private var reportButton: some View {
@@ -1201,6 +1324,17 @@ struct MapHomeView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                }
+                // Raccourcis Domicile / Travail.
+                Section("Favoris") {
+                    favoriteRow(icon: "house.fill", title: "Domicile", place: homePlace) {
+                        homePlace = $0
+                        Session.home = $0
+                    }
+                    favoriteRow(icon: "briefcase.fill", title: "Travail", place: workPlace) {
+                        workPlace = $0
+                        Session.work = $0
+                    }
                 }
                 // Résultats de la recherche en cours.
                 ForEach(Array(placeSearch.results.enumerated()), id: \.offset) { _, item in
@@ -1290,6 +1424,61 @@ struct MapHomeView: View {
             }
         }
         .presentationDetents([.large])
+    }
+
+    /// Ligne de favori (Domicile / Travail) : y aller, définir, redéfinir, effacer.
+    @ViewBuilder
+    private func favoriteRow(
+        icon: String, title: String, place: FavoritePlace?,
+        set: @escaping (FavoritePlace?) -> Void
+    ) -> some View {
+        if let place {
+            Button {
+                showSearch = false
+                Task {
+                    await presentRouteOptions(
+                        to: CLLocationCoordinate2D(latitude: place.lat, longitude: place.lon))
+                }
+            } label: {
+                HStack {
+                    Image(systemName: icon).foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(.headline)
+                        Text(place.label).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Label("Y aller", systemImage: "location.north.line.fill")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.green)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(location.coordinate == nil)
+            .contextMenu {
+                Button {
+                    if let c = location.coordinate {
+                        set(FavoritePlace(lat: c.latitude, lon: c.longitude,
+                                          label: "Défini sur ma position"))
+                    }
+                } label: {
+                    Label("Redéfinir sur ma position", systemImage: "location.fill")
+                }
+                Button(role: .destructive) { set(nil) } label: {
+                    Label("Effacer", systemImage: "trash")
+                }
+            }
+        } else {
+            Button {
+                if let c = location.coordinate {
+                    set(FavoritePlace(lat: c.latitude, lon: c.longitude,
+                                      label: "Défini sur ma position"))
+                }
+            } label: {
+                Label("Définir \(title) sur ma position", systemImage: icon)
+            }
+            .disabled(location.coordinate == nil)
+        }
     }
 
     /// Propose les itinéraires vers un résultat de recherche.

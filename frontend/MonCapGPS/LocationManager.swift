@@ -24,6 +24,15 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.startUpdatingLocation()
     }
 
+    /// Active/désactive le suivi en arrière-plan (pendant la navigation) :
+    /// le GPS et le guidage continuent écran verrouillé, avec l'indicateur
+    /// système visible.
+    func setBackgroundTracking(_ on: Bool) {
+        manager.allowsBackgroundLocationUpdates = on
+        manager.pausesLocationUpdatesAutomatically = !on
+        manager.showsBackgroundLocationIndicator = on
+    }
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
         coordinate = loc.coordinate

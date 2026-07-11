@@ -226,6 +226,7 @@
 				DEVELOPMENT_TEAM = 2FW8T4UX4L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "MonCap GPS utilise votre position pour l'afficher, calculer vos trajets et la partager en direct.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -255,6 +256,7 @@
 				DEVELOPMENT_TEAM = 2FW8T4UX4L;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "MonCap GPS utilise votre position pour l'afficher, calculer vos trajets et la partager en direct.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

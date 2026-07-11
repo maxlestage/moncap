@@ -16,6 +16,31 @@ enum Session {
         set { UserDefaults.standard.set(newValue, forKey: avatarKey) }
     }
 
+    // MARK: - Favoris Domicile / Travail
+
+    private static func favorite(forKey key: String) -> FavoritePlace? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(FavoritePlace.self, from: data)
+    }
+
+    private static func setFavorite(_ place: FavoritePlace?, forKey key: String) {
+        if let place, let data = try? JSONEncoder().encode(place) {
+            UserDefaults.standard.set(data, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    static var home: FavoritePlace? {
+        get { favorite(forKey: "moncap.home") }
+        set { setFavorite(newValue, forKey: "moncap.home") }
+    }
+
+    static var work: FavoritePlace? {
+        get { favorite(forKey: "moncap.work") }
+        set { setFavorite(newValue, forKey: "moncap.work") }
+    }
+
     // MARK: - Recherches récentes
 
     private static let recentsKey = "moncap.recents"
@@ -220,6 +245,20 @@ struct APIClient {
 
     func clearSearches() async throws {
         _ = try await URLSession.shared.data(for: authedRequest("searches", method: "DELETE"))
+    }
+
+    // MARK: - Signalements (persistés, votes)
+
+    func alerts() async throws -> [Alert] {
+        try await send(authedRequest("alerts"))
+    }
+
+    /// Vote « toujours là » (up) ou « plus là » sur un signalement.
+    func voteAlert(id: Int, up: Bool) async throws {
+        _ = try await URLSession.shared.data(
+            for: authedRequest(
+                "alerts/\(id)/vote", method: "POST",
+                body: try JSONEncoder().encode(["up": up]), contentType: "application/json"))
     }
 
     func nearest(lat: Double, lon: Double) async throws -> NearestResponse {

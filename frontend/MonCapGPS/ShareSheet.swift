@@ -17,3 +17,9 @@ struct IdentifiableURL: Identifiable {
     let id = UUID()
     let url: URL
 }
+
+/// Un texte rendu `Identifiable` pour piloter une feuille de partage.
+struct IdentifiableText: Identifiable {
+    let id = UUID()
+    let text: String
+}
