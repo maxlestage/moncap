@@ -40,6 +40,8 @@ struct RouteOption: Identifiable {
     /// Dénivelé positif (côte) et négatif (descente) en mètres, si connus.
     var climb: Double?
     var descent: Double?
+    /// L'itinéraire emprunte des sections à péage.
+    var hasTolls = false
 }
 
 /// Profil d'altitude d'une suite de points via l'API open-meteo (gratuite,
@@ -82,6 +84,7 @@ fileprivate struct RouteBuild {
     let steps: [NavStep]
     let km: Double
     let minutes: Double
+    var hasTolls = false
 }
 
 /// Préférences d'itinéraire voiture (péages / autoroutes), lues au moment du
@@ -116,7 +119,8 @@ fileprivate func buildRoutes(
                         coord: $0.polyline.coordinates.last ?? $0.polyline.coordinate)
             },
             km: r.distance / 1000,
-            minutes: r.expectedTravelTime / 60)
+            minutes: r.expectedTravelTime / 60,
+            hasTolls: r.hasTolls)
     }
 }
 
@@ -136,7 +140,8 @@ fileprivate func viaRoute(
     let steps = Array(a.steps.dropLast()) + Array(b.steps.dropFirst())
     return RouteBuild(
         coords: a.coords + b.coords, steps: steps,
-        km: a.km + b.km, minutes: a.minutes + b.minutes)
+        km: a.km + b.km, minutes: a.minutes + b.minutes,
+        hasTolls: a.hasTolls || b.hasTolls)
 }
 
 /// Cap (0 = nord) d'un point vers un autre.
@@ -368,6 +373,7 @@ struct MapHomeView: View {
     @StateObject private var nav = NavigationManager()
     @StateObject private var placeSearch = PlaceSearch()
     @StateObject private var speedLimit = SpeedLimitService()
+    @StateObject private var fuel = FuelPriceService()
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -421,6 +427,9 @@ struct MapHomeView: View {
     /// Préférences d'itinéraire voiture.
     @AppStorage("moncap.avoidTolls") private var avoidTolls = false
     @AppStorage("moncap.avoidHighways") private var avoidHighways = false
+    /// Mon véhicule : carburant et consommation (pour le coût des trajets).
+    @AppStorage("moncap.fuelType") private var fuelType = "gazole"
+    @AppStorage("moncap.consumption") private var consumption = 6.5
     /// Signalements déjà annoncés vocalement pendant cette navigation.
     @State private var announcedAlertIDs: Set<Int> = []
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
@@ -539,6 +548,8 @@ struct MapHomeView: View {
             } else {
                 speedLimit.update(c)
             }
+            // Prix du carburant local (cache 6 h, pour le coût des trajets).
+            fuel.refresh(near: c, type: fuelType)
             if location.speedKmh > 15 { checkOverspeed() }
 
             if nav.active {
@@ -592,6 +603,9 @@ struct MapHomeView: View {
         }
         .onChange(of: avoidTolls) { _, _ in reroutePreferencesChanged() }
         .onChange(of: avoidHighways) { _, _ in reroutePreferencesChanged() }
+        .onChange(of: fuelType) { _, newType in
+            if let c = location.coordinate { fuel.refresh(near: c, type: newType) }
+        }
     }
 
     /// Recalcule les itinéraires affichés quand une préférence change.
@@ -1135,6 +1149,24 @@ struct MapHomeView: View {
         UINotificationFeedbackGenerator().notificationOccurred(.warning)
     }
 
+    /// Coût estimé du trajet pour mon véhicule : carburant + péages.
+    /// Les péages sont une estimation (part d'autoroute × ~0,078 €/km,
+    /// tarif moyen français classe 1) — pas le tarif exact du concessionnaire.
+    private func routeCostText(_ o: RouteOption) -> String? {
+        guard travelMode == .car else { return nil }
+        let price = fuel.effectivePrice(type: fuelType)
+        let fuelCost = o.km * consumption / 100 * price
+        guard o.hasTolls else {
+            return String(format: "⛽ ~%.2f € · sans péage", fuelCost)
+        }
+        // Part d'autoroute estimée d'après la vitesse moyenne de l'itinéraire.
+        let avgKmh = o.minutes > 0 ? o.km / (o.minutes / 60) : 0
+        let motorwayShare = max(0, min(0.9, (avgKmh - 55) / 60))
+        let tollCost = o.km * motorwayShare * 0.078
+        return String(format: "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €",
+                      fuelCost, tollCost, fuelCost + tollCost)
+    }
+
     /// Infos détaillées : ligne principale + dénivelé sur une ligne à part.
     private func routeDetails(_ o: RouteOption, compact: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -1143,6 +1175,11 @@ struct MapHomeView: View {
                 .minimumScaleFactor(compact ? 0.6 : 0.85)
             if let elev = routeElevationText(o) {
                 Text(elev)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            if !compact, let cost = routeCostText(o) {
+                Text(cost)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -1779,6 +1816,32 @@ struct MapHomeView: View {
                         .padding(.vertical, 4)
                     }
                 }
+                Section("Mon véhicule") {
+                    Picker("Carburant", selection: $fuelType) {
+                        Text("Gazole").tag("gazole")
+                        Text("SP95").tag("sp95")
+                        Text("SP98").tag("sp98")
+                        Text("E10").tag("e10")
+                        Text("E85").tag("e85")
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Consommation")
+                            Spacer()
+                            Text(String(format: "%.1f L/100 km", consumption))
+                                .foregroundStyle(.secondary)
+                        }
+                        Slider(value: $consumption, in: 3...15, step: 0.1)
+                    }
+                    HStack {
+                        Label("Prix carburant", systemImage: "fuelpump")
+                        Spacer()
+                        Text(String(format: "%.3f €/L", fuel.effectivePrice(type: fuelType)))
+                        Text(fuel.stationCount > 0
+                            ? "(\(fuel.stationCount) stations)" : "(estimation)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 if !leaders.isEmpty {
                     Section("Classement des contributeurs") {
                         ForEach(Array(leaders.enumerated()), id: \.offset) { i, e in
@@ -2106,7 +2169,8 @@ struct MapHomeView: View {
             RouteOption(
                 coordinates: b.coords, steps: b.steps,
                 minutes: b.minutes, km: b.km,
-                turns: max(b.steps.count - 1, 0))
+                turns: max(b.steps.count - 1, 0),
+                hasTolls: b.hasTolls)
         }
         // Le « plus simple » = le moins de manœuvres (puis le plus rapide).
         if let best = options.indices.min(by: {
