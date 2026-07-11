@@ -12,22 +12,34 @@ final class SpeedLimitService: ObservableObject {
     private var lastQuery = Date.distantPast
     private var lastCoord: CLLocationCoordinate2D?
     private var inFlight = false
-    /// Limites préchargées le long de l'itinéraire (centre de voie → limite).
-    private var cache: [(coord: CLLocationCoordinate2D, limit: Int)] = []
+    /// Voies préchargées le long de l'itinéraire : géométrie complète →
+    /// la limite bascule dès qu'on change de route.
+    private struct CachedWay {
+        let coords: [CLLocationCoordinate2D]
+        let limit: Int
+    }
+    private var cache: [CachedWay] = []
+    /// Itinéraire courant (pour re-précharger périodiquement).
+    private var routeCoords: [CLLocationCoordinate2D] = []
+    private var lastPreload = Date.distantPast
 
-    /// À appeler à chaque position. Consulte d'abord le cache préchargé le
-    /// long de l'itinéraire (instantané), sinon interroge Overpass au plus
-    /// toutes les 20 s et après au moins 80 m parcourus.
+    /// À appeler à chaque position. La limite est appariée à la géométrie de
+    /// la voie la plus proche du cache (instantané et précis), avec repli sur
+    /// une requête Overpass (au plus toutes les 12 s / 60 m). Le cache
+    /// d'itinéraire est re-préchargé toutes les 10 min (limites temporaires).
     func update(_ c: CLLocationCoordinate2D) {
-        if let cached = nearestCachedLimit(c, within: 300) {
+        if !routeCoords.isEmpty, Date().timeIntervalSince(lastPreload) > 600 {
+            preload(along: routeCoords)
+        }
+        if let cached = nearestWayLimit(c, within: 35) {
             limitKmh = cached
             return
         }
-        guard !inFlight, Date().timeIntervalSince(lastQuery) > 20 else { return }
+        guard !inFlight, Date().timeIntervalSince(lastQuery) > 12 else { return }
         if let last = lastCoord {
             let d = CLLocation(latitude: last.latitude, longitude: last.longitude)
                 .distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
-            guard d > 80 else { return }
+            guard d > 60 else { return }
         }
         lastQuery = Date()
         lastCoord = c
@@ -55,14 +67,17 @@ final class SpeedLimitService: ObservableObject {
         }
     }
 
-    /// Précharge les limites le long d'un itinéraire (une seule requête
-    /// groupée) : pendant la navigation, la limite est servie depuis ce cache.
+    /// Précharge les voies (géométrie + limite) le long d'un itinéraire, en
+    /// une requête groupée. Re-préchargé toutes les 10 min pendant la
+    /// navigation pour suivre les changements (travaux, limites temporaires).
     func preload(along coords: [CLLocationCoordinate2D]) {
         let sampled = Self.sample(coords, max: 25)
         guard !sampled.isEmpty else { return }
+        routeCoords = coords
+        lastPreload = Date()
         Task {
-            if let segments = await Self.fetchLimits(at: sampled) {
-                cache = segments
+            if let ways = await Self.fetchWays(at: sampled) {
+                cache = ways
             }
         }
     }
@@ -72,25 +87,56 @@ final class SpeedLimitService: ObservableObject {
         lastCoord = nil
         lastQuery = .distantPast
         cache = []
+        routeCoords = []
+        lastPreload = .distantPast
     }
 
     /// Vide le cache d'itinéraire (fin de navigation) en gardant la limite
     /// courante affichée.
     func clearRoute() {
         cache = []
+        routeCoords = []
+        lastPreload = .distantPast
     }
 
-    /// Limite du point de cache le plus proche (m), si assez proche.
-    private func nearestCachedLimit(_ c: CLLocationCoordinate2D, within meters: Double) -> Int? {
+    /// Limite de la voie dont la géométrie passe à moins de `meters` de la
+    /// position (la plus proche gagne).
+    private func nearestWayLimit(_ c: CLLocationCoordinate2D, within meters: Double) -> Int? {
         var best: (d: Double, limit: Int)?
-        for entry in cache {
-            let d = CLLocation(latitude: entry.coord.latitude, longitude: entry.coord.longitude)
-                .distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
+        for way in cache {
+            let d = Self.distanceToPolyline(c, way.coords)
             if d <= meters, best == nil || d < best!.d {
-                best = (d, entry.limit)
+                best = (d, way.limit)
             }
         }
         return best?.limit
+    }
+
+    /// Distance minimale (m) d'un point à une polyligne (projection locale).
+    private static func distanceToPolyline(
+        _ p: CLLocationCoordinate2D, _ coords: [CLLocationCoordinate2D]
+    ) -> Double {
+        guard coords.count >= 2 else {
+            guard let only = coords.first else { return .greatestFiniteMagnitude }
+            return CLLocation(latitude: p.latitude, longitude: p.longitude)
+                .distance(from: CLLocation(latitude: only.latitude, longitude: only.longitude))
+        }
+        let mLat = 111_320.0
+        let mLon = 111_320.0 * cos(p.latitude * .pi / 180)
+        func xy(_ c: CLLocationCoordinate2D) -> (Double, Double) {
+            ((c.longitude - p.longitude) * mLon, (c.latitude - p.latitude) * mLat)
+        }
+        var best = Double.greatestFiniteMagnitude
+        for i in 0..<(coords.count - 1) {
+            let (ax, ay) = xy(coords[i])
+            let (bx, by) = xy(coords[i + 1])
+            let dx = bx - ax, dy = by - ay
+            let len2 = dx * dx + dy * dy
+            let t = len2 == 0 ? 0 : max(0, min(1, -(ax * dx + ay * dy) / len2))
+            let cx = ax + t * dx, cy = ay + t * dy
+            best = min(best, (cx * cx + cy * cy).squareRoot())
+        }
+        return best
     }
 
     /// Échantillonne au plus `n` points répartis le long d'un tracé.
@@ -102,15 +148,15 @@ final class SpeedLimitService: ObservableObject {
         return (0..<n).map { coords[Int((Double($0) * step).rounded())] }
     }
 
-    /// Requête groupée : limites des voies autour de chaque point échantillonné
-    /// (maxspeed explicite ou défaut légal français).
-    private static func fetchLimits(at points: [CLLocationCoordinate2D])
-        async -> [(coord: CLLocationCoordinate2D, limit: Int)]?
+    /// Requête groupée : voies (géométrie complète + limite) autour de chaque
+    /// point échantillonné — maxspeed explicite ou défaut légal français.
+    private static func fetchWays(at points: [CLLocationCoordinate2D])
+        async -> [CachedWay]?
     {
         let clauses = points
             .map { "way(around:25,\($0.latitude),\($0.longitude))[highway];" }
             .joined()
-        let q = "[out:json][timeout:15];(\(clauses));out tags center;"
+        let q = "[out:json][timeout:15];(\(clauses));out tags geom;"
         var comps = URLComponents(string: "https://overpass-api.de/api/interpreter")!
         comps.queryItems = [URLQueryItem(name: "data", value: q)]
         guard let url = comps.url else { return nil }
@@ -119,13 +165,16 @@ final class SpeedLimitService: ObservableObject {
         guard let (data, _) = try? await URLSession.shared.data(for: req) else { return nil }
 
         struct Resp: Decodable { let elements: [Element] }
-        struct Center: Decodable { let lat: Double; let lon: Double }
-        struct Element: Decodable { let tags: [String: String]?; let center: Center? }
+        struct Point: Decodable { let lat: Double; let lon: Double }
+        struct Element: Decodable { let tags: [String: String]?; let geometry: [Point]? }
         guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return nil }
-        var out: [(CLLocationCoordinate2D, Int)] = []
+        var out: [CachedWay] = []
         for el in resp.elements {
-            guard let center = el.center, let limit = limit(fromTags: el.tags) else { continue }
-            out.append((CLLocationCoordinate2D(latitude: center.lat, longitude: center.lon), limit))
+            guard let geom = el.geometry, geom.count >= 2,
+                let limit = limit(fromTags: el.tags)
+            else { continue }
+            let coords = geom.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
+            out.append(CachedWay(coords: coords, limit: limit))
         }
         return out
     }
