@@ -31,19 +31,25 @@ use tower_http::{
 };
 
 use auth::AuthUser;
-use entity::{position, search, trip, user};
+use entity::{alert, position, search, trip, user};
 use migration::Migrator;
 use sea_orm_migration::MigratorTrait;
 
-/// Identifiant unique attribué à chaque connexion live et à chaque alerte.
+/// Identifiant unique attribué à chaque connexion live.
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// État partagé : base, canal temps réel, alertes récentes en mémoire.
+/// Durée de vie d'un signalement (prolongeable par confirmation).
+const ALERT_TTL_SECS: i64 = 30 * 60;
+/// Prolongation apportée par un vote « toujours là ».
+const ALERT_EXTEND_SECS: i64 = 10 * 60;
+/// Durée de vie maximale d'un signalement, même très confirmé.
+const ALERT_MAX_SECS: i64 = 2 * 60 * 60;
+
+/// État partagé : base et canal temps réel.
 #[derive(Clone)]
 struct AppState {
     db: DatabaseConnection,
     tx: broadcast::Sender<String>,
-    alerts: Arc<Mutex<Vec<Alert>>>,
 }
 
 impl FromRef<AppState> for DatabaseConnection {
@@ -58,15 +64,34 @@ impl FromRef<AppState> for broadcast::Sender<String> {
     }
 }
 
-/// Un signalement façon Waze (police, accident, bouchon, danger…).
+/// Un signalement façon Waze (police, accident, bouchon, danger…), tel
+/// qu'échangé avec les clients.
 #[derive(Clone, Serialize, Deserialize)]
 struct Alert {
-    id: u64,
+    id: i64,
     category: String,
     lat: f64,
     lon: f64,
     label: String,
     ts: u64,
+    #[serde(default)]
+    confirms: i32,
+    #[serde(default)]
+    denies: i32,
+}
+
+/// Convertit un signalement stocké en base vers le format client.
+fn wire_alert(m: &alert::Model) -> Alert {
+    Alert {
+        id: m.id as i64,
+        category: m.category.clone(),
+        lat: m.lat,
+        lon: m.lon,
+        label: m.label.clone(),
+        ts: (m.created_at as u64) * 1000,
+        confirms: m.confirms,
+        denies: m.denies,
+    }
 }
 
 /// Message reçu d'un client via WebSocket.
@@ -107,8 +132,10 @@ enum ServerEvent {
     },
     /// Un utilisateur live s'est déconnecté.
     LiveGone { id: u64 },
-    /// Un nouveau signalement.
+    /// Un signalement nouveau ou mis à jour (votes).
     Alert(Alert),
+    /// Un signalement supprimé (expiré ou infirmé par les votes).
+    AlertGone { id: i64 },
     /// Instantané des signalements en cours (à la connexion).
     Alerts { alerts: Vec<Alert> },
 }
@@ -366,11 +393,7 @@ async fn main() {
 
     // Canal de diffusion temps réel (WebSocket).
     let (tx, _rx) = broadcast::channel::<String>(256);
-    let state = AppState {
-        db,
-        tx,
-        alerts: Arc::new(Mutex::new(Vec::new())),
-    };
+    let state = AppState { db, tx };
 
     // Front web statique (React + Bun, voir web/). Servi en repli : toute
     // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
@@ -407,6 +430,8 @@ async fn main() {
         .route("/trips/:id", axum::routing::delete(delete_trip))
         .route("/searches", get(list_searches).post(add_search).delete(clear_searches))
         .route("/searches/:id", axum::routing::delete(delete_search))
+        .route("/alerts", get(list_alerts))
+        .route("/alerts/:id/vote", post(vote_alert))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
         .fallback_service(web)
@@ -837,19 +862,19 @@ async fn ws_handler(
     Query(q): Query<WsAuth>,
     State(state): State<AppState>,
 ) -> Result<Response, AppError> {
-    if auth::verify_token(&q.token).is_none() {
+    let Some(uid) = auth::verify_token(&q.token) else {
         return Err(AppError::Unauthorized);
-    }
-    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state)))
+    };
+    Ok(ws.on_upgrade(move |socket| handle_socket(socket, state, uid)))
 }
 
-async fn handle_socket(mut socket: WebSocket, state: AppState) {
+async fn handle_socket(mut socket: WebSocket, state: AppState, uid: i32) {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let mut rx = state.tx.subscribe();
 
-    // Instantané des signalements en cours, envoyé à la connexion.
+    // Instantané des signalements en cours (persistés), envoyé à la connexion.
     let snapshot = ServerEvent::Alerts {
-        alerts: prune_alerts(&state.alerts),
+        alerts: active_alerts(&state.db).await.unwrap_or_default(),
     };
     if let Ok(json) = serde_json::to_string(&snapshot) {
         let _ = socket.send(Message::Text(json)).await;
@@ -867,7 +892,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 Err(_) => break,
             },
             msg = socket.recv() => match msg {
-                Some(Ok(Message::Text(t))) => handle_client_msg(&state, id, &t),
+                Some(Ok(Message::Text(t))) => handle_client_msg(&state, id, uid, &t).await,
                 Some(Ok(Message::Close(_))) | None => break,
                 Some(Err(_)) => break,
                 _ => {}
@@ -880,7 +905,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
 }
 
 /// Traite un message reçu d'un client et le rediffuse.
-fn handle_client_msg(state: &AppState, id: u64, text: &str) {
+async fn handle_client_msg(state: &AppState, id: u64, uid: i32, text: &str) {
     let Ok(ev) = serde_json::from_str::<ClientEvent>(text) else {
         return;
     };
@@ -914,33 +939,100 @@ fn handle_client_msg(state: &AppState, id: u64, text: &str) {
             if !valid_coord(lat, lon) {
                 return;
             }
-            let alert = Alert {
-                id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-                category: clean_label(&category),
-                lat,
-                lon,
-                label: clean_label(&label),
-                ts: now_ms(),
-            };
-            {
-                let mut alerts = state.alerts.lock().unwrap();
-                alerts.push(alert.clone());
-                let len = alerts.len();
-                if len > 100 {
-                    alerts.drain(0..len - 100);
-                }
+            // Persisté en base : survit aux redémarrages et visible par les
+            // clients qui se connectent plus tard.
+            let now = (now_ms() / 1000) as i64;
+            let saved = alert::ActiveModel {
+                category: Set(clean_label(&category)),
+                label: Set(clean_label(&label)),
+                lat: Set(lat),
+                lon: Set(lon),
+                created_at: Set(now),
+                expires_at: Set(now + ALERT_TTL_SECS),
+                confirms: Set(0),
+                denies: Set(0),
+                user_id: Set(uid),
+                ..Default::default()
             }
-            broadcast_event(&state.tx, &ServerEvent::Alert(alert));
+            .insert(&state.db)
+            .await;
+            if let Ok(saved) = saved {
+                broadcast_event(&state.tx, &ServerEvent::Alert(wire_alert(&saved)));
+            }
         }
     }
 }
 
-/// Retire les signalements de plus de 30 min et renvoie ceux restants.
-fn prune_alerts(alerts: &Arc<Mutex<Vec<Alert>>>) -> Vec<Alert> {
-    let cutoff = now_ms().saturating_sub(30 * 60 * 1000);
-    let mut a = alerts.lock().unwrap();
-    a.retain(|x| x.ts >= cutoff);
-    a.clone()
+/// Signalements actifs : purge les expirés puis renvoie les restants.
+async fn active_alerts(db: &DatabaseConnection) -> Result<Vec<Alert>, sea_orm::DbErr> {
+    let now = (now_ms() / 1000) as i64;
+    alert::Entity::delete_many()
+        .filter(alert::Column::ExpiresAt.lte(now))
+        .exec(db)
+        .await?;
+    let items = alert::Entity::find()
+        .order_by_desc(alert::Column::CreatedAt)
+        .all(db)
+        .await?;
+    Ok(items.iter().map(wire_alert).collect())
+}
+
+/// GET /alerts — signalements en cours (authentifié).
+async fn list_alerts(
+    AuthUser(_uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<Vec<Alert>>, AppError> {
+    Ok(Json(active_alerts(&db).await?))
+}
+
+/// Vote sur un signalement : « toujours là » (up) ou « plus là ».
+#[derive(Deserialize)]
+struct AlertVote {
+    up: bool,
+}
+
+/// POST /alerts/:id/vote — confirme (prolonge) ou infirme (peut supprimer).
+async fn vote_alert(
+    AuthUser(_uid): AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+    Json(v): Json<AlertVote>,
+) -> Result<StatusCode, AppError> {
+    let Some(found) = alert::Entity::find_by_id(id).one(&state.db).await? else {
+        return Ok(StatusCode::NOT_FOUND);
+    };
+    let now = (now_ms() / 1000) as i64;
+    if v.up {
+        // Confirmé : on prolonge, plafonné par rapport à la création.
+        let extended = (found.expires_at.max(now) + ALERT_EXTEND_SECS)
+            .min(found.created_at + ALERT_MAX_SECS);
+        let updated = alert::ActiveModel {
+            id: Set(found.id),
+            confirms: Set(found.confirms + 1),
+            expires_at: Set(extended),
+            ..Default::default()
+        }
+        .update(&state.db)
+        .await?;
+        broadcast_event(&state.tx, &ServerEvent::Alert(wire_alert(&updated)));
+    } else {
+        let denies = found.denies + 1;
+        if denies >= 2 && denies > found.confirms {
+            // Infirmé par la communauté : on supprime.
+            alert::Entity::delete_by_id(found.id).exec(&state.db).await?;
+            broadcast_event(&state.tx, &ServerEvent::AlertGone { id: found.id as i64 });
+        } else {
+            let updated = alert::ActiveModel {
+                id: Set(found.id),
+                denies: Set(denies),
+                ..Default::default()
+            }
+            .update(&state.db)
+            .await?;
+            broadcast_event(&state.tx, &ServerEvent::Alert(wire_alert(&updated)));
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// GET /stats — vue d'ensemble des positions de l'utilisateur.

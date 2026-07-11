@@ -103,6 +103,8 @@ final class RealtimeClient: ObservableObject {
         case .alert(let alert):
             alerts.removeAll { $0.id == alert.id }
             alerts.append(alert)
+        case .alertGone(let id):
+            alerts.removeAll { $0.id == id }
         case .alerts(let list):
             alerts = list
         }
