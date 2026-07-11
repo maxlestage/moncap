@@ -453,6 +453,8 @@ struct MapHomeView: View {
     /// Dernière caméra 3D appliquée (anti-tremblement à l'arrêt).
     @State private var lastCamCoord: CLLocationCoordinate2D?
     @State private var lastCamHeading: Double = -1
+    /// Mode nuit automatique (selon la position réelle du soleil).
+    @State private var nightMode = false
     /// Prévisualisation (survol) de l'itinéraire en cours.
     @State private var previewing = false
     @State private var previewTask: Task<Void, Never>?
@@ -537,6 +539,9 @@ struct MapHomeView: View {
             }
         }
         .task {
+            // Jour / nuit dès l'ouverture (centre de la France en repli, la
+            // vraie position affine dès le premier point GPS).
+            nightMode = DayNight.isNight(lat: 46.6, lon: 2.5)
             location.start()
             realtime.onPositionsChanged = { Task { await refresh() } }
             nav.onReroute = { Task { await recomputeRoute() } }
@@ -561,6 +566,8 @@ struct MapHomeView: View {
             }
             // Prix du carburant local (cache 6 h, pour le coût des trajets).
             fuel.refresh(near: c, type: fuelType)
+            // Jour / nuit selon la position réelle du soleil.
+            nightMode = DayNight.isNight(lat: c.latitude, lon: c.longitude)
             if location.speedKmh > 15 { checkOverspeed() }
 
             if nav.active {
@@ -636,6 +643,8 @@ struct MapHomeView: View {
         .onChange(of: fuelType) { _, newType in
             if let c = location.coordinate { fuel.refresh(near: c, type: newType) }
         }
+        // Mode nuit automatique : l'app suit le soleil (coucher → sombre).
+        .preferredColorScheme(nightMode ? .dark : .light)
     }
 
     /// Recalcule les itinéraires affichés quand une préférence change.
@@ -1011,11 +1020,23 @@ struct MapHomeView: View {
         .onTapGesture { showSearch = true }
     }
 
+    /// Catégories triées selon le moment de la journée : restos à midi,
+    /// baignade l'après-midi, sorties le soir, hôtels la nuit.
+    private var poiKindsForNow: [POIKind] {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 11...14: return [.restaurant, .fastFood, .water, .tourism, .hangout, .hotel]
+        case 15...18: return [.water, .tourism, .fastFood, .restaurant, .hangout, .hotel]
+        case 19...23: return [.restaurant, .hangout, .fastFood, .hotel, .water, .tourism]
+        case 0...5: return [.hotel, .fastFood, .hangout, .restaurant, .water, .tourism]
+        default: return [.fastFood, .restaurant, .water, .tourism, .hangout, .hotel]
+        }
+    }
+
     /// Pastilles de catégories de lieux (fast-food, hôtels, tourisme…).
     private var poiBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(POIKind.allCases) { kind in
+                ForEach(poiKindsForNow) { kind in
                     let isOn = poiKind == kind
                     Button {
                         togglePOIKind(kind)
