@@ -51,6 +51,10 @@ struct LoginView: View {
             Spacer()
         }
         .padding(24)
+        // Tout le texte affiché de l'écran (titres, libellés, boutons,
+        // placeholders) est rendu en minuscules. La saisie de l'utilisateur
+        // n'est pas modifiée : l'e-mail garde sa casse réelle.
+        .textCase(.lowercase)
     }
 
     private func submit() {
