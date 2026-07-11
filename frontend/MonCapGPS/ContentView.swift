@@ -1033,15 +1033,15 @@ struct MapHomeView: View {
     }
 
     /// Vrai si la carte a suffisamment bougé pour justifier un rechargement
-    /// des lieux (≥ 25 % de déplacement ou changement de zoom net).
+    /// des lieux : déplacement ≥ 15 % de la zone, ou zoom/dézoom ≥ 25 %.
     private func regionChangedEnough(_ r: MKCoordinateRegion) -> Bool {
         guard let last = lastPOIRegion else { return true }
         let movedLat = abs(r.center.latitude - last.center.latitude)
-            > last.span.latitudeDelta * 0.25
+            > last.span.latitudeDelta * 0.15
         let movedLon = abs(r.center.longitude - last.center.longitude)
-            > last.span.longitudeDelta * 0.25
-        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.6
-            || r.span.latitudeDelta < last.span.latitudeDelta / 1.6
+            > last.span.longitudeDelta * 0.15
+        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.25
+            || r.span.latitudeDelta < last.span.latitudeDelta / 1.25
         return movedLat || movedLon || zoomed
     }
 
@@ -1082,10 +1082,24 @@ struct MapHomeView: View {
     /// de baignade en lac/rivière, piscines publiques, parcs aquatiques 🏊.
     /// Renvoie nil en cas d'échec réseau (pour conserver l'affichage actuel).
     private func fetchSwimmingSpots(in region: MKCoordinateRegion) async -> [POI]? {
-        let south = region.center.latitude - region.span.latitudeDelta / 2
-        let north = region.center.latitude + region.span.latitudeDelta / 2
-        let west = region.center.longitude - region.span.longitudeDelta / 2
-        let east = region.center.longitude + region.span.longitudeDelta / 2
+        // Dézoom extrême : on plafonne la zone interrogée (~250 km) pour que
+        // la requête reste rapide ; `out 60` limite déjà le nombre de lieux.
+        let latSpan = min(region.span.latitudeDelta, 2.5)
+        let lonSpan = min(region.span.longitudeDelta, 3.5)
+        var south = region.center.latitude - latSpan / 2
+        var north = region.center.latitude + latSpan / 2
+        var west = region.center.longitude - lonSpan / 2
+        var east = region.center.longitude + lonSpan / 2
+
+        // Seulement en France 🇫🇷 : zone découpée à la métropole (Corse incluse).
+        let fr = (south: 41.0, west: -5.6, north: 51.4, east: 9.9)
+        south = max(south, fr.south)
+        north = min(north, fr.north)
+        west = max(west, fr.west)
+        east = min(east, fr.east)
+        // Hors de France : succès vide (les épingles s'effacent, pas d'appel).
+        guard south < north, west < east else { return [] }
+
         let bbox = "(\(south),\(west),\(north),\(east))"
         // nwr = nœuds + chemins + relations ; `out center` fournit un point
         // représentatif pour les surfaces (plages, lacs…).
