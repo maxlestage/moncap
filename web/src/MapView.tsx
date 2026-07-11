@@ -15,6 +15,7 @@ interface Props {
   me: Coord | null;
   destination: Destination | null;
   onAddPoint: (coord: Coord) => void;
+  onVoteAlert: (id: number, up: boolean) => void;
 }
 
 const ALERT_EMOJI: Record<string, string> = {
@@ -39,7 +40,7 @@ function esc(s: string): string {
 }
 
 /** Carte Leaflet : positions enregistrées + voitures live + signalements. */
-export function MapView({ positions, liveUsers, alerts, me, destination, onAddPoint }: Props) {
+export function MapView({ positions, liveUsers, alerts, me, destination, onAddPoint, onVoteAlert }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const posLayer = useRef<any>(null);
@@ -144,7 +145,7 @@ export function MapView({ positions, liveUsers, alerts, me, destination, onAddPo
     }
   }, [destination, me]);
 
-  // Signalements (façon Waze).
+  // Signalements (façon Waze) : la popup permet de voter 👍 / 👎.
   useEffect(() => {
     const layer = alertLayer.current;
     if (!layer) return;
@@ -157,11 +158,23 @@ export function MapView({ positions, liveUsers, alerts, me, destination, onAddPo
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       });
-      L.marker([a.lat, a.lon], { icon })
-        .bindPopup(`${emoji} ${esc(a.label || a.category)}`)
-        .addTo(layer);
+      const popup = document.createElement("div");
+      popup.className = "alert-popup";
+      const title = document.createElement("div");
+      title.textContent = `${emoji} ${a.label || a.category}`;
+      const counts = document.createElement("div");
+      counts.className = "alert-votes";
+      counts.textContent = `👍 ${a.confirms ?? 0} · 👎 ${a.denies ?? 0}`;
+      const up = document.createElement("button");
+      up.textContent = "👍 Toujours là";
+      up.onclick = () => onVoteAlert(a.id, true);
+      const down = document.createElement("button");
+      down.textContent = "👎 Plus là";
+      down.onclick = () => onVoteAlert(a.id, false);
+      popup.append(title, counts, up, down);
+      L.marker([a.lat, a.lon], { icon }).bindPopup(popup).addTo(layer);
     }
-  }, [alerts]);
+  }, [alerts, onVoteAlert]);
 
   return <div ref={containerRef} className="map" />;
 }

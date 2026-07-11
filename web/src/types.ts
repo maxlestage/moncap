@@ -46,7 +46,7 @@ export interface LiveUser {
   ts: number;
 }
 
-/** Signalement façon Waze. */
+/** Signalement façon Waze (avec votes de confirmation). */
 export interface Alert {
   id: number;
   category: string;
@@ -54,4 +54,6 @@ export interface Alert {
   lon: number;
   label: string;
   ts: number;
+  confirms?: number;
+  denies?: number;
 }

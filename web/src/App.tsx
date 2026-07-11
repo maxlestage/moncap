@@ -308,6 +308,11 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  // Vote sur un signalement ; la mise à jour revient par le WebSocket.
+  const voteAlert = useCallback((id: number, up: boolean) => {
+    api.voteAlert(id, up).catch(() => setError("Vote impossible."));
+  }, []);
+
   const addPoint = useCallback(
     async (coord: Coord) => {
       const label = prompt("Nom de la position ?", "Point") ?? "Point";
@@ -410,6 +415,7 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
         me={me}
         destination={destination}
         onAddPoint={addPoint}
+        onVoteAlert={voteAlert}
       />
 
       <section className="controls">

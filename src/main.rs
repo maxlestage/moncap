@@ -19,7 +19,7 @@ use axum::{
 use rayon::prelude::*;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectOptions, Database, DatabaseConnection, EntityTrait,
-    PaginatorTrait, QueryFilter, QueryOrder, Set,
+    FromQueryResult, PaginatorTrait, QueryFilter, QueryOrder, Set,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
@@ -533,6 +533,7 @@ async fn main() {
         .route("/alerts", get(list_alerts))
         .route("/alerts/:id/vote", post(vote_alert))
         .route("/account", get(account_info).delete(delete_account))
+        .route("/leaderboard", get(leaderboard))
         .route("/privacy", get(privacy_page))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
@@ -1041,9 +1042,25 @@ async fn handle_client_msg(state: &AppState, id: u64, uid: i32, text: &str) {
             if !valid_coord(lat, lon) {
                 return;
             }
+            let now = (now_ms() / 1000) as i64;
+            // Anti-abus : au plus 3 signalements par 2 minutes et 10 actifs
+            // par utilisateur (silencieusement ignoré au-delà).
+            let recent = alert::Entity::find()
+                .filter(alert::Column::UserId.eq(uid))
+                .filter(alert::Column::CreatedAt.gt(now - 120))
+                .count(&state.db)
+                .await
+                .unwrap_or(0);
+            let active = alert::Entity::find()
+                .filter(alert::Column::UserId.eq(uid))
+                .count(&state.db)
+                .await
+                .unwrap_or(0);
+            if recent >= 3 || active >= 10 {
+                return;
+            }
             // Persisté en base : survit aux redémarrages et visible par les
             // clients qui se connectent plus tard.
-            let now = (now_ms() / 1000) as i64;
             let saved = alert::ActiveModel {
                 category: Set(clean_label(&category)),
                 label: Set(clean_label(&label)),
@@ -1222,6 +1239,66 @@ async fn delete_account(
     user::Entity::delete_by_id(uid).exec(db).await?;
     broadcast_event(&state.tx, &ServerEvent::PositionsChanged);
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Une ligne du classement des contributeurs.
+#[derive(Serialize)]
+struct LeaderEntry {
+    name: String,
+    points: i64,
+}
+
+#[derive(sea_orm::FromQueryResult)]
+struct LeaderRow {
+    username: String,
+    alerts: i64,
+    trips: i64,
+    positions: i64,
+    searches: i64,
+}
+
+/// Pseudonymise un e-mail pour l'affichage public : « maxle… ».
+fn public_name(username: &str) -> String {
+    let local = username.split('@').next().unwrap_or(username);
+    let prefix: String = local.chars().take(5).collect();
+    if local.chars().count() > 5 {
+        format!("{prefix}…")
+    } else {
+        prefix
+    }
+}
+
+/// GET /leaderboard — top 10 des contributeurs (noms pseudonymisés).
+async fn leaderboard(
+    AuthUser(_uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<Vec<LeaderEntry>>, AppError> {
+    let rows = LeaderRow::find_by_statement(sea_orm::Statement::from_string(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT u.username, \
+           (SELECT count(*) FROM alerts a WHERE a.user_id = u.id) AS alerts, \
+           (SELECT count(*) FROM trips t WHERE t.user_id = u.id) AS trips, \
+           (SELECT count(*) FROM positions p WHERE p.user_id = u.id) AS positions, \
+           (SELECT count(*) FROM searches s WHERE s.user_id = u.id) AS searches \
+         FROM users u",
+    ))
+    .all(&db)
+    .await?;
+    let mut entries: Vec<LeaderEntry> = rows
+        .iter()
+        .map(|r| LeaderEntry {
+            name: public_name(&r.username),
+            points: score(
+                r.alerts as u64,
+                r.trips as u64,
+                r.positions as u64,
+                r.searches as u64,
+            ),
+        })
+        .collect();
+    entries.sort_by(|a, b| b.points.cmp(&a.points));
+    entries.truncate(10);
+    Ok(Json(entries))
 }
 
 /// GET /privacy — politique de confidentialité (publique, exigée pour la
@@ -1804,6 +1881,20 @@ mod tests {
             mk_search(1, "C", 3.0, 3.0),
         ];
         assert!(recents_to_prune(&items, 3, 12).is_empty());
+    }
+
+    #[test]
+    fn public_name_masks_email() {
+        assert_eq!(public_name("maxlestage@icloud.com"), "maxle…");
+        assert_eq!(public_name("bob@x.fr"), "bob");
+        assert_eq!(public_name("sanschien"), "sansc…");
+    }
+
+    #[test]
+    fn score_weights_contributions() {
+        // 1 signalement (10) + 1 trajet (5) + 2 positions (4) + 1 recherche (1).
+        assert_eq!(score(1, 1, 2, 1), 20);
+        assert_eq!(score(0, 0, 0, 0), 0);
     }
 
     #[test]

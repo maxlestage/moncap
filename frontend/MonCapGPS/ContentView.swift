@@ -414,6 +414,8 @@ struct MapHomeView: View {
     @State private var lastFasterCheck = Date.distantPast
     /// Infos du compte (points de contribution).
     @State private var accountInfo: AccountInfo?
+    /// Classement des contributeurs.
+    @State private var leaders: [LeaderEntry] = []
     /// Confirmation de suppression du compte.
     @State private var confirmDelete = false
     /// Préférences d'itinéraire voiture.
@@ -630,6 +632,17 @@ struct MapHomeView: View {
         lastSpeedWarning = Date()
         warnHaptic()
         nav.announce("Attention, vous dépassez la limite de \(lim) kilomètres heure.")
+    }
+
+    /// Grade façon Waze selon les points de contribution.
+    private func rankName(_ points: Int) -> String {
+        switch points {
+        case ..<50: return "Débutant"
+        case ..<200: return "Éclaireur"
+        case ..<500: return "Navigateur"
+        case ..<1000: return "Capitaine"
+        default: return "Légende de la route"
+        }
     }
 
     /// Compose et partage l'heure d'arrivée estimée.
@@ -1764,11 +1777,26 @@ struct MapHomeView: View {
                         .padding(.vertical, 4)
                     }
                 }
+                if !leaders.isEmpty {
+                    Section("Classement des contributeurs") {
+                        ForEach(Array(leaders.enumerated()), id: \.offset) { i, e in
+                            HStack {
+                                Text(i == 0 ? "🥇" : i == 1 ? "🥈" : i == 2 ? "🥉" : "\(i + 1).")
+                                    .frame(width: 34, alignment: .leading)
+                                Text(e.name)
+                                Spacer()
+                                Text("\(e.points) pts")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
                 Section("Compte") {
                     Label(auth.username, systemImage: "person.crop.circle")
                     if let info = accountInfo {
                         HStack {
-                            Label("\(info.points) points", systemImage: "trophy.fill")
+                            Label("\(info.points) points · \(rankName(info.points))",
+                                  systemImage: "trophy.fill")
                                 .foregroundStyle(.orange)
                             Spacer()
                             Text("\(info.alerts) signalements · \(info.trips) trajets")
@@ -1928,6 +1956,7 @@ struct MapHomeView: View {
             positions = try await api.positions()
             stats = try? await api.stats()
             accountInfo = try? await api.accountInfo()
+            leaders = (try? await api.leaderboard()) ?? leaders
             await updateRoute()
         } catch APIError.unauthorized {
             auth.logout()

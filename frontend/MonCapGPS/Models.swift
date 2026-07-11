@@ -87,6 +87,13 @@ struct AccountInfo: Codable {
     let searches: Int
 }
 
+/// Une ligne du classement des contributeurs (nom pseudonymisé).
+struct LeaderEntry: Codable, Identifiable {
+    var id: String { name }
+    let name: String
+    let points: Int
+}
+
 /// Un lieu favori (Domicile / Travail), mémorisé sur l'appareil.
 struct FavoritePlace: Codable {
     let lat: Double

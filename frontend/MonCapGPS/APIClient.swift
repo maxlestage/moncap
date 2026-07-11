@@ -261,6 +261,11 @@ struct APIClient {
         _ = try await URLSession.shared.data(for: authedRequest("account", method: "DELETE"))
     }
 
+    /// Top des contributeurs (noms pseudonymisés).
+    func leaderboard() async throws -> [LeaderEntry] {
+        try await send(authedRequest("leaderboard"))
+    }
+
     // MARK: - Signalements (persistés, votes)
 
     func alerts() async throws -> [Alert] {
