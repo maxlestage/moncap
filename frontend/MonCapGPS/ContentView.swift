@@ -1089,20 +1089,33 @@ struct MapHomeView: View {
         let bbox = "(\(south),\(west),\(north),\(east))"
         // nwr = nœuds + chemins + relations ; `out center` fournit un point
         // représentatif pour les surfaces (plages, lacs…).
-        let q = "[out:json][timeout:12];("
+        let q = "[out:json][timeout:15];("
             + "nwr[\"leisure\"=\"swimming_area\"]\(bbox);"
             + "nwr[\"natural\"=\"beach\"]\(bbox);"
             + "nwr[\"leisure\"=\"beach_resort\"]\(bbox);"
             + "nwr[\"leisure\"=\"water_park\"]\(bbox);"
             + "nwr[\"leisure\"=\"sports_centre\"][\"sport\"=\"swimming\"]\(bbox);"
             + ");out center 60;"
-        // Miroir Overpass dédié, pour ne pas partager la limite de débit avec
-        // les requêtes de limitations de vitesse.
-        var comps = URLComponents(string: "https://overpass.kumi.systems/api/interpreter")!
-        comps.queryItems = [URLQueryItem(name: "data", value: q)]
-        guard let url = comps.url,
-            let (data, _) = try? await URLSession.shared.data(from: url)
-        else { return nil }
+        // Serveur principal puis miroir de secours (vérifiés fonctionnels) :
+        // on ne renvoie nil que si tous échouent.
+        let endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        ]
+        var data: Data?
+        for endpoint in endpoints {
+            var comps = URLComponents(string: endpoint)!
+            comps.queryItems = [URLQueryItem(name: "data", value: q)]
+            guard let url = comps.url else { continue }
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 20
+            if let (d, resp) = try? await URLSession.shared.data(for: req),
+                (resp as? HTTPURLResponse)?.statusCode == 200 {
+                data = d
+                break
+            }
+        }
+        guard let data else { return nil }
         struct Resp: Decodable { let elements: [Element] }
         struct Center: Decodable { let lat: Double; let lon: Double }
         struct Element: Decodable {
