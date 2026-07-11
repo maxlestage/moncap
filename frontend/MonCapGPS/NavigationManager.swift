@@ -37,6 +37,7 @@ final class NavigationManager: ObservableObject {
     /// Dernier point d'étape vocal (heure d'arrivée).
     private var lastEtaSpoken = Date()
     private var spokenApproach = false
+    private var spokenNear = false
     private var spokenImminent = false
     private var offRouteHits = 0
     private var lastReroute = Date.distantPast
@@ -151,11 +152,21 @@ final class NavigationManager: ObservableObject {
             speak("Dans \(roundedMeters(d)) mètres, \(instruction)")
             spokenApproach = true
         }
+        // Assistance rapprochée : 100 m, puis 50 m, puis au point exact.
+        if d < 120, !spokenNear {
+            speak("Dans \(roundedMeters(d)) mètres, \(instruction)")
+            spokenNear = true
+        }
         if d < 60, !spokenImminent {
-            speak(instruction)
+            speak("À \(roundedMeters(d)) mètres, \(instruction)")
             spokenImminent = true
         }
         if d < 25 {
+            // Dernière consigne au moment de tourner (sauf à l'arrivée, qui a
+            // sa propre annonce).
+            if stepIndex < steps.count - 1 {
+                speak("Maintenant, \(instruction)")
+            }
             advance()
         }
 
@@ -205,6 +216,7 @@ final class NavigationManager: ObservableObject {
         etaMinutes = min
         stepIndex = steps.firstIndex { !$0.text.isEmpty } ?? 0
         spokenApproach = false
+        spokenNear = false
         spokenImminent = false
         spokenFar = false
         chainAnnouncePending = false
@@ -218,6 +230,7 @@ final class NavigationManager: ObservableObject {
     private func advance() {
         stepIndex += 1
         spokenApproach = false
+        spokenNear = false
         spokenImminent = false
         spokenFar = false
         if stepIndex >= steps.count {
