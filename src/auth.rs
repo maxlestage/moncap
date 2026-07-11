@@ -78,6 +78,20 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Empreinte factice, calculée une seule fois, pour comparer un mot de passe
+/// même quand l'utilisateur n'existe pas : le temps de réponse de la connexion
+/// reste identique, ce qui empêche de deviner les comptes existants par
+/// mesure du temps (énumération d'utilisateurs).
+fn dummy_hash() -> &'static str {
+    static H: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    H.get_or_init(|| hash_password("moncap-dummy-timing-guard").unwrap_or_default())
+}
+
+/// Consomme le même temps qu'une vérification réelle, sans rien authentifier.
+pub fn dummy_verify(password: &str) {
+    let _ = verify_password(password, dummy_hash());
+}
+
 /// Extracteur : exige un en-tête `Authorization: Bearer <jwt>` valide.
 pub(crate) struct AuthUser(pub(crate) i32);
 
@@ -95,5 +109,52 @@ impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
         verify_token(token)
             .map(AuthUser)
             .ok_or(AppError::Unauthorized)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_round_trip() {
+        let t = make_token(42).unwrap();
+        assert_eq!(verify_token(&t), Some(42));
+    }
+
+    #[test]
+    fn rejects_garbage_token() {
+        assert_eq!(verify_token("pas-un-jeton"), None);
+        assert_eq!(verify_token(""), None);
+    }
+
+    #[test]
+    fn rejects_expired_token() {
+        // Jeton déjà expiré (exp en 1970) signé avec le bon secret.
+        let claims = Claims { sub: 7, exp: 1 };
+        let t = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(&secret()),
+        )
+        .unwrap();
+        assert_eq!(verify_token(&t), None);
+    }
+
+    #[test]
+    fn password_hash_round_trip() {
+        let h = hash_password("s3cret!").unwrap();
+        assert!(verify_password("s3cret!", &h));
+        assert!(!verify_password("mauvais", &h));
+    }
+
+    #[test]
+    fn verify_password_tolerates_bad_hash() {
+        assert!(!verify_password("x", "pas-un-hash"));
+    }
+
+    #[test]
+    fn dummy_verify_does_not_panic() {
+        dummy_verify("n'importe quoi");
     }
 }
