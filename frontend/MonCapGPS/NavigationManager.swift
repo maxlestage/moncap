@@ -75,6 +75,11 @@ final class NavigationManager: ObservableObject {
         }
     }
 
+    /// Annonce vocale ponctuelle (ex. signalement à proximité).
+    func announce(_ text: String) {
+        speak(text)
+    }
+
     func stop() {
         active = false
         rerouting = false

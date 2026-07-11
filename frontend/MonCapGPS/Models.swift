@@ -77,6 +77,13 @@ struct NewTrip: Codable {
     let duration_min: Double
 }
 
+/// Un lieu favori (Domicile / Travail), mémorisé sur l'appareil.
+struct FavoritePlace: Codable {
+    let lat: Double
+    let lon: Double
+    let label: String
+}
+
 /// Une recherche de destination récente (synchronisée avec le backend, avec
 /// repli local hors ligne).
 struct RecentSearch: Codable, Identifiable {
@@ -137,7 +144,7 @@ struct LiveUser: Identifiable {
     var lastSeen: Date = Date()
 }
 
-/// Signalement façon Waze.
+/// Signalement façon Waze (persisté côté serveur, avec votes).
 struct Alert: Identifiable, Codable {
     let id: Int
     let category: String
@@ -145,6 +152,9 @@ struct Alert: Identifiable, Codable {
     let lon: Double
     let label: String
     let ts: Double
+    /// Votes « toujours là » / « plus là » (absents des anciens serveurs).
+    var confirms: Int?
+    var denies: Int?
 }
 
 /// Événement reçu du serveur via WebSocket (enum « tagué » par `kind`).
@@ -153,6 +163,7 @@ enum ServerEvent {
     case live(LiveUser)
     case liveGone(Int)
     case alert(Alert)
+    case alertGone(Int)
     case alerts([Alert])
 }
 
@@ -180,6 +191,8 @@ extension ServerEvent: Decodable {
         case "alert":
             // Les champs de l'alerte sont au même niveau que `kind`.
             self = .alert(try Alert(from: decoder))
+        case "alert_gone":
+            self = .alertGone(try c.decode(Int.self, forKey: .id))
         case "alerts":
             self = .alerts(try c.decode([Alert].self, forKey: .alerts))
         default:
