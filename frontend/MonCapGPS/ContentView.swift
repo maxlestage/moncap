@@ -407,6 +407,8 @@ struct MapHomeView: View {
     @State private var pois: [POI] = []
     /// Région actuellement visible (pour chercher les lieux dans la zone).
     @State private var visibleRegion: MKCoordinateRegion?
+    /// Région du dernier chargement de lieux (anti-rechargements inutiles).
+    @State private var lastPOIRegion: MKCoordinateRegion?
     /// Lieu Apple natif touché directement sur la carte (resto, hôtel, musée…).
     @State private var selectedFeature: MapFeature?
     /// Signalement touché sur la carte (pour voter 👍/👎).
@@ -861,7 +863,8 @@ struct MapHomeView: View {
         // quand on déplace la carte (fin de geste uniquement).
         .onMapCameraChange(frequency: .onEnd) { ctx in
             visibleRegion = ctx.region
-            if let kind = poiKind, !nav.active {
+            // Recharge les lieux seulement si la carte a vraiment bougé.
+            if let kind = poiKind, !nav.active, regionChangedEnough(ctx.region) {
                 Task { await loadPOIs(kind) }
             }
         }
@@ -1021,13 +1024,29 @@ struct MapHomeView: View {
         if poiKind == kind {
             poiKind = nil
             pois = []
+            lastPOIRegion = nil
             return
         }
         poiKind = kind
+        lastPOIRegion = nil
         Task { await loadPOIs(kind) }
     }
 
+    /// Vrai si la carte a suffisamment bougé pour justifier un rechargement
+    /// des lieux (≥ 25 % de déplacement ou changement de zoom net).
+    private func regionChangedEnough(_ r: MKCoordinateRegion) -> Bool {
+        guard let last = lastPOIRegion else { return true }
+        let movedLat = abs(r.center.latitude - last.center.latitude)
+            > last.span.latitudeDelta * 0.25
+        let movedLon = abs(r.center.longitude - last.center.longitude)
+            > last.span.longitudeDelta * 0.25
+        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.6
+            || r.span.latitudeDelta < last.span.latitudeDelta / 1.6
+        return movedLat || movedLon || zoomed
+    }
+
     /// Cherche les lieux de la catégorie dans la zone visible de la carte.
+    /// En cas d'échec réseau, les épingles existantes sont conservées.
     private func loadPOIs(_ kind: POIKind) async {
         let region = visibleRegion
             ?? location.coordinate.map {
@@ -1037,9 +1056,11 @@ struct MapHomeView: View {
 
         // Baignade : plages, lacs, piscines… d'OpenStreetMap.
         if kind == .water {
-            let found = await fetchSwimmingSpots(in: region)
+            // Échec réseau → on garde ce qui est affiché.
+            guard let found = await fetchSwimmingSpots(in: region) else { return }
             guard poiKind == kind else { return }
             pois = found
+            lastPOIRegion = region
             return
         }
 
@@ -1047,17 +1068,20 @@ struct MapHomeView: View {
         req.naturalLanguageQuery = kind.query
         req.region = region
         req.resultTypes = .pointOfInterest
-        let resp = try? await MKLocalSearch(request: req).start()
+        // Échec réseau → on garde ce qui est affiché.
+        guard let resp = try? await MKLocalSearch(request: req).start() else { return }
         // La catégorie a pu changer pendant la recherche.
         guard poiKind == kind else { return }
-        pois = (resp?.mapItems ?? []).prefix(25).map {
+        pois = resp.mapItems.prefix(25).map {
             POI(name: $0.name ?? "Lieu", coordinate: $0.placemark.coordinate)
         }
+        lastPOIRegion = region
     }
 
     /// Lieux de baignade (OpenStreetMap) dans la zone visible : plages, zones
     /// de baignade en lac/rivière, piscines publiques, parcs aquatiques 🏊.
-    private func fetchSwimmingSpots(in region: MKCoordinateRegion) async -> [POI] {
+    /// Renvoie nil en cas d'échec réseau (pour conserver l'affichage actuel).
+    private func fetchSwimmingSpots(in region: MKCoordinateRegion) async -> [POI]? {
         let south = region.center.latitude - region.span.latitudeDelta / 2
         let north = region.center.latitude + region.span.latitudeDelta / 2
         let west = region.center.longitude - region.span.longitudeDelta / 2
@@ -1072,11 +1096,13 @@ struct MapHomeView: View {
             + "nwr[\"leisure\"=\"water_park\"]\(bbox);"
             + "nwr[\"leisure\"=\"sports_centre\"][\"sport\"=\"swimming\"]\(bbox);"
             + ");out center 60;"
-        var comps = URLComponents(string: "https://overpass-api.de/api/interpreter")!
+        // Miroir Overpass dédié, pour ne pas partager la limite de débit avec
+        // les requêtes de limitations de vitesse.
+        var comps = URLComponents(string: "https://overpass.kumi.systems/api/interpreter")!
         comps.queryItems = [URLQueryItem(name: "data", value: q)]
         guard let url = comps.url,
             let (data, _) = try? await URLSession.shared.data(from: url)
-        else { return [] }
+        else { return nil }
         struct Resp: Decodable { let elements: [Element] }
         struct Center: Decodable { let lat: Double; let lon: Double }
         struct Element: Decodable {
@@ -1085,7 +1111,7 @@ struct MapHomeView: View {
             let center: Center?
             let tags: [String: String]?
         }
-        guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return [] }
+        guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return nil }
         var out: [POI] = []
         for el in resp.elements {
             let lat = el.lat ?? el.center?.lat
