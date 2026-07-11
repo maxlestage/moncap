@@ -7,6 +7,10 @@ private let alertTypes: [(category: String, emoji: String, label: String, color:
     ("accident", "💥", "Accident", .red),
     ("bouchon", "🚧", "Bouchon", .orange),
     ("danger", "⚠️", "Danger", .yellow),
+    ("vehicule", "🚘", "Véhicule arrêté", .gray),
+    ("objet", "📦", "Objet sur la route", .brown),
+    ("travaux", "🏗️", "Travaux", .yellow),
+    ("brouillard", "🌫️", "Brouillard", .teal),
 ]
 
 private func emoji(for category: String) -> String {
@@ -404,6 +408,10 @@ struct MapHomeView: View {
     @State private var etaShare: IdentifiableText?
     /// Dernier avertissement de dépassement de vitesse (anti-spam).
     @State private var lastSpeedWarning = Date.distantPast
+    /// Première position reçue → mise à jour immédiate de la limite de vitesse.
+    @State private var didInitialSpeedFetch = false
+    /// Dernière recherche d'itinéraire plus rapide (toutes les 90 s).
+    @State private var lastFasterCheck = Date.distantPast
     /// Infos du compte (points de contribution).
     @State private var accountInfo: AccountInfo?
     /// Confirmation de suppression du compte.
@@ -520,12 +528,22 @@ struct MapHomeView: View {
             if sharing {
                 realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: liveAvatar)
             }
+            // Limites de vitesse : mise à jour immédiate au lancement, puis en
+            // continu (cache d'itinéraire d'abord, Overpass sinon) — même hors
+            // navigation, comme Waze.
+            if !didInitialSpeedFetch {
+                didInitialSpeedFetch = true
+                speedLimit.refreshNow(c)
+            } else {
+                speedLimit.update(c)
+            }
+            if location.speedKmh > 15 { checkOverspeed() }
+
             if nav.active {
                 nav.update(c)
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
-                speedLimit.update(c)
-                checkOverspeed()
+                maybeCheckFasterRoute(from: c)
                 // Vue conduite 3D : la caméra suit, inclinée, dans le sens de la
                 // marche — sauf si on a déplacé la carte à la main.
                 if is3D, !previewing, followsRoute {
@@ -542,7 +560,9 @@ struct MapHomeView: View {
             UIApplication.shared.isIdleTimerDisabled = isActive
             // GPS + guidage vocal continuent en arrière-plan / écran verrouillé.
             location.setBackgroundTracking(isActive)
-            if !isActive { speedLimit.reset() }
+            // Fin de navigation : on vide le cache d'itinéraire mais on garde
+            // la limite courante affichée.
+            if !isActive { speedLimit.clearRoute() }
             // Fin de navigation (arrivée ou « Quitter ») → on enregistre le trajet.
             if wasActive && !isActive {
                 Task { await saveRecordedTrip() }
@@ -576,6 +596,24 @@ struct MapHomeView: View {
     private func reroutePreferencesChanged() {
         guard !nav.active, let dest = pendingDestination else { return }
         Task { await presentRouteOptions(to: dest) }
+    }
+
+    /// Cherche périodiquement (90 s) un itinéraire plus rapide vers la
+    /// destination (mode voiture) et l'applique s'il fait gagner ≥ 2 min.
+    private func maybeCheckFasterRoute(from c: CLLocationCoordinate2D) {
+        guard travelMode == .car, !nav.rerouting,
+            Date().timeIntervalSince(lastFasterCheck) > 90,
+            let dest = nav.destination
+        else { return }
+        lastFasterCheck = Date()
+        Task {
+            guard let route = await drivingRoute(from: c, to: dest, transportType: .automobile)
+            else { return }
+            let saved = nav.etaMinutes - route.expectedTravelTime / 60
+            if saved >= 2, nav.active {
+                nav.applyFasterRoute(route: route, savedMinutes: Int(saved.rounded()))
+            }
+        }
     }
 
     /// Vrai si la vitesse actuelle dépasse la limite connue (marge 5 km/h).
@@ -1298,9 +1336,9 @@ struct MapHomeView: View {
         .background(.regularMaterial, in: Circle())
         .overlay(Circle().stroke(isOverspeeding ? Color.red : .clear, lineWidth: 3))
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
-        // Panneau de limitation (données OSM) pendant la navigation.
+        // Panneau de limitation (données OSM), affiché dès qu'il est connu.
         .overlay(alignment: .topTrailing) {
-            if nav.active, let lim = speedLimit.limitKmh {
+            if let lim = speedLimit.limitKmh {
                 ZStack {
                     Circle().fill(.white)
                     Circle().stroke(Color.red, lineWidth: 4).padding(2)
@@ -1809,7 +1847,7 @@ struct MapHomeView: View {
             .padding(.horizontal)
         }
         .padding(.bottom, 16)
-        .presentationDetents([.height(280)])
+        .presentationDetents([.medium])
     }
 
     // MARK: - Feuille « Mes trajets » (historique)
@@ -2105,6 +2143,8 @@ struct MapHomeView: View {
         previewTask?.cancel()
         previewing = false
         followsRoute = true
+        // Précharge les limites de vitesse le long de l'itinéraire choisi.
+        speedLimit.preload(along: option.coordinates)
         nav.start(steps: option.steps, coordinates: option.coordinates,
                   distanceKm: option.km, etaMinutes: option.minutes, destination: dest)
         routeOptions = []

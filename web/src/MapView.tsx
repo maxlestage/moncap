@@ -22,6 +22,10 @@ const ALERT_EMOJI: Record<string, string> = {
   accident: "💥",
   bouchon: "🚧",
   danger: "⚠️",
+  vehicule: "🚘",
+  objet: "📦",
+  travaux: "🏗️",
+  brouillard: "🌫️",
 };
 
 /** Échappe le HTML : les popups Leaflet interprètent le HTML (anti-XSS). */
