@@ -766,6 +766,33 @@ struct MapHomeView: View {
                         .stroke(o.color,
                                 style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
                 }
+                // Aperçu par itinéraire : bulle durée + coût au milieu du
+                // tracé, tapable pour sélectionner l'itinéraire.
+                ForEach(routeOptions.filter { $0.coordinates.count >= 2 }) { o in
+                    Annotation("", coordinate: o.coordinates[o.coordinates.count / 2]) {
+                        let isSel = o.id == selectedRouteID
+                        Button {
+                            withAnimation { selectedRouteID = o.id }
+                        } label: {
+                            VStack(spacing: 0) {
+                                Text(String(format: "%.0f min", o.minutes))
+                                    .font(.caption.weight(.bold))
+                                if let cost = routeCostShort(o) {
+                                    Text(cost).font(.caption2.weight(.semibold))
+                                }
+                            }
+                            .foregroundStyle(isSel ? .white : .primary)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(
+                                isSel ? AnyShapeStyle(o.color) : AnyShapeStyle(.regularMaterial),
+                                in: Capsule())
+                            .overlay(Capsule().stroke(o.color, lineWidth: 2))
+                            .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             } else if !multiRoutes.isEmpty && !nav.active {
                 // Plusieurs trajets simultanés (un par point), chacun sa couleur.
                 ForEach(multiRoutes) { r in
@@ -1152,19 +1179,33 @@ struct MapHomeView: View {
     /// Coût estimé du trajet pour mon véhicule : carburant + péages.
     /// Les péages sont une estimation (part d'autoroute × ~0,078 €/km,
     /// tarif moyen français classe 1) — pas le tarif exact du concessionnaire.
-    private func routeCostText(_ o: RouteOption) -> String? {
+    private func routeCosts(_ o: RouteOption) -> (fuel: Double, toll: Double)? {
         guard travelMode == .car else { return nil }
         let price = fuel.effectivePrice(type: fuelType)
         let fuelCost = o.km * consumption / 100 * price
-        guard o.hasTolls else {
-            return String(format: "⛽ ~%.2f € · sans péage", fuelCost)
+        var toll = 0.0
+        if o.hasTolls {
+            // Part d'autoroute estimée d'après la vitesse moyenne.
+            let avgKmh = o.minutes > 0 ? o.km / (o.minutes / 60) : 0
+            toll = o.km * max(0, min(0.9, (avgKmh - 55) / 60)) * 0.078
         }
-        // Part d'autoroute estimée d'après la vitesse moyenne de l'itinéraire.
-        let avgKmh = o.minutes > 0 ? o.km / (o.minutes / 60) : 0
-        let motorwayShare = max(0, min(0.9, (avgKmh - 55) / 60))
-        let tollCost = o.km * motorwayShare * 0.078
-        return String(format: "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €",
-                      fuelCost, tollCost, fuelCost + tollCost)
+        return (fuelCost, toll)
+    }
+
+    /// Détail du coût (liste du comparateur).
+    private func routeCostText(_ o: RouteOption) -> String? {
+        guard let c = routeCosts(o) else { return nil }
+        if c.toll > 0 {
+            return String(format: "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €",
+                          c.fuel, c.toll, c.fuel + c.toll)
+        }
+        return String(format: "⛽ ~%.2f € · sans péage", c.fuel)
+    }
+
+    /// Coût total compact (« ~19,70 € ») pour les bulles sur la carte.
+    private func routeCostShort(_ o: RouteOption) -> String? {
+        guard let c = routeCosts(o) else { return nil }
+        return String(format: "~%.2f €", c.fuel + c.toll)
     }
 
     /// Infos détaillées : ligne principale + dénivelé sur une ligne à part.
@@ -1178,7 +1219,7 @@ struct MapHomeView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            if !compact, let cost = routeCostText(o) {
+            if let cost = routeCostText(o) {
                 Text(cost)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
