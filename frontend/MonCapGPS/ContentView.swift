@@ -284,7 +284,7 @@ enum POIKind: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .water: return "Points d'eau"
+        case .water: return "Baignade"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
         case .hotel: return "Hôtels"
@@ -295,7 +295,7 @@ enum POIKind: String, CaseIterable, Identifiable {
 
     var emoji: String {
         switch self {
-        case .water: return "💧"
+        case .water: return "🏊"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
         case .hotel: return "🏨"
@@ -1035,9 +1035,9 @@ struct MapHomeView: View {
             }
         guard let region else { return }
 
-        // Points d'eau : fontaines à eau potable d'OpenStreetMap.
+        // Baignade : plages, lacs, piscines… d'OpenStreetMap.
         if kind == .water {
-            let found = await fetchWaterPoints(in: region)
+            let found = await fetchSwimmingSpots(in: region)
             guard poiKind == kind else { return }
             pois = found
             return
@@ -1055,34 +1055,56 @@ struct MapHomeView: View {
         }
     }
 
-    /// Fontaines à eau potable (OSM `drinking_water` + robinets publics) dans
-    /// la zone visible — précieuses l'été 🥵.
-    private func fetchWaterPoints(in region: MKCoordinateRegion) async -> [POI] {
+    /// Lieux de baignade (OpenStreetMap) dans la zone visible : plages, zones
+    /// de baignade en lac/rivière, piscines publiques, parcs aquatiques 🏊.
+    private func fetchSwimmingSpots(in region: MKCoordinateRegion) async -> [POI] {
         let south = region.center.latitude - region.span.latitudeDelta / 2
         let north = region.center.latitude + region.span.latitudeDelta / 2
         let west = region.center.longitude - region.span.longitudeDelta / 2
         let east = region.center.longitude + region.span.longitudeDelta / 2
         let bbox = "(\(south),\(west),\(north),\(east))"
-        let q = "[out:json][timeout:10];("
-            + "node[\"amenity\"=\"drinking_water\"]\(bbox);"
-            + "node[\"man_made\"=\"water_tap\"]\(bbox);"
-            + ");out 60;"
+        // nwr = nœuds + chemins + relations ; `out center` fournit un point
+        // représentatif pour les surfaces (plages, lacs…).
+        let q = "[out:json][timeout:12];("
+            + "nwr[\"leisure\"=\"swimming_area\"]\(bbox);"
+            + "nwr[\"natural\"=\"beach\"]\(bbox);"
+            + "nwr[\"leisure\"=\"beach_resort\"]\(bbox);"
+            + "nwr[\"leisure\"=\"water_park\"]\(bbox);"
+            + "nwr[\"leisure\"=\"sports_centre\"][\"sport\"=\"swimming\"]\(bbox);"
+            + ");out center 60;"
         var comps = URLComponents(string: "https://overpass-api.de/api/interpreter")!
         comps.queryItems = [URLQueryItem(name: "data", value: q)]
         guard let url = comps.url,
             let (data, _) = try? await URLSession.shared.data(from: url)
         else { return [] }
         struct Resp: Decodable { let elements: [Element] }
+        struct Center: Decodable { let lat: Double; let lon: Double }
         struct Element: Decodable {
-            let lat: Double
-            let lon: Double
+            let lat: Double?
+            let lon: Double?
+            let center: Center?
             let tags: [String: String]?
         }
         guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return [] }
-        return resp.elements.map {
-            POI(name: $0.tags?["name"] ?? "Point d'eau",
-                coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon))
+        var out: [POI] = []
+        for el in resp.elements {
+            let lat = el.lat ?? el.center?.lat
+            let lon = el.lon ?? el.center?.lon
+            guard let lat, let lon else { continue }
+            let name = el.tags?["name"] ?? Self.swimName(fromTags: el.tags)
+            out.append(POI(name: name,
+                           coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
         }
+        return out
+    }
+
+    /// Libellé par défaut d'un lieu de baignade selon ses tags OSM.
+    private static func swimName(fromTags tags: [String: String]?) -> String {
+        if tags?["natural"] == "beach" { return "Plage" }
+        if tags?["leisure"] == "swimming_area" { return "Baignade" }
+        if tags?["leisure"] == "beach_resort" { return "Plage aménagée" }
+        if tags?["leisure"] == "water_park" { return "Parc aquatique" }
+        return "Piscine"
     }
 
     /// Bouton menu (lieux enregistrés, avatar, compte, partage…).
