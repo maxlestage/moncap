@@ -570,19 +570,28 @@ struct AuthResponse {
     username: String,
 }
 
+/// Filtre `username` sans tenir compte de la casse (`LOWER(username) = …`),
+/// pour qu'une adresse saisie « Max@X.com » corresponde à « max@x.com ».
+fn username_matches(username: &str) -> sea_orm::sea_query::SimpleExpr {
+    use sea_orm::sea_query::{Expr, Func};
+    Expr::expr(Func::lower(Expr::col(user::Column::Username))).eq(username.to_lowercase())
+}
+
 /// POST /auth/signup — crée un compte et renvoie un jeton.
 async fn signup(
     State(db): State<DatabaseConnection>,
     Json(c): Json<Credentials>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let username = c.username.trim().to_string();
+    // Normalise l'identifiant : sans espaces superflus ni casse, pour éviter
+    // les doublons « Max » / « max » et les échecs de connexion liés à la casse.
+    let username = c.username.trim().to_lowercase();
     if username.chars().count() < 3 || c.password.len() < 6 {
         return Err(AppError::BadRequest(
             "nom (≥3) et mot de passe (≥6) requis".into(),
         ));
     }
     if user::Entity::find()
-        .filter(user::Column::Username.eq(&username))
+        .filter(username_matches(&username))
         .one(&db)
         .await?
         .is_some()
@@ -607,19 +616,24 @@ async fn login(
     State(db): State<DatabaseConnection>,
     Json(c): Json<Credentials>,
 ) -> Result<Json<AuthResponse>, AppError> {
-    let username = c.username.trim().to_string();
+    let username = c.username.trim();
     let found = user::Entity::find()
-        .filter(user::Column::Username.eq(&username))
+        .filter(username_matches(username))
         .one(&db)
-        .await?
-        .ok_or(AppError::Unauthorized)?;
-    if !auth::verify_password(&c.password, &found.password_hash) {
-        return Err(AppError::Unauthorized);
+        .await?;
+    match found {
+        Some(u) if auth::verify_password(&c.password, &u.password_hash) => Ok(Json(AuthResponse {
+            token: auth::make_token(u.id)?,
+            username: u.username,
+        })),
+        Some(_) => Err(AppError::Unauthorized),
+        None => {
+            // Compte inexistant : on vérifie quand même une empreinte factice
+            // pour ne pas révéler l'absence du compte par le temps de réponse.
+            auth::dummy_verify(&c.password);
+            Err(AppError::Unauthorized)
+        }
     }
-    Ok(Json(AuthResponse {
-        token: auth::make_token(found.id)?,
-        username,
-    }))
 }
 
 /// Ajoute `sslmode=require` pour les bases distantes (ex. Heroku Postgres

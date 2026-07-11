@@ -81,6 +81,19 @@ enum Session {
         UserDefaults.standard.removeObject(forKey: tokenKey)
         UserDefaults.standard.removeObject(forKey: userKey)
     }
+
+    /// Émise quand le backend rejette le jeton (401) : jeton expiré ou
+    /// invalidé. L'app efface la session et revient à l'écran de connexion.
+    static let expiredNotification = Notification.Name("moncap.session.expired")
+
+    /// Invalide la session locale et prévient l'app (une seule fois) qu'il faut
+    /// se reconnecter. Ne fait rien si aucune session n'est active (ex. échec
+    /// de connexion, où l'utilisateur n'était pas encore authentifié).
+    static func markExpired() {
+        guard isAuthenticated else { return }
+        clear()
+        NotificationCenter.default.post(name: expiredNotification, object: nil)
+    }
 }
 
 /// Réponse d'authentification.
@@ -127,9 +140,22 @@ struct APIClient {
     private func send<T: Decodable>(_ req: URLRequest) async throws -> T {
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode == 401 {
+            Session.markExpired()
             throw APIError.unauthorized
         }
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Envoie une requête sans corps de réponse à décoder (DELETE, etc.) en
+    /// gérant le 401 comme les autres appels (retour à l'écran de connexion).
+    @discardableResult
+    private func sendRaw(_ req: URLRequest) async throws -> Data {
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        if let http = resp as? HTTPURLResponse, http.statusCode == 401 {
+            Session.markExpired()
+            throw APIError.unauthorized
+        }
+        return data
     }
 
     // MARK: - Authentification
@@ -150,7 +176,12 @@ struct APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(["username": username, "password": password])
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.server("Serveur injoignable")
+        }
+        // 401 sur /login = identifiants incorrects (message clair côté vue).
+        if http.statusCode == 401 { throw APIError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else {
             throw APIError.server(String(data: data, encoding: .utf8) ?? "Échec")
         }
         let auth = try JSONDecoder().decode(AuthResponse.self, from: data)
@@ -179,7 +210,7 @@ struct APIClient {
     }
 
     func delete(id: Int) async throws {
-        _ = try await URLSession.shared.data(for: authedRequest("positions/\(id)", method: "DELETE"))
+        try await sendRaw(authedRequest("positions/\(id)", method: "DELETE"))
     }
 
     func importGPX(_ gpx: String) async throws -> [Position] {
@@ -223,7 +254,7 @@ struct APIClient {
     }
 
     func deleteTrip(id: Int) async throws {
-        _ = try await URLSession.shared.data(for: authedRequest("trips/\(id)", method: "DELETE"))
+        try await sendRaw(authedRequest("trips/\(id)", method: "DELETE"))
     }
 
     // MARK: - Recherches récentes (synchronisées)
@@ -240,11 +271,11 @@ struct APIClient {
     }
 
     func deleteSearch(id: Int) async throws {
-        _ = try await URLSession.shared.data(for: authedRequest("searches/\(id)", method: "DELETE"))
+        try await sendRaw(authedRequest("searches/\(id)", method: "DELETE"))
     }
 
     func clearSearches() async throws {
-        _ = try await URLSession.shared.data(for: authedRequest("searches", method: "DELETE"))
+        try await sendRaw(authedRequest("searches", method: "DELETE"))
     }
 
     // MARK: - Compte
@@ -258,7 +289,7 @@ struct APIClient {
 
     /// Supprime définitivement le compte et toutes ses données.
     func deleteAccount() async throws {
-        _ = try await URLSession.shared.data(for: authedRequest("account", method: "DELETE"))
+        try await sendRaw(authedRequest("account", method: "DELETE"))
     }
 
     /// Top des contributeurs (noms pseudonymisés).
@@ -274,8 +305,8 @@ struct APIClient {
 
     /// Vote « toujours là » (up) ou « plus là » sur un signalement.
     func voteAlert(id: Int, up: Bool) async throws {
-        _ = try await URLSession.shared.data(
-            for: authedRequest(
+        try await sendRaw(
+            authedRequest(
                 "alerts/\(id)/vote", method: "POST",
                 body: try JSONEncoder().encode(["up": up]), contentType: "application/json"))
     }
