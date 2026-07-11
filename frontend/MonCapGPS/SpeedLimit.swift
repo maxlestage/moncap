@@ -102,12 +102,13 @@ final class SpeedLimitService: ObservableObject {
         return (0..<n).map { coords[Int((Double($0) * step).rounded())] }
     }
 
-    /// Requête groupée : limites des voies autour de chaque point échantillonné.
+    /// Requête groupée : limites des voies autour de chaque point échantillonné
+    /// (maxspeed explicite ou défaut légal français).
     private static func fetchLimits(at points: [CLLocationCoordinate2D])
         async -> [(coord: CLLocationCoordinate2D, limit: Int)]?
     {
         let clauses = points
-            .map { "way(around:25,\($0.latitude),\($0.longitude))[highway][maxspeed];" }
+            .map { "way(around:25,\($0.latitude),\($0.longitude))[highway];" }
             .joined()
         let q = "[out:json][timeout:15];(\(clauses));out tags center;"
         var comps = URLComponents(string: "https://overpass-api.de/api/interpreter")!
@@ -123,16 +124,23 @@ final class SpeedLimitService: ObservableObject {
         guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return nil }
         var out: [(CLLocationCoordinate2D, Int)] = []
         for el in resp.elements {
-            guard let center = el.center, let raw = el.tags?["maxspeed"],
-                let limit = parseMaxspeed(raw)
-            else { continue }
+            guard let center = el.center, let limit = limit(fromTags: el.tags) else { continue }
             out.append((CLLocationCoordinate2D(latitude: center.lat, longitude: center.lon), limit))
         }
         return out
     }
 
-    /// Interprète les valeurs `maxspeed` OSM courantes.
+    /// Interprète les valeurs `maxspeed` OSM courantes, y compris les codes
+    /// nationaux français.
     private static func parseMaxspeed(_ raw: String) -> Int? {
+        switch raw {
+        case "FR:urban": return 50
+        case "FR:rural": return 80
+        case "FR:motorway": return 130
+        case "FR:zone30", "zone30": return 30
+        case "FR:walk", "walk": return 20
+        default: break
+        }
         if let v = Int(raw) { return v }
         if raw.hasSuffix(" km/h"), let v = Int(raw.dropLast(5)) { return v }
         if raw.hasSuffix(" mph"), let v = Int(raw.dropLast(4)) {
@@ -141,11 +149,12 @@ final class SpeedLimitService: ObservableObject {
         return nil
     }
 
-    /// Cherche le `maxspeed` OSM de la voie la plus proche (rayon 20 m).
+    /// Cherche la limite de la voie la plus proche (rayon 20 m) : `maxspeed`
+    /// OSM si présent, sinon limite légale française selon le type de voie.
     private static func fetchLimit(around c: CLLocationCoordinate2D) async -> Int? {
         let q = "[out:json][timeout:8];"
-            + "way(around:20,\(c.latitude),\(c.longitude))[highway][maxspeed];"
-            + "out tags 1;"
+            + "way(around:20,\(c.latitude),\(c.longitude))[highway];"
+            + "out tags 5;"
         var comps = URLComponents(string: "https://overpass-api.de/api/interpreter")!
         comps.queryItems = [URLQueryItem(name: "data", value: q)]
         guard let url = comps.url else { return nil }
@@ -156,9 +165,36 @@ final class SpeedLimitService: ObservableObject {
         struct Resp: Decodable { let elements: [Element] }
         struct Element: Decodable { let tags: [String: String]? }
         guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return nil }
+        // Priorité aux voies avec maxspeed explicite, puis défauts français.
         for el in resp.elements {
             if let raw = el.tags?["maxspeed"], let v = parseMaxspeed(raw) { return v }
         }
+        for el in resp.elements {
+            if let v = limit(fromTags: el.tags) { return v }
+        }
         return nil
+    }
+
+    /// Limite d'une voie : `maxspeed` si présent, sinon défaut français.
+    private static func limit(fromTags tags: [String: String]?) -> Int? {
+        guard let tags else { return nil }
+        if let raw = tags["maxspeed"], let v = parseMaxspeed(raw) { return v }
+        if let highway = tags["highway"] { return frenchDefault(forHighway: highway) }
+        return nil
+    }
+
+    /// Limites légales françaises 🇫🇷 par type de voie OSM, appliquées quand
+    /// `maxspeed` n'est pas renseigné.
+    private static func frenchDefault(forHighway highway: String) -> Int? {
+        switch highway {
+        case "motorway": return 130
+        case "trunk": return 110
+        case "primary", "secondary", "tertiary", "unclassified": return 80
+        case "motorway_link", "trunk_link", "primary_link", "secondary_link": return 70
+        case "residential": return 50
+        case "living_street": return 20
+        case "service": return 30
+        default: return nil
+        }
     }
 }
