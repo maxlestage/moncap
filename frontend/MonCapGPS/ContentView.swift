@@ -1020,15 +1020,11 @@ struct MapHomeView: View {
         .onTapGesture { showSearch = true }
     }
 
-    /// Catégories triées selon le moment de la journée : restos à midi,
-    /// baignade l'après-midi, sorties le soir, hôtels la nuit.
-    private var poiKindsForNow: [POIKind] {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 11...14: return [.restaurant, .fastFood, .water, .tourism, .hangout, .hotel]
-        case 15...18: return [.water, .tourism, .fastFood, .restaurant, .hangout, .hotel]
-        case 19...23: return [.restaurant, .hangout, .fastFood, .hotel, .water, .tourism]
-        case 0...5: return [.hotel, .fastFood, .hangout, .restaurant, .water, .tourism]
-        default: return [.fastFood, .restaurant, .water, .tourism, .hangout, .hotel]
+    /// Catégories triées par ordre alphabétique de leur libellé (comparaison
+    /// localisée pour gérer les accents, ex. « Hôtels »).
+    private var poiKindsSorted: [POIKind] {
+        POIKind.allCases.sorted {
+            $0.label.localizedStandardCompare($1.label) == .orderedAscending
         }
     }
 
@@ -1036,7 +1032,7 @@ struct MapHomeView: View {
     private var poiBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(poiKindsForNow) { kind in
+                ForEach(poiKindsSorted) { kind in
                     let isOn = poiKind == kind
                     Button {
                         togglePOIKind(kind)
