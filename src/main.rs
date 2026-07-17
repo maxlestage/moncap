@@ -576,7 +576,38 @@ async fn main() {
     let addr = format!("0.0.0.0:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     tracing::info!("moncap-gps écoute sur http://{addr}");
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+}
+
+/// Attend un signal d'arrêt — SIGTERM (envoyé par Heroku au recyclage du dyno
+/// et à chaque déploiement) ou Ctrl+C en local — pour un arrêt en douceur :
+/// le serveur cesse d'accepter de nouvelles connexions mais laisse les requêtes
+/// en cours se terminer, au lieu d'être coupées net.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = terminate => {}
+    }
+    tracing::info!("signal d'arrêt reçu — arrêt en douceur");
 }
 
 /// Identifiants envoyés à l'inscription / connexion.

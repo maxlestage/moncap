@@ -8,7 +8,7 @@ axum = { version = "0.7", features = ["ws"] }
 # Features ciblées (au lieu de "full") : évite de compiler fs/process/signal/
 # io-std inutiles ici → build plus léger et binaire un peu plus petit.
 tokio = { version = "1", features = [
-    "rt-multi-thread", "macros", "sync", "time", "net",
+    "rt-multi-thread", "macros", "sync", "time", "net", "signal",
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
