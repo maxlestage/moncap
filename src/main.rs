@@ -1318,7 +1318,7 @@ async fn leaderboard(
             ),
         })
         .collect();
-    entries.sort_by(|a, b| b.points.cmp(&a.points));
+    entries.sort_by_key(|b| std::cmp::Reverse(b.points));
     entries.truncate(10);
     Ok(Json(entries))
 }
