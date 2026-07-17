@@ -447,6 +447,67 @@ struct Stats {
     centroid: Option<Coord>,
 }
 
+/// Construit le routeur complet de l'API (routes, limiteurs de débit, couches
+/// compression/CORS/trace). Extrait de `main` pour être réutilisable tel quel
+/// par les tests d'intégration.
+fn build_app(state: AppState) -> Router {
+    // Front web statique (React + Bun, voir web/). Servi en repli : toute
+    // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
+    // avec index.html en repli (SPA).
+    let web = ServeDir::new("web/dist").not_found_service(ServeFile::new("web/dist/index.html"));
+
+    // Limiteurs : général (par IP) + strict sur l'authentification (anti brute-force).
+    let general = Arc::new(RateLimiter::new(300, 60));
+    let auth_rl = Arc::new(RateLimiter::new(20, 60));
+
+    // Routes d'auth, sous limite stricte.
+    let auth_routes = Router::new()
+        .route("/auth/signup", post(signup))
+        .route("/auth/login", post(login))
+        .layer(middleware::from_fn(move |req, next| {
+            rate_limit(auth_rl.clone(), req, next)
+        }));
+
+    // Routes volontairement minimales.
+    Router::new()
+        .route("/health", get(|| async { "ok" }))
+        .route("/positions", get(list_positions).post(add_position))
+        .route(
+            "/positions/:id",
+            axum::routing::put(update_position).delete(delete_position),
+        )
+        .route("/positions/nearest", get(nearest_position))
+        .route("/positions/import", post(import_gpx))
+        .route("/positions.gpx", get(export_gpx))
+        .route("/stats", get(stats))
+        .route("/route", post(compute_route))
+        .route("/route/multi", post(compute_multi_route))
+        .route("/trips", get(list_trips).post(add_trip))
+        .route("/trips/:id", axum::routing::delete(delete_trip))
+        .route(
+            "/searches",
+            get(list_searches).post(add_search).delete(clear_searches),
+        )
+        .route("/searches/:id", axum::routing::delete(delete_search))
+        .route("/alerts", get(list_alerts))
+        .route("/alerts/:id/vote", post(vote_alert))
+        .route("/account", get(account_info).delete(delete_account))
+        .route("/leaderboard", get(leaderboard))
+        .route("/privacy", get(privacy_page))
+        .route("/ws", get(ws_handler))
+        .merge(auth_routes)
+        .fallback_service(web)
+        .layer(middleware::from_fn(move |req, next| {
+            rate_limit(general.clone(), req, next)
+        }))
+        .layer(TraceLayer::new_for_http())
+        // Compresse les réponses (gzip/brotli) selon Accept-Encoding — utile
+        // surtout pour les payloads texte (listes JSON, export GPX).
+        .layer(CompressionLayer::new())
+        .layer(cors_layer())
+        .with_state(state)
+}
+
 #[tokio::main]
 async fn main() {
     // Logs structurés (niveau via RUST_LOG, défaut: info).
@@ -495,61 +556,7 @@ async fn main() {
     start_redis_bridge(tx.clone());
     let state = AppState { db, tx };
 
-    // Front web statique (React + Bun, voir web/). Servi en repli : toute
-    // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
-    // avec index.html en repli (SPA).
-    let web = ServeDir::new("web/dist").not_found_service(ServeFile::new("web/dist/index.html"));
-
-    // Limiteurs : général (par IP) + strict sur l'authentification (anti brute-force).
-    let general = Arc::new(RateLimiter::new(300, 60));
-    let auth_rl = Arc::new(RateLimiter::new(20, 60));
-
-    // Routes d'auth, sous limite stricte.
-    let auth_routes = Router::new()
-        .route("/auth/signup", post(signup))
-        .route("/auth/login", post(login))
-        .layer(middleware::from_fn(move |req, next| {
-            rate_limit(auth_rl.clone(), req, next)
-        }));
-
-    // Routes volontairement minimales.
-    let app = Router::new()
-        .route("/health", get(|| async { "ok" }))
-        .route("/positions", get(list_positions).post(add_position))
-        .route(
-            "/positions/:id",
-            axum::routing::put(update_position).delete(delete_position),
-        )
-        .route("/positions/nearest", get(nearest_position))
-        .route("/positions/import", post(import_gpx))
-        .route("/positions.gpx", get(export_gpx))
-        .route("/stats", get(stats))
-        .route("/route", post(compute_route))
-        .route("/route/multi", post(compute_multi_route))
-        .route("/trips", get(list_trips).post(add_trip))
-        .route("/trips/:id", axum::routing::delete(delete_trip))
-        .route(
-            "/searches",
-            get(list_searches).post(add_search).delete(clear_searches),
-        )
-        .route("/searches/:id", axum::routing::delete(delete_search))
-        .route("/alerts", get(list_alerts))
-        .route("/alerts/:id/vote", post(vote_alert))
-        .route("/account", get(account_info).delete(delete_account))
-        .route("/leaderboard", get(leaderboard))
-        .route("/privacy", get(privacy_page))
-        .route("/ws", get(ws_handler))
-        .merge(auth_routes)
-        .fallback_service(web)
-        .layer(middleware::from_fn(move |req, next| {
-            rate_limit(general.clone(), req, next)
-        }))
-        .layer(TraceLayer::new_for_http())
-        // Compresse les réponses (gzip/brotli) selon Accept-Encoding — utile
-        // surtout pour les payloads texte (listes JSON, export GPX).
-        .layer(CompressionLayer::new())
-        .layer(cors_layer())
-        .with_state(state);
+    let app = build_app(state);
 
     // Heroku impose le port via la variable d'environnement PORT.
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".to_string());
@@ -1927,5 +1934,238 @@ mod tests {
         let parsed = parse_gpx_waypoints(xml);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].label, "Point 1");
+    }
+}
+
+/// Tests d'intégration des handlers HTTP sur une vraie base Postgres.
+///
+/// Ils s'exécutent uniquement si `TEST_DATABASE_URL` est défini (base jetable,
+/// ex. service Postgres du CI) ; sinon chaque test se termine sans rien faire,
+/// pour que `cargo test` reste vert dans un environnement sans base.
+/// La requête passe par `oneshot` (aucun port réseau ouvert).
+#[cfg(test)]
+mod integration {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    /// Sérialise l'application des migrations : elles ne sont appliquées qu'une
+    /// fois pour toute la suite (le drapeau passe à `true` après le premier
+    /// test). Chaque test garde en revanche sa **propre** connexion : un pool
+    /// sqlx est lié au runtime qui l'a créé, et chaque `#[tokio::test]` a le
+    /// sien — partager le pool casserait les tests suivants.
+    static MIGRATE_ONCE: tokio::sync::Mutex<bool> = tokio::sync::Mutex::const_new(false);
+
+    /// Application de test, ou `None` si `TEST_DATABASE_URL` n'est pas défini.
+    async fn test_app() -> Option<Router> {
+        let url = std::env::var("TEST_DATABASE_URL").ok()?;
+        let db = Database::connect(&url)
+            .await
+            .expect("connexion base de test");
+        {
+            let mut migrated = MIGRATE_ONCE.lock().await;
+            if !*migrated {
+                Migrator::up(&db, None)
+                    .await
+                    .expect("migrations base de test");
+                *migrated = true;
+            }
+        }
+        let (tx, _rx) = broadcast::channel::<String>(16);
+        Some(build_app(AppState { db, tx }))
+    }
+
+    /// Identifiant unique par test (base partagée) — le préfixe isole les cas.
+    fn uniq(prefix: &str) -> String {
+        format!("{prefix}-{}@test.moncap", now_ms())
+    }
+
+    fn json_req(
+        method: &str,
+        uri: &str,
+        token: Option<&str>,
+        body: serde_json::Value,
+    ) -> Request<Body> {
+        let mut b = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("content-type", "application/json");
+        if let Some(t) = token {
+            b = b.header("authorization", format!("Bearer {t}"));
+        }
+        b.body(Body::from(serde_json::to_vec(&body).unwrap()))
+            .unwrap()
+    }
+
+    fn get_req(uri: &str, token: Option<&str>) -> Request<Body> {
+        let mut b = Request::builder().method("GET").uri(uri);
+        if let Some(t) = token {
+            b = b.header("authorization", format!("Bearer {t}"));
+        }
+        b.body(Body::empty()).unwrap()
+    }
+
+    async fn body_json(resp: axum::response::Response) -> serde_json::Value {
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null)
+    }
+
+    /// Inscrit un utilisateur et renvoie son jeton.
+    async fn signup(app: &Router, user: &str) -> String {
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/signup",
+                None,
+                serde_json::json!({"username": user, "password": "s3cret!"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "signup doit réussir");
+        body_json(resp).await["token"].as_str().unwrap().to_string()
+    }
+
+    #[tokio::test]
+    async fn signup_then_authed_and_401_without_token() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("flow")).await;
+
+        // Requête authentifiée : OK avec le jeton.
+        let resp = app
+            .clone()
+            .oneshot(get_req("/account", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Sans jeton : 401.
+        let resp = app
+            .clone()
+            .oneshot(get_req("/account", None))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn login_is_case_sensitive() {
+        let Some(app) = test_app().await else { return };
+        let user = uniq("Case"); // contient une majuscule
+        signup(&app, &user).await;
+
+        // Même casse : OK.
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/login",
+                None,
+                serde_json::json!({"username": user, "password": "s3cret!"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Casse différente : 401 (auth sensible à la casse).
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/login",
+                None,
+                serde_json::json!({"username": user.to_lowercase(), "password": "s3cret!"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn wrong_password_rejected() {
+        let Some(app) = test_app().await else { return };
+        let user = uniq("pwd");
+        signup(&app, &user).await;
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/login",
+                None,
+                serde_json::json!({"username": user, "password": "mauvais"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn duplicate_signup_rejected() {
+        let Some(app) = test_app().await else { return };
+        let user = uniq("dup");
+        signup(&app, &user).await;
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/signup",
+                None,
+                serde_json::json!({"username": user, "password": "s3cret!"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn positions_persist_and_are_scoped_to_user() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("pos")).await;
+
+        // Ajoute une position.
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/positions",
+                Some(&token),
+                serde_json::json!({"lat": 48.8566, "lon": 2.3522, "label": "Paris"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // La liste de l'utilisateur contient bien la position ajoutée.
+        let resp = app
+            .clone()
+            .oneshot(get_req("/positions", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list = body_json(resp).await;
+        let arr = list.as_array().expect("liste de positions");
+        assert!(
+            arr.iter().any(|p| p["label"] == "Paris"),
+            "la position ajoutée doit apparaître dans la liste de l'utilisateur"
+        );
+
+        // Un autre utilisateur ne voit pas ces positions (isolation par compte).
+        let other = signup(&app, &uniq("pos-other")).await;
+        let resp = app
+            .clone()
+            .oneshot(get_req("/positions", Some(&other)))
+            .await
+            .unwrap();
+        let arr = body_json(resp).await;
+        assert!(
+            arr.as_array()
+                .unwrap()
+                .iter()
+                .all(|p| p["label"] != "Paris"),
+            "les positions ne doivent pas fuiter vers un autre compte"
+        );
     }
 }
