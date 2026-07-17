@@ -1,7 +1,7 @@
 import Foundation
 
 /// Connexion WebSocket temps réel : positions partagées, voitures live,
-/// signalements façon Waze.
+/// signalements communautaires.
 @MainActor
 final class RealtimeClient: ObservableObject {
     /// Voitures live des autres utilisateurs, par identifiant.

@@ -65,8 +65,8 @@ final class NavigationManager: ObservableObject {
         active = true
     }
 
-    /// Applique un itinéraire plus rapide trouvé en cours de route (façon
-    /// Waze : « X minutes de gagnées »).
+    /// Applique un itinéraire plus rapide trouvé en cours de route
+    /// (« X minutes de gagnées »).
     func applyFasterRoute(route: MKRoute, savedMinutes: Int) {
         load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
              km: route.distance / 1000, min: route.expectedTravelTime / 60,

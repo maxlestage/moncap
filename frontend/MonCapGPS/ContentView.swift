@@ -575,7 +575,7 @@ struct MapHomeView: View {
             }
             // Limites de vitesse : mise à jour immédiate au lancement, puis en
             // continu (cache d'itinéraire d'abord, Overpass sinon) — même hors
-            // navigation, comme Waze.
+            // navigation.
             if !didInitialSpeedFetch {
                 didInitialSpeedFetch = true
                 speedLimit.refreshNow(c)
@@ -604,7 +604,7 @@ struct MapHomeView: View {
                 announceNearbyAlerts(from: c)
                 maybeCheckFasterRoute(from: c)
                 // Recentre en permanence : si on a touché la carte, le suivi
-                // reprend tout seul après 8 s (façon Waze) — 3D comme 2D.
+                // reprend tout seul après 8 s — 3D comme 2D.
                 if !followsRoute, Date().timeIntervalSince(lastMapInteraction) > 8 {
                     followsRoute = true
                     if !is3D {
@@ -727,7 +727,7 @@ struct MapHomeView: View {
         nav.announce("Attention, vous dépassez la limite de \(lim) kilomètres heure.")
     }
 
-    /// Grade façon Waze selon les points de contribution.
+    /// Grade selon les points de contribution.
     private func rankName(_ points: Int) -> String {
         switch points {
         case ..<50: return "Débutant"
@@ -1652,8 +1652,8 @@ struct MapHomeView: View {
                 .font(.title2)
                 .foregroundStyle(.white)
                 .frame(width: 64, height: 64)
-                .background(Color.orange, in: Circle())
-                .shadow(color: .orange.opacity(0.5), radius: 8, y: 4)
+                .background(Color.blue, in: Circle())
+                .shadow(color: .blue.opacity(0.5), radius: 8, y: 4)
         }
         .disabled(location.coordinate == nil)
     }

@@ -42,7 +42,7 @@ bun static-server.ts 8080 dist
 - Statistiques (nombre, longueur, centre)
 - Import / export **GPX**
 - **Temps réel (WebSocket)** : synchro des positions entre tous les écrans,
-  partage de sa position en direct, signalements façon Waze (police,
+  partage de sa position en direct, signalements communautaires (police,
   accident, bouchon, danger) — pastille verte = connecté.
 - **Avatars** : choisis ton combi (vert/orange/bleu/menthe) ; il représente
   ta voiture en direct sur la carte des autres.

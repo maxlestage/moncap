@@ -161,7 +161,7 @@ struct LiveUser: Identifiable {
     var lastSeen: Date = Date()
 }
 
-/// Signalement façon Waze (persisté côté serveur, avec votes).
+/// Signalement communautaire (persisté côté serveur, avec votes).
 struct Alert: Identifiable, Codable {
     let id: Int
     let category: String
