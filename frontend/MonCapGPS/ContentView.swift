@@ -1652,8 +1652,8 @@ struct MapHomeView: View {
                 .font(.title2)
                 .foregroundStyle(.white)
                 .frame(width: 64, height: 64)
-                .background(Color.orange, in: Circle())
-                .shadow(color: .orange.opacity(0.5), radius: 8, y: 4)
+                .background(Color.blue, in: Circle())
+                .shadow(color: .blue.opacity(0.5), radius: 8, y: 4)
         }
         .disabled(location.coordinate == nil)
     }
