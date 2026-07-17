@@ -528,7 +528,10 @@ async fn main() {
         .route("/route/multi", post(compute_multi_route))
         .route("/trips", get(list_trips).post(add_trip))
         .route("/trips/:id", axum::routing::delete(delete_trip))
-        .route("/searches", get(list_searches).post(add_search).delete(clear_searches))
+        .route(
+            "/searches",
+            get(list_searches).post(add_search).delete(clear_searches),
+        )
         .route("/searches/:id", axum::routing::delete(delete_search))
         .route("/alerts", get(list_alerts))
         .route("/alerts/:id/vote", post(vote_alert))
@@ -895,7 +898,11 @@ async fn clear_searches(
 /// internes réduits) + coordonnées arrondies (~10 m). Deux recherches de même
 /// clé désignent le même lieu.
 fn recent_key(name: &str, lat: f64, lon: f64) -> String {
-    let norm = name.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let norm = name
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
     format!("{}|{:.4},{:.4}", norm, lat, lon)
 }
 
@@ -1131,8 +1138,8 @@ async fn vote_alert(
     let now = (now_ms() / 1000) as i64;
     if v.up {
         // Confirmé : on prolonge, plafonné par rapport à la création.
-        let extended = (found.expires_at.max(now) + ALERT_EXTEND_SECS)
-            .min(found.created_at + ALERT_MAX_SECS);
+        let extended =
+            (found.expires_at.max(now) + ALERT_EXTEND_SECS).min(found.created_at + ALERT_MAX_SECS);
         let updated = alert::ActiveModel {
             id: Set(found.id),
             confirms: Set(found.confirms + 1),
@@ -1146,8 +1153,15 @@ async fn vote_alert(
         let denies = found.denies + 1;
         if denies >= 2 && denies > found.confirms {
             // Infirmé par la communauté : on supprime.
-            alert::Entity::delete_by_id(found.id).exec(&state.db).await?;
-            broadcast_event(&state.tx, &ServerEvent::AlertGone { id: found.id as i64 });
+            alert::Entity::delete_by_id(found.id)
+                .exec(&state.db)
+                .await?;
+            broadcast_event(
+                &state.tx,
+                &ServerEvent::AlertGone {
+                    id: found.id as i64,
+                },
+            );
         } else {
             let updated = alert::ActiveModel {
                 id: Set(found.id),
