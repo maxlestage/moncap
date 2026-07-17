@@ -1257,22 +1257,24 @@ async fn account_info(
         .one(&db)
         .await?
         .ok_or(AppError::Unauthorized)?;
-    let alerts = alert::Entity::find()
-        .filter(alert::Column::UserId.eq(uid))
-        .count(&db)
-        .await?;
-    let trips = trip::Entity::find()
-        .filter(trip::Column::UserId.eq(uid))
-        .count(&db)
-        .await?;
-    let positions = position::Entity::find()
-        .filter(position::Column::UserId.eq(uid))
-        .count(&db)
-        .await?;
-    let searches = search::Entity::find()
-        .filter(search::Column::UserId.eq(uid))
-        .count(&db)
-        .await?;
+    // Les quatre décomptes sont indépendants : on les exécute en parallèle
+    // (try_join!) plutôt qu'en quatre allers-retours séquentiels vers Postgres.
+    // Le pool sqlx fournit une connexion à chacun → une seule latence au lieu
+    // de la somme des quatre.
+    let (alerts, trips, positions, searches) = tokio::try_join!(
+        alert::Entity::find()
+            .filter(alert::Column::UserId.eq(uid))
+            .count(&db),
+        trip::Entity::find()
+            .filter(trip::Column::UserId.eq(uid))
+            .count(&db),
+        position::Entity::find()
+            .filter(position::Column::UserId.eq(uid))
+            .count(&db),
+        search::Entity::find()
+            .filter(search::Column::UserId.eq(uid))
+            .count(&db),
+    )?;
     Ok(Json(AccountInfo {
         username: found.username,
         points: score(alerts, trips, positions, searches),
@@ -2415,5 +2417,36 @@ mod integration {
         // La base de test répond → 200 (sonde de disponibilité, sans auth).
         let resp = app.oneshot(get_req("/health", None)).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn account_info_counts_are_correct() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("acct")).await;
+
+        // Deux positions ajoutées, aucun trajet.
+        for i in 0..2 {
+            app.clone()
+                .oneshot(json_req(
+                    "POST",
+                    "/positions",
+                    Some(&token),
+                    serde_json::json!({"lat": 48.0 + f64::from(i) * 0.1, "lon": 2.0, "label": "P"}),
+                ))
+                .await
+                .unwrap();
+        }
+
+        let resp = app
+            .clone()
+            .oneshot(get_req("/account", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let info = body_json(resp).await;
+        // Vérifie aussi le bon ordre des décomptes parallélisés (try_join!).
+        assert_eq!(info["positions"].as_u64(), Some(2));
+        assert_eq!(info["trips"].as_u64(), Some(0));
+        assert_eq!(info["alerts"].as_u64(), Some(0));
     }
 }
