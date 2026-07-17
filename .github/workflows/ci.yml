@@ -17,6 +17,14 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # Éditeur de liens mold : temps de link nettement réduit (utile sur ce
+      # projet aux nombreuses dépendances). `make-default` le rend transparent,
+      # sans avoir à toucher aux RUSTFLAGS.
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
+        with:
+          make-default: true
+
       - name: Cache cargo
         uses: actions/cache@v4
         with:
@@ -37,3 +45,24 @@ jobs:
 
       - name: Build (release)
         run: cargo build --release
+
+  audit:
+    name: Security audit (RustSec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Binaire prébuilt de cargo-audit (pas de compilation → rapide).
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # Vérifie Cargo.lock contre la base d'avis de sécurité RustSec.
+      # RUSTSEC-2023-0071 (Marvin, crate `rsa`) : aucune version corrigée
+      # n'existe en amont. `rsa` est tirée transitivement par sqlx pour la
+      # poignée de main Postgres (côté client, vers une base de confiance) —
+      # pas une surface exposée à un attaquant ici. Ignoré tant qu'il n'y a pas
+      # de correctif ; le job échouera sur toute autre vulnérabilité corrigeable.
+      - name: Audit dependencies
+        run: cargo audit --ignore RUSTSEC-2023-0071
