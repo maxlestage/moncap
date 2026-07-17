@@ -5,7 +5,11 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.7", features = ["ws"] }
-tokio = { version = "1", features = ["full"] }
+# Features ciblées (au lieu de "full") : évite de compiler fs/process/signal/
+# io-std inutiles ici → build plus léger et binaire un peu plus petit.
+tokio = { version = "1", features = [
+    "rt-multi-thread", "macros", "sync", "time", "net",
+] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tower-http = { version = "0.5", features = ["cors", "trace", "fs", "compression-gzip", "compression-br"] }
