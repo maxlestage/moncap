@@ -24,6 +24,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tower_http::{
+    catch_panic::CatchPanicLayer,
     compression::CompressionLayer,
     cors::{AllowOrigin, Any, CorsLayer},
     services::{ServeDir, ServeFile},
@@ -518,6 +519,10 @@ fn build_app(state: AppState) -> Router {
         // surtout pour les payloads texte (listes JSON, export GPX).
         .layer(CompressionLayer::new())
         .layer(cors_layer())
+        // Couche la plus externe : convertit un éventuel panic de handler en
+        // réponse 500 propre au lieu de couper la connexion sans réponse. Le
+        // process et les autres requêtes ne sont pas affectés.
+        .layer(CatchPanicLayer::new())
         .with_state(state)
 }
 
@@ -1978,6 +1983,28 @@ mod tests {
         let parsed = parse_gpx_waypoints(xml);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].label, "Point 1");
+    }
+
+    /// Un panic dans un handler est converti en réponse 500 (pas de connexion
+    /// coupée sans réponse). Ne nécessite pas de base : routeur minimal.
+    #[tokio::test]
+    async fn catch_panic_returns_500() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        // Type de retour concret pour éviter l'ambiguïté du type « never ».
+        async fn boom() -> StatusCode {
+            panic!("boom")
+        }
+        let app: Router = Router::new()
+            .route("/boom", get(boom))
+            .layer(CatchPanicLayer::new());
+        let resp = app
+            .oneshot(Request::builder().uri("/boom").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
 
