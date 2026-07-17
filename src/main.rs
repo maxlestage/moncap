@@ -447,6 +447,19 @@ struct Stats {
     centroid: Option<Coord>,
 }
 
+/// GET /health — sonde de disponibilité. Vérifie que la base répond
+/// (`SELECT 1`) : 200 « ok » si tout va bien, 503 sinon. Utile pour le
+/// monitoring : distingue « process vivant » de « service réellement prêt ».
+async fn health(State(db): State<DatabaseConnection>) -> Response {
+    match db.ping().await {
+        Ok(()) => (StatusCode::OK, "ok").into_response(),
+        Err(err) => {
+            tracing::error!("health: base indisponible: {err}");
+            (StatusCode::SERVICE_UNAVAILABLE, "base indisponible").into_response()
+        }
+    }
+}
+
 /// Construit le routeur complet de l'API (routes, limiteurs de débit, couches
 /// compression/CORS/trace). Extrait de `main` pour être réutilisable tel quel
 /// par les tests d'intégration.
@@ -470,7 +483,7 @@ fn build_app(state: AppState) -> Router {
 
     // Routes volontairement minimales.
     Router::new()
-        .route("/health", get(|| async { "ok" }))
+        .route("/health", get(health))
         .route("/positions", get(list_positions).post(add_position))
         .route(
             "/positions/:id",
@@ -2336,5 +2349,13 @@ mod integration {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_json(resp).await.is_array());
+    }
+
+    #[tokio::test]
+    async fn health_ok_when_db_reachable() {
+        let Some(app) = test_app().await else { return };
+        // La base de test répond → 200 (sonde de disponibilité, sans auth).
+        let resp = app.oneshot(get_req("/health", None)).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }

@@ -16,6 +16,6 @@ jobs:
       - name: Ping backend
         run: |
           curl -fsS --max-time 30 --retry 2 \
-            https://moncap-c41a5aaf07e8.herokuapp.com/ -o /dev/null \
-            && echo "Backend réveillé ✅" \
-            || echo "Ping échoué (l'app se réveille peut-être)"
+            https://moncap-c41a5aaf07e8.herokuapp.com/health -o /dev/null \
+            && echo "Backend réveillé ✅ (base OK)" \
+            || echo "Ping échoué (l'app se réveille peut-être, ou base indisponible)"
