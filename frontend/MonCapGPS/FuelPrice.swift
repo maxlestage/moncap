@@ -42,7 +42,7 @@ final class FuelPriceService: ObservableObject {
 
     /// Interroge l'open data : stations dans un rayon de 20 km, moyenne du
     /// prix du carburant demandé.
-    private static func fetch(near c: CLLocationCoordinate2D, type: String)
+    nonisolated private static func fetch(near c: CLLocationCoordinate2D, type: String)
         async -> (Double, Int)?
     {
         var comps = URLComponents(

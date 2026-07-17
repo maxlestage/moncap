@@ -113,7 +113,7 @@ final class SpeedLimitService: ObservableObject {
     }
 
     /// Distance minimale (m) d'un point à une polyligne (projection locale).
-    private static func distanceToPolyline(
+    nonisolated private static func distanceToPolyline(
         _ p: CLLocationCoordinate2D, _ coords: [CLLocationCoordinate2D]
     ) -> Double {
         guard coords.count >= 2 else {
@@ -140,7 +140,7 @@ final class SpeedLimitService: ObservableObject {
     }
 
     /// Échantillonne au plus `n` points répartis le long d'un tracé.
-    private static func sample(_ coords: [CLLocationCoordinate2D], max n: Int)
+    nonisolated private static func sample(_ coords: [CLLocationCoordinate2D], max n: Int)
         -> [CLLocationCoordinate2D]
     {
         guard coords.count > n, n > 1 else { return coords }
@@ -150,7 +150,7 @@ final class SpeedLimitService: ObservableObject {
 
     /// Requête groupée : voies (géométrie complète + limite) autour de chaque
     /// point échantillonné — maxspeed explicite ou défaut légal français.
-    private static func fetchWays(at points: [CLLocationCoordinate2D])
+    nonisolated private static func fetchWays(at points: [CLLocationCoordinate2D])
         async -> [CachedWay]?
     {
         let clauses = points
@@ -181,7 +181,7 @@ final class SpeedLimitService: ObservableObject {
 
     /// Interprète les valeurs `maxspeed` OSM courantes, y compris les codes
     /// nationaux français.
-    private static func parseMaxspeed(_ raw: String) -> Int? {
+    nonisolated private static func parseMaxspeed(_ raw: String) -> Int? {
         switch raw {
         case "FR:urban": return 50
         case "FR:rural": return 80
@@ -200,7 +200,7 @@ final class SpeedLimitService: ObservableObject {
 
     /// Cherche la limite de la voie la plus proche (rayon 20 m) : `maxspeed`
     /// OSM si présent, sinon limite légale française selon le type de voie.
-    private static func fetchLimit(around c: CLLocationCoordinate2D) async -> Int? {
+    nonisolated private static func fetchLimit(around c: CLLocationCoordinate2D) async -> Int? {
         let q = "[out:json][timeout:8];"
             + "way(around:20,\(c.latitude),\(c.longitude))[highway];"
             + "out tags 5;"
@@ -225,7 +225,7 @@ final class SpeedLimitService: ObservableObject {
     }
 
     /// Limite d'une voie : `maxspeed` si présent, sinon défaut français.
-    private static func limit(fromTags tags: [String: String]?) -> Int? {
+    nonisolated private static func limit(fromTags tags: [String: String]?) -> Int? {
         guard let tags else { return nil }
         if let raw = tags["maxspeed"], let v = parseMaxspeed(raw) { return v }
         if let highway = tags["highway"] { return frenchDefault(forHighway: highway) }
@@ -234,7 +234,7 @@ final class SpeedLimitService: ObservableObject {
 
     /// Limites légales françaises 🇫🇷 par type de voie OSM, appliquées quand
     /// `maxspeed` n'est pas renseigné.
-    private static func frenchDefault(forHighway highway: String) -> Int? {
+    nonisolated private static func frenchDefault(forHighway highway: String) -> Int? {
         switch highway {
         case "motorway": return 130
         case "trunk": return 110
