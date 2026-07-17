@@ -1957,8 +1957,9 @@ mod integration {
     /// sien — partager le pool casserait les tests suivants.
     static MIGRATE_ONCE: tokio::sync::Mutex<bool> = tokio::sync::Mutex::const_new(false);
 
-    /// Application de test, ou `None` si `TEST_DATABASE_URL` n'est pas défini.
-    async fn test_app() -> Option<Router> {
+    /// Application de test **et** sa connexion (pour insérer des données
+    /// directement, ex. un signalement). `None` si `TEST_DATABASE_URL` absent.
+    async fn test_app_db() -> Option<(Router, DatabaseConnection)> {
         let url = std::env::var("TEST_DATABASE_URL").ok()?;
         let db = Database::connect(&url)
             .await
@@ -1973,7 +1974,12 @@ mod integration {
             }
         }
         let (tx, _rx) = broadcast::channel::<String>(16);
-        Some(build_app(AppState { db, tx }))
+        Some((build_app(AppState { db: db.clone(), tx }), db))
+    }
+
+    /// Application de test, ou `None` si `TEST_DATABASE_URL` n'est pas défini.
+    async fn test_app() -> Option<Router> {
+        Some(test_app_db().await?.0)
     }
 
     /// Identifiant unique par test (base partagée) — le préfixe isole les cas.
@@ -2167,5 +2173,168 @@ mod integration {
                 .all(|p| p["label"] != "Paris"),
             "les positions ne doivent pas fuiter vers un autre compte"
         );
+    }
+
+    #[tokio::test]
+    async fn account_deletion_removes_data_and_frees_email() {
+        let Some(app) = test_app().await else { return };
+        let email = uniq("del");
+        let token = signup(&app, &email).await;
+
+        // Un peu de données rattachées au compte.
+        app.clone()
+            .oneshot(json_req(
+                "POST",
+                "/positions",
+                Some(&token),
+                serde_json::json!({"lat": 1.0, "lon": 2.0, "label": "temp"}),
+            ))
+            .await
+            .unwrap();
+
+        // Suppression : 204.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/account")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // L'ancien jeton ne donne plus accès (utilisateur supprimé) → 401.
+        let resp = app
+            .clone()
+            .oneshot(get_req("/account", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // L'e-mail est de nouveau libre : ré-inscription possible.
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/signup",
+                None,
+                serde_json::json!({"username": email, "password": "s3cret!"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn alert_up_vote_increments_confirms() {
+        let Some((app, db)) = test_app_db().await else {
+            return;
+        };
+        let token = signup(&app, &uniq("voter")).await;
+
+        // Les signalements sont créés via WebSocket : on en insère un en base
+        // directement pour tester le handler de vote HTTP.
+        let now = (now_ms() / 1000) as i64;
+        let created = alert::ActiveModel {
+            category: Set("police".into()),
+            label: Set(String::new()),
+            lat: Set(48.85),
+            lon: Set(2.35),
+            created_at: Set(now),
+            expires_at: Set(now + 1800),
+            confirms: Set(0),
+            denies: Set(0),
+            user_id: Set(0),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        // Vote « toujours là ».
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                &format!("/alerts/{}/vote", created.id),
+                Some(&token),
+                serde_json::json!({"up": true}),
+            ))
+            .await
+            .unwrap();
+        assert!(resp.status().is_success());
+
+        // Le compteur de confirmations a augmenté.
+        let updated = alert::Entity::find_by_id(created.id)
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.confirms, 1);
+    }
+
+    #[tokio::test]
+    async fn trips_round_trip() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("trip")).await;
+
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/trips",
+                Some(&token),
+                serde_json::json!({
+                    "label": "Balade",
+                    "points": [{"lat": 48.85, "lon": 2.35}, {"lat": 48.86, "lon": 2.36}],
+                    "duration_min": 12.0
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(get_req("/trips", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list = body_json(resp).await;
+        assert!(
+            list.as_array()
+                .unwrap()
+                .iter()
+                .any(|t| t["label"] == "Balade"),
+            "le trajet enregistré doit apparaître dans l'historique"
+        );
+    }
+
+    #[tokio::test]
+    async fn leaderboard_returns_array() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("leader")).await;
+        // Un peu d'activité pour marquer des points.
+        app.clone()
+            .oneshot(json_req(
+                "POST",
+                "/positions",
+                Some(&token),
+                serde_json::json!({"lat": 1.0, "lon": 2.0, "label": "P"}),
+            ))
+            .await
+            .unwrap();
+
+        let resp = app
+            .clone()
+            .oneshot(get_req("/leaderboard", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_json(resp).await.is_array());
     }
 }
