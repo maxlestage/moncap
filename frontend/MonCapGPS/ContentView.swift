@@ -455,6 +455,12 @@ struct MapHomeView: View {
     @State private var lastCamHeading: Double = -1
     /// Mode nuit automatique (selon la position réelle du soleil).
     @State private var nightMode = false
+    /// Dernier calcul jour/nuit (recalcul limité à 1×/min : le soleil bouge
+    /// lentement, inutile de refaire la trigo à chaque point GPS).
+    @State private var lastNightCheck = Date.distantPast
+    /// Dernier envoi de position live (throttle du WebSocket de partage).
+    @State private var lastLiveSend = Date.distantPast
+    @State private var lastLiveCoord: CLLocationCoordinate2D?
     /// Prévisualisation (survol) de l'itinéraire en cours.
     @State private var previewing = false
     @State private var previewTask: Task<Void, Never>?
@@ -553,7 +559,15 @@ struct MapHomeView: View {
         .onReceive(location.$coordinate) { coord in
             guard let c = coord else { return }
             if sharing {
-                realtime.sendLive(lat: c.latitude, lon: c.longitude, label: driverName, avatar: liveAvatar)
+                // Throttle : au plus 1 envoi / 2 s, et seulement si on a bougé
+                // d'au moins 8 m — évite d'inonder le WebSocket à la cadence GPS.
+                let movedLive = lastLiveCoord.map { metersBetween($0, c) } ?? .infinity
+                if Date().timeIntervalSince(lastLiveSend) >= 2, movedLive >= 8 {
+                    lastLiveSend = Date()
+                    lastLiveCoord = c
+                    realtime.sendLive(
+                        lat: c.latitude, lon: c.longitude, label: driverName, avatar: liveAvatar)
+                }
             }
             // Limites de vitesse : mise à jour immédiate au lancement, puis en
             // continu (cache d'itinéraire d'abord, Overpass sinon) — même hors
@@ -566,8 +580,12 @@ struct MapHomeView: View {
             }
             // Prix du carburant local (cache 6 h, pour le coût des trajets).
             fuel.refresh(near: c, type: fuelType)
-            // Jour / nuit selon la position réelle du soleil.
-            nightMode = DayNight.isNight(lat: c.latitude, lon: c.longitude)
+            // Jour / nuit selon la position réelle du soleil : recalcul au plus
+            // 1×/min (le soleil bouge lentement — pas besoin à chaque point GPS).
+            if Date().timeIntervalSince(lastNightCheck) >= 60 {
+                lastNightCheck = Date()
+                nightMode = DayNight.isNight(lat: c.latitude, lon: c.longitude)
+            }
             if location.speedKmh > 15 { checkOverspeed() }
 
             if nav.active {

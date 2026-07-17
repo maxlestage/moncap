@@ -102,6 +102,8 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
   const wsRef = useRef<WebSocket | null>(null);
   const myPos = useRef<Coord | null>(null);
   const watchId = useRef<number | null>(null);
+  // Dernier envoi de position live (throttle du WebSocket de partage).
+  const lastLive = useRef<{ t: number; c: Coord } | null>(null);
 
   const signOut = useCallback(() => {
     logout();
@@ -257,7 +259,18 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
           const c = { lat: p.coords.latitude, lon: p.coords.longitude };
           myPos.current = c;
           setMe(c);
-          send({ kind: "live", lat: c.lat, lon: c.lon, label, avatar });
+          // Throttle : au plus 1 envoi / 1,5 s et si on a bougé d'au moins ~8 m,
+          // pour ne pas inonder le WebSocket à la cadence du GPS.
+          const prev = lastLive.current;
+          const dLat = prev ? (c.lat - prev.c.lat) * 111320 : Infinity;
+          const dLon = prev
+            ? (c.lon - prev.c.lon) * 111320 * Math.cos((c.lat * Math.PI) / 180)
+            : Infinity;
+          const moved = Math.hypot(dLat, dLon);
+          if (!prev || (Date.now() - prev.t >= 1500 && moved >= 8)) {
+            lastLive.current = { t: Date.now(), c };
+            send({ kind: "live", lat: c.lat, lon: c.lon, label, avatar });
+          }
         },
         () => setError("Partage de position refusé."),
         { enableHighAccuracy: true, maximumAge: 2000 },

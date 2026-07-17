@@ -16,6 +16,11 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        // Filtre de distance : CoreLocation n'émet une mise à jour que tous les
+        // ~10 m hors navigation (au lieu de plusieurs par seconde en continu).
+        // Cela allège tout le pipeline déclenché à chaque point (réseau, trigo,
+        // rendu carte) et économise nettement la batterie.
+        manager.distanceFilter = 10
     }
 
     /// Demande l'autorisation et démarre le suivi.
@@ -31,6 +36,9 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.allowsBackgroundLocationUpdates = on
         manager.pausesLocationUpdatesAutomatically = !on
         manager.showsBackgroundLocationIndicator = on
+        // En navigation : filtre resserré (5 m) pour un guidage et une caméra 3D
+        // fluides. Hors navigation : 10 m pour économiser la batterie.
+        manager.distanceFilter = on ? 5 : 10
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
