@@ -46,7 +46,7 @@ export interface LiveUser {
   ts: number;
 }
 
-/** Signalement façon Waze (avec votes de confirmation). */
+/** Signalement communautaire (avec votes de confirmation). */
 export interface Alert {
   id: number;
   category: string;

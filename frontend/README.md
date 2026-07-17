@@ -164,7 +164,7 @@ installe l'app **TestFlight** sur l'iPhone, et teste.
 - [ ] **Partage en direct** (bouton « Partager ») : ta voiture (avatar)
       visible en temps réel ; teste à deux appareils/comptes.
 - [ ] **Choix de l'avatar** (feuille « Lieux » → section « Mon avatar »).
-- [ ] **Signalements** façon Waze (bouton orange) : police, accident,
+- [ ] **Signalements** communautaires : police, accident,
       bouchon, danger — visibles en direct.
 - [ ] **Export GPX** (feuille « Lieux » → bouton GPX → partage).
 

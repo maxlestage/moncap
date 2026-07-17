@@ -65,7 +65,7 @@ impl FromRef<AppState> for broadcast::Sender<String> {
     }
 }
 
-/// Un signalement façon Waze (police, accident, bouchon, danger…), tel
+/// Un signalement communautaire (police, accident, bouchon, danger…), tel
 /// qu'échangé avec les clients.
 #[derive(Clone, Serialize, Deserialize)]
 struct Alert {

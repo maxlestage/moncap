@@ -94,7 +94,7 @@ Légende : ✅ OK · ⚠️ moyen / à revoir · ❌ KO / bug
 | 8.2 | Le choix est bien pris en compte sur la carte |  |  |
 | 8.3 | L'avatar est conservé après relance |  |  |
 
-## 9. Signalements (façon Waze)
+## 9. Signalements (communautaires)
 
 | # | À vérifier | État | Notes |
 |---|------------|:----:|-------|
