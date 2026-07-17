@@ -145,7 +145,7 @@ export function MapView({ positions, liveUsers, alerts, me, destination, onAddPo
     }
   }, [destination, me]);
 
-  // Signalements (façon Waze) : la popup permet de voter 👍 / 👎.
+  // Signalements communautaires : la popup permet de voter 👍 / 👎.
   useEffect(() => {
     const layer = alertLayer.current;
     if (!layer) return;

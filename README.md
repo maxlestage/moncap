@@ -34,7 +34,7 @@ Les routes sont volontairement aussi simples que possible :
 | POST    | `/route/multi` | Distance totale + durée estimée d'un itinéraire (`{points:[...], speed_kmh?}`) |
 | GET     | `/ws`         | WebSocket temps réel (positions, voitures live, signalements) |
 
-### Temps réel (WebSocket, façon Waze)
+### Temps réel (WebSocket)
 
 `/ws` diffuse à tous les clients connectés :
 
@@ -183,7 +183,7 @@ turn-by-turn avec annonces vocales** (depuis ta position vers la
 destination, carte qui suit le cap, **recalcul automatique si tu sors de la
 route**), export GPX, liste avec suppression.
 
-**Temps réel (WebSocket)** façon Waze :
+**Temps réel (WebSocket)** :
 
 - 🟢 synchro instantanée des positions entre tous les appareils
 - 🚗 partage de sa position GPS en direct (voitures des autres sur la carte)
