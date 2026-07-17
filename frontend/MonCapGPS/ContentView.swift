@@ -438,6 +438,10 @@ struct MapHomeView: View {
     @AppStorage("moncap.consumption") private var consumption = 6.5
     /// Signalements déjà annoncés vocalement pendant cette navigation.
     @State private var announcedAlertIDs: Set<Int> = []
+    /// Notifications locales d'alertes à proximité (bannière + son), y compris
+    /// hors navigation et écran verrouillé.
+    @AppStorage("moncap.notifyNearby") private var notifyNearbyAlerts = false
+    @StateObject private var nearbyNotifier = NearbyAlertNotifier()
     /// Itinéraire actuellement prévisualisé (mis en avant) avant décision.
     @State private var selectedRouteID: UUID?
     /// Liste déroulée ou repliée (bandeau compact par défaut).
@@ -588,6 +592,12 @@ struct MapHomeView: View {
             }
             if location.speedKmh > 15 { checkOverspeed() }
 
+            // Notifications d'alertes à proximité (bannière + son), même hors
+            // navigation, si l'option est activée.
+            if notifyNearbyAlerts {
+                nearbyNotifier.check(from: c, alerts: realtime.alerts) { emoji(for: $0) }
+            }
+
             if nav.active {
                 nav.update(c)
                 recordTrackPoint(c)
@@ -622,6 +632,16 @@ struct MapHomeView: View {
                     }
                 }
             }
+        }
+        .onReceive(realtime.$alerts) { alerts in
+            // Nouvelle alerte reçue : notifie si elle est proche (utile même à
+            // l'arrêt, quand on ne bouge pas vers l'alerte).
+            guard notifyNearbyAlerts, let c = location.coordinate else { return }
+            nearbyNotifier.check(from: c, alerts: alerts) { emoji(for: $0) }
+        }
+        .onChange(of: notifyNearbyAlerts) { _, on in
+            // À l'activation : demande l'autorisation de notification.
+            if on { nearbyNotifier.requestAuthorizationIfNeeded() }
         }
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
@@ -1670,6 +1690,15 @@ struct MapHomeView: View {
                             Label("Éviter les autoroutes", systemImage: "road.lanes")
                         }
                     }
+                }
+                // Notifications d'alertes à proximité.
+                Section("Alertes") {
+                    Toggle(isOn: $notifyNearbyAlerts) {
+                        Label("Alertes à proximité", systemImage: "bell.badge")
+                    }
+                    Text("Reçois une notification quand un signalement (police, accident, danger…) se trouve à moins de 600 m, même écran verrouillé.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
