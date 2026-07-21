@@ -943,15 +943,25 @@ struct MapHomeView: View {
         .onTapGesture(coordinateSpace: .local) { point in
             handleMapTap(point, proxy: proxy)
         }
-        // Déplacer la carte à la main débraye le suivi automatique ; il
-        // reprend tout seul 8 s après le dernier geste (en navigation).
+        // Manipuler la carte à la main (déplacement OU zoom) débraye le suivi
+        // automatique ; il reprend tout seul 8 s après le dernier geste (en
+        // navigation). Le zoom était auparavant ignoré : la caméra le suivait
+        // et « ramenait » la vue, rendant le zoom impossible.
         .simultaneousGesture(
-            DragGesture(minimumDistance: 8).onChanged { _ in
-                lastMapInteraction = Date()
-                if followsRoute { followsRoute = false }
-            }
+            DragGesture(minimumDistance: 8).onChanged { _ in userTouchedMap() }
+        )
+        .simultaneousGesture(
+            MagnifyGesture().onChanged { _ in userTouchedMap() }
         )
         }
+    }
+
+    /// Un geste manuel sur la carte (déplacement ou zoom) débraye le suivi
+    /// automatique de la caméra ; il reprend seul 8 s après le dernier geste
+    /// (pendant la navigation).
+    private func userTouchedMap() {
+        lastMapInteraction = Date()
+        if followsRoute { followsRoute = false }
     }
 
     /// Sélectionne l'itinéraire dont le tracé est le plus proche du point touché.
