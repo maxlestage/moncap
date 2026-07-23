@@ -357,15 +357,31 @@ enum TravelMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Point d'entrée : écran de connexion ou carte selon l'authentification.
+/// Point d'entrée : écran de garde/chargement au lancement, puis écran de
+/// connexion ou carte selon l'authentification.
 struct ContentView: View {
     @StateObject private var auth = AuthStore()
+    /// Affiche l'écran de garde le temps du lancement, puis se fond dans l'app.
+    @State private var showSplash = true
 
     var body: some View {
-        if auth.isAuthenticated {
-            MapHomeView(auth: auth)
-        } else {
-            LoginView(auth: auth)
+        ZStack {
+            if auth.isAuthenticated {
+                MapHomeView(auth: auth)
+            } else {
+                LoginView(auth: auth)
+            }
+            if showSplash {
+                SplashView()
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
+        }
+        .task {
+            // Laisse l'écran de garde s'afficher un court instant, puis fond
+            // vers l'application.
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            withAnimation(.easeInOut(duration: 0.5)) { showSplash = false }
         }
     }
 }
