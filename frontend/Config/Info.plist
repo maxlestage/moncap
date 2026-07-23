@@ -10,5 +10,12 @@
 		<string>location</string>
 		<string>audio</string>
 	</array>
+	<!-- Écran de lancement natif : fond bleu de marque (évite le flash blanc
+	     avant l'apparition de la vue SwiftUI de chargement). -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 </dict>
 </plist>
