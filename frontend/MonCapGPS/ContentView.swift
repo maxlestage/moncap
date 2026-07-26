@@ -428,6 +428,7 @@ struct MapHomeView: View {
     @StateObject private var placeSearch = PlaceSearch()
     @StateObject private var speedLimit = SpeedLimitService()
     @StateObject private var fuel = FuelPriceService()
+    @StateObject private var airQuality = AirQualityService()
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -634,6 +635,8 @@ struct MapHomeView: View {
             }
             // Prix du carburant local (cache 6 h, pour le coût des trajets).
             fuel.refresh(near: c, type: fuelType)
+            // Qualité de l'air en temps réel (indice européen).
+            airQuality.update(c)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
             // 1×/min (le soleil bouge lentement — pas besoin à chaque point GPS).
             if Date().timeIntervalSince(lastNightCheck) >= 60 {
@@ -1928,7 +1931,10 @@ struct MapHomeView: View {
 
     private var bottomBar: some View {
         HStack(alignment: .bottom) {
-            speedPill
+            VStack(alignment: .leading, spacing: 8) {
+                airQualityPill
+                speedPill
+            }
             Spacer()
             VStack(spacing: 14) {
                 map3DButton
@@ -1953,6 +1959,23 @@ struct MapHomeView: View {
                     }
                 }
                 .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+    }
+
+    /// Qualité de l'air en temps réel (indice européen), au-dessus de la vitesse.
+    @ViewBuilder private var airQualityPill: some View {
+        if let aqi = airQuality.aqi {
+            let lvl = AirQualityService.level(aqi)
+            HStack(spacing: 6) {
+                Circle().fill(lvl.color).frame(width: 10, height: 10)
+                Text("Air \(aqi)").font(.subheadline.weight(.bold))
+                Text(lvl.label).font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().stroke(lvl.color.opacity(0.6), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
 
