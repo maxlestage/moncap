@@ -429,6 +429,9 @@ struct MapHomeView: View {
     @StateObject private var speedLimit = SpeedLimitService()
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var airQuality = AirQualityService()
+    @StateObject private var fires = FireService()
+    /// Clé NASA FIRMS (gratuite) pour afficher les incendies. Vide = désactivé.
+    @AppStorage("moncap.firmsKey") private var firmsKey = ""
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -637,6 +640,8 @@ struct MapHomeView: View {
             fuel.refresh(near: c, type: fuelType)
             // Qualité de l'air en temps réel (indice européen).
             airQuality.update(c)
+            // Incendies actifs NASA FIRMS (throttle interne à 15 min).
+            fires.refresh(key: firmsKey)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
             // 1×/min (le soleil bouge lentement — pas besoin à chaque point GPS).
             if Date().timeIntervalSince(lastNightCheck) >= 60 {
@@ -695,6 +700,10 @@ struct MapHomeView: View {
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.
             if on { nearbyNotifier.requestAuthorizationIfNeeded() }
+        }
+        .onChange(of: firmsKey) { _, key in
+            // Nouvelle clé NASA FIRMS saisie : on charge les incendies tout de suite.
+            fires.refresh(key: key)
         }
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
@@ -856,6 +865,13 @@ struct MapHomeView: View {
         MapReader { proxy in
         Map(position: $camera, selection: $selectedFeature) {
             UserAnnotation()
+            // Incendies actifs (NASA FIRMS) : zones colorées en rouge, sous les
+            // épingles. Dessinées d'abord pour rester en arrière-plan.
+            ForEach(fires.fires) { f in
+                MapCircle(center: f.coordinate, radius: 2200)
+                    .foregroundStyle(.red.opacity(0.28))
+                    .stroke(.red.opacity(0.8), lineWidth: 1)
+            }
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
                 Annotation("Moi", coordinate: me) {
@@ -2061,6 +2077,22 @@ struct MapHomeView: View {
                     Text("Reçois une notification quand un signalement (police, accident, danger…) se trouve à moins de 600 m, même écran verrouillé.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+                // Incendies actifs (NASA FIRMS) : nécessite une clé gratuite.
+                Section("Incendies 🔥 (NASA FIRMS)") {
+                    TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    if firmsKey.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text("Colle ta clé gratuite (obtenue en 1 min sur firms.modaps.eosdis.nasa.gov/api/map_key) pour voir les incendies détectés par satellite, en zones rouges sur la carte.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("\(fires.fires.count) foyer(s) actif(s) en France (dernières 24 h, satellite VIIRS).")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
