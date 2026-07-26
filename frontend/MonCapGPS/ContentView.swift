@@ -476,6 +476,10 @@ struct MapHomeView: View {
     @State private var didInitialSpeedFetch = false
     /// Dernière recherche d'itinéraire plus rapide (toutes les 90 s).
     @State private var lastFasterCheck = Date.distantPast
+    /// Anti-bouchon (« toujours avancer ») : depuis quand on rampe, et dernier
+    /// contournement déclenché (anti-répétition).
+    @State private var stuckSince: Date?
+    @State private var lastAntiJamReroute = Date.distantPast
     /// Infos du compte (points de contribution).
     @State private var accountInfo: AccountInfo?
     /// Classement des contributeurs.
@@ -659,6 +663,8 @@ struct MapHomeView: View {
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
                 maybeCheckFasterRoute(from: c)
+                // « Toujours avancer » : contourne un bouchon si on est bloqué.
+                checkStuckInTraffic(from: c)
                 // Recentre en permanence : si on a touché la carte, le suivi
                 // reprend tout seul après 8 s — 3D comme 2D.
                 if !followsRoute, Date().timeIntervalSince(lastMapInteraction) > 8 {
@@ -749,6 +755,8 @@ struct MapHomeView: View {
 
     /// Cherche périodiquement (90 s) un itinéraire plus rapide vers la
     /// destination (mode voiture) et l'applique s'il fait gagner ≥ 2 min.
+    /// Demande les alternatives : le temps estimé de MapKit tient compte du
+    /// trafic, on retient donc le plus rapide selon les conditions du moment.
     private func maybeCheckFasterRoute(from c: CLLocationCoordinate2D) {
         guard travelMode == .car, !nav.rerouting,
             Date().timeIntervalSince(lastFasterCheck) > 90,
@@ -756,7 +764,8 @@ struct MapHomeView: View {
         else { return }
         lastFasterCheck = Date()
         Task {
-            guard let route = await drivingRoute(from: c, to: dest, transportType: .automobile)
+            let routes = await drivingRoutes(from: c, to: dest, transportType: .automobile)
+            guard let route = routes.min(by: { $0.expectedTravelTime < $1.expectedTravelTime })
             else { return }
             let saved = nav.etaMinutes - route.expectedTravelTime / 60
             if saved >= 2, nav.active {
@@ -765,6 +774,89 @@ struct MapHomeView: View {
                 speedLimit.preload(along: route.polyline.coordinates)
             }
         }
+    }
+
+    /// « Toujours avancer » : si on rampe (< 7 km/h) trop longtemps en voiture,
+    /// c'est le signe d'un bouchon. On cherche alors un contournement réel (un
+    /// itinéraire qui s'écarte de la route actuelle) et on bascule dessus s'il
+    /// fait gagner du temps. Le garde-fou « plus rapide et divergent » évite de
+    /// recalculer à un simple feu rouge : à un feu, rester sur place reste le
+    /// plus rapide, donc rien ne change.
+    private func checkStuckInTraffic(from c: CLLocationCoordinate2D) {
+        guard travelMode == .car, nav.active, !nav.rerouting else {
+            stuckSince = nil
+            return
+        }
+        // On roule normalement : pas de bouchon.
+        guard location.speedKmh < 7 else {
+            stuckSince = nil
+            return
+        }
+        // Tout près de l'arrivée : un arrêt est normal, on ne contourne pas.
+        guard nav.remainingKm > 0.3 else {
+            stuckSince = nil
+            return
+        }
+        let now = Date()
+        if stuckSince == nil { stuckSince = now }
+        guard let since = stuckSince,
+            now.timeIntervalSince(since) >= 35,
+            now.timeIntervalSince(lastAntiJamReroute) > 120
+        else { return }
+        lastAntiJamReroute = now
+        stuckSince = nil
+
+        let currentCoords = nav.routeCoords
+        let currentEta = nav.etaMinutes
+        Task {
+            guard let dest = nav.destination else { return }
+            let routes = await drivingRoutes(from: c, to: dest, transportType: .automobile)
+            guard routes.count >= 2, nav.active else { return }
+            // Sépare les itinéraires qui suivent la route actuelle de ceux qui
+            // s'en écartent (les vrais contournements).
+            let detours = routes.filter { Self.routeDiverges($0, from: currentCoords) }
+            let staying = routes.filter { !Self.routeDiverges($0, from: currentCoords) }
+            guard let detour = detours.min(by: { $0.expectedTravelTime < $1.expectedTravelTime })
+            else { return }  // aucune alternative pour contourner → on reste
+            // Référence = temps réel (trafic inclus) en restant sur la route
+            // actuelle ; à défaut, l'ETA courante.
+            let baseSecs = staying.map { $0.expectedTravelTime }.min() ?? (currentEta * 60)
+            let saved = (baseSecs - detour.expectedTravelTime) / 60
+            if saved >= 1 {
+                nav.applyDetour(route: detour, savedMinutes: Int(saved.rounded()))
+                speedLimit.preload(along: detour.polyline.coordinates)
+            }
+        }
+    }
+
+    /// Vrai si `route` s'écarte nettement (> 250 m) du corridor `current` sur
+    /// ses ~3 premiers km — donc propose un vrai contournement, pas la même
+    /// route. `nonisolated static` : aucune donnée de vue touchée.
+    nonisolated private static func routeDiverges(
+        _ route: MKRoute, from current: [CLLocationCoordinate2D]
+    ) -> Bool {
+        guard !current.isEmpty else { return true }
+        let cand = route.polyline.coordinates
+        guard cand.count > 1 else { return false }
+        var walked = 0.0
+        var prev = cand[0]
+        for c in cand {
+            walked += CLLocation(latitude: prev.latitude, longitude: prev.longitude)
+                .distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
+            prev = c
+            if walked > 3000 { break }  // on ne juge que le début du trajet
+            var best = Double.greatestFiniteMagnitude
+            for p in current {
+                let d = CLLocation(latitude: c.latitude, longitude: c.longitude)
+                    .distance(from: CLLocation(latitude: p.latitude, longitude: p.longitude))
+                if d < best {
+                    best = d
+                    if best < 120 { break }  // proche du corridor : inutile de continuer
+                }
+            }
+            if best > 250 { return true }
+        }
+        return false
     }
 
     /// Vrai si la vitesse actuelle dépasse la limite connue (marge 5 km/h).
@@ -2915,6 +3007,21 @@ struct MapHomeView: View {
         request.requestsAlternateRoutes = false
         routePreferences(request)
         return try? await MKDirections(request: request).calculate().routes.first
+    }
+
+    /// Tous les itinéraires (dont alternatives) entre deux points, pour choisir
+    /// le plus rapide selon le trafic ou contourner un bouchon.
+    private func drivingRoutes(
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+        transportType: MKDirectionsTransportType = .automobile
+    ) async -> [MKRoute] {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: from))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: to))
+        request.transportType = transportType
+        request.requestsAlternateRoutes = true
+        routePreferences(request)
+        return (try? await MKDirections(request: request).calculate().routes) ?? []
     }
 
     private func recenter() {
