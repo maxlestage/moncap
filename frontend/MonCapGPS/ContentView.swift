@@ -1186,9 +1186,10 @@ struct MapHomeView: View {
                 MKCoordinateRegion(center: $0, latitudinalMeters: 8000, longitudinalMeters: 8000)
             }
         guard let region else { return }
-        // Recherche agressive : on interroge une zone plus large que l'écran
-        // pour ramener aussi les lieux juste au-delà des bords visibles.
-        let searchRegion = Self.expandedRegion(region, factor: 1.6)
+        // Recherche large : on interroge une zone bien plus grande que l'écran
+        // (3×) pour ramener aussi les lieux au-delà des bords visibles, sur
+        // toutes les catégories.
+        let searchRegion = Self.expandedRegion(region, factor: 3.0)
 
         // Baignade : plages, lacs, piscines… d'OpenStreetMap.
         if kind == .water {
@@ -1261,7 +1262,7 @@ struct MapHomeView: View {
     private func fetchFuelStations(in region: MKCoordinateRegion, type: String) async -> [POI]? {
         // Rayon = moitié de la hauteur visible, plafonné (~40 km) pour rester
         // rapide ; `rows` plafonne déjà le nombre de stations renvoyées.
-        let radiusM = min(max(region.span.latitudeDelta * 111_320 / 2, 1500), 40_000)
+        let radiusM = min(max(region.span.latitudeDelta * 111_320 / 2, 3000), 60_000)
         var comps = URLComponents(
             string: "https://data.economie.gouv.fr/api/records/1.0/search/")!
         comps.queryItems = [
@@ -1452,7 +1453,7 @@ struct MapHomeView: View {
         switch kind {
         case .parkingAll:
             return await fetchOverpass(
-                in: region, latCap: 0.6, lonCap: 0.8, limit: 150,
+                in: region, latCap: 1.2, lonCap: 1.6, limit: 150,
                 clauses: { "nwr[\"amenity\"=\"parking\"]\($0);" },
                 name: { Self.namedOr($0, "Parking") })
         case .charging:
@@ -1462,7 +1463,7 @@ struct MapHomeView: View {
                 name: { Self.namedOr($0, "Borne de recharge") })
         case .toilets:
             return await fetchOverpass(
-                in: region, latCap: 0.8, lonCap: 1.1, limit: 150,
+                in: region, latCap: 1.2, lonCap: 1.6, limit: 150,
                 clauses: { "nwr[\"amenity\"=\"toilets\"]\($0);" },
                 name: { Self.toiletName(fromTags: $0) })
         case .surf:
