@@ -14,25 +14,39 @@ final class PlaceSearch: ObservableObject {
     func search(_ text: String) {
         task?.cancel()
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 3 else {
+        // Recherche agressive : démarre dès 2 caractères.
+        guard query.count >= 2 else {
             results = []
             return
         }
         task = Task { [weak self] in
-            // Anti-rebond : on attend que l'utilisateur arrête de taper.
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            // Anti-rebond court : la recherche démarre vite.
+            try? await Task.sleep(nanoseconds: 150_000_000)
             guard let self, !Task.isCancelled else { return }
 
-            let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = query
-            if let center = self.center {
-                request.region = MKCoordinateRegion(
-                    center: center,
-                    latitudinalMeters: 40_000, longitudinalMeters: 40_000)
+            func run(region: MKCoordinateRegion?) async -> [MKMapItem] {
+                let request = MKLocalSearch.Request()
+                request.naturalLanguageQuery = query
+                request.resultTypes = [.address, .pointOfInterest]
+                if let region { request.region = region }
+                return (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
             }
-            let response = try? await MKLocalSearch(request: request).start()
+
+            // Grande zone (~1500 km) centrée sur l'utilisateur : priorise les
+            // résultats proches sans exclure les lieux lointains.
+            let near = self.center.map {
+                MKCoordinateRegion(
+                    center: $0, latitudinalMeters: 1_500_000, longitudinalMeters: 1_500_000)
+            }
+            var items = await run(region: near)
             guard !Task.isCancelled else { return }
-            self.results = response?.mapItems ?? []
+            // Repli agressif : rien trouvé près → nouvelle recherche sans biais
+            // régional, pour ramener les lieux éloignés.
+            if items.isEmpty {
+                items = await run(region: nil)
+                guard !Task.isCancelled else { return }
+            }
+            self.results = items
         }
     }
 
