@@ -279,7 +279,7 @@ private let routePalette: [Color] = [
 
 /// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
 enum POIKind: String, CaseIterable, Identifiable {
-    case fuel, parking, parkingAll, charging, toilets, water
+    case fuel, parking, parkingAll, charging, toilets, water, surf, skate
     case fastFood, restaurant, hotel, tourism, hangout
     var id: String { rawValue }
 
@@ -291,6 +291,8 @@ enum POIKind: String, CaseIterable, Identifiable {
         case .charging: return "Recharge"
         case .toilets: return "Toilettes"
         case .water: return "Baignade"
+        case .surf: return "Surf"
+        case .skate: return "Skatepark"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
         case .hotel: return "Hôtels"
@@ -307,6 +309,8 @@ enum POIKind: String, CaseIterable, Identifiable {
         case .charging: return "⚡"
         case .toilets: return "🚻"
         case .water: return "🏊"
+        case .surf: return "🏄"
+        case .skate: return "🛹"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
         case .hotel: return "🏨"
@@ -317,10 +321,11 @@ enum POIKind: String, CaseIterable, Identifiable {
 
     /// Requête MKLocalSearch correspondante. Essence (open data) et les
     /// catégories OpenStreetMap (handicapé, parking, recharge, toilettes,
-    /// baignade) passent par des sources dédiées.
+    /// baignade, surf, skatepark) passent par des sources dédiées.
     var query: String {
         switch self {
-        case .fuel, .parking, .parkingAll, .charging, .toilets, .water: return ""
+        case .fuel, .parking, .parkingAll, .charging, .toilets, .water, .surf, .skate:
+            return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
         case .hotel: return "hôtel"
@@ -1202,8 +1207,8 @@ struct MapHomeView: View {
             return
         }
 
-        // Parkings, bornes de recharge, toilettes : OpenStreetMap (Overpass).
-        if [.parkingAll, .charging, .toilets].contains(kind) {
+        // Catégories OpenStreetMap (parkings, recharge, toilettes, surf, skate).
+        if [.parkingAll, .charging, .toilets, .surf, .skate].contains(kind) {
             // Échec réseau → on garde ce qui est affiché.
             guard let found = await fetchOSMCategory(kind, in: region) else { return }
             guard poiKind == kind else { return }
@@ -1418,7 +1423,8 @@ struct MapHomeView: View {
             name: { Self.parkingName(fromTags: $0) })
     }
 
-    /// Parkings 🅿️, bornes de recharge ⚡ ou toilettes 🚻 via OpenStreetMap.
+    /// Catégories OpenStreetMap : parkings 🅿️, recharge ⚡, toilettes 🚻,
+    /// surf 🏄, skateparks 🛹.
     private func fetchOSMCategory(_ kind: POIKind, in region: MKCoordinateRegion) async -> [POI]? {
         switch kind {
         case .parkingAll:
@@ -1436,6 +1442,24 @@ struct MapHomeView: View {
                 in: region, latCap: 0.8, lonCap: 1.1, limit: 100,
                 clauses: { "nwr[\"amenity\"=\"toilets\"]\($0);" },
                 name: { Self.toiletName(fromTags: $0) })
+        case .surf:
+            // Spots de surf : le tag surf sans les magasins (`[!shop]`), plus
+            // les plages taguées surf. Zone large (les spots sont côtiers).
+            return await fetchOverpass(
+                in: region, latCap: 2.5, lonCap: 3.5, limit: 80,
+                clauses: { b in
+                    "nwr[\"sport\"=\"surfing\"][!\"shop\"]\(b);"
+                        + "nwr[\"natural\"=\"beach\"][\"surfing\"=\"yes\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Spot de surf") })
+        case .skate:
+            return await fetchOverpass(
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 100,
+                clauses: { b in
+                    "nwr[\"leisure\"=\"skatepark\"]\(b);"
+                        + "nwr[\"sport\"=\"skateboard\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Skatepark") })
         default:
             return nil
         }
