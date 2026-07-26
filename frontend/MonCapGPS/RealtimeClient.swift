@@ -116,9 +116,14 @@ final class RealtimeClient: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 let now = Date()
-                self.liveUsers = self.liveUsers.filter { now.timeIntervalSince($0.value.lastSeen) < 15 }
+                // Ne réaffecter (donc ne notifier les vues) que si quelque chose
+                // a réellement expiré : sinon ce timer de 3 s invaliderait tout
+                // le body de la carte en continu, app immobile.
+                let users = self.liveUsers.filter { now.timeIntervalSince($0.value.lastSeen) < 15 }
+                if users.count != self.liveUsers.count { self.liveUsers = users }
                 let cutoff = now.timeIntervalSince1970 * 1000 - 30 * 60 * 1000
-                self.alerts = self.alerts.filter { $0.ts >= cutoff }
+                let live = self.alerts.filter { $0.ts >= cutoff }
+                if live.count != self.alerts.count { self.alerts = live }
             }
         }
     }

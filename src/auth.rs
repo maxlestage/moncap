@@ -1,3 +1,4 @@
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use argon2::password_hash::{
@@ -20,10 +21,17 @@ struct Claims {
 }
 
 /// Secret de signature des jetons (variable d'env JWT_SECRET en production).
-fn secret() -> Vec<u8> {
-    std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "moncap-dev-secret-change-me".to_string())
-        .into_bytes()
+///
+/// Lu une seule fois puis mémorisé : `secret()` est sur le chemin chaud de
+/// toutes les requêtes authentifiées (extracteur `AuthUser`), inutile de
+/// relire l'environnement et de réallouer à chaque appel.
+fn secret() -> &'static [u8] {
+    static SECRET: OnceLock<Vec<u8>> = OnceLock::new();
+    SECRET.get_or_init(|| {
+        std::env::var("JWT_SECRET")
+            .unwrap_or_else(|_| "moncap-dev-secret-change-me".to_string())
+            .into_bytes()
+    })
 }
 
 fn now_secs() -> u64 {
@@ -42,7 +50,7 @@ pub fn make_token(user_id: i32) -> Result<String, AppError> {
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&secret()),
+        &EncodingKey::from_secret(secret()),
     )
     .map_err(|_| AppError::Internal)
 }
@@ -51,7 +59,7 @@ pub fn make_token(user_id: i32) -> Result<String, AppError> {
 pub fn verify_token(token: &str) -> Option<i32> {
     decode::<Claims>(
         token,
-        &DecodingKey::from_secret(&secret()),
+        &DecodingKey::from_secret(secret()),
         &Validation::default(),
     )
     .ok()
@@ -135,7 +143,7 @@ mod tests {
         let t = encode(
             &Header::default(),
             &claims,
-            &EncodingKey::from_secret(&secret()),
+            &EncodingKey::from_secret(secret()),
         )
         .unwrap();
         assert_eq!(verify_token(&t), None);
