@@ -4,8 +4,8 @@ mod migration;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -448,6 +448,96 @@ struct Stats {
     centroid: Option<Coord>,
 }
 
+/// Un foyer d'incendie détecté par satellite (NASA FIRMS), tel qu'exposé aux
+/// clients : latitude / longitude uniquement.
+#[derive(Clone, Serialize)]
+struct FirePoint {
+    lat: f64,
+    lon: f64,
+}
+
+/// Cache mémoire des feux : évite d'appeler la NASA à chaque requête client.
+struct FiresCache {
+    fetched_at: Instant,
+    data: Vec<FirePoint>,
+}
+
+static FIRES_CACHE: OnceLock<tokio::sync::Mutex<Option<FiresCache>>> = OnceLock::new();
+
+/// Durée de fraîcheur du cache des feux (les données FIRMS NRT ne sont mises à
+/// jour que quelques fois par jour).
+const FIRES_TTL: Duration = Duration::from_secs(900);
+
+/// GET /fires — incendies actifs sur la France métropolitaine (NASA FIRMS).
+///
+/// La clé FIRMS (MAP_KEY) est détenue **par le serveur** (variable
+/// d'environnement `FIRMS_MAP_KEY`, repli `FIRMS_KEY`), jamais exposée aux
+/// clients : tous les utilisateurs profitent des feux sans configurer de clé.
+/// Sans clé configurée, renvoie une liste vide (silencieux). Résultat mis en
+/// cache 15 min ; en cas d'échec réseau, le dernier cache est renvoyé.
+async fn list_fires() -> Json<Vec<FirePoint>> {
+    let key = std::env::var("FIRMS_MAP_KEY")
+        .or_else(|_| std::env::var("FIRMS_KEY"))
+        .ok()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty());
+    let Some(key) = key else { return Json(vec![]) };
+
+    let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(None));
+    let mut guard = cache.lock().await;
+    if let Some(c) = guard.as_ref() {
+        if c.fetched_at.elapsed() < FIRES_TTL {
+            return Json(c.data.clone());
+        }
+    }
+
+    match fetch_fires(&key).await {
+        Some(data) => {
+            *guard = Some(FiresCache {
+                fetched_at: Instant::now(),
+                data: data.clone(),
+            });
+            Json(data)
+        }
+        // Échec réseau : on garde le dernier cache connu (sinon vide).
+        None => Json(guard.as_ref().map(|c| c.data.clone()).unwrap_or_default()),
+    }
+}
+
+/// Interroge l'API FIRMS (CSV) : France métropolitaine (Corse incluse), VIIRS
+/// S-NPP, dernières 24 h. `None` en cas d'échec. Garde-fou à 500 foyers.
+async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
+    // Zone = ouest,sud,est,nord.
+    let area = "-5.5,41,10,51.5";
+    let url =
+        format!("https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/1");
+    let resp = reqwest::Client::new()
+        .get(&url)
+        .timeout(Duration::from_secs(15))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let text = resp.text().await.ok()?;
+
+    // CSV : latitude,longitude,... (première ligne = en-tête).
+    let mut out = Vec::new();
+    for line in text.lines().skip(1) {
+        let mut cols = line.split(',');
+        let lat = cols.next().and_then(|s| s.trim().parse::<f64>().ok());
+        let lon = cols.next().and_then(|s| s.trim().parse::<f64>().ok());
+        if let (Some(lat), Some(lon)) = (lat, lon) {
+            out.push(FirePoint { lat, lon });
+            if out.len() >= 500 {
+                break;
+            }
+        }
+    }
+    Some(out)
+}
+
 /// GET /health — sonde de disponibilité. Vérifie que la base répond
 /// (`SELECT 1`) : 200 « ok » si tout va bien, 503 sinon. Utile pour le
 /// monitoring : distingue « process vivant » de « service réellement prêt ».
@@ -507,6 +597,7 @@ fn build_app(state: AppState) -> Router {
         .route("/alerts/:id/vote", post(vote_alert))
         .route("/account", get(account_info).delete(delete_account))
         .route("/leaderboard", get(leaderboard))
+        .route("/fires", get(list_fires))
         .route("/privacy", get(privacy_page))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
