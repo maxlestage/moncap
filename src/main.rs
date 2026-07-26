@@ -518,16 +518,7 @@ async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
     let area = "-5.5,41,10,51.5";
     let url =
         format!("https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/1");
-    // Client HTTP réutilisé (pool de connexions + pile TLS construits une seule
-    // fois) plutôt que reconstruit à chaque appel.
-    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
-    let client = HTTP.get_or_init(|| {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(15))
-            .build()
-            .unwrap_or_default()
-    });
-    let resp = client.get(&url).send().await.ok()?;
+    let resp = http_client().get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }
@@ -547,6 +538,179 @@ async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
         }
     }
     Some(out)
+}
+
+/// Client HTTP sortant partagé (pool de connexions + pile TLS construits une
+/// seule fois) — réutilisé par tous les appels externes (FIRMS, TomTom).
+fn http_client() -> &'static reqwest::Client {
+    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+    HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap_or_default()
+    })
+}
+
+/// Un bouchon (ou route fermée) en temps réel, tel qu'exposé aux clients.
+#[derive(Clone, Serialize)]
+struct TrafficPoint {
+    lat: f64,
+    lon: f64,
+    /// Retard estimé en secondes (0 si inconnu).
+    delay: i64,
+}
+
+/// Paramètres de `GET /traffic` : emprise « minLon,minLat,maxLon,maxLat ».
+#[derive(Deserialize)]
+struct TrafficQuery {
+    bbox: String,
+}
+
+/// Cache mémoire des bouchons par emprise (arrondie) : borne le nombre d'appels
+/// à TomTom (quota gratuit) même avec beaucoup d'utilisateurs.
+type TrafficCache = tokio::sync::Mutex<HashMap<String, (Instant, Vec<TrafficPoint>)>>;
+static TRAFFIC_CACHE: OnceLock<TrafficCache> = OnceLock::new();
+
+/// Fraîcheur du cache trafic (les incidents TomTom évoluent au fil des minutes).
+const TRAFFIC_TTL: Duration = Duration::from_secs(60);
+
+/// GET /traffic?bbox=minLon,minLat,maxLon,maxLat — bouchons et routes fermées
+/// en temps réel (API TomTom Traffic Incidents).
+///
+/// La clé TomTom est détenue **par le serveur** (variable d'environnement
+/// `TOMTOM_KEY`), jamais exposée aux clients : tous les utilisateurs profitent
+/// du trafic réel sans configurer de clé. Sans clé → liste vide (silencieux).
+/// Résultat mis en cache 60 s par emprise ; en cas d'échec, liste vide.
+async fn list_traffic(Query(q): Query<TrafficQuery>) -> Json<Vec<TrafficPoint>> {
+    let key = std::env::var("TOMTOM_KEY")
+        .ok()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty());
+    let Some(key) = key else { return Json(vec![]) };
+
+    // Valide l'emprise : 4 nombres, dans les bornes géographiques.
+    let parts: Vec<f64> = q
+        .bbox
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    if parts.len() != 4
+        || !(-180.0..=180.0).contains(&parts[0])
+        || !(-90.0..=90.0).contains(&parts[1])
+        || !(-180.0..=180.0).contains(&parts[2])
+        || !(-90.0..=90.0).contains(&parts[3])
+    {
+        return Json(vec![]);
+    }
+    // Clé de cache : emprise arrondie (~0,1° ≈ 11 km) pour regrouper les appels.
+    let cache_key = format!(
+        "{:.1},{:.1},{:.1},{:.1}",
+        parts[0], parts[1], parts[2], parts[3]
+    );
+    let bbox = format!("{},{},{},{}", parts[0], parts[1], parts[2], parts[3]);
+
+    let cache = TRAFFIC_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    let mut guard = cache.lock().await;
+    if let Some((at, data)) = guard.get(&cache_key) {
+        if at.elapsed() < TRAFFIC_TTL {
+            return Json(data.clone());
+        }
+    }
+    match fetch_traffic(&key, &bbox).await {
+        Some(data) => {
+            // Purge grossière des entrées périmées avant d'insérer.
+            guard.retain(|_, (at, _)| at.elapsed() < TRAFFIC_TTL);
+            guard.insert(cache_key, (Instant::now(), data.clone()));
+            Json(data)
+        }
+        None => Json(
+            guard
+                .get(&cache_key)
+                .map(|(_, d)| d.clone())
+                .unwrap_or_default(),
+        ),
+    }
+}
+
+/// Interroge l'API TomTom Traffic Incidents (v5) sur l'emprise donnée et ne
+/// retient que les bouchons (catégorie 6) et routes fermées (8). `None` en cas
+/// d'échec. Garde-fou à 300 incidents.
+async fn fetch_traffic(key: &str, bbox: &str) -> Option<Vec<TrafficPoint>> {
+    let fields = "{incidents{geometry{type,coordinates},properties{iconCategory,delay}}}";
+    let resp = http_client()
+        .get("https://api.tomtom.com/traffic/services/5/incidentDetails")
+        .query(&[
+            ("key", key),
+            ("bbox", bbox),
+            ("fields", fields),
+            ("language", "fr-FR"),
+            ("categoryFilter", "6,8"),
+            ("timeValidityFilter", "present"),
+        ])
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: TomTomResp = resp.json().await.ok()?;
+
+    let mut out = Vec::new();
+    for inc in body.incidents.unwrap_or_default() {
+        let Some(geom) = inc.geometry else { continue };
+        // Point représentatif : le point lui-même, ou le milieu de la ligne.
+        let coord = match geom.gtype.as_str() {
+            "Point" => lonlat(&geom.coordinates),
+            "LineString" => geom
+                .coordinates
+                .as_array()
+                .and_then(|a| a.get(a.len() / 2))
+                .and_then(lonlat),
+            _ => None,
+        };
+        let Some((lon, lat)) = coord else { continue };
+        let delay = inc
+            .properties
+            .and_then(|p| p.delay)
+            .map(|d| d as i64)
+            .unwrap_or(0);
+        out.push(TrafficPoint { lat, lon, delay });
+        if out.len() >= 300 {
+            break;
+        }
+    }
+    Some(out)
+}
+
+/// Extrait `(lon, lat)` d'une valeur JSON `[lon, lat]`.
+fn lonlat(v: &serde_json::Value) -> Option<(f64, f64)> {
+    let a = v.as_array()?;
+    Some((a.first()?.as_f64()?, a.get(1)?.as_f64()?))
+}
+
+#[derive(Deserialize)]
+struct TomTomResp {
+    incidents: Option<Vec<TomTomIncident>>,
+}
+
+#[derive(Deserialize)]
+struct TomTomIncident {
+    geometry: Option<TomTomGeom>,
+    properties: Option<TomTomProps>,
+}
+
+#[derive(Deserialize)]
+struct TomTomGeom {
+    #[serde(rename = "type", default)]
+    gtype: String,
+    #[serde(default)]
+    coordinates: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct TomTomProps {
+    delay: Option<f64>,
 }
 
 /// GET /health — sonde de disponibilité. Vérifie que la base répond
@@ -609,6 +773,7 @@ fn build_app(state: AppState) -> Router {
         .route("/account", get(account_info).delete(delete_account))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
+        .route("/traffic", get(list_traffic))
         .route("/privacy", get(privacy_page))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)

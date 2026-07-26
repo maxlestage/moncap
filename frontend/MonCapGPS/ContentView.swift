@@ -430,6 +430,7 @@ struct MapHomeView: View {
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var airQuality = AirQualityService()
     @StateObject private var fires = FireService()
+    @StateObject private var traffic = TrafficService()
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -480,10 +481,10 @@ struct MapHomeView: View {
     /// contournement déclenché (anti-répétition).
     @State private var stuckSince: Date?
     @State private var lastAntiJamReroute = Date.distantPast
-    /// Bouchons communautaires : dernier scan, et signalements déjà contournés
-    /// (pour ne pas rerouter en boucle sur le même).
+    /// Bouchons (communautaires + trafic réel) : dernier scan, et bouchons déjà
+    /// contournés (pour ne pas rerouter en boucle sur le même).
     @State private var lastCommunityJamCheck = Date.distantPast
-    @State private var avoidedJamIDs: Set<Int> = []
+    @State private var avoidedJamIDs: Set<String> = []
     /// Infos du compte (points de contribution).
     @State private var accountInfo: AccountInfo?
     /// Classement des contributeurs.
@@ -667,9 +668,10 @@ struct MapHomeView: View {
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
                 maybeCheckFasterRoute(from: c)
-                // « Toujours avancer » : contourne un bouchon si on est bloqué,
-                // ou en amont s'il est signalé par la communauté sur le trajet.
-                checkCommunityJamAhead(from: c)
+                // « Toujours avancer » : évite en amont les bouchons connus
+                // (trafic réel + signalements) et contourne si on est bloqué.
+                refreshTraffic(from: c)
+                checkJamAhead(from: c)
                 checkStuckInTraffic(from: c)
                 // Recentre en permanence : si on a touché la carte, le suivi
                 // reprend tout seul après 8 s — 3D comme 2D.
@@ -869,26 +871,37 @@ struct MapHomeView: View {
         return false
     }
 
-    /// Bouchons communautaires : si un signalement « bouchon » se trouve sur le
-    /// trajet, devant nous, on cherche un itinéraire qui l'évite et on bascule
-    /// dessus — de façon proactive, avant même d'y être bloqué.
-    private func checkCommunityJamAhead(from c: CLLocationCoordinate2D) {
+    /// Rafraîchit les bouchons de trafic réel (TomTom, via le backend) autour de
+    /// la position — emprise ~±20 km. Le service temporise en interne (60 s).
+    private func refreshTraffic(from c: CLLocationCoordinate2D) {
+        guard travelMode == .car, nav.active else { return }
+        let d = 0.2  // ~ ±20 km de marge autour de la position
+        traffic.refresh(
+            minLon: c.longitude - d, minLat: c.latitude - d,
+            maxLon: c.longitude + d, maxLat: c.latitude + d)
+    }
+
+    /// Bouchons sur le trajet : si un bouchon (signalé par la communauté ou
+    /// remonté par le trafic réel) se trouve devant nous, on cherche un
+    /// itinéraire qui l'évite et on bascule dessus — de façon proactive, avant
+    /// même d'y être bloqué.
+    private func checkJamAhead(from c: CLLocationCoordinate2D) {
         guard travelMode == .car, nav.active, !nav.rerouting,
             Date().timeIntervalSince(lastCommunityJamCheck) > 20,
             Date().timeIntervalSince(lastAntiJamReroute) > 120
         else { return }
         lastCommunityJamCheck = Date()
 
-        guard let jam = communityJamAhead(from: c), !avoidedJamIDs.contains(jam.id) else { return }
-        let jamCoord = CLLocationCoordinate2D(latitude: jam.lat, longitude: jam.lon)
+        guard let jam = jamAhead(from: c), !avoidedJamIDs.contains(jam.id) else { return }
+        let jamCoord = jam.coord
         lastAntiJamReroute = Date()
         avoidedJamIDs.insert(jam.id)
         Task {
             guard let dest = nav.destination else { return }
             let routes = await drivingRoutes(from: c, to: dest, transportType: .automobile)
             guard nav.active else { return }
-            // Sépare les itinéraires qui évitent le bouchon signalé de ceux qui
-            // le traversent.
+            // Sépare les itinéraires qui évitent le bouchon de ceux qui le
+            // traversent.
             let avoiding = routes.filter { Self.route($0, avoids: jamCoord, within: 250) }
             let crossing = routes.filter { !Self.route($0, avoids: jamCoord, within: 250) }
             guard let best = avoiding.min(by: { $0.expectedTravelTime < $1.expectedTravelTime })
@@ -904,18 +917,34 @@ struct MapHomeView: View {
         }
     }
 
-    /// Renvoie un signalement « bouchon » situé sur l'itinéraire, devant nous
-    /// (entre ~400 m et ~8 km) et à moins de 300 m du tracé — ou nil.
-    private func communityJamAhead(from c: CLLocationCoordinate2D) -> Alert? {
+    /// Tous les bouchons connus (communauté + trafic réel TomTom), avec un id
+    /// stable pour l'anti-répétition.
+    private func knownJams() -> [(id: String, coord: CLLocationCoordinate2D)] {
+        var out: [(id: String, coord: CLLocationCoordinate2D)] = []
+        for a in realtime.alerts where a.category == "bouchon" {
+            out.append(
+                (id: "alert-\(a.id)",
+                    coord: CLLocationCoordinate2D(latitude: a.lat, longitude: a.lon)))
+        }
+        for j in traffic.jams {
+            out.append((id: "traffic-\(j.id)", coord: j.coordinate))
+        }
+        return out
+    }
+
+    /// Renvoie un bouchon situé sur l'itinéraire, devant nous (entre ~400 m et
+    /// ~8 km) et à moins de 300 m du tracé — ou nil.
+    private func jamAhead(from c: CLLocationCoordinate2D)
+        -> (id: String, coord: CLLocationCoordinate2D)?
+    {
         let coords = nav.routeCoords
         guard coords.count >= 2 else { return nil }
         let hereIdx = Self.nearestIndex(on: coords, to: c)
-        for alert in realtime.alerts where alert.category == "bouchon" {
-            let jc = CLLocationCoordinate2D(latitude: alert.lat, longitude: alert.lon)
-            let jIdx = Self.nearestIndex(on: coords, to: jc)
+        for jam in knownJams() {
+            let jIdx = Self.nearestIndex(on: coords, to: jam.coord)
             guard jIdx > hereIdx else { continue }  // devant nous seulement
             let perp = CLLocation(latitude: coords[jIdx].latitude, longitude: coords[jIdx].longitude)
-                .distance(from: CLLocation(latitude: jc.latitude, longitude: jc.longitude))
+                .distance(from: CLLocation(latitude: jam.coord.latitude, longitude: jam.coord.longitude))
             guard perp < 300 else { continue }  // pas vraiment sur la route
             // Distance le long du tracé jusqu'au bouchon.
             var ahead = 0.0
@@ -927,7 +956,7 @@ struct MapHomeView: View {
                             latitude: coords[i + 1].latitude, longitude: coords[i + 1].longitude))
                 i += 1
             }
-            if ahead >= 400, ahead <= 8000 { return alert }
+            if ahead >= 400, ahead <= 8000 { return jam }
         }
         return nil
     }
