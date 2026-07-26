@@ -1459,15 +1459,17 @@ struct MapHomeView: View {
                 clauses: { "nwr[\"amenity\"=\"toilets\"]\($0);" },
                 name: { Self.toiletName(fromTags: $0) })
         case .surf:
-            // Spots de surf : le tag surf sans les magasins (`[!shop]`), plus
-            // les plages taguées surf. Zone large (les spots sont côtiers).
+            // Surf, densifié : spots + écoles (sans les magasins `[!shop]`),
+            // TOUTES les plages (c'est là qu'on surfe) et tout ce qui est tagué
+            // surfable. Zone large (les spots sont côtiers).
             return await fetchOverpass(
-                in: region, latCap: 2.5, lonCap: 3.5, limit: 120,
+                in: region, latCap: 2.5, lonCap: 3.5, limit: 150,
                 clauses: { b in
                     "nwr[\"sport\"=\"surfing\"][!\"shop\"]\(b);"
-                        + "nwr[\"natural\"=\"beach\"][\"surfing\"=\"yes\"]\(b);"
+                        + "nwr[\"natural\"=\"beach\"]\(b);"
+                        + "nwr[\"surfing\"=\"yes\"]\(b);"
                 },
-                name: { Self.namedOr($0, "Spot de surf") })
+                name: { Self.surfName(fromTags: $0) })
         case .skate:
             return await fetchOverpass(
                 in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
@@ -1485,6 +1487,14 @@ struct MapHomeView: View {
     private static func namedOr(_ tags: [String: String]?, _ fallback: String) -> String {
         if let name = tags?["name"], !name.isEmpty { return name }
         return fallback
+    }
+
+    /// Libellé d'un lieu de surf : nom OSM s'il existe (ex. « Plage de la
+    /// Piste »), sinon « Plage » pour une plage, « Spot de surf » sinon.
+    private static func surfName(fromTags tags: [String: String]?) -> String {
+        if let name = tags?["name"], !name.isEmpty { return name }
+        if tags?["natural"] == "beach" { return "Plage" }
+        return "Spot de surf"
     }
 
     /// Libellé de toilettes : signale l'accès PMR et le caractère payant.
