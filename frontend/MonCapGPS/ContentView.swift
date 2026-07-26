@@ -1160,12 +1160,14 @@ struct MapHomeView: View {
     /// des lieux : déplacement ≥ 15 % de la zone, ou zoom/dézoom ≥ 25 %.
     private func regionChangedEnough(_ r: MKCoordinateRegion) -> Bool {
         guard let last = lastPOIRegion else { return true }
+        // Rechargement agressif : on rafraîchit dès un petit déplacement (8 %)
+        // ou un léger zoom/dézoom (15 %).
         let movedLat = abs(r.center.latitude - last.center.latitude)
-            > last.span.latitudeDelta * 0.15
+            > last.span.latitudeDelta * 0.08
         let movedLon = abs(r.center.longitude - last.center.longitude)
-            > last.span.longitudeDelta * 0.15
-        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.25
-            || r.span.latitudeDelta < last.span.latitudeDelta / 1.25
+            > last.span.longitudeDelta * 0.08
+        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.15
+            || r.span.latitudeDelta < last.span.latitudeDelta / 1.15
         return movedLat || movedLon || zoomed
     }
 
@@ -1174,14 +1176,17 @@ struct MapHomeView: View {
     private func loadPOIs(_ kind: POIKind) async {
         let region = visibleRegion
             ?? location.coordinate.map {
-                MKCoordinateRegion(center: $0, latitudinalMeters: 4000, longitudinalMeters: 4000)
+                MKCoordinateRegion(center: $0, latitudinalMeters: 8000, longitudinalMeters: 8000)
             }
         guard let region else { return }
+        // Recherche agressive : on interroge une zone plus large que l'écran
+        // pour ramener aussi les lieux juste au-delà des bords visibles.
+        let searchRegion = Self.expandedRegion(region, factor: 1.6)
 
         // Baignade : plages, lacs, piscines… d'OpenStreetMap.
         if kind == .water {
             // Échec réseau → on garde ce qui est affiché.
-            guard let found = await fetchSwimmingSpots(in: region) else { return }
+            guard let found = await fetchSwimmingSpots(in: searchRegion) else { return }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1191,7 +1196,7 @@ struct MapHomeView: View {
         // Essence : toutes les stations de la zone (open data français), avec
         // le prix du carburant choisi si disponible.
         if kind == .fuel {
-            guard let found = await fetchFuelStations(in: region, type: fuelType) else { return }
+            guard let found = await fetchFuelStations(in: searchRegion, type: fuelType) else { return }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1200,7 +1205,7 @@ struct MapHomeView: View {
 
         // Places handicapé : stationnement PMR d'OpenStreetMap.
         if kind == .parking {
-            guard let found = await fetchDisabledParking(in: region) else { return }
+            guard let found = await fetchDisabledParking(in: searchRegion) else { return }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1210,7 +1215,7 @@ struct MapHomeView: View {
         // Catégories OpenStreetMap (parkings, recharge, toilettes, surf, skate).
         if [.parkingAll, .charging, .toilets, .surf, .skate].contains(kind) {
             // Échec réseau → on garde ce qui est affiché.
-            guard let found = await fetchOSMCategory(kind, in: region) else { return }
+            guard let found = await fetchOSMCategory(kind, in: searchRegion) else { return }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1219,16 +1224,27 @@ struct MapHomeView: View {
 
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = kind.query
-        req.region = region
+        req.region = searchRegion
         req.resultTypes = .pointOfInterest
         // Échec réseau → on garde ce qui est affiché.
         guard let resp = try? await MKLocalSearch(request: req).start() else { return }
         // La catégorie a pu changer pendant la recherche.
         guard poiKind == kind else { return }
-        pois = resp.mapItems.prefix(25).map {
+        pois = resp.mapItems.prefix(50).map {
             POI(name: $0.name ?? "Lieu", coordinate: $0.placemark.coordinate)
         }
         lastPOIRegion = region
+    }
+
+    /// Agrandit une région autour de son centre (recherche « agressive » : on
+    /// ramène aussi les lieux juste au-delà des bords de l'écran). Span plafonné
+    /// pour éviter des requêtes démesurées au dézoom.
+    private static func expandedRegion(_ r: MKCoordinateRegion, factor: Double) -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: r.center,
+            span: MKCoordinateSpan(
+                latitudeDelta: min(r.span.latitudeDelta * factor, 12.0),
+                longitudeDelta: min(r.span.longitudeDelta * factor, 12.0)))
     }
 
     /// Toutes les stations essence de la zone visible via l'open data français
@@ -1309,7 +1325,7 @@ struct MapHomeView: View {
             + "nwr[\"leisure\"=\"beach_resort\"]\(bbox);"
             + "nwr[\"leisure\"=\"water_park\"]\(bbox);"
             + "nwr[\"leisure\"=\"sports_centre\"][\"sport\"=\"swimming\"]\(bbox);"
-            + ");out center 60;"
+            + ");out center 100;"
         // Serveur principal puis miroir de secours (vérifiés fonctionnels) :
         // on ne renvoie nil que si tous échouent.
         let endpoints = [
@@ -1414,7 +1430,7 @@ struct MapHomeView: View {
     /// parkings annonçant des places réservées (`capacity:disabled`).
     private func fetchDisabledParking(in region: MKCoordinateRegion) async -> [POI]? {
         await fetchOverpass(
-            in: region, latCap: 1.0, lonCap: 1.4, limit: 100,
+            in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
             clauses: { b in
                 "nwr[\"amenity\"=\"parking_space\"][\"wheelchair\"=\"designated\"]\(b);"
                     + "nwr[\"amenity\"=\"parking_space\"][\"parking_space\"=\"disabled\"]\(b);"
@@ -1429,24 +1445,24 @@ struct MapHomeView: View {
         switch kind {
         case .parkingAll:
             return await fetchOverpass(
-                in: region, latCap: 0.6, lonCap: 0.8, limit: 100,
+                in: region, latCap: 0.6, lonCap: 0.8, limit: 150,
                 clauses: { "nwr[\"amenity\"=\"parking\"]\($0);" },
                 name: { Self.namedOr($0, "Parking") })
         case .charging:
             return await fetchOverpass(
-                in: region, latCap: 1.0, lonCap: 1.4, limit: 100,
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
                 clauses: { "nwr[\"amenity\"=\"charging_station\"]\($0);" },
                 name: { Self.namedOr($0, "Borne de recharge") })
         case .toilets:
             return await fetchOverpass(
-                in: region, latCap: 0.8, lonCap: 1.1, limit: 100,
+                in: region, latCap: 0.8, lonCap: 1.1, limit: 150,
                 clauses: { "nwr[\"amenity\"=\"toilets\"]\($0);" },
                 name: { Self.toiletName(fromTags: $0) })
         case .surf:
             // Spots de surf : le tag surf sans les magasins (`[!shop]`), plus
             // les plages taguées surf. Zone large (les spots sont côtiers).
             return await fetchOverpass(
-                in: region, latCap: 2.5, lonCap: 3.5, limit: 80,
+                in: region, latCap: 2.5, lonCap: 3.5, limit: 120,
                 clauses: { b in
                     "nwr[\"sport\"=\"surfing\"][!\"shop\"]\(b);"
                         + "nwr[\"natural\"=\"beach\"][\"surfing\"=\"yes\"]\(b);"
@@ -1454,7 +1470,7 @@ struct MapHomeView: View {
                 name: { Self.namedOr($0, "Spot de surf") })
         case .skate:
             return await fetchOverpass(
-                in: region, latCap: 1.5, lonCap: 2.0, limit: 100,
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
                 clauses: { b in
                     "nwr[\"leisure\"=\"skatepark\"]\(b);"
                         + "nwr[\"sport\"=\"skateboard\"]\(b);"
