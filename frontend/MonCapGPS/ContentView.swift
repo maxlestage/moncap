@@ -280,6 +280,7 @@ private let routePalette: [Color] = [
 /// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
 enum POIKind: String, CaseIterable, Identifiable {
     case fuel, parking, parkingAll, charging, toilets, water, surf, skate
+    case pharmacy, atm, supermarket, camping, drinkingWater, viewpoint
     case fastFood, restaurant, hotel, tourism, hangout
     var id: String { rawValue }
 
@@ -293,6 +294,12 @@ enum POIKind: String, CaseIterable, Identifiable {
         case .water: return "Baignade"
         case .surf: return "Surf"
         case .skate: return "Skatepark"
+        case .pharmacy: return "Pharmacie"
+        case .atm: return "Distributeur"
+        case .supermarket: return "Supermarché"
+        case .camping: return "Camping"
+        case .drinkingWater: return "Eau potable"
+        case .viewpoint: return "Point de vue"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
         case .hotel: return "Hôtels"
@@ -311,6 +318,12 @@ enum POIKind: String, CaseIterable, Identifiable {
         case .water: return "🏊"
         case .surf: return "🏄"
         case .skate: return "🛹"
+        case .pharmacy: return "💊"
+        case .atm: return "🏧"
+        case .supermarket: return "🛒"
+        case .camping: return "🏕️"
+        case .drinkingWater: return "🚰"
+        case .viewpoint: return "⛰️"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
         case .hotel: return "🏨"
@@ -320,11 +333,12 @@ enum POIKind: String, CaseIterable, Identifiable {
     }
 
     /// Requête MKLocalSearch correspondante. Essence (open data) et les
-    /// catégories OpenStreetMap (handicapé, parking, recharge, toilettes,
-    /// baignade, surf, skatepark) passent par des sources dédiées.
+    /// catégories OpenStreetMap passent par des sources dédiées ; seules les
+    /// catégories « lieux Apple » utilisent une requête en langage naturel.
     var query: String {
         switch self {
-        case .fuel, .parking, .parkingAll, .charging, .toilets, .water, .surf, .skate:
+        case .fuel, .parking, .parkingAll, .charging, .toilets, .water, .surf, .skate,
+            .pharmacy, .atm, .supermarket, .camping, .drinkingWater, .viewpoint:
             return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
@@ -1220,8 +1234,9 @@ struct MapHomeView: View {
             return
         }
 
-        // Catégories OpenStreetMap (parkings, recharge, toilettes, surf, skate).
-        if [.parkingAll, .charging, .toilets, .surf, .skate].contains(kind) {
+        // Catégories OpenStreetMap.
+        if [.parkingAll, .charging, .toilets, .surf, .skate,
+            .pharmacy, .atm, .supermarket, .camping, .drinkingWater, .viewpoint].contains(kind) {
             // Échec réseau → on garde ce qui est affiché.
             guard let found = await fetchOSMCategory(kind, in: searchRegion) else { return }
             guard poiKind == kind else { return }
@@ -1486,6 +1501,39 @@ struct MapHomeView: View {
                         + "nwr[\"sport\"=\"skateboard\"]\(b);"
                 },
                 name: { Self.namedOr($0, "Skatepark") })
+        case .pharmacy:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"pharmacy\"]\($0);" },
+                name: { Self.namedOr($0, "Pharmacie") })
+        case .atm:
+            return await fetchOverpass(
+                in: region, latCap: 0.8, lonCap: 1.1, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"atm\"]\($0);" },
+                name: { Self.namedOr($0, "Distributeur") })
+        case .supermarket:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"shop\"=\"supermarket\"]\($0);" },
+                name: { Self.namedOr($0, "Supermarché") })
+        case .camping:
+            return await fetchOverpass(
+                in: region, latCap: 2.5, lonCap: 3.5, limit: 120,
+                clauses: { b in
+                    "nwr[\"tourism\"=\"camp_site\"]\(b);"
+                        + "nwr[\"tourism\"=\"caravan_site\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Camping") })
+        case .drinkingWater:
+            return await fetchOverpass(
+                in: region, latCap: 0.8, lonCap: 1.1, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"drinking_water\"]\($0);" },
+                name: { Self.namedOr($0, "Eau potable") })
+        case .viewpoint:
+            return await fetchOverpass(
+                in: region, latCap: 2.5, lonCap: 3.5, limit: 120,
+                clauses: { "nwr[\"tourism\"=\"viewpoint\"]\($0);" },
+                name: { Self.namedOr($0, "Point de vue") })
         default:
             return nil
         }
