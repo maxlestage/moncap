@@ -89,6 +89,15 @@ final class NavigationManager: ObservableObject {
         }
     }
 
+    /// Applique un itinéraire qui évite un bouchon signalé par la communauté,
+    /// repéré en amont sur le trajet (avant même d'y être bloqué).
+    func applyReportedJamDetour(route: MKRoute) {
+        load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
+             km: route.distance / 1000, min: route.expectedTravelTime / 60,
+             announceStart: false)
+        speak("Bouchon signalé devant. Itinéraire pour l'éviter.")
+    }
+
     /// Applique un itinéraire recalculé (sans annonce « Départ »).
     func applyReroute(route: MKRoute) {
         load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
