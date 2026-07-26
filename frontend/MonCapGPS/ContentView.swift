@@ -279,11 +279,12 @@ private let routePalette: [Color] = [
 
 /// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
 enum POIKind: String, CaseIterable, Identifiable {
-    case water, fastFood, restaurant, hotel, tourism, hangout
+    case fuel, water, fastFood, restaurant, hotel, tourism, hangout
     var id: String { rawValue }
 
     var label: String {
         switch self {
+        case .fuel: return "Essence"
         case .water: return "Baignade"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
@@ -295,6 +296,7 @@ enum POIKind: String, CaseIterable, Identifiable {
 
     var emoji: String {
         switch self {
+        case .fuel: return "⛽"
         case .water: return "🏊"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
@@ -304,11 +306,11 @@ enum POIKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Requête MKLocalSearch correspondante (les points d'eau passent par
-    /// OpenStreetMap, pas par MKLocalSearch).
+    /// Requête MKLocalSearch correspondante (les points d'eau et les stations
+    /// essence passent par des sources dédiées, pas par MKLocalSearch).
     var query: String {
         switch self {
-        case .water: return ""
+        case .fuel, .water: return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
         case .hotel: return "hôtel"
@@ -1171,6 +1173,16 @@ struct MapHomeView: View {
             return
         }
 
+        // Essence : toutes les stations de la zone (open data français), avec
+        // le prix du carburant choisi si disponible.
+        if kind == .fuel {
+            guard let found = await fetchFuelStations(in: region, type: fuelType) else { return }
+            guard poiKind == kind else { return }
+            pois = found
+            lastPOIRegion = region
+            return
+        }
+
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = kind.query
         req.region = region
@@ -1183,6 +1195,53 @@ struct MapHomeView: View {
             POI(name: $0.name ?? "Lieu", coordinate: $0.placemark.coordinate)
         }
         lastPOIRegion = region
+    }
+
+    /// Toutes les stations essence de la zone visible via l'open data français
+    /// (data.economie.gouv.fr), avec le prix du carburant choisi si disponible.
+    /// Renvoie nil en cas d'échec réseau (pour conserver l'affichage actuel).
+    /// France uniquement (hors de France : liste vide).
+    private func fetchFuelStations(in region: MKCoordinateRegion, type: String) async -> [POI]? {
+        // Rayon = moitié de la hauteur visible, plafonné (~40 km) pour rester
+        // rapide ; `rows` plafonne déjà le nombre de stations renvoyées.
+        let radiusM = min(max(region.span.latitudeDelta * 111_320 / 2, 1500), 40_000)
+        var comps = URLComponents(
+            string: "https://data.economie.gouv.fr/api/records/1.0/search/")!
+        comps.queryItems = [
+            URLQueryItem(name: "dataset",
+                         value: "prix-des-carburants-en-france-flux-instantane-v2"),
+            URLQueryItem(name: "rows", value: "100"),
+            URLQueryItem(
+                name: "geofilter.distance",
+                value: "\(region.center.latitude),\(region.center.longitude),\(Int(radiusM))"),
+        ]
+        guard let url = comps.url,
+            let (data, _) = try? await URLSession.shared.data(from: url),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let records = json["records"] as? [[String: Any]]
+        else { return nil }
+
+        let priceKey = "\(type)_prix"
+        var out: [POI] = []
+        for record in records {
+            guard let fields = record["fields"] as? [String: Any],
+                let geom = fields["geom"] as? [Any], geom.count == 2,
+                let lat = (geom[0] as? NSNumber)?.doubleValue,
+                let lon = (geom[1] as? NSNumber)?.doubleValue
+            else { continue }
+            // Prix du carburant choisi (Double ou chaîne « 1,72 »), format FR.
+            var priceText: String?
+            if let v = fields[priceKey] as? Double {
+                priceText = String(format: "%.3f", v).replacingOccurrences(of: ".", with: ",") + " €"
+            } else if let s = fields[priceKey] as? String,
+                let v = Double(s.replacingOccurrences(of: ",", with: ".")) {
+                priceText = String(format: "%.3f", v).replacingOccurrences(of: ".", with: ",") + " €"
+            }
+            let ville = (fields["ville"] as? String) ?? "Station"
+            let name = priceText.map { "\($0) · \(ville)" } ?? ville
+            out.append(POI(name: name, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
+        }
+        return out
     }
 
     /// Lieux de baignade (OpenStreetMap) dans la zone visible : plages, zones
