@@ -151,5 +151,22 @@ jobs:
           fi
           IPA="$(ls "$RUNNER_TEMP"/export/*.ipa | head -1)"
           echo "Envoi de $IPA"
-          xcrun altool --upload-app -f "$IPA" -t ios \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          # On capture la sortie pour distinguer un vrai échec d'envoi du simple
+          # quota quotidien Apple (erreur 90382 : « Upload limit reached »), qui
+          # n'a rien à voir avec le code — l'archive a déjà réussi. Dans ce cas
+          # on émet un avertissement et le job reste vert ; tout autre échec fait
+          # bien échouer le build.
+          set +e
+          OUT="$(xcrun altool --upload-app -f "$IPA" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+          if [ "$CODE" -ne 0 ]; then
+            if echo "$OUT" | grep -q '90382'; then
+              echo "::warning::Quota d'envoi TestFlight quotidien atteint (Apple 90382). L'app a bien été archivée ; réessayer dans 24 h."
+              exit 0
+            fi
+            echo "::error::Échec de l'envoi TestFlight."
+            exit "$CODE"
+          fi
