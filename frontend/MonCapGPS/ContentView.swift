@@ -279,12 +279,13 @@ private let routePalette: [Color] = [
 
 /// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
 enum POIKind: String, CaseIterable, Identifiable {
-    case fuel, water, fastFood, restaurant, hotel, tourism, hangout
+    case fuel, parking, water, fastFood, restaurant, hotel, tourism, hangout
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .fuel: return "Essence"
+        case .parking: return "Handicapé"
         case .water: return "Baignade"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
@@ -297,6 +298,7 @@ enum POIKind: String, CaseIterable, Identifiable {
     var emoji: String {
         switch self {
         case .fuel: return "⛽"
+        case .parking: return "♿"
         case .water: return "🏊"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
@@ -306,11 +308,11 @@ enum POIKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Requête MKLocalSearch correspondante (les points d'eau et les stations
-    /// essence passent par des sources dédiées, pas par MKLocalSearch).
+    /// Requête MKLocalSearch correspondante. Essence, points d'eau et places
+    /// handicapé passent par des sources dédiées (open data / OpenStreetMap).
     var query: String {
         switch self {
-        case .fuel, .water: return ""
+        case .fuel, .parking, .water: return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
         case .hotel: return "hôtel"
@@ -1183,6 +1185,15 @@ struct MapHomeView: View {
             return
         }
 
+        // Places handicapé : stationnement PMR d'OpenStreetMap.
+        if kind == .parking {
+            guard let found = await fetchDisabledParking(in: region) else { return }
+            guard poiKind == kind else { return }
+            pois = found
+            lastPOIRegion = region
+            return
+        }
+
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = kind.query
         req.region = region
@@ -1315,6 +1326,73 @@ struct MapHomeView: View {
                            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
         }
         return out
+    }
+
+    /// Places de stationnement handicapé (PMR) de la zone visible via
+    /// OpenStreetMap : places individuelles `wheelchair=designated` /
+    /// `parking_space=disabled`, et parkings annonçant des places `capacity:disabled`.
+    /// Renvoie nil en cas d'échec réseau (pour conserver l'affichage actuel).
+    private func fetchDisabledParking(in region: MKCoordinateRegion) async -> [POI]? {
+        // Zone plafonnée pour une requête rapide (le stationnement PMR est dense).
+        let latSpan = min(region.span.latitudeDelta, 1.0)
+        let lonSpan = min(region.span.longitudeDelta, 1.4)
+        let south = region.center.latitude - latSpan / 2
+        let north = region.center.latitude + latSpan / 2
+        let west = region.center.longitude - lonSpan / 2
+        let east = region.center.longitude + lonSpan / 2
+        let bbox = "(\(south),\(west),\(north),\(east))"
+        let q = "[out:json][timeout:20];("
+            + "nwr[\"amenity\"=\"parking_space\"][\"wheelchair\"=\"designated\"]\(bbox);"
+            + "nwr[\"amenity\"=\"parking_space\"][\"parking_space\"=\"disabled\"]\(bbox);"
+            + "nwr[\"amenity\"=\"parking\"][\"capacity:disabled\"]\(bbox);"
+            + ");out center 100;"
+
+        let endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        ]
+        var data: Data?
+        for endpoint in endpoints {
+            var comps = URLComponents(string: endpoint)!
+            comps.queryItems = [URLQueryItem(name: "data", value: q)]
+            guard let url = comps.url else { continue }
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 20
+            if let (d, resp) = try? await URLSession.shared.data(for: req),
+                (resp as? HTTPURLResponse)?.statusCode == 200 {
+                data = d
+                break
+            }
+        }
+        guard let data else { return nil }
+        struct Resp: Decodable { let elements: [Element] }
+        struct Center: Decodable { let lat: Double; let lon: Double }
+        struct Element: Decodable {
+            let lat: Double?
+            let lon: Double?
+            let center: Center?
+            let tags: [String: String]?
+        }
+        guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return nil }
+        var out: [POI] = []
+        for el in resp.elements {
+            let lat = el.lat ?? el.center?.lat
+            let lon = el.lon ?? el.center?.lon
+            guard let lat, let lon else { continue }
+            out.append(POI(name: Self.parkingName(fromTags: el.tags),
+                           coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
+        }
+        return out
+    }
+
+    /// Libellé d'une place / d'un parking handicapé selon ses tags OSM.
+    private static func parkingName(fromTags tags: [String: String]?) -> String {
+        if let cap = tags?["capacity:disabled"], let n = Int(cap), n > 0 {
+            let base = tags?["name"] ?? "Parking"
+            return "\(base) · \(n) place\(n > 1 ? "s" : "") PMR"
+        }
+        if let name = tags?["name"], !name.isEmpty { return name }
+        return "Place PMR"
     }
 
     /// Libellé par défaut d'un lieu de baignade selon ses tags OSM.
