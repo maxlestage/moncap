@@ -28,7 +28,7 @@ redis = { version = "0.27", features = ["tokio-rustls-comp", "tls-rustls-insecur
 futures-util = "0.3"
 # Client HTTP sortant (rustls, sans OpenSSL) : sert à interroger l'API NASA
 # FIRMS côté serveur pour ne pas exposer la clé aux clients.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 [dev-dependencies]
 # `oneshot` pour tester les handlers Axum sans ouvrir de port réseau.
