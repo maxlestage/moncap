@@ -337,7 +337,10 @@ enum POIKind: String, CaseIterable, Identifiable {
 
 /// Un lieu affiché sur la carte (résultat de recherche par catégorie).
 struct POI: Identifiable {
-    let id = UUID()
+    /// Identité STABLE (nom + position) : lors d'un rechargement, une épingle
+    /// inchangée garde le même id, donc SwiftUI ne reconstruit que ce qui
+    /// change au lieu de redessiner toutes les épingles (fluidité de la carte).
+    var id: String { "\(name)|\(Int(coordinate.latitude * 1e5))|\(Int(coordinate.longitude * 1e5))" }
     let name: String
     let coordinate: CLLocationCoordinate2D
 }
@@ -853,9 +856,12 @@ struct MapHomeView: View {
                             Task { await presentRouteOptions(to: p.coordinate) }
                         } label: {
                             ZStack {
+                                // Contour léger plutôt qu'une ombre : bien moins
+                                // coûteux à dessiner quand il y a beaucoup
+                                // d'épingles (fluidité).
                                 Circle().fill(.white)
                                     .frame(width: 34, height: 34)
-                                    .shadow(radius: 2)
+                                    .overlay(Circle().stroke(.black.opacity(0.15), lineWidth: 0.5))
                                 Text(poiKind?.emoji ?? "📍").font(.body)
                             }
                         }
@@ -1160,14 +1166,15 @@ struct MapHomeView: View {
     /// des lieux : déplacement ≥ 15 % de la zone, ou zoom/dézoom ≥ 25 %.
     private func regionChangedEnough(_ r: MKCoordinateRegion) -> Bool {
         guard let last = lastPOIRegion else { return true }
-        // Rechargement agressif : on rafraîchit dès un petit déplacement (8 %)
-        // ou un léger zoom/dézoom (15 %).
+        // Rechargement réactif mais pas incessant : dès ~12 % de déplacement ou
+        // ~20 % de zoom. Les identités d'épingles étant stables, un rechargement
+        // ne redessine que ce qui a changé.
         let movedLat = abs(r.center.latitude - last.center.latitude)
-            > last.span.latitudeDelta * 0.08
+            > last.span.latitudeDelta * 0.12
         let movedLon = abs(r.center.longitude - last.center.longitude)
-            > last.span.longitudeDelta * 0.08
-        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.15
-            || r.span.latitudeDelta < last.span.latitudeDelta / 1.15
+            > last.span.longitudeDelta * 0.12
+        let zoomed = r.span.latitudeDelta > last.span.latitudeDelta * 1.2
+            || r.span.latitudeDelta < last.span.latitudeDelta / 1.2
         return movedLat || movedLon || zoomed
     }
 
