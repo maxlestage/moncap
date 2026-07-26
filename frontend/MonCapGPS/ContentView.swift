@@ -430,8 +430,6 @@ struct MapHomeView: View {
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var airQuality = AirQualityService()
     @StateObject private var fires = FireService()
-    /// Clé NASA FIRMS (gratuite) pour afficher les incendies. Vide = désactivé.
-    @AppStorage("moncap.firmsKey") private var firmsKey = ""
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -641,7 +639,7 @@ struct MapHomeView: View {
             // Qualité de l'air en temps réel (indice européen).
             airQuality.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
-            fires.refresh(key: firmsKey)
+            fires.refresh()
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
             // 1×/min (le soleil bouge lentement — pas besoin à chaque point GPS).
             if Date().timeIntervalSince(lastNightCheck) >= 60 {
@@ -700,10 +698,6 @@ struct MapHomeView: View {
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.
             if on { nearbyNotifier.requestAuthorizationIfNeeded() }
-        }
-        .onChange(of: firmsKey) { _, key in
-            // Nouvelle clé NASA FIRMS saisie : on charge les incendies tout de suite.
-            fires.refresh(key: key)
         }
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
@@ -2078,21 +2072,14 @@ struct MapHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                // Incendies actifs (NASA FIRMS) : nécessite une clé gratuite.
+                // Incendies actifs (NASA FIRMS) : automatique, sans configuration.
                 Section("Incendies 🔥 (NASA FIRMS)") {
-                    TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .monospaced))
-                    if firmsKey.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Text("Colle ta clé gratuite (obtenue en 1 min sur firms.modaps.eosdis.nasa.gov/api/map_key) pour voir les incendies détectés par satellite, en zones rouges sur la carte.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("\(fires.fires.count) foyer(s) actif(s) en France (dernières 24 h, satellite VIIRS).")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                    Text("\(fires.fires.count) foyer(s) actif(s) en France (dernières 24 h, satellite VIIRS).")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("Les incendies détectés par satellite s'affichent en zones rouges sur la carte, automatiquement.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
