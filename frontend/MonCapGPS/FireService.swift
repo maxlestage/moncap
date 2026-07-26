@@ -42,7 +42,9 @@ final class FireService: ObservableObject {
     }
 
     /// Interroge `GET /fires`. Renvoie nil en cas d'échec (affichage gardé).
-    private static func fetch(base: URL) async -> [Fire]? {
+    /// `nonisolated` : le décodage JSON + la transformation (potentiellement des
+    /// centaines de points) s'exécutent hors du thread principal.
+    nonisolated private static func fetch(base: URL) async -> [Fire]? {
         let url = base.appendingPathComponent("fires")
         guard
             let (data, resp) = try? await URLSession.shared.data(from: url),
