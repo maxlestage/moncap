@@ -74,6 +74,21 @@ final class NavigationManager: ObservableObject {
         speak("Itinéraire plus rapide trouvé : environ \(savedMinutes) minutes de gagnées.")
     }
 
+    /// Applique un itinéraire de contournement quand on est bloqué dans un
+    /// bouchon (« toujours avancer »).
+    func applyDetour(route: MKRoute, savedMinutes: Int) {
+        load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
+             km: route.distance / 1000, min: route.expectedTravelTime / 60,
+             announceStart: false)
+        if savedMinutes >= 1 {
+            speak(
+                "Ça bouchonne devant. Itinéraire de contournement, environ \(savedMinutes) minutes gagnées."
+            )
+        } else {
+            speak("Ça bouchonne devant. Itinéraire de contournement.")
+        }
+    }
+
     /// Applique un itinéraire recalculé (sans annonce « Départ »).
     func applyReroute(route: MKRoute) {
         load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
