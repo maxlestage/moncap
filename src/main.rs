@@ -152,10 +152,12 @@ fn now_ms() -> u64 {
 /// et des autres via le pont Redis s'il est actif.
 fn broadcast_event(tx: &broadcast::Sender<String>, ev: &ServerEvent) {
     if let Ok(json) = serde_json::to_string(ev) {
-        let _ = tx.send(json.clone());
+        // Ne cloner que si le pont Redis est actif : en mono-instance (défaut),
+        // on évite une allocation par événement temps réel.
         if let Some(publisher) = REDIS_PUB.get() {
-            let _ = publisher.send(json);
+            let _ = publisher.send(json.clone());
         }
+        let _ = tx.send(json);
     }
 }
 
@@ -277,7 +279,12 @@ impl RateLimiter {
         if map.len() > 50_000 {
             map.retain(|_, (start, _)| now.saturating_sub(*start) < self.window_secs);
         }
-        let entry = map.entry(key.to_owned()).or_insert((now, 0));
+        // Cas courant (l'IP existe déjà) : accès sans allouer de clé. On ne
+        // paie le `to_owned()` que lors de la première requête d'une IP.
+        let entry = match map.get_mut(key) {
+            Some(e) => e,
+            None => map.entry(key.to_owned()).or_insert((now, 0)),
+        };
         if now.saturating_sub(entry.0) >= self.window_secs {
             *entry = (now, 0);
         }
@@ -511,12 +518,16 @@ async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
     let area = "-5.5,41,10,51.5";
     let url =
         format!("https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/1");
-    let resp = reqwest::Client::new()
-        .get(&url)
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await
-        .ok()?;
+    // Client HTTP réutilisé (pool de connexions + pile TLS construits une seule
+    // fois) plutôt que reconstruit à chaque appel.
+    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+    let client = HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap_or_default()
+    });
+    let resp = client.get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }
@@ -1206,18 +1217,16 @@ async fn handle_client_msg(state: &AppState, id: u64, uid: i32, text: &str) {
             }
             let now = (now_ms() / 1000) as i64;
             // Anti-abus : au plus 3 signalements par 2 minutes et 10 actifs
-            // par utilisateur (silencieusement ignoré au-delà).
-            let recent = alert::Entity::find()
+            // par utilisateur (silencieusement ignoré au-delà). Les deux
+            // comptages partent en parallèle (un seul aller-retour perçu).
+            let recent_fut = alert::Entity::find()
                 .filter(alert::Column::UserId.eq(uid))
                 .filter(alert::Column::CreatedAt.gt(now - 120))
-                .count(&state.db)
-                .await
-                .unwrap_or(0);
-            let active = alert::Entity::find()
+                .count(&state.db);
+            let active_fut = alert::Entity::find()
                 .filter(alert::Column::UserId.eq(uid))
-                .count(&state.db)
-                .await
-                .unwrap_or(0);
+                .count(&state.db);
+            let (recent, active) = tokio::try_join!(recent_fut, active_fut).unwrap_or((0, 0));
             if recent >= 3 || active >= 10 {
                 return;
             }
@@ -1700,13 +1709,24 @@ fn to_gpx(positions: &[position::Model]) -> String {
     gpx
 }
 
-/// Échappe les caractères XML spéciaux d'un texte.
-fn xml_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+/// Échappe les caractères XML spéciaux d'un texte. Renvoie l'entrée telle
+/// quelle (sans allocation) quand il n'y a rien à échapper — le cas courant.
+fn xml_escape(s: &str) -> std::borrow::Cow<'_, str> {
+    if !s.contains(['&', '<', '>', '"', '\'']) {
+        return std::borrow::Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len() + 16);
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    std::borrow::Cow::Owned(out)
 }
 
 /// Inverse de `xml_escape`.

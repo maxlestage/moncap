@@ -1449,9 +1449,14 @@ struct MapHomeView: View {
             let center: Center?
             let tags: [String: String]?
         }
-        guard let resp = try? JSONDecoder().decode(Resp.self, from: data) else { return nil }
+        // Décodage JSON (jusqu'à ~150 éléments) hors du thread principal : il
+        // survient en plein pan de carte, à ne surtout pas y bloquer l'UI.
+        let elements = await Task.detached {
+            try? JSONDecoder().decode(Resp.self, from: data).elements
+        }.value
+        guard let elements else { return nil }
         var out: [POI] = []
-        for el in resp.elements {
+        for el in elements {
             let lat = el.lat ?? el.center?.lat
             let lon = el.lon ?? el.center?.lon
             guard let lat, let lon else { continue }
