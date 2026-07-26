@@ -279,13 +279,17 @@ private let routePalette: [Color] = [
 
 /// Catégorie de lieux à explorer sur la carte (fast-foods, hôtels, tourisme…).
 enum POIKind: String, CaseIterable, Identifiable {
-    case fuel, parking, water, fastFood, restaurant, hotel, tourism, hangout
+    case fuel, parking, parkingAll, charging, toilets, water
+    case fastFood, restaurant, hotel, tourism, hangout
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .fuel: return "Essence"
         case .parking: return "Handicapé"
+        case .parkingAll: return "Parking"
+        case .charging: return "Recharge"
+        case .toilets: return "Toilettes"
         case .water: return "Baignade"
         case .fastFood: return "Fast-food"
         case .restaurant: return "Restaurants"
@@ -299,6 +303,9 @@ enum POIKind: String, CaseIterable, Identifiable {
         switch self {
         case .fuel: return "⛽"
         case .parking: return "♿"
+        case .parkingAll: return "🅿️"
+        case .charging: return "⚡"
+        case .toilets: return "🚻"
         case .water: return "🏊"
         case .fastFood: return "🍔"
         case .restaurant: return "🍽️"
@@ -308,11 +315,12 @@ enum POIKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Requête MKLocalSearch correspondante. Essence, points d'eau et places
-    /// handicapé passent par des sources dédiées (open data / OpenStreetMap).
+    /// Requête MKLocalSearch correspondante. Essence (open data) et les
+    /// catégories OpenStreetMap (handicapé, parking, recharge, toilettes,
+    /// baignade) passent par des sources dédiées.
     var query: String {
         switch self {
-        case .fuel, .parking, .water: return ""
+        case .fuel, .parking, .parkingAll, .charging, .toilets, .water: return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
         case .hotel: return "hôtel"
@@ -1194,6 +1202,16 @@ struct MapHomeView: View {
             return
         }
 
+        // Parkings, bornes de recharge, toilettes : OpenStreetMap (Overpass).
+        if [.parkingAll, .charging, .toilets].contains(kind) {
+            // Échec réseau → on garde ce qui est affiché.
+            guard let found = await fetchOSMCategory(kind, in: region) else { return }
+            guard poiKind == kind else { return }
+            pois = found
+            lastPOIRegion = region
+            return
+        }
+
         let req = MKLocalSearch.Request()
         req.naturalLanguageQuery = kind.query
         req.region = region
@@ -1328,24 +1346,25 @@ struct MapHomeView: View {
         return out
     }
 
-    /// Places de stationnement handicapé (PMR) de la zone visible via
-    /// OpenStreetMap : places individuelles `wheelchair=designated` /
-    /// `parking_space=disabled`, et parkings annonçant des places `capacity:disabled`.
-    /// Renvoie nil en cas d'échec réseau (pour conserver l'affichage actuel).
-    private func fetchDisabledParking(in region: MKCoordinateRegion) async -> [POI]? {
-        // Zone plafonnée pour une requête rapide (le stationnement PMR est dense).
-        let latSpan = min(region.span.latitudeDelta, 1.0)
-        let lonSpan = min(region.span.longitudeDelta, 1.4)
+    /// Exécute une requête Overpass sur la zone visible (plafonnée à latCap ×
+    /// lonCap pour rester rapide) et renvoie des POI. `clauses(bbox)` fournit le
+    /// corps de l'union ; `name(tags)` calcule le libellé. Renvoie nil en cas
+    /// d'échec réseau (pour conserver l'affichage). Chaîne d'endpoints de
+    /// secours partagée par toutes les catégories OpenStreetMap.
+    private func fetchOverpass(
+        in region: MKCoordinateRegion,
+        latCap: Double, lonCap: Double, limit: Int,
+        clauses: (String) -> String,
+        name: ([String: String]?) -> String
+    ) async -> [POI]? {
+        let latSpan = min(region.span.latitudeDelta, latCap)
+        let lonSpan = min(region.span.longitudeDelta, lonCap)
         let south = region.center.latitude - latSpan / 2
         let north = region.center.latitude + latSpan / 2
         let west = region.center.longitude - lonSpan / 2
         let east = region.center.longitude + lonSpan / 2
         let bbox = "(\(south),\(west),\(north),\(east))"
-        let q = "[out:json][timeout:20];("
-            + "nwr[\"amenity\"=\"parking_space\"][\"wheelchair\"=\"designated\"]\(bbox);"
-            + "nwr[\"amenity\"=\"parking_space\"][\"parking_space\"=\"disabled\"]\(bbox);"
-            + "nwr[\"amenity\"=\"parking\"][\"capacity:disabled\"]\(bbox);"
-            + ");out center 100;"
+        let q = "[out:json][timeout:20];(\(clauses(bbox)));out center \(limit);"
 
         let endpoints = [
             "https://overpass-api.de/api/interpreter",
@@ -1379,10 +1398,61 @@ struct MapHomeView: View {
             let lat = el.lat ?? el.center?.lat
             let lon = el.lon ?? el.center?.lon
             guard let lat, let lon else { continue }
-            out.append(POI(name: Self.parkingName(fromTags: el.tags),
+            out.append(POI(name: name(el.tags),
                            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
         }
         return out
+    }
+
+    /// Places de stationnement handicapé (PMR) via OpenStreetMap : places
+    /// individuelles (`wheelchair=designated` / `parking_space=disabled`) et
+    /// parkings annonçant des places réservées (`capacity:disabled`).
+    private func fetchDisabledParking(in region: MKCoordinateRegion) async -> [POI]? {
+        await fetchOverpass(
+            in: region, latCap: 1.0, lonCap: 1.4, limit: 100,
+            clauses: { b in
+                "nwr[\"amenity\"=\"parking_space\"][\"wheelchair\"=\"designated\"]\(b);"
+                    + "nwr[\"amenity\"=\"parking_space\"][\"parking_space\"=\"disabled\"]\(b);"
+                    + "nwr[\"amenity\"=\"parking\"][\"capacity:disabled\"]\(b);"
+            },
+            name: { Self.parkingName(fromTags: $0) })
+    }
+
+    /// Parkings 🅿️, bornes de recharge ⚡ ou toilettes 🚻 via OpenStreetMap.
+    private func fetchOSMCategory(_ kind: POIKind, in region: MKCoordinateRegion) async -> [POI]? {
+        switch kind {
+        case .parkingAll:
+            return await fetchOverpass(
+                in: region, latCap: 0.6, lonCap: 0.8, limit: 100,
+                clauses: { "nwr[\"amenity\"=\"parking\"]\($0);" },
+                name: { Self.namedOr($0, "Parking") })
+        case .charging:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 100,
+                clauses: { "nwr[\"amenity\"=\"charging_station\"]\($0);" },
+                name: { Self.namedOr($0, "Borne de recharge") })
+        case .toilets:
+            return await fetchOverpass(
+                in: region, latCap: 0.8, lonCap: 1.1, limit: 100,
+                clauses: { "nwr[\"amenity\"=\"toilets\"]\($0);" },
+                name: { Self.toiletName(fromTags: $0) })
+        default:
+            return nil
+        }
+    }
+
+    /// Nom OSM (`name`) s'il existe, sinon le libellé par défaut fourni.
+    private static func namedOr(_ tags: [String: String]?, _ fallback: String) -> String {
+        if let name = tags?["name"], !name.isEmpty { return name }
+        return fallback
+    }
+
+    /// Libellé de toilettes : signale l'accès PMR et le caractère payant.
+    private static func toiletName(fromTags tags: [String: String]?) -> String {
+        var s = namedOr(tags, "Toilettes")
+        if tags?["wheelchair"] == "yes" { s += " ♿" }
+        if tags?["fee"] == "yes" { s += " · payant" }
+        return s
     }
 
     /// Libellé d'une place / d'un parking handicapé selon ses tags OSM.
