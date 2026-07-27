@@ -542,6 +542,9 @@ struct MapHomeView: View {
     /// Carte qualité de l'air (tuiles WAQI, écran dédié).
     @State private var showAirMap = false
     @AppStorage("moncap.waqiToken") private var waqiToken = ""
+    /// Partage de position en direct.
+    @StateObject private var liveShare = LiveShareManager()
+    @State private var liveShareLink: IdentifiableURL?
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -598,6 +601,7 @@ struct MapHomeView: View {
         .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
         .sheet(item: $etaShare) { share in ShareSheet(items: [share.text]) }
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
+        .sheet(item: $liveShareLink) { link in ShareSheet(items: [link.url]) }
         .fullScreenCover(isPresented: $showAirMap) {
             AirQualityMapScreen(token: waqiToken, center: location.coordinate)
         }
@@ -664,6 +668,8 @@ struct MapHomeView: View {
             weather.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
             fires.refresh()
+            // Partage de position en direct (throttle interne à 5 s).
+            liveShare.update(c, heading: location.course, speed: location.speedKmh)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
             // 1×/min (le soleil bouge lentement — pas besoin à chaque point GPS).
             if Date().timeIntervalSince(lastNightCheck) >= 60 {
@@ -1043,6 +1049,19 @@ struct MapHomeView: View {
         case ..<500: return "Navigateur"
         case ..<1000: return "Capitaine"
         default: return "Légende de la route"
+        }
+    }
+
+    /// Démarre le partage de position en direct, puis présente le lien à envoyer.
+    private func startLiveShare() {
+        showPlaces = false
+        Task {
+            let name = Session.username.isEmpty ? "Un ami" : Session.username
+            if let url = await liveShare.start(name: name) {
+                liveShareLink = IdentifiableURL(url: url)
+                // Continue d'émettre la position même écran verrouillé.
+                location.setBackgroundTracking(true)
+            }
         }
     }
 
@@ -2656,6 +2675,35 @@ struct MapHomeView: View {
                         }
                     } label: {
                         Label("Prévenir que je suis arrivé", systemImage: "checkmark.message.fill")
+                    }
+                    if liveShare.active {
+                        Button {
+                            showPlaces = false
+                            if let u = liveShare.shareURL {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    liveShareLink = IdentifiableURL(url: u)
+                                }
+                            }
+                        } label: {
+                            Label("Renvoyer le lien de suivi", systemImage: "link")
+                        }
+                        Button(role: .destructive) {
+                            liveShare.stop()
+                            // Coupe le suivi en arrière-plan sauf si la navigation
+                            // est en cours (elle a le sien).
+                            location.setBackgroundTracking(nav.active)
+                        } label: {
+                            Label("Arrêter le partage en direct", systemImage: "stop.circle.fill")
+                        }
+                    } else {
+                        Button {
+                            startLiveShare()
+                        } label: {
+                            Label(
+                                "Partager ma position en direct",
+                                systemImage: "dot.radiowaves.left.and.right")
+                        }
+                        .disabled(location.coordinate == nil)
                     }
                 }
                 Section {
