@@ -46,12 +46,15 @@ final class AirQualityLayerService: ObservableObject {
         lastFetch = Date()
 
         // Grille dense pour un rendu lisse et plein (comme une carte de chaleur).
-        let n = 16
-        // On échantillonne un peu AU-DELÀ de la zone visible (×1,25) : les bords
-        // ronds des disques tombent alors hors de l'écran, il ne reste à l'image
-        // que l'intérieur, continu. Borné quand on est très dézoomé.
-        let latSpan = min(region.span.latitudeDelta * 1.25, 11.0)
-        let lonSpan = min(region.span.longitudeDelta * 1.25, 14.0)
+        let n = 18
+        // On échantillonne BIEN au-delà de la zone visible (×1,9) : ça constitue
+        // une réserve tout autour de l'écran. Résultat : quand on déplace la
+        // carte, on reste dans du déjà-coloré → mise à jour perçue comme
+        // instantanée (le rechargement réseau ne sert qu'à étendre la réserve).
+        // Bonus : les bords ronds des disques tombent hors champ (rendu continu).
+        // Borné quand on est très dézoomé.
+        let latSpan = min(region.span.latitudeDelta * 1.9, 17.0)
+        let lonSpan = min(region.span.longitudeDelta * 1.9, 20.0)
         let lat0 = region.center.latitude - latSpan / 2
         let lon0 = region.center.longitude - lonSpan / 2
         var coords: [CLLocationCoordinate2D] = []
