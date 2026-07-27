@@ -1104,10 +1104,12 @@ struct MapHomeView: View {
             UserAnnotation()
             // Incendies actifs (NASA FIRMS) : zones colorées en rouge, sous les
             // épingles. Dessinées d'abord pour rester en arrière-plan.
+            // Zones touchées : grands disques rouges translucides et sans
+            // contour. Là où les foyers se chevauchent, l'opacité s'accumule →
+            // rouge plus intense, rendu « carte de chaleur » façon zones.
             ForEach(visibleFires) { f in
-                MapCircle(center: f.coordinate, radius: 2200)
-                    .foregroundStyle(.red.opacity(0.28))
-                    .stroke(.red.opacity(0.8), lineWidth: 1)
+                MapCircle(center: f.coordinate, radius: 6500)
+                    .foregroundStyle(.red.opacity(0.16))
             }
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
