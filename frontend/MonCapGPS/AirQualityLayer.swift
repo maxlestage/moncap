@@ -4,7 +4,11 @@ import MapKit
 /// Une cellule de la grille de qualité de l'air (un point échantillonné + son
 /// indice européen EAQI).
 struct AQICell: Identifiable {
-    let id: Int
+    /// Identité basée sur la POSITION (pas un index fixe) : quand la grille se
+    /// déplace au déplacement de la carte, les identités changent, donc la carte
+    /// repositionne vraiment les cellules (avec un id d'index constant, MapKit
+    /// gardait les cercles au même endroit).
+    var id: String { "\(Int(coordinate.latitude * 1000))|\(Int(coordinate.longitude * 1000))" }
     let coordinate: CLLocationCoordinate2D
     let aqi: Int
 }
@@ -42,11 +46,15 @@ final class AirQualityLayerService: ObservableObject {
         lastFetch = Date()
 
         // Grille dense pour un rendu lisse et plein (comme une carte de chaleur).
-        let n = 14
-        // Borne l'étendue pour garder des cellules utiles (évite une grille sur
-        // la moitié du globe quand on est dézoomé à fond).
-        let latSpan = min(region.span.latitudeDelta, 9.0)
-        let lonSpan = min(region.span.longitudeDelta, 12.0)
+        let n = 18
+        // On échantillonne BIEN au-delà de la zone visible (×1,9) : ça constitue
+        // une réserve tout autour de l'écran. Résultat : quand on déplace la
+        // carte, on reste dans du déjà-coloré → mise à jour perçue comme
+        // instantanée (le rechargement réseau ne sert qu'à étendre la réserve).
+        // Bonus : les bords ronds des disques tombent hors champ (rendu continu).
+        // Borné quand on est très dézoomé.
+        let latSpan = min(region.span.latitudeDelta * 1.9, 17.0)
+        let lonSpan = min(region.span.longitudeDelta * 1.9, 20.0)
         let lat0 = region.center.latitude - latSpan / 2
         let lon0 = region.center.longitude - lonSpan / 2
         var coords: [CLLocationCoordinate2D] = []
@@ -57,10 +65,11 @@ final class AirQualityLayerService: ObservableObject {
                 coords.append(CLLocationCoordinate2D(latitude: lat, longitude: lon))
             }
         }
-        // Rayon > pas de la grille → les cellules se chevauchent franchement et
-        // se fondent en plages continues (rendu lisse, sans trous).
+        // Rayon très supérieur au pas (×1,9) → recouvrement massif : chaque point
+        // de la carte est couvert par ~10 disques, dont la somme forme un dégradé
+        // continu sans cercle visible.
         let stepMeters = (latSpan / Double(n - 1)) * 111_320
-        let r = stepMeters * 1.2
+        let r = stepMeters * 1.9
 
         Task {
             if let c = await Self.fetch(coords: coords) {
@@ -102,7 +111,7 @@ final class AirQualityLayerService: ObservableObject {
                 (current["european_aqi"] as? Double).map { Int($0.rounded()) }
                 ?? (current["european_aqi"] as? Int)
             guard let aqi = v else { continue }
-            out.append(AQICell(id: i, coordinate: coords[i], aqi: aqi))
+            out.append(AQICell(coordinate: coords[i], aqi: aqi))
         }
         return out.isEmpty ? nil : out
     }

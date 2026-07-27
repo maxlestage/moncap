@@ -1110,7 +1110,7 @@ struct MapHomeView: View {
             if aqiLayerOn {
                 ForEach(aqiLayer.cells) { cell in
                     MapCircle(center: cell.coordinate, radius: aqiLayer.radius)
-                        .foregroundStyle(AirQualityService.level(cell.aqi).color.opacity(0.28))
+                        .foregroundStyle(AirQualityService.level(cell.aqi).color.opacity(0.13))
                 }
             }
             // Incendies actifs (NASA FIRMS) : marqueurs flamme animés avec un
