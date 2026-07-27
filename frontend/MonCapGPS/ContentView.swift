@@ -946,8 +946,17 @@ struct MapHomeView: View {
     {
         let coords = nav.routeCoords
         guard coords.count >= 2 else { return nil }
+        let here = CLLocation(latitude: c.latitude, longitude: c.longitude)
         let hereIdx = Self.nearestIndex(on: coords, to: c)
         for jam in knownJams() {
+            // Pré-filtre bon marché : la distance le long du tracé est toujours
+            // ≥ la distance à vol d'oiseau. Un bouchon à plus de ~8,5 km à vol
+            // d'oiseau ne peut donc pas être dans notre fenêtre de 8 km sur la
+            // route → on l'écarte sans le coûteux nearestIndex sur tout le tracé
+            // (jusqu'à 300 bouchons en trafic réel, 20 s d'intervalle).
+            let asCrow = here.distance(
+                from: CLLocation(latitude: jam.coord.latitude, longitude: jam.coord.longitude))
+            guard asCrow <= 8500 else { continue }
             let jIdx = Self.nearestIndex(on: coords, to: jam.coord)
             guard jIdx > hereIdx else { continue }  // devant nous seulement
             let perp = CLLocation(latitude: coords[jIdx].latitude, longitude: coords[jIdx].longitude)
