@@ -430,6 +430,9 @@ struct MapHomeView: View {
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var airQuality = AirQualityService()
     @StateObject private var weather = WeatherService()
+    @StateObject private var aqiLayer = AirQualityLayerService()
+    /// Couche « qualité de l'air » colorée sur la carte (activable).
+    @AppStorage("moncap.aqiLayer") private var aqiLayerOn = false
     @StateObject private var fires = FireService()
     @StateObject private var traffic = TrafficService()
     /// Clé TomTom optionnelle saisie sur l'appareil : si présente, l'app
@@ -1102,6 +1105,14 @@ struct MapHomeView: View {
         MapReader { proxy in
         Map(position: $camera, selection: $selectedFeature) {
             UserAnnotation()
+            // Couche « qualité de l'air » (activable) : grille de disques colorés
+            // selon l'indice EAQI, tout au fond.
+            if aqiLayerOn {
+                ForEach(aqiLayer.cells) { cell in
+                    MapCircle(center: cell.coordinate, radius: aqiLayer.radius)
+                        .foregroundStyle(AirQualityService.level(cell.aqi).color.opacity(0.32))
+                }
+            }
             // Incendies actifs (NASA FIRMS) : zones colorées en rouge, sous les
             // épingles. Dessinées d'abord pour rester en arrière-plan.
             // Zones touchées : grands disques rouges translucides et sans
@@ -1245,6 +1256,8 @@ struct MapHomeView: View {
         // quand on déplace la carte (fin de geste uniquement).
         .onMapCameraChange(frequency: .onEnd) { ctx in
             visibleRegion = ctx.region
+            // Couche qualité de l'air : re-échantillonne la nouvelle zone visible.
+            if aqiLayerOn { aqiLayer.refresh(region: ctx.region) }
             // Recharge les lieux seulement si la carte a vraiment bougé.
             if let kind = poiKind, !nav.active, regionChangedEnough(ctx.region) {
                 Task { await loadPOIs(kind) }
@@ -2214,10 +2227,36 @@ struct MapHomeView: View {
             }
             Spacer()
             VStack(spacing: 14) {
+                aqiLayerButton
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
             }
+        }
+    }
+
+    /// Active / désactive la couche « qualité de l'air » colorée.
+    private var aqiLayerButton: some View {
+        Button {
+            aqiLayerOn.toggle()
+            if aqiLayerOn {
+                if let r = visibleRegion { aqiLayer.refresh(region: r) }
+            } else {
+                aqiLayer.clear()
+            }
+        } label: {
+            Image(systemName: "aqi.medium")
+                .font(.title3)
+                .foregroundStyle(aqiLayerOn ? Color.white : .blue)
+                .frame(width: 48, height: 48)
+                .background {
+                    if aqiLayerOn {
+                        Circle().fill(Color.blue)
+                    } else {
+                        Circle().fill(.regularMaterial)
+                    }
+                }
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
 
