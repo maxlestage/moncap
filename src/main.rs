@@ -849,6 +849,9 @@ async fn main() {
     start_redis_bridge(tx.clone());
     let state = AppState { db, tx };
 
+    // Purge périodique des signalements expirés (hors du chemin de lecture).
+    tokio::spawn(purge_expired_alerts(state.db.clone()));
+
     let app = build_app(state);
 
     // Heroku impose le port via la variable d'environnement PORT.
@@ -1426,18 +1429,34 @@ async fn handle_client_msg(state: &AppState, id: u64, uid: i32, text: &str) {
     }
 }
 
-/// Signalements actifs : purge les expirés puis renvoie les restants.
+/// Signalements actifs : lecture seule (non expirés). La purge des expirés est
+/// faite en tâche de fond (voir `purge_expired_alerts`), pour ne pas transformer
+/// chaque lecture (GET /alerts, connexion WebSocket) en écriture.
 async fn active_alerts(db: &DatabaseConnection) -> Result<Vec<Alert>, sea_orm::DbErr> {
     let now = (now_ms() / 1000) as i64;
-    alert::Entity::delete_many()
-        .filter(alert::Column::ExpiresAt.lte(now))
-        .exec(db)
-        .await?;
     let items = alert::Entity::find()
+        .filter(alert::Column::ExpiresAt.gt(now))
         .order_by_desc(alert::Column::CreatedAt)
         .all(db)
         .await?;
     Ok(items.iter().map(wire_alert).collect())
+}
+
+/// Tâche de fond : supprime périodiquement les signalements expirés (au lieu de
+/// le faire à chaque lecture). Tourne toutes les 60 s.
+async fn purge_expired_alerts(db: DatabaseConnection) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(60));
+    loop {
+        ticker.tick().await;
+        let now = (now_ms() / 1000) as i64;
+        if let Err(err) = alert::Entity::delete_many()
+            .filter(alert::Column::ExpiresAt.lte(now))
+            .exec(&db)
+            .await
+        {
+            tracing::warn!("purge des alertes expirées: {err}");
+        }
+    }
 }
 
 /// GET /alerts — signalements en cours (authentifié).
