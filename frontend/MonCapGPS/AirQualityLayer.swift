@@ -4,7 +4,11 @@ import MapKit
 /// Une cellule de la grille de qualité de l'air (un point échantillonné + son
 /// indice européen EAQI).
 struct AQICell: Identifiable {
-    let id: Int
+    /// Identité basée sur la POSITION (pas un index fixe) : quand la grille se
+    /// déplace au déplacement de la carte, les identités changent, donc la carte
+    /// repositionne vraiment les cellules (avec un id d'index constant, MapKit
+    /// gardait les cercles au même endroit).
+    var id: String { "\(Int(coordinate.latitude * 1000))|\(Int(coordinate.longitude * 1000))" }
     let coordinate: CLLocationCoordinate2D
     let aqi: Int
 }
@@ -104,7 +108,7 @@ final class AirQualityLayerService: ObservableObject {
                 (current["european_aqi"] as? Double).map { Int($0.rounded()) }
                 ?? (current["european_aqi"] as? Int)
             guard let aqi = v else { continue }
-            out.append(AQICell(id: i, coordinate: coords[i], aqi: aqi))
+            out.append(AQICell(coordinate: coords[i], aqi: aqi))
         }
         return out.isEmpty ? nil : out
     }
