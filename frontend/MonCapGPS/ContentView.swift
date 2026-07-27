@@ -1113,14 +1113,12 @@ struct MapHomeView: View {
                         .foregroundStyle(AirQualityService.level(cell.aqi).color.opacity(0.28))
                 }
             }
-            // Incendies actifs (NASA FIRMS) : zones colorées en rouge, sous les
-            // épingles. Dessinées d'abord pour rester en arrière-plan.
-            // Zones touchées : grands disques rouges translucides et sans
-            // contour. Là où les foyers se chevauchent, l'opacité s'accumule →
-            // rouge plus intense, rendu « carte de chaleur » façon zones.
+            // Incendies actifs (NASA FIRMS) : marqueurs flamme animés avec un
+            // halo de chaleur qui pulse, plus vivants que de simples disques.
             ForEach(visibleFires) { f in
-                MapCircle(center: f.coordinate, radius: 6500)
-                    .foregroundStyle(.red.opacity(0.16))
+                Annotation("", coordinate: f.coordinate) {
+                    FireMarker()
+                }
             }
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
@@ -2206,7 +2204,7 @@ struct MapHomeView: View {
     /// et plafonnés, pour ne pas empiler des centaines d'overlays hors champ.
     private var visibleFires: [Fire] {
         let all = fires.fires
-        guard let r = visibleRegion else { return Array(all.prefix(120)) }
+        guard let r = visibleRegion else { return Array(all.prefix(60)) }
         let latMin = r.center.latitude - r.span.latitudeDelta
         let latMax = r.center.latitude + r.span.latitudeDelta
         let lonMin = r.center.longitude - r.span.longitudeDelta
@@ -2215,7 +2213,7 @@ struct MapHomeView: View {
             all.lazy.filter {
                 $0.coordinate.latitude >= latMin && $0.coordinate.latitude <= latMax
                     && $0.coordinate.longitude >= lonMin && $0.coordinate.longitude <= lonMax
-            }.prefix(120))
+            }.prefix(60))
     }
 
     private var bottomBar: some View {
@@ -3420,6 +3418,45 @@ struct MapHomeView: View {
     private func exportGPX() async {
         if let url = try? await api.exportGPX() {
             gpxFile = IdentifiableURL(url: url)
+        }
+    }
+}
+
+/// Marqueur d'incendie animé : un cœur incandescent (flamme) posé sur un halo
+/// de chaleur qui « respire » (pulsation continue), pour une carte des feux
+/// bien plus vivante que de simples disques.
+private struct FireMarker: View {
+    @State private var pulse = false
+
+    var body: some View {
+        ZStack {
+            // Halo de chaleur diffus qui pulse (dégradé radial rouge → orange).
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .orange.opacity(0.55), .red.opacity(0.35), .red.opacity(0.0),
+                        ],
+                        center: .center, startRadius: 1, endRadius: 30)
+                )
+                .frame(width: 60, height: 60)
+                .scaleEffect(pulse ? 1.2 : 0.8)
+                .opacity(pulse ? 0.45 : 0.95)
+            // Flamme centrale, légère pulsation.
+            Image(systemName: "flame.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.yellow, .orange, .red],
+                        startPoint: .top, endPoint: .bottom)
+                )
+                .scaleEffect(pulse ? 1.12 : 0.92)
+                .shadow(color: .red.opacity(0.6), radius: 4)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
         }
     }
 }
