@@ -429,6 +429,7 @@ struct MapHomeView: View {
     @StateObject private var speedLimit = SpeedLimitService()
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var airQuality = AirQualityService()
+    @StateObject private var weather = WeatherService()
     @StateObject private var fires = FireService()
     @StateObject private var traffic = TrafficService()
     /// Clé TomTom optionnelle saisie sur l'appareil : si présente, l'app
@@ -650,6 +651,8 @@ struct MapHomeView: View {
             fuel.refresh(near: c, type: fuelType)
             // Qualité de l'air en temps réel (indice européen).
             airQuality.update(c)
+            // Météo en temps réel (température + conditions).
+            weather.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
             fires.refresh()
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
@@ -2178,6 +2181,7 @@ struct MapHomeView: View {
     private var bottomBar: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
+                weatherPill
                 airQualityPill
                 speedPill
             }
@@ -2205,6 +2209,23 @@ struct MapHomeView: View {
                     }
                 }
                 .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+    }
+
+    /// Météo en temps réel (température + conditions), tout en haut des pastilles.
+    @ViewBuilder private var weatherPill: some View {
+        if let temp = weather.temperature, let code = weather.code {
+            let w = WeatherService.describe(code)
+            HStack(spacing: 6) {
+                Text(w.emoji).font(.subheadline)
+                Text("\(temp)°").font(.subheadline.weight(.bold))
+                Text(w.label).font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.blue.opacity(0.35), lineWidth: 1.5))
+            .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
 
