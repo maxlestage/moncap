@@ -42,11 +42,12 @@ final class AirQualityLayerService: ObservableObject {
         lastFetch = Date()
 
         // Grille dense pour un rendu lisse et plein (comme une carte de chaleur).
-        let n = 14
-        // Borne l'étendue pour garder des cellules utiles (évite une grille sur
-        // la moitié du globe quand on est dézoomé à fond).
-        let latSpan = min(region.span.latitudeDelta, 9.0)
-        let lonSpan = min(region.span.longitudeDelta, 12.0)
+        let n = 16
+        // On échantillonne un peu AU-DELÀ de la zone visible (×1,25) : les bords
+        // ronds des disques tombent alors hors de l'écran, il ne reste à l'image
+        // que l'intérieur, continu. Borné quand on est très dézoomé.
+        let latSpan = min(region.span.latitudeDelta * 1.25, 11.0)
+        let lonSpan = min(region.span.longitudeDelta * 1.25, 14.0)
         let lat0 = region.center.latitude - latSpan / 2
         let lon0 = region.center.longitude - lonSpan / 2
         var coords: [CLLocationCoordinate2D] = []
@@ -57,10 +58,11 @@ final class AirQualityLayerService: ObservableObject {
                 coords.append(CLLocationCoordinate2D(latitude: lat, longitude: lon))
             }
         }
-        // Rayon > pas de la grille → les cellules se chevauchent franchement et
-        // se fondent en plages continues (rendu lisse, sans trous).
+        // Rayon très supérieur au pas (×1,9) → recouvrement massif : chaque point
+        // de la carte est couvert par ~10 disques, dont la somme forme un dégradé
+        // continu sans cercle visible.
         let stepMeters = (latSpan / Double(n - 1)) * 111_320
-        let r = stepMeters * 1.2
+        let r = stepMeters * 1.9
 
         Task {
             if let c = await Self.fetch(coords: coords) {
