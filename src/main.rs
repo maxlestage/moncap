@@ -12,7 +12,7 @@ use axum::{
     extract::{FromRef, Path, Query, Request, State},
     http::{HeaderMap, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -721,6 +721,182 @@ struct TomTomProps {
     delay: Option<f64>,
 }
 
+// ---------------------------------------------------------------------------
+// Partage de position en direct : l'utilisateur crée un lien, l'envoie à un
+// proche qui l'ouvre dans un navigateur (sans l'app) et suit sa position en
+// temps réel. Stocké en mémoire, éphémère (TTL), jeton non devinable.
+// ---------------------------------------------------------------------------
+
+/// Un partage de position actif.
+#[derive(Clone, Serialize)]
+struct LiveShare {
+    name: String,
+    lat: Option<f64>,
+    lon: Option<f64>,
+    heading: f64,
+    speed: f64,
+    /// Horodatage (s) de la dernière position.
+    updated: i64,
+    /// Expiration (s epoch) ; non sérialisé.
+    #[serde(skip)]
+    expires: i64,
+}
+
+type LiveMap = Mutex<HashMap<String, LiveShare>>;
+static LIVE: OnceLock<LiveMap> = OnceLock::new();
+fn live_map() -> &'static LiveMap {
+    LIVE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+/// Durée de vie d'un partage sans mise à jour (prolongée à chaque position).
+const LIVE_TTL_SECS: i64 = 3 * 3600;
+
+#[derive(Deserialize)]
+struct LiveStartReq {
+    name: Option<String>,
+}
+
+#[derive(Serialize)]
+struct LiveStartResp {
+    token: String,
+}
+
+/// POST /live — crée un partage et renvoie son jeton.
+async fn live_start(Json(req): Json<LiveStartReq>) -> Result<Json<LiveStartResp>, AppError> {
+    let name = req
+        .name
+        .map(|n| clean_label(&n))
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Un ami".to_string());
+    let now = (now_ms() / 1000) as i64;
+    let token = auth::random_token();
+    let map = live_map();
+    let mut g = map.lock().unwrap();
+    g.retain(|_, s| s.expires > now); // purge des partages expirés
+    if g.len() >= 20_000 {
+        return Err(AppError::Internal);
+    }
+    g.insert(
+        token.clone(),
+        LiveShare {
+            name,
+            lat: None,
+            lon: None,
+            heading: 0.0,
+            speed: 0.0,
+            updated: now,
+            expires: now + LIVE_TTL_SECS,
+        },
+    );
+    Ok(Json(LiveStartResp { token }))
+}
+
+#[derive(Deserialize)]
+struct LivePos {
+    lat: f64,
+    lon: f64,
+    heading: Option<f64>,
+    speed: Option<f64>,
+}
+
+/// POST /live/:token — met à jour la position (depuis l'app qui partage).
+async fn live_update(Path(token): Path<String>, Json(p): Json<LivePos>) -> StatusCode {
+    if !valid_coord(p.lat, p.lon) {
+        return StatusCode::BAD_REQUEST;
+    }
+    let now = (now_ms() / 1000) as i64;
+    let mut g = live_map().lock().unwrap();
+    match g.get_mut(&token) {
+        Some(s) if s.expires > now => {
+            s.lat = Some(p.lat);
+            s.lon = Some(p.lon);
+            s.heading = p.heading.unwrap_or(0.0);
+            s.speed = p.speed.unwrap_or(0.0);
+            s.updated = now;
+            s.expires = now + LIVE_TTL_SECS;
+            StatusCode::OK
+        }
+        _ => StatusCode::NOT_FOUND,
+    }
+}
+
+/// DELETE /live/:token — arrête le partage.
+async fn live_stop(Path(token): Path<String>) -> StatusCode {
+    live_map().lock().unwrap().remove(&token);
+    StatusCode::OK
+}
+
+/// GET /live/:token/pos — dernière position (JSON), pour la page de suivi.
+async fn live_pos(Path(token): Path<String>) -> Response {
+    let now = (now_ms() / 1000) as i64;
+    let g = live_map().lock().unwrap();
+    match g.get(&token) {
+        Some(s) if s.expires > now => Json(s.clone()).into_response(),
+        _ => (StatusCode::NOT_FOUND, "expired").into_response(),
+    }
+}
+
+/// GET /live/:token — page web de suivi (carte Leaflet qui interroge /pos).
+async fn live_page(Path(token): Path<String>) -> Response {
+    // Le jeton est injecté dans le HTML/JS : on n'accepte que de l'hexadécimal
+    // (généré par random_token) pour écarter toute injection.
+    if token.len() > 64 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
+        return (StatusCode::NOT_FOUND, "").into_response();
+    }
+    Html(live_html(&token)).into_response()
+}
+
+/// Page HTML autonome de suivi (Leaflet + OpenStreetMap, sans clé).
+fn live_html(token: &str) -> String {
+    format!(
+        r#"<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Position en direct — MonCap GPS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html,body{{margin:0;height:100%;font-family:-apple-system,system-ui,sans-serif}}
+  #map{{position:absolute;inset:0}}
+  #bar{{position:absolute;z-index:1000;left:12px;top:12px;right:12px;background:#fff;
+    border-radius:14px;padding:10px 14px;box-shadow:0 2px 10px rgba(0,0,0,.15);
+    display:flex;align-items:center;gap:10px}}
+  #dot{{width:12px;height:12px;border-radius:50%;background:#2a7;flex:none;
+    animation:p 1.4s infinite}}
+  @keyframes p{{0%,100%{{opacity:1}}50%{{opacity:.3}}}}
+  #name{{font-weight:700}} #sub{{color:#777;font-size:13px}}
+</style></head><body>
+<div id="bar"><div id="dot"></div><div><div id="name">Position en direct</div>
+<div id="sub">Connexion…</div></div></div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var token={token:?};
+var map=L.map('map').setView([46.6,2.4],6);
+L.tileLayer('https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
+  {{maxZoom:19,attribution:'© OpenStreetMap'}}).addTo(map);
+var marker=null,first=true;
+function ago(t){{var d=Math.max(0,Math.floor(Date.now()/1000-t));
+  if(d<60)return 'il y a '+d+' s'; if(d<3600)return 'il y a '+Math.floor(d/60)+' min';
+  return 'il y a '+Math.floor(d/3600)+' h';}}
+function tick(){{
+  fetch('/live/'+token+'/pos').then(function(r){{
+    if(!r.ok)throw 0; return r.json();}}).then(function(s){{
+    document.getElementById('name').textContent=s.name||'Position en direct';
+    if(s.lat==null){{document.getElementById('sub').textContent='En attente de position…';return;}}
+    var ll=[s.lat,s.lon];
+    if(!marker){{marker=L.marker(ll).addTo(map);}} else {{marker.setLatLng(ll);}}
+    if(first){{map.setView(ll,14);first=false;}} else {{map.panTo(ll);}}
+    var kmh=Math.round(s.speed||0);
+    document.getElementById('sub').textContent=kmh+' km/h · '+ago(s.updated);
+  }}).catch(function(){{
+    document.getElementById('sub').textContent='Partage terminé';
+    document.getElementById('dot').style.background='#c33';
+  }});
+}}
+tick(); setInterval(tick,4000);
+</script></body></html>"#,
+        token = token
+    )
+}
+
 /// GET /health — sonde de disponibilité. Vérifie que la base répond
 /// (`SELECT 1`) : 200 « ok » si tout va bien, 503 sinon. Utile pour le
 /// monitoring : distingue « process vivant » de « service réellement prêt ».
@@ -782,6 +958,12 @@ fn build_app(state: AppState) -> Router {
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
         .route("/traffic", get(list_traffic))
+        .route("/live", post(live_start))
+        .route(
+            "/live/:token",
+            get(live_page).post(live_update).delete(live_stop),
+        )
+        .route("/live/:token/pos", get(live_pos))
         .route("/privacy", get(privacy_page))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)

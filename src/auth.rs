@@ -2,7 +2,8 @@ use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use argon2::password_hash::{
-    rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+    rand_core::{OsRng, RngCore},
+    PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
 };
 use argon2::Argon2;
 use axum::extract::FromRequestParts;
@@ -32,6 +33,14 @@ fn secret() -> &'static [u8] {
             .unwrap_or_else(|_| "moncap-dev-secret-change-me".to_string())
             .into_bytes()
     })
+}
+
+/// Jeton aléatoire non devinable (128 bits, hex) — pour les liens de partage.
+pub fn random_token() -> String {
+    let mut bytes = [0u8; 16];
+    let mut rng = OsRng;
+    rng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn now_secs() -> u64 {
