@@ -2,29 +2,31 @@ import ContactsUI
 import MessageUI
 import SwiftUI
 
-/// Sélecteur de contacts natif iOS (CNContactPickerViewController). Il s'exécute
-/// hors-processus : **aucune autorisation Contacts n'est requise**, on ne reçoit
-/// que le contact choisi.
-struct ContactPicker: UIViewControllerRepresentable {
-    /// (nom affiché, numéro de téléphone).
+/// Présente le sélecteur de contacts natif (CNContactPickerViewController)
+/// **depuis un contrôleur hôte stable et invisible**, et non via une `.sheet`
+/// SwiftUI imbriquée : cette dernière faisait tomber toute la pile de feuilles
+/// à la sélection (« tout quitte »). Aucune autorisation Contacts requise.
+struct ContactPickerPresenter: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
     var onPick: (String, String) -> Void
-    var onCancel: () -> Void = {}
 
-    func makeUIViewController(context: Context) -> CNContactPickerViewController {
-        let picker = CNContactPickerViewController()
-        picker.delegate = context.coordinator
-        // Ne rend sélectionnables que les contacts ayant au moins un numéro.
-        picker.predicateForEnablingContact = NSPredicate(format: "phoneNumbers.@count > 0")
-        return picker
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
     }
 
-    func updateUIViewController(_ vc: CNContactPickerViewController, context: Context) {}
+    func updateUIViewController(_ host: UIViewController, context: Context) {
+        guard isPresented, host.presentedViewController == nil else { return }
+        let picker = CNContactPickerViewController()
+        picker.delegate = context.coordinator
+        picker.predicateForEnablingContact = NSPredicate(format: "phoneNumbers.@count > 0")
+        host.present(picker, animated: true)
+    }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, CNContactPickerDelegate {
-        let parent: ContactPicker
-        init(_ parent: ContactPicker) { self.parent = parent }
+        let parent: ContactPickerPresenter
+        init(_ parent: ContactPickerPresenter) { self.parent = parent }
 
         func contactPicker(_ picker: CNContactPickerViewController, didSelect contact: CNContact) {
             let name = [contact.givenName, contact.familyName]
@@ -32,41 +34,53 @@ struct ContactPicker: UIViewControllerRepresentable {
                 .joined(separator: " ")
             let phone = contact.phoneNumbers.first?.value.stringValue ?? ""
             parent.onPick(name.isEmpty ? phone : name, phone)
+            parent.isPresented = false
         }
 
         func contactPickerDidCancel(_ picker: CNContactPickerViewController) {
-            parent.onCancel()
+            parent.isPresented = false
         }
     }
 }
 
-/// Compositeur de SMS natif (MFMessageComposeViewController), pré-rempli avec le
-/// destinataire et le message. L'utilisateur relit et envoie lui-même.
-struct MessageComposer: UIViewControllerRepresentable {
+/// Présente le compositeur SMS natif (MFMessageComposeViewController) depuis un
+/// contrôleur hôte stable (même raison que ci-dessus). Pré-rempli destinataire
+/// + message ; l'utilisateur relit et envoie lui-même.
+struct MessageComposerPresenter: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
     let recipients: [String]
     let body: String
     var onFinish: () -> Void
 
-    func makeUIViewController(context: Context) -> MFMessageComposeViewController {
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ host: UIViewController, context: Context) {
+        guard isPresented, host.presentedViewController == nil,
+            MFMessageComposeViewController.canSendText()
+        else { return }
         let vc = MFMessageComposeViewController()
         vc.recipients = recipients
         vc.body = body
         vc.messageComposeDelegate = context.coordinator
-        return vc
+        host.present(vc, animated: true)
     }
 
-    func updateUIViewController(_ vc: MFMessageComposeViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(onFinish: onFinish) }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, MFMessageComposeViewControllerDelegate {
-        let onFinish: () -> Void
-        init(onFinish: @escaping () -> Void) { self.onFinish = onFinish }
+        let parent: MessageComposerPresenter
+        init(_ parent: MessageComposerPresenter) { self.parent = parent }
 
         func messageComposeViewController(
             _ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult
         ) {
-            onFinish()
+            // MFMessageComposeViewController ne se referme pas tout seul.
+            controller.dismiss(animated: true) { [parent] in
+                parent.isPresented = false
+                parent.onFinish()
+            }
         }
     }
 }
@@ -155,21 +169,23 @@ struct ArriveNotifyView: View {
                     Button("Fermer") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showContactPicker) {
-                ContactPicker(
-                    onPick: { name, phone in
-                        contactName = name
-                        contactPhone = phone
-                        showContactPicker = false
-                    },
-                    onCancel: { showContactPicker = false })
-            }
-            .sheet(isPresented: $showComposer) {
-                MessageComposer(recipients: [contactPhone], body: message) {
-                    showComposer = false
+            // Sélecteur de contacts et compositeur SMS présentés depuis un hôte
+            // stable (invisible), pour ne pas casser la pile de feuilles.
+            .background(
+                ContactPickerPresenter(isPresented: $showContactPicker) { name, phone in
+                    contactName = name
+                    contactPhone = phone
+                }
+            )
+            .background(
+                MessageComposerPresenter(
+                    isPresented: $showComposer,
+                    recipients: [contactPhone],
+                    body: message
+                ) {
                     dismiss()
                 }
-            }
+            )
             .alert("Messages indisponible", isPresented: $cannotSendText) {
                 Button("OK", role: .cancel) {}
             } message: {
