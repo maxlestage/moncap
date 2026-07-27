@@ -25,16 +25,27 @@ final class TrafficService: ObservableObject {
     private var lastBBoxKey = ""
 
     /// Rafraîchit les bouchons dans l'emprise donnée (au plus toutes les 60 s,
-    /// ou immédiatement si la zone a nettement changé). Le backend met déjà en
+    /// ou immédiatement si la zone a nettement changé).
+    ///
+    /// Si `key` (clé TomTom saisie dans les réglages) est non vide, l'app
+    /// interroge TomTom **directement** ; sinon elle passe par notre backend
+    /// (qui détient éventuellement une clé serveur). Le backend met déjà en
     /// cache 60 s par emprise, inutile d'appeler plus souvent.
-    func refresh(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) {
-        let key = String(format: "%.1f,%.1f,%.1f,%.1f", minLon, minLat, maxLon, maxLat)
-        guard key != lastBBoxKey || Date().timeIntervalSince(lastFetch) > 60 else { return }
+    func refresh(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double, key: String) {
+        let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bboxKey = String(format: "%.1f,%.1f,%.1f,%.1f", minLon, minLat, maxLon, maxLat)
+        let cacheKey = "\(bboxKey)|\(k.isEmpty ? "srv" : "dev")"
+        guard cacheKey != lastBBoxKey || Date().timeIntervalSince(lastFetch) > 60 else { return }
         lastFetch = Date()
-        lastBBoxKey = key
+        lastBBoxKey = cacheKey
         let bbox = "\(minLon),\(minLat),\(maxLon),\(maxLat)"
+        let base = baseURL
         Task {
-            if let j = await Self.fetch(base: baseURL, bbox: bbox) { jams = j }
+            let j =
+                k.isEmpty
+                ? await Self.fetchBackend(base: base, bbox: bbox)
+                : await Self.fetchTomTom(key: k, bbox: bbox)
+            if let j { jams = j }
         }
     }
 
@@ -45,9 +56,9 @@ final class TrafficService: ObservableObject {
         let delay: Int?
     }
 
-    /// Interroge `GET /traffic`. `nonisolated` : décodage hors du thread
-    /// principal. Renvoie nil en cas d'échec (affichage courant gardé).
-    nonisolated private static func fetch(base: URL, bbox: String) async -> [TrafficJam]? {
+    /// Interroge notre backend `GET /traffic`. `nonisolated` : décodage hors du
+    /// thread principal. Renvoie nil en cas d'échec (affichage courant gardé).
+    nonisolated private static func fetchBackend(base: URL, bbox: String) async -> [TrafficJam]? {
         var comps = URLComponents(
             url: base.appendingPathComponent("traffic"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "bbox", value: bbox)]
@@ -61,5 +72,51 @@ final class TrafficService: ObservableObject {
                 coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
                 delaySeconds: $0.delay ?? 0)
         }
+    }
+
+    /// Interroge directement l'API TomTom Traffic Incidents (v5) avec la clé de
+    /// l'appareil : bouchons (catégorie 6) et routes fermées (8) dans l'emprise.
+    /// `nonisolated` : parsing hors du thread principal.
+    nonisolated private static func fetchTomTom(key: String, bbox: String) async -> [TrafficJam]? {
+        let fields = "{incidents{geometry{type,coordinates},properties{iconCategory,delay}}}"
+        var comps = URLComponents(
+            string: "https://api.tomtom.com/traffic/services/5/incidentDetails")!
+        comps.queryItems = [
+            URLQueryItem(name: "key", value: key),
+            URLQueryItem(name: "bbox", value: bbox),
+            URLQueryItem(name: "fields", value: fields),
+            URLQueryItem(name: "language", value: "fr-FR"),
+            URLQueryItem(name: "categoryFilter", value: "6,8"),
+            URLQueryItem(name: "timeValidityFilter", value: "present"),
+        ]
+        guard let url = comps.url,
+            let (data, resp) = try? await URLSession.shared.data(from: url),
+            (resp as? HTTPURLResponse)?.statusCode == 200,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let incidents = json["incidents"] as? [[String: Any]]
+        else { return nil }
+
+        var out: [TrafficJam] = []
+        for inc in incidents {
+            guard let geom = inc["geometry"] as? [String: Any],
+                let type = geom["type"] as? String
+            else { continue }
+            // Point représentatif : le point lui-même, ou le milieu de la ligne.
+            var lonLat: [Double]?
+            if type == "Point" {
+                lonLat = geom["coordinates"] as? [Double]
+            } else if type == "LineString", let cs = geom["coordinates"] as? [[Double]], !cs.isEmpty
+            {
+                lonLat = cs[cs.count / 2]
+            }
+            guard let ll = lonLat, ll.count >= 2 else { continue }
+            let delay = ((inc["properties"] as? [String: Any])?["delay"] as? Double).map { Int($0) }
+            out.append(
+                TrafficJam(
+                    coordinate: CLLocationCoordinate2D(latitude: ll[1], longitude: ll[0]),
+                    delaySeconds: delay ?? 0))
+            if out.count >= 300 { break }
+        }
+        return out
     }
 }
