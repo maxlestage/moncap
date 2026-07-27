@@ -1104,7 +1104,7 @@ struct MapHomeView: View {
             UserAnnotation()
             // Incendies actifs (NASA FIRMS) : zones colorées en rouge, sous les
             // épingles. Dessinées d'abord pour rester en arrière-plan.
-            ForEach(fires.fires) { f in
+            ForEach(visibleFires) { f in
                 MapCircle(center: f.coordinate, radius: 2200)
                     .foregroundStyle(.red.opacity(0.28))
                     .stroke(.red.opacity(0.8), lineWidth: 1)
@@ -2185,6 +2185,22 @@ struct MapHomeView: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+    }
+
+    /// Feux à dessiner : limités à la zone visible (avec une marge d'un écran)
+    /// et plafonnés, pour ne pas empiler des centaines d'overlays hors champ.
+    private var visibleFires: [Fire] {
+        let all = fires.fires
+        guard let r = visibleRegion else { return Array(all.prefix(120)) }
+        let latMin = r.center.latitude - r.span.latitudeDelta
+        let latMax = r.center.latitude + r.span.latitudeDelta
+        let lonMin = r.center.longitude - r.span.longitudeDelta
+        let lonMax = r.center.longitude + r.span.longitudeDelta
+        return Array(
+            all.lazy.filter {
+                $0.coordinate.latitude >= latMin && $0.coordinate.latitude <= latMax
+                    && $0.coordinate.longitude >= lonMin && $0.coordinate.longitude <= lonMax
+            }.prefix(120))
     }
 
     private var bottomBar: some View {
