@@ -611,13 +611,21 @@ async fn list_traffic(Query(q): Query<TrafficQuery>) -> Json<Vec<TrafficPoint>> 
     let bbox = format!("{},{},{},{}", parts[0], parts[1], parts[2], parts[3]);
 
     let cache = TRAFFIC_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
-    let mut guard = cache.lock().await;
-    if let Some((at, data)) = guard.get(&cache_key) {
-        if at.elapsed() < TRAFFIC_TTL {
-            return Json(data.clone());
+    // Lecture du cache sous verrou court, puis on relâche : on ne tient PAS le
+    // verrou pendant l'appel réseau à TomTom, sinon toutes les requêtes
+    // /traffic (même sur d'autres emprises) seraient sérialisées derrière un
+    // seul fetch.
+    {
+        let guard = cache.lock().await;
+        if let Some((at, data)) = guard.get(&cache_key) {
+            if at.elapsed() < TRAFFIC_TTL {
+                return Json(data.clone());
+            }
         }
     }
-    match fetch_traffic(&key, &bbox).await {
+    let fetched = fetch_traffic(&key, &bbox).await;
+    let mut guard = cache.lock().await;
+    match fetched {
         Some(data) => {
             // Purge grossière des entrées périmées avant d'insérer.
             guard.retain(|_, (at, _)| at.elapsed() < TRAFFIC_TTL);
