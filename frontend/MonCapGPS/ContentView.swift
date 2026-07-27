@@ -431,6 +431,9 @@ struct MapHomeView: View {
     @StateObject private var airQuality = AirQualityService()
     @StateObject private var fires = FireService()
     @StateObject private var traffic = TrafficService()
+    /// Clé TomTom optionnelle saisie sur l'appareil : si présente, l'app
+    /// interroge TomTom directement (sinon elle passe par le backend).
+    @AppStorage("moncap.tomtomKey") private var tomtomKey = ""
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -878,7 +881,8 @@ struct MapHomeView: View {
         let d = 0.2  // ~ ±20 km de marge autour de la position
         traffic.refresh(
             minLon: c.longitude - d, minLat: c.latitude - d,
-            maxLon: c.longitude + d, maxLat: c.latitude + d)
+            maxLon: c.longitude + d, maxLat: c.latitude + d,
+            key: tomtomKey)
     }
 
     /// Bouchons sur le trajet : si un bouchon (signalé par la communauté ou
@@ -2312,6 +2316,29 @@ struct MapHomeView: View {
                     Text("Les incendies détectés par satellite s'affichent en zones rouges sur la carte, automatiquement.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+                // Trafic temps réel TomTom : clé optionnelle saisie sur
+                // l'appareil (sinon le serveur fournit le trafic si configuré).
+                Section("Trafic 🚦 (TomTom)") {
+                    TextField("Clé API TomTom", text: $tomtomKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    Link(destination: URL(string: "https://developer.tomtom.com/user/me/apps")!) {
+                        Label("Obtenir une clé gratuite (2 500 req./jour)", systemImage: "link")
+                    }
+                    .font(.footnote)
+                    if tomtomKey.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text(
+                            "Colle ta clé TomTom pour activer les vrais bouchons en temps réel : la navigation contournera automatiquement les embouteillages sur ta route."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    } else {
+                        Text("\(traffic.jams.count) bouchon(s) détecté(s) autour de toi (temps réel).")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
