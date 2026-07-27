@@ -41,11 +41,12 @@ final class AirQualityLayerService: ObservableObject {
         lastKey = key
         lastFetch = Date()
 
-        let n = 8
+        // Grille dense pour un rendu lisse et plein (comme une carte de chaleur).
+        let n = 14
         // Borne l'étendue pour garder des cellules utiles (évite une grille sur
         // la moitié du globe quand on est dézoomé à fond).
-        let latSpan = min(region.span.latitudeDelta, 6.0)
-        let lonSpan = min(region.span.longitudeDelta, 8.0)
+        let latSpan = min(region.span.latitudeDelta, 9.0)
+        let lonSpan = min(region.span.longitudeDelta, 12.0)
         let lat0 = region.center.latitude - latSpan / 2
         let lon0 = region.center.longitude - lonSpan / 2
         var coords: [CLLocationCoordinate2D] = []
@@ -56,10 +57,10 @@ final class AirQualityLayerService: ObservableObject {
                 coords.append(CLLocationCoordinate2D(latitude: lat, longitude: lon))
             }
         }
-        // Rayon ≈ pas de la grille × 0,75 → cellules qui se touchent, sans trop
-        // se chevaucher (évite de mélanger les couleurs).
+        // Rayon > pas de la grille → les cellules se chevauchent franchement et
+        // se fondent en plages continues (rendu lisse, sans trous).
         let stepMeters = (latSpan / Double(n - 1)) * 111_320
-        let r = stepMeters * 0.75
+        let r = stepMeters * 1.2
 
         Task {
             if let c = await Self.fetch(coords: coords) {
