@@ -540,6 +540,8 @@ struct MapHomeView: View {
     // Historique des trajets parcourus.
     @State private var trips: [Trip] = []
     @State private var showTrips = false
+    /// « Prévenir un proche » (message d'arrivée à un contact).
+    @State private var showArrive = false
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -595,6 +597,7 @@ struct MapHomeView: View {
         .sheet(isPresented: $showTrips) { tripsSheet }
         .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
         .sheet(item: $etaShare) { share in ShareSheet(items: [share.text]) }
+        .sheet(isPresented: $showArrive) { ArriveNotifyView() }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
             alertToVote.map { "\(emoji(for: $0.category)) \($0.label.isEmpty ? $0.category : $0.label)" }
@@ -2647,6 +2650,18 @@ struct MapHomeView: View {
     private var placesSheet: some View {
         NavigationStack {
             List {
+                Section {
+                    Button {
+                        // Ferme le menu puis présente la feuille (évite deux
+                        // feuilles empilées simultanément).
+                        showPlaces = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            showArrive = true
+                        }
+                    } label: {
+                        Label("Prévenir que je suis arrivé", systemImage: "checkmark.message.fill")
+                    }
+                }
                 Section {
                     Button {
                         Task { await saveCurrent() }
