@@ -539,6 +539,9 @@ struct MapHomeView: View {
     @State private var showTrips = false
     /// « Prévenir un proche » (message d'arrivée à un contact).
     @State private var showArrive = false
+    /// Carte qualité de l'air (tuiles WAQI, écran dédié).
+    @State private var showAirMap = false
+    @AppStorage("moncap.waqiToken") private var waqiToken = ""
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -595,6 +598,9 @@ struct MapHomeView: View {
         .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
         .sheet(item: $etaShare) { share in ShareSheet(items: [share.text]) }
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
+        .fullScreenCover(isPresented: $showAirMap) {
+            AirQualityMapScreen(token: waqiToken, center: location.coordinate)
+        }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
             alertToVote.map { "\(emoji(for: $0.category)) \($0.label.isEmpty ? $0.category : $0.label)" }
@@ -2215,10 +2221,23 @@ struct MapHomeView: View {
             }
             Spacer()
             VStack(spacing: 14) {
+                airMapButton
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
             }
+        }
+    }
+
+    /// Ouvre la carte qualité de l'air (tuiles WAQI) en plein écran.
+    private var airMapButton: some View {
+        Button { showAirMap = true } label: {
+            Image(systemName: "aqi.medium")
+                .font(.title3)
+                .foregroundStyle(.blue)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(.regularMaterial))
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
 
@@ -2388,6 +2407,22 @@ struct MapHomeView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
+                }
+                // Carte qualité de l'air (tuiles WAQI, écran dédié).
+                Section("Qualité de l'air 🌫️ (WAQI)") {
+                    TextField("Token WAQI", text: $waqiToken)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    Link(destination: URL(string: "https://aqicn.org/data-platform/token/")!) {
+                        Label("Obtenir un token gratuit", systemImage: "link")
+                    }
+                    .font(.footnote)
+                    Text(
+                        "Colle ton token pour afficher la carte de chaleur de la qualité de l'air (bouton « Air » sur la carte) : de vraies tuiles, lisses et rapides."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
