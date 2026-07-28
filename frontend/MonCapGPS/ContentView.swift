@@ -543,6 +543,8 @@ struct MapHomeView: View {
     @State private var showAirMap = false
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
+    /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
+    @AppStorage("moncap.firmsKey") private var firmsKey = ""
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
     @State private var liveShareLink: IdentifiableURL?
@@ -607,7 +609,7 @@ struct MapHomeView: View {
             AirQualityMapScreen(center: location.coordinate)
         }
         .fullScreenCover(isPresented: $showFireMap) {
-            FireMapScreen(fires: fires.fires)
+            FireMapScreen(service: fires)
         }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
@@ -671,7 +673,7 @@ struct MapHomeView: View {
             // Météo en temps réel (température + conditions).
             weather.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
-            fires.refresh()
+            fires.refresh(key: firmsKey)
             // Partage de position en direct (throttle interne à 5 s).
             liveShare.update(c, heading: location.course, speed: location.speedKmh)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
@@ -737,6 +739,10 @@ struct MapHomeView: View {
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.
             if on { nearbyNotifier.requestAuthorizationIfNeeded() }
+        }
+        .onChange(of: firmsKey) { _, key in
+            // Nouvelle clé FIRMS saisie : on recharge les feux tout de suite.
+            fires.refresh(key: key)
         }
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
@@ -2399,14 +2405,25 @@ struct MapHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                // Incendies actifs (NASA FIRMS) : automatique, sans configuration.
+                // Incendies (NASA FIRMS) : clé optionnelle saisie sur l'appareil
+                // (sinon le serveur fournit les feux si configuré).
                 Section("Incendies 🔥 (NASA FIRMS)") {
-                    Text("\(fires.fires.count) foyer(s) actif(s) en France (dernières 24 h, satellite VIIRS).")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text("Les incendies détectés par satellite s'affichent en zones rouges sur la carte, automatiquement.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    Link(
+                        destination: URL(
+                            string: "https://firms.modaps.eosdis.nasa.gov/api/map_key/")!
+                    ) {
+                        Label("Obtenir une clé gratuite", systemImage: "link")
+                    }
+                    .font(.footnote)
+                    Text(
+                        "Colle ta clé FIRMS pour afficher les vrais foyers (carte des feux, menu) sans attendre le serveur. \(fires.fires.count) foyer(s) actuellement."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
                 // Trafic temps réel TomTom : clé optionnelle saisie sur
                 // l'appareil (sinon le serveur fournit le trafic si configuré).
@@ -2694,6 +2711,7 @@ struct MapHomeView: View {
                         .disabled(location.coordinate == nil)
                     }
                     Button {
+                        fires.refresh(key: firmsKey)
                         showPlaces = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                             showFireMap = true

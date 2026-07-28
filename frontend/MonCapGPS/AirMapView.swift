@@ -85,9 +85,12 @@ struct AirMapRepresentable: UIViewRepresentable {
             lastFetch = Date()
             busy = true
 
-            // Un peu plus large que l'écran, borné quand on est très dézoomé.
-            let latSpan = min(region.span.latitudeDelta * 1.3, 24.0)
-            let lonSpan = min(region.span.longitudeDelta * 1.3, 28.0)
+            // BEAUCOUP plus large que l'écran (×2,6) : ça constitue une réserve
+            // tout autour, donc les déplacements restent dans du déjà-affiché →
+            // mise à jour perçue instantanée (l'ancienne image reste visible
+            // pendant le rechargement, pas de flash). Borné quand on est dézoomé.
+            let latSpan = min(region.span.latitudeDelta * 2.6, 30.0)
+            let lonSpan = min(region.span.longitudeDelta * 2.6, 34.0)
             let north = region.center.latitude + latSpan / 2
             let south = region.center.latitude - latSpan / 2
             let west = region.center.longitude - lonSpan / 2
