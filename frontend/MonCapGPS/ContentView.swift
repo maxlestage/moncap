@@ -542,6 +542,8 @@ struct MapHomeView: View {
     /// Carte qualité de l'air (tuiles WAQI, écran dédié).
     @State private var showAirMap = false
     @AppStorage("moncap.waqiToken") private var waqiToken = ""
+    /// Carte des feux de forêt (contours sur satellite, écran dédié).
+    @State private var showFireMap = false
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
     @State private var liveShareLink: IdentifiableURL?
@@ -604,6 +606,9 @@ struct MapHomeView: View {
         .sheet(item: $liveShareLink) { link in ShareSheet(items: [link.url]) }
         .fullScreenCover(isPresented: $showAirMap) {
             AirQualityMapScreen(token: waqiToken, center: location.coordinate)
+        }
+        .fullScreenCover(isPresented: $showFireMap) {
+            FireMapScreen(fires: fires.fires)
         }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
@@ -2705,6 +2710,14 @@ struct MapHomeView: View {
                         }
                         .disabled(location.coordinate == nil)
                     }
+                    Button {
+                        showPlaces = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            showFireMap = true
+                        }
+                    } label: {
+                        Label("Carte des feux de forêt", systemImage: "flame.fill")
+                    }
                 }
                 Section {
                     Button {
@@ -3484,7 +3497,7 @@ struct MapHomeView: View {
 /// Marqueur d'incendie animé : un cœur incandescent (flamme) posé sur un halo
 /// de chaleur qui « respire » (pulsation continue), pour une carte des feux
 /// bien plus vivante que de simples disques.
-private struct FireMarker: View {
+struct FireMarker: View {
     @State private var pulse = false
 
     var body: some View {

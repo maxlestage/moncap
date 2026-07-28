@@ -57,7 +57,7 @@ struct AirMapRepresentable: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let tile = overlay as? MKTileOverlay {
                 let renderer = MKTileOverlayRenderer(tileOverlay: tile)
-                renderer.alpha = 0.6  // translucide, pour garder les repères de la carte
+                renderer.alpha = 0.85  // bien visible tout en laissant deviner la carte
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
