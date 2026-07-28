@@ -44,6 +44,12 @@ struct AirMapRepresentable: UIViewRepresentable {
         map.delegate = context.coordinator
         map.showsUserLocation = true
         map.pointOfInterestFilter = .excludingAll
+        // Fond clair et épuré (comme les cartes IQA de référence) : on garde la
+        // carte standard — qui affiche bien nos overlays — et on la force en mode
+        // clair (jour), au lieu du mode nuit sombre du téléphone qui rendait les
+        // couleurs boueuses. NB : passer par `preferredConfiguration` faisait
+        // disparaître complètement l'overlay (carte vide) — d'où ce choix.
+        map.overrideUserInterfaceStyle = .light
         if let c = center {
             map.setRegion(
                 MKCoordinateRegion(
@@ -60,12 +66,24 @@ struct AirMapRepresentable: UIViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         private var overlay: AQIImageOverlay?
-        private var lastKey = ""
-        private var lastFetch = Date.distantPast
+        /// Région pour laquelle l'overlay courant a été calculé (pour décider
+        /// s'il faut recharger quand la carte bouge).
+        private var fetchedRegion: MKCoordinateRegion?
+        private var lastFetchTime = Date.distantPast
         private var busy = false
+        /// Débounce des mouvements : ne recharge qu'une fois la carte posée.
+        private var pending: DispatchWorkItem?
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            refresh(mapView)
+            // Attend ~0,35 s d'immobilité avant de recharger (évite dix requêtes
+            // pendant un glissement continu), puis recharge si la vue a changé.
+            pending?.cancel()
+            let work = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else { return }
+                self.refresh(mapView)
+            }
+            pending = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -73,31 +91,45 @@ struct AirMapRepresentable: UIViewRepresentable {
             return MKOverlayRenderer(overlay: overlay)
         }
 
-        /// Recalcule la carte de chaleur pour la zone visible (si elle a changé).
+        /// Faut-il recharger pour la région visible ? Oui si aucun overlay, si
+        /// les données ont vieilli (>10 min : le champ CAMS évolue), si le zoom
+        /// a nettement changé, ou si le centre a bougé de plus de 30 % de l'écran.
+        private func needsRefresh(_ region: MKCoordinateRegion) -> Bool {
+            guard let f = fetchedRegion else { return true }
+            if Date().timeIntervalSince(lastFetchTime) > 600 { return true }
+            let zoom = region.span.latitudeDelta / max(f.span.latitudeDelta, 0.0001)
+            if zoom < 0.7 || zoom > 1.4 { return true }
+            let dLat = abs(region.center.latitude - f.center.latitude)
+            let dLon = abs(region.center.longitude - f.center.longitude)
+            return dLat > region.span.latitudeDelta * 0.3
+                || dLon > region.span.longitudeDelta * 0.3
+        }
+
+        /// Recalcule la carte de chaleur pour la zone visible (si nécessaire).
         func refresh(_ mapView: MKMapView) {
             // Affiche instantanément la dernière image connue (préchargée au
-            // lancement ou d'une ouverture précédente), puis on actualise.
-            if overlay == nil, let cached = AirHeat.lastOverlay {
-                let ov = AQIImageOverlay(image: cached.image, rect: cached.rect)
-                overlay = ov
-                mapView.addOverlay(ov, level: .aboveRoads)
+            // lancement, en mémoire, ou cache disque de la session d'avant),
+            // puis on actualise.
+            if overlay == nil {
+                if AirHeat.lastOverlay == nil { AirHeat.lastOverlay = AirHeat.loadCache() }
+                if let cached = AirHeat.lastOverlay {
+                    let ov = AQIImageOverlay(image: cached.image, rect: cached.rect)
+                    overlay = ov
+                    mapView.addOverlay(ov, level: .aboveRoads)
+                }
             }
             let region = mapView.region
-            let key = String(
-                format: "%.1f,%.1f,%.1f,%.1f",
-                region.center.latitude, region.center.longitude,
-                region.span.latitudeDelta, region.span.longitudeDelta)
-            guard !busy, key != lastKey || Date().timeIntervalSince(lastFetch) > 300 else { return }
-            lastKey = key
-            lastFetch = Date()
+            guard !busy, needsRefresh(region) else { return }
             busy = true
+            fetchedRegion = region
+            lastFetchTime = Date()
 
-            // BEAUCOUP plus large que l'écran (×2,6) : ça constitue une réserve
-            // tout autour, donc les déplacements restent dans du déjà-affiché →
-            // mise à jour perçue instantanée (l'ancienne image reste visible
-            // pendant le rechargement, pas de flash). Borné quand on est dézoomé.
-            let latSpan = min(region.span.latitudeDelta * 2.6, 30.0)
-            let lonSpan = min(region.span.longitudeDelta * 2.6, 34.0)
+            // Tampon modéré (×1,8) : l'overlay dépasse un peu l'écran pour éviter
+            // les bords vides et les flashs pendant le rechargement, mais reste
+            // assez serré pour que déplacer la carte révèle vraiment de nouvelles
+            // données (le tampon trop large ×2,6 donnait l'impression d'un figé).
+            let latSpan = min(region.span.latitudeDelta * 1.8, 26.0)
+            let lonSpan = min(region.span.longitudeDelta * 1.8, 30.0)
             let north = region.center.latitude + latSpan / 2
             let south = region.center.latitude - latSpan / 2
             let west = region.center.longitude - lonSpan / 2
@@ -128,11 +160,14 @@ struct AirMapRepresentable: UIViewRepresentable {
                     let ov = AQIImageOverlay(image: image, rect: rect)
                     self.overlay = ov
                     mapView.addOverlay(ov, level: .aboveRoads)
-                    AirHeat.lastOverlay = (image, rect)  // cache pour un affichage instantané
+                    AirHeat.lastOverlay = (image, rect)  // cache mémoire (instantané)
+                    // Cache disque (hors thread principal) : réouverture pleine
+                    // même après fermeture de l'app.
+                    Task.detached { AirHeat.saveCache(image: image, rect: rect) }
                     self.busy = false
                     // Rattrapage : si l'utilisateur a zoomé/déplacé pendant le
                     // chargement, on recharge la zone finale (sinon rendu figé).
-                    self.refresh(mapView)
+                    if self.needsRefresh(mapView.region) { self.refresh(mapView) }
                 }
             }
         }
@@ -146,11 +181,44 @@ enum AirHeat {
     /// l'ouverture. Touché uniquement sur le thread principal.
     static var lastOverlay: (image: UIImage, rect: MKMapRect)?
 
+    /// Fichier de cache disque de la dernière carte de chaleur (l'image survit à
+    /// une fermeture de l'app → réouverture réellement instantanée, déjà pleine).
+    private static let cacheFile: URL = {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return dir.appendingPathComponent("air_heat_overlay.png")
+    }()
+    private static let cacheRectKey = "moncap.airHeat.rect"
+
+    /// Sauve l'image + son rectangle sur le disque (hors thread principal).
+    nonisolated static func saveCache(image: UIImage, rect: MKMapRect) {
+        guard let png = image.pngData() else { return }
+        try? png.write(to: cacheFile, options: .atomic)
+        UserDefaults.standard.set(
+            [rect.origin.x, rect.origin.y, rect.size.width, rect.size.height], forKey: cacheRectKey)
+    }
+
+    /// Recharge l'image + rectangle depuis le disque (dernière session).
+    nonisolated static func loadCache() -> (image: UIImage, rect: MKMapRect)? {
+        guard let data = try? Data(contentsOf: cacheFile),
+            let img = UIImage(data: data),
+            let r = UserDefaults.standard.array(forKey: cacheRectKey) as? [Double], r.count == 4
+        else { return nil }
+        return (img, MKMapRect(x: r[0], y: r[1], width: r[2], height: r[3]))
+    }
+
     /// Précharge la carte de chaleur autour d'un point (au lancement), pour que
-    /// l'écran air s'affiche instantanément quand on l'ouvre.
+    /// l'écran air s'affiche instantanément quand on l'ouvre. La zone préchargée
+    /// est **volontairement très large** (couvre bien au-delà de la vue
+    /// d'ouverture ~600 km) : l'overlay en cache remplit alors tout l'écran dès
+    /// l'ouverture, sans bande vide le temps que le réseau réponde.
     nonisolated static func prefetch(center: CLLocationCoordinate2D) async {
-        let latSpan = 8.0
-        let lonSpan = 10.0
+        // Affiche d'emblée l'overlay de la session précédente (disque) tant que
+        // le nouveau n'est pas prêt : ouverture pleine, jamais de demi-écran.
+        if let disk = loadCache() {
+            await MainActor.run { if lastOverlay == nil { lastOverlay = disk } }
+        }
+        let latSpan = 13.0
+        let lonSpan = 17.0
         let north = center.latitude + latSpan / 2
         let south = center.latitude - latSpan / 2
         let west = center.longitude - lonSpan / 2
@@ -172,6 +240,7 @@ enum AirHeat {
         let br = MKMapPoint(CLLocationCoordinate2D(latitude: south, longitude: east))
         let rect = MKMapRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
         await MainActor.run { lastOverlay = (img, rect) }
+        saveCache(image: img, rect: rect)
     }
 
     /// Échantillonne la grille EAQI (une seule requête open-meteo). `nil` si échec.
@@ -217,7 +286,9 @@ enum AirHeat {
         let h = 256
         let bytesPerRow = w * 4
         var data = [UInt8](repeating: 0, count: h * bytesPerRow)
-        let alpha: UInt8 = 150
+        // Translucide (comme la référence : on voit routes et villes au travers)
+        // — d'autant plus lisible que le fond est désormais clair.
+        let alpha: UInt8 = 140
         for py in 0..<h {
             let gy = Double(py) / Double(h - 1) * Double(n - 1)
             let r0 = min(Int(gy), n - 2)
@@ -253,15 +324,16 @@ enum AirHeat {
         return UIImage(cgImage: cg)
     }
 
-    /// Rampe de couleur EAQI continue (0 = bon → 100+ = extrême).
+    /// Rampe de couleur continue à l'échelle **IQA (FR)** de la référence
+    /// (indice européen EAQI : 0 = bonne → 100+ = extrême).
     private static func color(_ value: Double) -> (UInt8, UInt8, UInt8) {
         let stops: [(Double, Double, Double, Double)] = [
-            (0, 0.30, 0.68, 0.30),  // Bon — vert
-            (20, 0.60, 0.80, 0.25),  // Correct
-            (40, 0.96, 0.86, 0.20),  // Moyen — jaune
-            (60, 0.96, 0.55, 0.15),  // Mauvais — orange
-            (80, 0.90, 0.20, 0.20),  // Très mauvais — rouge
-            (100, 0.55, 0.15, 0.55),  // Extrême — violet
+            (0, 0.24, 0.55, 0.90),  // Bonne — bleu
+            (20, 0.35, 0.73, 0.38),  // Moyenne — vert
+            (40, 0.98, 0.85, 0.25),  // Dégradée — jaune
+            (60, 0.93, 0.27, 0.22),  // Mauvaise — rouge
+            (80, 0.60, 0.11, 0.13),  // Très mauvaise — rouge foncé
+            (100, 0.55, 0.16, 0.60),  // Extrême — violet
         ]
         let x = max(0, min(100, value))
         for i in 0..<(stops.count - 1) {
@@ -287,12 +359,12 @@ struct AirQualityMapScreen: View {
     let center: CLLocationCoordinate2D?
 
     private static let legend: [(String, Color)] = [
-        ("Bon", Color(red: 0.30, green: 0.68, blue: 0.30)),
-        ("Correct", Color(red: 0.60, green: 0.80, blue: 0.25)),
-        ("Moyen", Color(red: 0.96, green: 0.86, blue: 0.20)),
-        ("Mauvais", Color(red: 0.96, green: 0.55, blue: 0.15)),
-        ("Très mauvais", Color(red: 0.90, green: 0.20, blue: 0.20)),
-        ("Extrême", Color(red: 0.55, green: 0.15, blue: 0.55)),
+        ("Bonne", Color(red: 0.24, green: 0.55, blue: 0.90)),
+        ("Moyenne", Color(red: 0.35, green: 0.73, blue: 0.38)),
+        ("Dégradée", Color(red: 0.98, green: 0.85, blue: 0.25)),
+        ("Mauvaise", Color(red: 0.93, green: 0.27, blue: 0.22)),
+        ("Très mauvaise", Color(red: 0.60, green: 0.11, blue: 0.13)),
+        ("Extrême", Color(red: 0.55, green: 0.16, blue: 0.60)),
     ]
 
     var body: some View {
