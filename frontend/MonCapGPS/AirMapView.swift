@@ -75,6 +75,13 @@ struct AirMapRepresentable: UIViewRepresentable {
 
         /// Recalcule la carte de chaleur pour la zone visible (si elle a changé).
         func refresh(_ mapView: MKMapView) {
+            // Affiche instantanément la dernière image connue (préchargée au
+            // lancement ou d'une ouverture précédente), puis on actualise.
+            if overlay == nil, let cached = AirHeat.lastOverlay {
+                let ov = AQIImageOverlay(image: cached.image, rect: cached.rect)
+                overlay = ov
+                mapView.addOverlay(ov, level: .aboveRoads)
+            }
             let region = mapView.region
             let key = String(
                 format: "%.1f,%.1f,%.1f,%.1f",
@@ -121,6 +128,7 @@ struct AirMapRepresentable: UIViewRepresentable {
                     let ov = AQIImageOverlay(image: image, rect: rect)
                     self.overlay = ov
                     mapView.addOverlay(ov, level: .aboveRoads)
+                    AirHeat.lastOverlay = (image, rect)  // cache pour un affichage instantané
                     self.busy = false
                 }
             }
@@ -131,6 +139,38 @@ struct AirMapRepresentable: UIViewRepresentable {
 /// Génération de la carte de chaleur : requête open-meteo groupée + interpolation
 /// bilinéaire vers une image lissée.
 enum AirHeat {
+    /// Dernière image générée (+ son rectangle), pour un affichage instantané à
+    /// l'ouverture. Touché uniquement sur le thread principal.
+    static var lastOverlay: (image: UIImage, rect: MKMapRect)?
+
+    /// Précharge la carte de chaleur autour d'un point (au lancement), pour que
+    /// l'écran air s'affiche instantanément quand on l'ouvre.
+    nonisolated static func prefetch(center: CLLocationCoordinate2D) async {
+        let latSpan = 8.0
+        let lonSpan = 10.0
+        let north = center.latitude + latSpan / 2
+        let south = center.latitude - latSpan / 2
+        let west = center.longitude - lonSpan / 2
+        let east = center.longitude + lonSpan / 2
+        let n = 16
+        var coords: [CLLocationCoordinate2D] = []
+        coords.reserveCapacity(n * n)
+        for r in 0..<n {
+            let lat = north - (north - south) * Double(r) / Double(n - 1)
+            for c in 0..<n {
+                let lon = west + (east - west) * Double(c) / Double(n - 1)
+                coords.append(CLLocationCoordinate2D(latitude: lat, longitude: lon))
+            }
+        }
+        guard let grid = await fetchGrid(coords: coords, n: n),
+            let img = image(grid: grid, n: n)
+        else { return }
+        let tl = MKMapPoint(CLLocationCoordinate2D(latitude: north, longitude: west))
+        let br = MKMapPoint(CLLocationCoordinate2D(latitude: south, longitude: east))
+        let rect = MKMapRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
+        await MainActor.run { lastOverlay = (img, rect) }
+    }
+
     /// Échantillonne la grille EAQI (une seule requête open-meteo). `nil` si échec.
     nonisolated static func fetchGrid(coords: [CLLocationCoordinate2D], n: Int) async -> [Double]? {
         let lats = coords.map { String(format: "%.3f", $0.latitude) }.joined(separator: ",")

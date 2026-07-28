@@ -545,6 +545,8 @@ struct MapHomeView: View {
     @State private var showFireMap = false
     /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
     @AppStorage("moncap.firmsKey") private var firmsKey = ""
+    /// Précharge une seule fois la carte de chaleur air (affichage instantané).
+    @State private var airPrefetched = false
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
     @State private var liveShareLink: IdentifiableURL?
@@ -674,6 +676,12 @@ struct MapHomeView: View {
             weather.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
             fires.refresh(key: firmsKey)
+            // Précharge la carte de chaleur air autour de la position (une fois)
+            // pour qu'elle s'affiche instantanément à l'ouverture.
+            if !airPrefetched {
+                airPrefetched = true
+                Task { await AirHeat.prefetch(center: c) }
+            }
             // Partage de position en direct (throttle interne à 5 s).
             liveShare.update(c, heading: location.course, speed: location.speedKmh)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
@@ -743,6 +751,11 @@ struct MapHomeView: View {
         .onChange(of: firmsKey) { _, key in
             // Nouvelle clé FIRMS saisie : on recharge les feux tout de suite.
             fires.refresh(key: key)
+        }
+        .task {
+            // Précharge les feux dès le lancement (indépendant de la position) →
+            // la carte des feux s'ouvre instantanément.
+            fires.refresh(key: firmsKey)
         }
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
