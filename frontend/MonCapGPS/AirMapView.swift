@@ -43,7 +43,12 @@ struct AirMapRepresentable: UIViewRepresentable {
         let map = MKMapView()
         map.delegate = context.coordinator
         map.showsUserLocation = true
-        map.pointOfInterestFilter = .excludingAll
+        // Fond clair et épuré (comme les cartes IQA de référence) : les couleurs
+        // de l'air ressortent vives dessus, alors que le fond satellite sombre
+        // les rendait boueuses et illisibles.
+        let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+        config.pointOfInterestFilter = .excludingAll
+        map.preferredConfiguration = config
         if let c = center {
             map.setRegion(
                 MKCoordinateRegion(
@@ -280,7 +285,9 @@ enum AirHeat {
         let h = 256
         let bytesPerRow = w * 4
         var data = [UInt8](repeating: 0, count: h * bytesPerRow)
-        let alpha: UInt8 = 150
+        // Translucide (comme la référence : on voit routes et villes au travers)
+        // — d'autant plus lisible que le fond est désormais clair.
+        let alpha: UInt8 = 140
         for py in 0..<h {
             let gy = Double(py) / Double(h - 1) * Double(n - 1)
             let r0 = min(Int(gy), n - 2)
@@ -316,15 +323,16 @@ enum AirHeat {
         return UIImage(cgImage: cg)
     }
 
-    /// Rampe de couleur EAQI continue (0 = bon → 100+ = extrême).
+    /// Rampe de couleur continue à l'échelle **IQA (FR)** de la référence
+    /// (indice européen EAQI : 0 = bonne → 100+ = extrême).
     private static func color(_ value: Double) -> (UInt8, UInt8, UInt8) {
         let stops: [(Double, Double, Double, Double)] = [
-            (0, 0.30, 0.68, 0.30),  // Bon — vert
-            (20, 0.60, 0.80, 0.25),  // Correct
-            (40, 0.96, 0.86, 0.20),  // Moyen — jaune
-            (60, 0.96, 0.55, 0.15),  // Mauvais — orange
-            (80, 0.90, 0.20, 0.20),  // Très mauvais — rouge
-            (100, 0.55, 0.15, 0.55),  // Extrême — violet
+            (0, 0.24, 0.55, 0.90),  // Bonne — bleu
+            (20, 0.35, 0.73, 0.38),  // Moyenne — vert
+            (40, 0.98, 0.85, 0.25),  // Dégradée — jaune
+            (60, 0.93, 0.27, 0.22),  // Mauvaise — rouge
+            (80, 0.60, 0.11, 0.13),  // Très mauvaise — rouge foncé
+            (100, 0.55, 0.16, 0.60),  // Extrême — violet
         ]
         let x = max(0, min(100, value))
         for i in 0..<(stops.count - 1) {
@@ -350,12 +358,12 @@ struct AirQualityMapScreen: View {
     let center: CLLocationCoordinate2D?
 
     private static let legend: [(String, Color)] = [
-        ("Bon", Color(red: 0.30, green: 0.68, blue: 0.30)),
-        ("Correct", Color(red: 0.60, green: 0.80, blue: 0.25)),
-        ("Moyen", Color(red: 0.96, green: 0.86, blue: 0.20)),
-        ("Mauvais", Color(red: 0.96, green: 0.55, blue: 0.15)),
-        ("Très mauvais", Color(red: 0.90, green: 0.20, blue: 0.20)),
-        ("Extrême", Color(red: 0.55, green: 0.15, blue: 0.55)),
+        ("Bonne", Color(red: 0.24, green: 0.55, blue: 0.90)),
+        ("Moyenne", Color(red: 0.35, green: 0.73, blue: 0.38)),
+        ("Dégradée", Color(red: 0.98, green: 0.85, blue: 0.25)),
+        ("Mauvaise", Color(red: 0.93, green: 0.27, blue: 0.22)),
+        ("Très mauvaise", Color(red: 0.60, green: 0.11, blue: 0.13)),
+        ("Extrême", Color(red: 0.55, green: 0.16, blue: 0.60)),
     ]
 
     var body: some View {
