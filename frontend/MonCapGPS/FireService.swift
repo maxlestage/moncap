@@ -6,6 +6,14 @@ struct Fire: Identifiable {
     /// Identité stable (position) pour un rendu de carte fluide.
     var id: String { "\(Int(coordinate.latitude * 1e4))|\(Int(coordinate.longitude * 1e4))" }
     let coordinate: CLLocationCoordinate2D
+    /// Instant de la détection satellite (UTC), si connu — sert à afficher
+    /// « Mise à jour il y a X h » sur la carte, comme feuxdeforet.fr.
+    let detectedAt: Date?
+
+    init(coordinate: CLLocationCoordinate2D, detectedAt: Date? = nil) {
+        self.coordinate = coordinate
+        self.detectedAt = detectedAt
+    }
 }
 
 /// Incendies actifs sur la France métropolitaine, servis par **notre backend**
@@ -18,6 +26,9 @@ struct Fire: Identifiable {
 @MainActor
 final class FireService: ObservableObject {
     @Published private(set) var fires: [Fire] = []
+    /// Dernière récupération réussie — repli pour « Mise à jour il y a X h »
+    /// quand les points n'ont pas d'horodatage satellite.
+    @Published private(set) var lastUpdate: Date?
 
     /// Base de l'API (identique à APIClient).
     private let baseURL = URL(string: "https://moncap-c41a5aaf07e8.herokuapp.com")!
@@ -38,14 +49,19 @@ final class FireService: ObservableObject {
         let base = baseURL
         Task {
             let f = k.isEmpty ? await Self.fetchBackend(base: base) : await Self.fetchNASA(key: k)
-            if let f { fires = f }
+            if let f {
+                fires = f
+                lastUpdate = Date()
+            }
         }
     }
 
-    /// Réponse JSON du backend : `[{ "lat": .., "lon": .. }, ...]`.
+    /// Réponse JSON du backend : `[{ "lat": .., "lon": .., "t": .. }, ...]`
+    /// (`t` = epoch secondes UTC de la détection satellite, optionnel).
     private struct Point: Decodable {
         let lat: Double
         let lon: Double
+        let t: Double?
     }
 
     /// Interroge notre backend `GET /fires`. `nonisolated` : décodage hors du
@@ -58,7 +74,9 @@ final class FireService: ObservableObject {
             let points = try? JSONDecoder().decode([Point].self, from: data)
         else { return nil }
         return points.map {
-            Fire(coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon))
+            Fire(
+                coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) })
         }
     }
 
@@ -75,16 +93,39 @@ final class FireService: ObservableObject {
             (resp as? HTTPURLResponse)?.statusCode == 200,
             let text = String(data: data, encoding: .utf8)
         else { return nil }
-        // CSV : latitude,longitude,... (première ligne = en-tête).
+        // CSV : latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,...
+        // (première ligne = en-tête).
         var out: [Fire] = []
         for line in text.split(whereSeparator: \.isNewline).dropFirst() {
             let cols = line.split(separator: ",", omittingEmptySubsequences: false)
             guard cols.count >= 2, let lat = Double(cols[0]), let lon = Double(cols[1]) else {
                 continue
             }
-            out.append(Fire(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
+            let detected = cols.count >= 7 ? acqDate(String(cols[5]), String(cols[6])) : nil
+            out.append(
+                Fire(
+                    coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
+                    detectedAt: detected))
             if out.count >= 1000 { break }
         }
         return out
+    }
+
+    /// Convertit une acquisition FIRMS (`acq_date` = « AAAA-MM-JJ », `acq_time`
+    /// = « HHMM » UTC, parfois sans zéros de tête) en `Date`.
+    nonisolated private static func acqDate(_ date: String, _ time: String) -> Date? {
+        let parts = date.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3, let hm = Int(time.trimmingCharacters(in: .whitespaces)) else {
+            return nil
+        }
+        var comps = DateComponents()
+        comps.year = parts[0]
+        comps.month = parts[1]
+        comps.day = parts[2]
+        comps.hour = hm / 100
+        comps.minute = hm % 100
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        return cal.date(from: comps)
     }
 }
