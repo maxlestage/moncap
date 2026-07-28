@@ -60,12 +60,24 @@ struct AirMapRepresentable: UIViewRepresentable {
 
     final class Coordinator: NSObject, MKMapViewDelegate {
         private var overlay: AQIImageOverlay?
-        private var lastKey = ""
-        private var lastFetch = Date.distantPast
+        /// Région pour laquelle l'overlay courant a été calculé (pour décider
+        /// s'il faut recharger quand la carte bouge).
+        private var fetchedRegion: MKCoordinateRegion?
+        private var lastFetchTime = Date.distantPast
         private var busy = false
+        /// Débounce des mouvements : ne recharge qu'une fois la carte posée.
+        private var pending: DispatchWorkItem?
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            refresh(mapView)
+            // Attend ~0,35 s d'immobilité avant de recharger (évite dix requêtes
+            // pendant un glissement continu), puis recharge si la vue a changé.
+            pending?.cancel()
+            let work = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else { return }
+                self.refresh(mapView)
+            }
+            pending = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -73,11 +85,25 @@ struct AirMapRepresentable: UIViewRepresentable {
             return MKOverlayRenderer(overlay: overlay)
         }
 
-        /// Recalcule la carte de chaleur pour la zone visible (si elle a changé).
+        /// Faut-il recharger pour la région visible ? Oui si aucun overlay, si
+        /// les données ont vieilli (>10 min : le champ CAMS évolue), si le zoom
+        /// a nettement changé, ou si le centre a bougé de plus de 30 % de l'écran.
+        private func needsRefresh(_ region: MKCoordinateRegion) -> Bool {
+            guard let f = fetchedRegion else { return true }
+            if Date().timeIntervalSince(lastFetchTime) > 600 { return true }
+            let zoom = region.span.latitudeDelta / max(f.span.latitudeDelta, 0.0001)
+            if zoom < 0.7 || zoom > 1.4 { return true }
+            let dLat = abs(region.center.latitude - f.center.latitude)
+            let dLon = abs(region.center.longitude - f.center.longitude)
+            return dLat > region.span.latitudeDelta * 0.3
+                || dLon > region.span.longitudeDelta * 0.3
+        }
+
+        /// Recalcule la carte de chaleur pour la zone visible (si nécessaire).
         func refresh(_ mapView: MKMapView) {
             // Affiche instantanément la dernière image connue (préchargée au
-            // lancement, ouverture précédente en mémoire, ou cache disque de la
-            // session d'avant), puis on actualise.
+            // lancement, en mémoire, ou cache disque de la session d'avant),
+            // puis on actualise.
             if overlay == nil {
                 if AirHeat.lastOverlay == nil { AirHeat.lastOverlay = AirHeat.loadCache() }
                 if let cached = AirHeat.lastOverlay {
@@ -87,21 +113,17 @@ struct AirMapRepresentable: UIViewRepresentable {
                 }
             }
             let region = mapView.region
-            let key = String(
-                format: "%.1f,%.1f,%.1f,%.1f",
-                region.center.latitude, region.center.longitude,
-                region.span.latitudeDelta, region.span.longitudeDelta)
-            guard !busy, key != lastKey || Date().timeIntervalSince(lastFetch) > 300 else { return }
-            lastKey = key
-            lastFetch = Date()
+            guard !busy, needsRefresh(region) else { return }
             busy = true
+            fetchedRegion = region
+            lastFetchTime = Date()
 
-            // BEAUCOUP plus large que l'écran (×2,6) : ça constitue une réserve
-            // tout autour, donc les déplacements restent dans du déjà-affiché →
-            // mise à jour perçue instantanée (l'ancienne image reste visible
-            // pendant le rechargement, pas de flash). Borné quand on est dézoomé.
-            let latSpan = min(region.span.latitudeDelta * 2.6, 30.0)
-            let lonSpan = min(region.span.longitudeDelta * 2.6, 34.0)
+            // Tampon modéré (×1,8) : l'overlay dépasse un peu l'écran pour éviter
+            // les bords vides et les flashs pendant le rechargement, mais reste
+            // assez serré pour que déplacer la carte révèle vraiment de nouvelles
+            // données (le tampon trop large ×2,6 donnait l'impression d'un figé).
+            let latSpan = min(region.span.latitudeDelta * 1.8, 26.0)
+            let lonSpan = min(region.span.longitudeDelta * 1.8, 30.0)
             let north = region.center.latitude + latSpan / 2
             let south = region.center.latitude - latSpan / 2
             let west = region.center.longitude - lonSpan / 2
@@ -139,7 +161,7 @@ struct AirMapRepresentable: UIViewRepresentable {
                     self.busy = false
                     // Rattrapage : si l'utilisateur a zoomé/déplacé pendant le
                     // chargement, on recharge la zone finale (sinon rendu figé).
-                    self.refresh(mapView)
+                    if self.needsRefresh(mapView.region) { self.refresh(mapView) }
                 }
             }
         }
