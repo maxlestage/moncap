@@ -86,7 +86,10 @@ enum FireGeometry {
         for (i, group) in clusters.enumerated() {
             let center = centroid(group)
             let hull = convexHull(group)
-            let polygon = hull.count >= 3 ? bufferedRing(hull) : circle(center, radiusMeters: 3500)
+            let polygon =
+                hull.count >= 3
+                ? smooth(bufferedRing(hull), iterations: 2)
+                : circle(center, radiusMeters: 3500)
             out.append(FirePerimeter(id: i, polygon: polygon, center: center))
         }
         return out
@@ -156,6 +159,34 @@ enum FireGeometry {
                 latitude: c.latitude + ($0.latitude - c.latitude) * factor,
                 longitude: c.longitude + ($0.longitude - c.longitude) * factor)
         }
+    }
+
+    /// Lissage par coupe-coins de Chaikin : arrondit un polygone fermé
+    /// (contour anguleux → organique). Chaque itération double le nombre de
+    /// points en rapprochant chaque segment de son milieu.
+    private static func smooth(_ ring: [CLLocationCoordinate2D], iterations: Int)
+        -> [CLLocationCoordinate2D]
+    {
+        guard ring.count >= 3 else { return ring }
+        var pts = ring
+        for _ in 0..<iterations {
+            var next: [CLLocationCoordinate2D] = []
+            next.reserveCapacity(pts.count * 2)
+            for i in 0..<pts.count {
+                let a = pts[i]
+                let b = pts[(i + 1) % pts.count]
+                next.append(
+                    CLLocationCoordinate2D(
+                        latitude: a.latitude * 0.75 + b.latitude * 0.25,
+                        longitude: a.longitude * 0.75 + b.longitude * 0.25))
+                next.append(
+                    CLLocationCoordinate2D(
+                        latitude: a.latitude * 0.25 + b.latitude * 0.75,
+                        longitude: a.longitude * 0.25 + b.longitude * 0.75))
+            }
+            pts = next
+        }
+        return pts
     }
 
     /// Polygone circulaire (~24 points) autour d'un centre, rayon en mètres.
