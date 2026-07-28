@@ -76,11 +76,15 @@ struct AirMapRepresentable: UIViewRepresentable {
         /// Recalcule la carte de chaleur pour la zone visible (si elle a changé).
         func refresh(_ mapView: MKMapView) {
             // Affiche instantanément la dernière image connue (préchargée au
-            // lancement ou d'une ouverture précédente), puis on actualise.
-            if overlay == nil, let cached = AirHeat.lastOverlay {
-                let ov = AQIImageOverlay(image: cached.image, rect: cached.rect)
-                overlay = ov
-                mapView.addOverlay(ov, level: .aboveRoads)
+            // lancement, ouverture précédente en mémoire, ou cache disque de la
+            // session d'avant), puis on actualise.
+            if overlay == nil {
+                if AirHeat.lastOverlay == nil { AirHeat.lastOverlay = AirHeat.loadCache() }
+                if let cached = AirHeat.lastOverlay {
+                    let ov = AQIImageOverlay(image: cached.image, rect: cached.rect)
+                    overlay = ov
+                    mapView.addOverlay(ov, level: .aboveRoads)
+                }
             }
             let region = mapView.region
             let key = String(
@@ -128,7 +132,10 @@ struct AirMapRepresentable: UIViewRepresentable {
                     let ov = AQIImageOverlay(image: image, rect: rect)
                     self.overlay = ov
                     mapView.addOverlay(ov, level: .aboveRoads)
-                    AirHeat.lastOverlay = (image, rect)  // cache pour un affichage instantané
+                    AirHeat.lastOverlay = (image, rect)  // cache mémoire (instantané)
+                    // Cache disque (hors thread principal) : réouverture pleine
+                    // même après fermeture de l'app.
+                    Task.detached { AirHeat.saveCache(image: image, rect: rect) }
                     self.busy = false
                     // Rattrapage : si l'utilisateur a zoomé/déplacé pendant le
                     // chargement, on recharge la zone finale (sinon rendu figé).
@@ -146,11 +153,44 @@ enum AirHeat {
     /// l'ouverture. Touché uniquement sur le thread principal.
     static var lastOverlay: (image: UIImage, rect: MKMapRect)?
 
+    /// Fichier de cache disque de la dernière carte de chaleur (l'image survit à
+    /// une fermeture de l'app → réouverture réellement instantanée, déjà pleine).
+    private static let cacheFile: URL = {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return dir.appendingPathComponent("air_heat_overlay.png")
+    }()
+    private static let cacheRectKey = "moncap.airHeat.rect"
+
+    /// Sauve l'image + son rectangle sur le disque (hors thread principal).
+    nonisolated static func saveCache(image: UIImage, rect: MKMapRect) {
+        guard let png = image.pngData() else { return }
+        try? png.write(to: cacheFile, options: .atomic)
+        UserDefaults.standard.set(
+            [rect.origin.x, rect.origin.y, rect.size.width, rect.size.height], forKey: cacheRectKey)
+    }
+
+    /// Recharge l'image + rectangle depuis le disque (dernière session).
+    nonisolated static func loadCache() -> (image: UIImage, rect: MKMapRect)? {
+        guard let data = try? Data(contentsOf: cacheFile),
+            let img = UIImage(data: data),
+            let r = UserDefaults.standard.array(forKey: cacheRectKey) as? [Double], r.count == 4
+        else { return nil }
+        return (img, MKMapRect(x: r[0], y: r[1], width: r[2], height: r[3]))
+    }
+
     /// Précharge la carte de chaleur autour d'un point (au lancement), pour que
-    /// l'écran air s'affiche instantanément quand on l'ouvre.
+    /// l'écran air s'affiche instantanément quand on l'ouvre. La zone préchargée
+    /// est **volontairement très large** (couvre bien au-delà de la vue
+    /// d'ouverture ~600 km) : l'overlay en cache remplit alors tout l'écran dès
+    /// l'ouverture, sans bande vide le temps que le réseau réponde.
     nonisolated static func prefetch(center: CLLocationCoordinate2D) async {
-        let latSpan = 8.0
-        let lonSpan = 10.0
+        // Affiche d'emblée l'overlay de la session précédente (disque) tant que
+        // le nouveau n'est pas prêt : ouverture pleine, jamais de demi-écran.
+        if let disk = loadCache() {
+            await MainActor.run { if lastOverlay == nil { lastOverlay = disk } }
+        }
+        let latSpan = 13.0
+        let lonSpan = 17.0
         let north = center.latitude + latSpan / 2
         let south = center.latitude - latSpan / 2
         let west = center.longitude - lonSpan / 2
@@ -172,6 +212,7 @@ enum AirHeat {
         let br = MKMapPoint(CLLocationCoordinate2D(latitude: south, longitude: east))
         let rect = MKMapRect(x: tl.x, y: tl.y, width: br.x - tl.x, height: br.y - tl.y)
         await MainActor.run { lastOverlay = (img, rect) }
+        saveCache(image: img, rect: rect)
     }
 
     /// Échantillonne la grille EAQI (une seule requête open-meteo). `nil` si échec.
