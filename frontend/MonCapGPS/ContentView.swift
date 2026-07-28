@@ -3521,39 +3521,49 @@ struct MapHomeView: View {
     }
 }
 
-/// Marqueur d'incendie animé : un cœur incandescent (flamme) posé sur un halo
-/// de chaleur qui « respire » (pulsation continue), pour une carte des feux
-/// bien plus vivante que de simples disques.
+/// Marqueur d'incendie identique à celui de feuxdeforet.fr : pastille rouge
+/// pleine cerclée d'anneaux rouges translucides concentriques (le halo externe
+/// « respire » doucement), flamme dorée au centre.
 struct FireMarker: View {
     @State private var pulse = false
 
+    /// Rouge vif du site (même teinte que le liseré des contours).
+    private let red = Color(red: 0.86, green: 0.13, blue: 0.11)
+
     var body: some View {
         ZStack {
-            // Halo de chaleur diffus qui pulse (dégradé radial rouge → orange).
+            // Halo externe diffus, pulsation lente.
+            Circle()
+                .fill(red.opacity(0.30))
+                .frame(width: 64, height: 64)
+                .scaleEffect(pulse ? 1.15 : 0.95)
+            // Anneau intermédiaire, plus soutenu.
+            Circle()
+                .fill(red.opacity(0.50))
+                .frame(width: 50, height: 50)
+            // Cœur plein : disque rouge légèrement bombé (dégradé radial).
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [
-                            .orange.opacity(0.55), .red.opacity(0.35), .red.opacity(0.0),
-                        ],
-                        center: .center, startRadius: 1, endRadius: 30)
+                        colors: [Color(red: 1.0, green: 0.30, blue: 0.22), red],
+                        center: .init(x: 0.42, y: 0.38), startRadius: 2, endRadius: 22)
                 )
-                .frame(width: 60, height: 60)
-                .scaleEffect(pulse ? 1.2 : 0.8)
-                .opacity(pulse ? 0.45 : 0.95)
-            // Flamme centrale, légère pulsation.
+                .frame(width: 38, height: 38)
+            // Flamme dorée, cœur clair en haut comme l'icône du site.
             Image(systemName: "flame.fill")
                 .font(.system(size: 20))
                 .foregroundStyle(
                     LinearGradient(
-                        colors: [.yellow, .orange, .red],
+                        colors: [
+                            Color(red: 1.0, green: 0.95, blue: 0.55), .yellow,
+                            Color(red: 1.0, green: 0.68, blue: 0.10),
+                        ],
                         startPoint: .top, endPoint: .bottom)
                 )
-                .scaleEffect(pulse ? 1.12 : 0.92)
-                .shadow(color: .red.opacity(0.6), radius: 4)
+                .scaleEffect(pulse ? 1.06 : 0.96)
         }
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
                 pulse = true
             }
         }

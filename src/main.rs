@@ -461,6 +461,11 @@ struct Stats {
 struct FirePoint {
     lat: f64,
     lon: f64,
+    /// Horodatage (epoch secondes UTC) de la détection satellite, si connu —
+    /// permet au client d'afficher « Mise à jour il y a X h ». Absent du JSON
+    /// quand la colonne CSV manque (compatibilité clients existants).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t: Option<i64>,
 }
 
 /// Cache mémoire des feux : évite d'appeler la NASA à chaque requête client.
@@ -524,20 +529,53 @@ async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
     }
     let text = resp.text().await.ok()?;
 
-    // CSV : latitude,longitude,... (première ligne = en-tête).
+    // CSV : latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,...
+    // (première ligne = en-tête).
     let mut out = Vec::new();
     for line in text.lines().skip(1) {
         let mut cols = line.split(',');
         let lat = cols.next().and_then(|s| s.trim().parse::<f64>().ok());
         let lon = cols.next().and_then(|s| s.trim().parse::<f64>().ok());
+        // `nth(3)` saute bright_ti4/scan/track → acq_date, puis acq_time.
+        let date = cols.nth(3);
+        let time = cols.next();
         if let (Some(lat), Some(lon)) = (lat, lon) {
-            out.push(FirePoint { lat, lon });
+            let t = date
+                .zip(time)
+                .and_then(|(d, h)| acq_epoch(d.trim(), h.trim()));
+            out.push(FirePoint { lat, lon, t });
             if out.len() >= 500 {
                 break;
             }
         }
     }
     Some(out)
+}
+
+/// Convertit une acquisition FIRMS (`acq_date` = « AAAA-MM-JJ », `acq_time` =
+/// « HHMM » UTC, parfois sans zéros de tête) en epoch secondes UTC.
+fn acq_epoch(date: &str, time: &str) -> Option<i64> {
+    let mut parts = date.split('-');
+    let y: i64 = parts.next()?.parse().ok()?;
+    let m: i64 = parts.next()?.parse().ok()?;
+    let d: i64 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+    let hm: i64 = time.parse().ok()?;
+    let (h, min) = (hm / 100, hm % 100);
+    if !(0..24).contains(&h) || !(0..60).contains(&min) {
+        return None;
+    }
+    // Jours écoulés depuis l'époque Unix (algorithme « days from civil »).
+    let y_adj = if m <= 2 { y - 1 } else { y };
+    let era = if y_adj >= 0 { y_adj } else { y_adj - 399 } / 400;
+    let yoe = y_adj - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some(days * 86_400 + h * 3_600 + min * 60)
 }
 
 /// Client HTTP sortant partagé (pool de connexions + pile TLS construits une
@@ -2258,6 +2296,21 @@ mod tests {
     #[test]
     fn distance_to_self_is_zero() {
         assert!(haversine_km(&PARIS, &PARIS) < 1e-9);
+    }
+
+    #[test]
+    fn acq_epoch_converts_firms_timestamps() {
+        // Valeurs de référence calculées avec `date -u +%s`.
+        assert_eq!(acq_epoch("2026-07-28", "0342"), Some(1_785_210_120));
+        // FIRMS omet parfois les zéros de tête (« 342 » = 03:42).
+        assert_eq!(acq_epoch("2026-07-28", "342"), Some(1_785_210_120));
+        // Année bissextile.
+        assert_eq!(acq_epoch("2000-02-29", "2359"), Some(951_868_740));
+        assert_eq!(acq_epoch("1970-01-01", "0001"), Some(60));
+        // Entrées invalides → None.
+        assert_eq!(acq_epoch("2026-13-01", "0000"), None);
+        assert_eq!(acq_epoch("2026-07-28", "2460"), None);
+        assert_eq!(acq_epoch("n/a", "0342"), None);
     }
 
     #[test]
