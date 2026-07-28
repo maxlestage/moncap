@@ -130,6 +130,9 @@ struct AirMapRepresentable: UIViewRepresentable {
                     mapView.addOverlay(ov, level: .aboveRoads)
                     AirHeat.lastOverlay = (image, rect)  // cache pour un affichage instantané
                     self.busy = false
+                    // Rattrapage : si l'utilisateur a zoomé/déplacé pendant le
+                    // chargement, on recharge la zone finale (sinon rendu figé).
+                    self.refresh(mapView)
                 }
             }
         }

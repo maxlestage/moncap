@@ -1153,13 +1153,8 @@ struct MapHomeView: View {
         MapReader { proxy in
         Map(position: $camera, selection: $selectedFeature) {
             UserAnnotation()
-            // Incendies actifs (NASA FIRMS) : marqueurs flamme animés avec un
-            // halo de chaleur qui pulse, plus vivants que de simples disques.
-            ForEach(visibleFires) { f in
-                Annotation("", coordinate: f.coordinate) {
-                    FireMarker()
-                }
-            }
+            // Les incendies ne surchargent plus la carte GPS : ils ont leur
+            // écran dédié (bouton 🔥 → carte des feux sur satellite).
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
                 Annotation("Moi", coordinate: me) {
@@ -2238,22 +2233,6 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    /// Feux à dessiner : limités à la zone visible (avec une marge d'un écran)
-    /// et plafonnés, pour ne pas empiler des centaines d'overlays hors champ.
-    private var visibleFires: [Fire] {
-        let all = fires.fires
-        guard let r = visibleRegion else { return Array(all.prefix(60)) }
-        let latMin = r.center.latitude - r.span.latitudeDelta
-        let latMax = r.center.latitude + r.span.latitudeDelta
-        let lonMin = r.center.longitude - r.span.longitudeDelta
-        let lonMax = r.center.longitude + r.span.longitudeDelta
-        return Array(
-            all.lazy.filter {
-                $0.coordinate.latitude >= latMin && $0.coordinate.latitude <= latMax
-                    && $0.coordinate.longitude >= lonMin && $0.coordinate.longitude <= lonMax
-            }.prefix(60))
-    }
-
     private var bottomBar: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
@@ -2263,11 +2242,27 @@ struct MapHomeView: View {
             }
             Spacer()
             VStack(spacing: 14) {
+                fireMapButton
                 airMapButton
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
             }
+        }
+    }
+
+    /// Ouvre la carte dédiée aux incendies (contours sur satellite) en plein écran.
+    private var fireMapButton: some View {
+        Button {
+            fires.refresh(key: firmsKey)
+            showFireMap = true
+        } label: {
+            Image(systemName: "flame.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(.regularMaterial))
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
 
