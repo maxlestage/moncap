@@ -446,7 +446,8 @@ struct MapHomeView: View {
     @State private var destQuery = ""
     @State private var recents: [RecentSearch] = Session.recentSearches
     @State private var showReports = false
-    @State private var gpxFile: IdentifiableURL?
+    /// Message d'erreur de partage (ex. serveur de suivi injoignable).
+    @State private var shareError: String?
     // Partagé automatiquement pour que tout le monde apparaisse sur la carte.
     @State private var sharing = true
     // Nom affiché aux autres : l'e-mail de connexion.
@@ -473,8 +474,6 @@ struct MapHomeView: View {
     /// Favoris Domicile / Travail (stockés sur l'appareil).
     @State private var homePlace = Session.home
     @State private var workPlace = Session.work
-    /// Texte d'ETA à partager (« J'arrive vers HH:MM »).
-    @State private var etaShare: IdentifiableText?
     /// Dernier avertissement de dépassement de vitesse (anti-spam).
     @State private var lastSpeedWarning = Date.distantPast
     /// Première position reçue → mise à jour immédiate de la limite de vitesse.
@@ -549,7 +548,6 @@ struct MapHomeView: View {
     @State private var airPrefetched = false
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
-    @State private var liveShareLink: IdentifiableURL?
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -603,10 +601,15 @@ struct MapHomeView: View {
         .sheet(isPresented: $showSearch) { searchSheet }
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
-        .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
-        .sheet(item: $etaShare) { share in ShareSheet(items: [share.text]) }
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
-        .sheet(item: $liveShareLink) { link in ShareSheet(items: [link.url]) }
+        .alert(
+            "Partage impossible", isPresented: Binding(
+                get: { shareError != nil }, set: { if !$0 { shareError = nil } })
+        ) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: {
+            Text(shareError ?? "")
+        }
         .fullScreenCover(isPresented: $showAirMap) {
             AirQualityMapScreen(center: location.coordinate)
         }
@@ -1081,9 +1084,16 @@ struct MapHomeView: View {
         Task {
             let name = Session.username.isEmpty ? "Un ami" : Session.username
             if let url = await liveShare.start(name: name) {
-                liveShareLink = IdentifiableURL(url: url)
                 // Continue d'émettre la position même écran verrouillé.
                 location.setBackgroundTracking(true)
+                // Laisse la feuille « Lieux » se fermer avant de présenter le
+                // partage, sinon iOS ignore la présentation.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    Sharer.present([url])
+                }
+            } else {
+                shareError =
+                    "Le serveur de suivi est injoignable pour le moment. Réessaie dans un instant."
             }
         }
     }
@@ -1094,9 +1104,10 @@ struct MapHomeView: View {
         f.locale = Locale(identifier: "fr_FR")
         f.dateFormat = "HH:mm"
         let eta = f.string(from: Date().addingTimeInterval(nav.etaMinutes * 60))
-        etaShare = IdentifiableText(text: String(
+        let text = String(
             format: "J'arrive vers %@ (%.1f km restants) — MonCap GPS 🛰️",
-            eta, nav.remainingKm))
+            eta, nav.remainingKm)
+        Sharer.present([text])
     }
 
     /// Annonce vocalement (une seule fois chacun) les signalements à moins de
@@ -2694,7 +2705,7 @@ struct MapHomeView: View {
                             showPlaces = false
                             if let u = liveShare.shareURL {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    liveShareLink = IdentifiableURL(url: u)
+                                    Sharer.present([u])
                                 }
                             }
                         } label: {
@@ -3497,8 +3508,15 @@ struct MapHomeView: View {
     }
 
     private func exportGPX() async {
-        if let url = try? await api.exportGPX() {
-            gpxFile = IdentifiableURL(url: url)
+        guard let url = try? await api.exportGPX() else {
+            shareError = "Impossible de générer le fichier GPX pour le moment."
+            return
+        }
+        // Ferme la feuille « Lieux » (d'où part le bouton) avant de présenter la
+        // feuille de partage, sinon iOS ignore la présentation.
+        showPlaces = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            Sharer.present([url])
         }
     }
 }
