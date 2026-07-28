@@ -15,7 +15,7 @@ struct FirePerimeter: Identifiable {
 /// des points chauds satellite (NASA FIRMS) regroupés par foyer.
 struct FireMapScreen: View {
     @Environment(\.dismiss) private var dismiss
-    let fires: [Fire]
+    @ObservedObject var service: FireService
 
     @State private var perimeters: [FirePerimeter] = []
     @State private var camera: MapCameraPosition = .automatic
@@ -37,9 +37,10 @@ struct FireMapScreen: View {
 
             header
         }
-        .task {
-            // Calcul (regroupement + enveloppes) hors du thread principal.
-            let fires = fires
+        // Recalcule les contours dès que la liste des feux change (arrivée des
+        // données), hors du thread principal.
+        .task(id: service.fires.count) {
+            let fires = service.fires
             perimeters = await Task.detached { FireGeometry.perimeters(from: fires) }.value
         }
     }

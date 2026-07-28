@@ -446,7 +446,8 @@ struct MapHomeView: View {
     @State private var destQuery = ""
     @State private var recents: [RecentSearch] = Session.recentSearches
     @State private var showReports = false
-    @State private var gpxFile: IdentifiableURL?
+    /// Message d'erreur de partage (ex. serveur de suivi injoignable).
+    @State private var shareError: String?
     // Partagé automatiquement pour que tout le monde apparaisse sur la carte.
     @State private var sharing = true
     // Nom affiché aux autres : l'e-mail de connexion.
@@ -473,8 +474,6 @@ struct MapHomeView: View {
     /// Favoris Domicile / Travail (stockés sur l'appareil).
     @State private var homePlace = Session.home
     @State private var workPlace = Session.work
-    /// Texte d'ETA à partager (« J'arrive vers HH:MM »).
-    @State private var etaShare: IdentifiableText?
     /// Dernier avertissement de dépassement de vitesse (anti-spam).
     @State private var lastSpeedWarning = Date.distantPast
     /// Première position reçue → mise à jour immédiate de la limite de vitesse.
@@ -539,14 +538,16 @@ struct MapHomeView: View {
     @State private var showTrips = false
     /// « Prévenir un proche » (message d'arrivée à un contact).
     @State private var showArrive = false
-    /// Carte qualité de l'air (tuiles WAQI, écran dédié).
+    /// Carte qualité de l'air (carte de chaleur maison, écran dédié).
     @State private var showAirMap = false
-    @AppStorage("moncap.waqiToken") private var waqiToken = ""
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
+    /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
+    @AppStorage("moncap.firmsKey") private var firmsKey = ""
+    /// Précharge une seule fois la carte de chaleur air (affichage instantané).
+    @State private var airPrefetched = false
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
-    @State private var liveShareLink: IdentifiableURL?
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -600,15 +601,20 @@ struct MapHomeView: View {
         .sheet(isPresented: $showSearch) { searchSheet }
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
-        .sheet(item: $gpxFile) { file in ShareSheet(items: [file.url]) }
-        .sheet(item: $etaShare) { share in ShareSheet(items: [share.text]) }
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
-        .sheet(item: $liveShareLink) { link in ShareSheet(items: [link.url]) }
+        .alert(
+            "Partage impossible", isPresented: Binding(
+                get: { shareError != nil }, set: { if !$0 { shareError = nil } })
+        ) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: {
+            Text(shareError ?? "")
+        }
         .fullScreenCover(isPresented: $showAirMap) {
-            AirQualityMapScreen(token: waqiToken, center: location.coordinate)
+            AirQualityMapScreen(center: location.coordinate)
         }
         .fullScreenCover(isPresented: $showFireMap) {
-            FireMapScreen(fires: fires.fires)
+            FireMapScreen(service: fires)
         }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
@@ -672,7 +678,13 @@ struct MapHomeView: View {
             // Météo en temps réel (température + conditions).
             weather.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
-            fires.refresh()
+            fires.refresh(key: firmsKey)
+            // Précharge la carte de chaleur air autour de la position (une fois)
+            // pour qu'elle s'affiche instantanément à l'ouverture.
+            if !airPrefetched {
+                airPrefetched = true
+                Task { await AirHeat.prefetch(center: c) }
+            }
             // Partage de position en direct (throttle interne à 5 s).
             liveShare.update(c, heading: location.course, speed: location.speedKmh)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
@@ -738,6 +750,15 @@ struct MapHomeView: View {
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.
             if on { nearbyNotifier.requestAuthorizationIfNeeded() }
+        }
+        .onChange(of: firmsKey) { _, key in
+            // Nouvelle clé FIRMS saisie : on recharge les feux tout de suite.
+            fires.refresh(key: key)
+        }
+        .task {
+            // Précharge les feux dès le lancement (indépendant de la position) →
+            // la carte des feux s'ouvre instantanément.
+            fires.refresh(key: firmsKey)
         }
         .onChange(of: nav.active) { wasActive, isActive in
             // Empêche la mise en veille de l'écran pendant la navigation.
@@ -1063,9 +1084,16 @@ struct MapHomeView: View {
         Task {
             let name = Session.username.isEmpty ? "Un ami" : Session.username
             if let url = await liveShare.start(name: name) {
-                liveShareLink = IdentifiableURL(url: url)
                 // Continue d'émettre la position même écran verrouillé.
                 location.setBackgroundTracking(true)
+                // Laisse la feuille « Lieux » se fermer avant de présenter le
+                // partage, sinon iOS ignore la présentation.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    Sharer.present([url])
+                }
+            } else {
+                shareError =
+                    "Le serveur de suivi est injoignable pour le moment. Réessaie dans un instant."
             }
         }
     }
@@ -1076,9 +1104,10 @@ struct MapHomeView: View {
         f.locale = Locale(identifier: "fr_FR")
         f.dateFormat = "HH:mm"
         let eta = f.string(from: Date().addingTimeInterval(nav.etaMinutes * 60))
-        etaShare = IdentifiableText(text: String(
+        let text = String(
             format: "J'arrive vers %@ (%.1f km restants) — MonCap GPS 🛰️",
-            eta, nav.remainingKm))
+            eta, nav.remainingKm)
+        Sharer.present([text])
     }
 
     /// Annonce vocalement (une seule fois chacun) les signalements à moins de
@@ -1135,13 +1164,8 @@ struct MapHomeView: View {
         MapReader { proxy in
         Map(position: $camera, selection: $selectedFeature) {
             UserAnnotation()
-            // Incendies actifs (NASA FIRMS) : marqueurs flamme animés avec un
-            // halo de chaleur qui pulse, plus vivants que de simples disques.
-            ForEach(visibleFires) { f in
-                Annotation("", coordinate: f.coordinate) {
-                    FireMarker()
-                }
-            }
+            // Les incendies ne surchargent plus la carte GPS : ils ont leur
+            // écran dédié (bouton 🔥 → carte des feux sur satellite).
             // Mon avatar affiché à ma position (hors navigation).
             if let me = location.coordinate, !nav.active {
                 Annotation("Moi", coordinate: me) {
@@ -2220,22 +2244,6 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    /// Feux à dessiner : limités à la zone visible (avec une marge d'un écran)
-    /// et plafonnés, pour ne pas empiler des centaines d'overlays hors champ.
-    private var visibleFires: [Fire] {
-        let all = fires.fires
-        guard let r = visibleRegion else { return Array(all.prefix(60)) }
-        let latMin = r.center.latitude - r.span.latitudeDelta
-        let latMax = r.center.latitude + r.span.latitudeDelta
-        let lonMin = r.center.longitude - r.span.longitudeDelta
-        let lonMax = r.center.longitude + r.span.longitudeDelta
-        return Array(
-            all.lazy.filter {
-                $0.coordinate.latitude >= latMin && $0.coordinate.latitude <= latMax
-                    && $0.coordinate.longitude >= lonMin && $0.coordinate.longitude <= lonMax
-            }.prefix(60))
-    }
-
     private var bottomBar: some View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
@@ -2245,6 +2253,7 @@ struct MapHomeView: View {
             }
             Spacer()
             VStack(spacing: 14) {
+                fireMapButton
                 airMapButton
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
@@ -2253,7 +2262,22 @@ struct MapHomeView: View {
         }
     }
 
-    /// Ouvre la carte qualité de l'air (tuiles WAQI) en plein écran.
+    /// Ouvre la carte dédiée aux incendies (contours sur satellite) en plein écran.
+    private var fireMapButton: some View {
+        Button {
+            fires.refresh(key: firmsKey)
+            showFireMap = true
+        } label: {
+            Image(systemName: "flame.fill")
+                .font(.title3)
+                .foregroundStyle(.orange)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(.regularMaterial))
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+    }
+
+    /// Ouvre la carte qualité de l'air (carte de chaleur maison) en plein écran.
     private var airMapButton: some View {
         Button { showAirMap = true } label: {
             Image(systemName: "aqi.medium")
@@ -2400,14 +2424,25 @@ struct MapHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                // Incendies actifs (NASA FIRMS) : automatique, sans configuration.
+                // Incendies (NASA FIRMS) : clé optionnelle saisie sur l'appareil
+                // (sinon le serveur fournit les feux si configuré).
                 Section("Incendies 🔥 (NASA FIRMS)") {
-                    Text("\(fires.fires.count) foyer(s) actif(s) en France (dernières 24 h, satellite VIIRS).")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text("Les incendies détectés par satellite s'affichent en zones rouges sur la carte, automatiquement.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    Link(
+                        destination: URL(
+                            string: "https://firms.modaps.eosdis.nasa.gov/api/map_key/")!
+                    ) {
+                        Label("Obtenir une clé gratuite", systemImage: "link")
+                    }
+                    .font(.footnote)
+                    Text(
+                        "Colle ta clé FIRMS pour afficher les vrais foyers (carte des feux, menu) sans attendre le serveur. \(fires.fires.count) foyer(s) actuellement."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
                 // Trafic temps réel TomTom : clé optionnelle saisie sur
                 // l'appareil (sinon le serveur fournit le trafic si configuré).
@@ -2431,22 +2466,6 @@ struct MapHomeView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                }
-                // Carte qualité de l'air (tuiles WAQI, écran dédié).
-                Section("Qualité de l'air 🌫️ (WAQI)") {
-                    TextField("Token WAQI", text: $waqiToken)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .monospaced))
-                    Link(destination: URL(string: "https://aqicn.org/data-platform/token/")!) {
-                        Label("Obtenir un token gratuit", systemImage: "link")
-                    }
-                    .font(.footnote)
-                    Text(
-                        "Colle ton token pour afficher la carte de chaleur de la qualité de l'air (bouton « Air » sur la carte) : de vraies tuiles, lisses et rapides."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
@@ -2686,7 +2705,7 @@ struct MapHomeView: View {
                             showPlaces = false
                             if let u = liveShare.shareURL {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    liveShareLink = IdentifiableURL(url: u)
+                                    Sharer.present([u])
                                 }
                             }
                         } label: {
@@ -2711,6 +2730,7 @@ struct MapHomeView: View {
                         .disabled(location.coordinate == nil)
                     }
                     Button {
+                        fires.refresh(key: firmsKey)
                         showPlaces = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                             showFireMap = true
@@ -3488,8 +3508,15 @@ struct MapHomeView: View {
     }
 
     private func exportGPX() async {
-        if let url = try? await api.exportGPX() {
-            gpxFile = IdentifiableURL(url: url)
+        guard let url = try? await api.exportGPX() else {
+            shareError = "Impossible de générer le fichier GPX pour le moment."
+            return
+        }
+        // Ferme la feuille « Lieux » (d'où part le bouton) avant de présenter la
+        // feuille de partage, sinon iOS ignore la présentation.
+        showPlaces = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            Sharer.present([url])
         }
     }
 }

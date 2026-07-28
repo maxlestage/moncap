@@ -23,15 +23,22 @@ final class FireService: ObservableObject {
     private let baseURL = URL(string: "https://moncap-c41a5aaf07e8.herokuapp.com")!
 
     private var lastFetch = Date.distantPast
+    private var lastKey = ""
 
-    /// Rafraîchit la liste des feux (au plus toutes les 15 min). Les données
-    /// FIRMS NRT ne sont mises à jour que quelques fois par jour, inutile
-    /// d'appeler plus souvent — et le backend met déjà en cache.
-    func refresh() {
-        guard Date().timeIntervalSince(lastFetch) > 900 else { return }
+    /// Rafraîchit la liste des feux (au plus toutes les 15 min ; immédiat si la
+    /// clé change). Si `key` (clé FIRMS saisie dans les réglages) est non vide,
+    /// l'app interroge la NASA **directement** ; sinon elle passe par notre
+    /// backend. Les données FIRMS NRT ne changent que quelques fois par jour.
+    func refresh(key: String) {
+        let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        let changed = k != lastKey
+        guard changed || Date().timeIntervalSince(lastFetch) > 900 else { return }
         lastFetch = Date()
+        lastKey = k
+        let base = baseURL
         Task {
-            if let f = await Self.fetch(base: baseURL) { fires = f }
+            let f = k.isEmpty ? await Self.fetchBackend(base: base) : await Self.fetchNASA(key: k)
+            if let f { fires = f }
         }
     }
 
@@ -41,10 +48,9 @@ final class FireService: ObservableObject {
         let lon: Double
     }
 
-    /// Interroge `GET /fires`. Renvoie nil en cas d'échec (affichage gardé).
-    /// `nonisolated` : le décodage JSON + la transformation (potentiellement des
-    /// centaines de points) s'exécutent hors du thread principal.
-    nonisolated private static func fetch(base: URL) async -> [Fire]? {
+    /// Interroge notre backend `GET /fires`. `nonisolated` : décodage hors du
+    /// thread principal. Renvoie nil en cas d'échec (affichage gardé).
+    nonisolated private static func fetchBackend(base: URL) async -> [Fire]? {
         let url = base.appendingPathComponent("fires")
         guard
             let (data, resp) = try? await URLSession.shared.data(from: url),
@@ -54,5 +60,31 @@ final class FireService: ObservableObject {
         return points.map {
             Fire(coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon))
         }
+    }
+
+    /// Interroge directement l'API NASA FIRMS (CSV) avec la clé de l'appareil :
+    /// France métropolitaine (Corse incluse), VIIRS S-NPP, dernières 24 h.
+    nonisolated private static func fetchNASA(key: String) async -> [Fire]? {
+        let area = "-5.5,41,10,51.5"  // ouest,sud,est,nord
+        guard
+            let url = URL(
+                string:
+                    "https://firms.modaps.eosdis.nasa.gov/api/area/csv/\(key)/VIIRS_SNPP_NRT/\(area)/1"
+            ),
+            let (data, resp) = try? await URLSession.shared.data(from: url),
+            (resp as? HTTPURLResponse)?.statusCode == 200,
+            let text = String(data: data, encoding: .utf8)
+        else { return nil }
+        // CSV : latitude,longitude,... (première ligne = en-tête).
+        var out: [Fire] = []
+        for line in text.split(whereSeparator: \.isNewline).dropFirst() {
+            let cols = line.split(separator: ",", omittingEmptySubsequences: false)
+            guard cols.count >= 2, let lat = Double(cols[0]), let lon = Double(cols[1]) else {
+                continue
+            }
+            out.append(Fire(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)))
+            if out.count >= 1000 { break }
+        }
+        return out
     }
 }
