@@ -43,12 +43,13 @@ struct AirMapRepresentable: UIViewRepresentable {
         let map = MKMapView()
         map.delegate = context.coordinator
         map.showsUserLocation = true
-        // Fond clair et épuré (comme les cartes IQA de référence) : les couleurs
-        // de l'air ressortent vives dessus, alors que le fond satellite sombre
-        // les rendait boueuses et illisibles.
-        let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
-        config.pointOfInterestFilter = .excludingAll
-        map.preferredConfiguration = config
+        map.pointOfInterestFilter = .excludingAll
+        // Fond clair et épuré (comme les cartes IQA de référence) : on garde la
+        // carte standard — qui affiche bien nos overlays — et on la force en mode
+        // clair (jour), au lieu du mode nuit sombre du téléphone qui rendait les
+        // couleurs boueuses. NB : passer par `preferredConfiguration` faisait
+        // disparaître complètement l'overlay (carte vide) — d'où ce choix.
+        map.overrideUserInterfaceStyle = .light
         if let c = center {
             map.setRegion(
                 MKCoordinateRegion(
