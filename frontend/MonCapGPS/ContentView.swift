@@ -539,9 +539,8 @@ struct MapHomeView: View {
     @State private var showTrips = false
     /// « Prévenir un proche » (message d'arrivée à un contact).
     @State private var showArrive = false
-    /// Carte qualité de l'air (tuiles WAQI, écran dédié).
+    /// Carte qualité de l'air (carte de chaleur maison, écran dédié).
     @State private var showAirMap = false
-    @AppStorage("moncap.waqiToken") private var waqiToken = ""
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
     /// Partage de position en direct.
@@ -605,7 +604,7 @@ struct MapHomeView: View {
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
         .sheet(item: $liveShareLink) { link in ShareSheet(items: [link.url]) }
         .fullScreenCover(isPresented: $showAirMap) {
-            AirQualityMapScreen(token: waqiToken, center: location.coordinate)
+            AirQualityMapScreen(center: location.coordinate)
         }
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(fires: fires.fires)
@@ -2253,7 +2252,7 @@ struct MapHomeView: View {
         }
     }
 
-    /// Ouvre la carte qualité de l'air (tuiles WAQI) en plein écran.
+    /// Ouvre la carte qualité de l'air (carte de chaleur maison) en plein écran.
     private var airMapButton: some View {
         Button { showAirMap = true } label: {
             Image(systemName: "aqi.medium")
@@ -2431,22 +2430,6 @@ struct MapHomeView: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
-                }
-                // Carte qualité de l'air (tuiles WAQI, écran dédié).
-                Section("Qualité de l'air 🌫️ (WAQI)") {
-                    TextField("Token WAQI", text: $waqiToken)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .monospaced))
-                    Link(destination: URL(string: "https://aqicn.org/data-platform/token/")!) {
-                        Label("Obtenir un token gratuit", systemImage: "link")
-                    }
-                    .font(.footnote)
-                    Text(
-                        "Colle ton token pour afficher la carte de chaleur de la qualité de l'air (bouton « Air » sur la carte) : de vraies tuiles, lisses et rapides."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
                 }
                 // Raccourcis Domicile / Travail.
                 Section("Favoris") {
