@@ -2,11 +2,13 @@ import MapKit
 import SwiftUI
 
 /// Un contour de feu approximatif : polygone (enveloppe des points chauds d'un
-/// même foyer) + son centre.
+/// même foyer) + son centre et l'heure de la dernière détection satellite.
 struct FirePerimeter: Identifiable {
     let id: Int
     let polygon: [CLLocationCoordinate2D]
     let center: CLLocationCoordinate2D
+    /// Détection satellite la plus récente du foyer (pour « Mise à jour il y a X h »).
+    let updatedAt: Date?
 }
 
 /// Écran dédié « Carte des feux » à la manière de feuxdeforet.fr : fond
@@ -24,11 +26,21 @@ struct FireMapScreen: View {
         ZStack(alignment: .top) {
             Map(position: $camera) {
                 ForEach(perimeters) { p in
+                    // Zone touchée : brun brûlé translucide cerné de rouge vif,
+                    // comme les contours de feuxdeforet.fr sur fond satellite.
                     MapPolygon(coordinates: p.polygon)
-                        .foregroundStyle(.red.opacity(0.35))
-                        .stroke(.red.opacity(0.9), lineWidth: 2)
-                    Annotation("Contour satellite approximatif", coordinate: p.center) {
+                        .foregroundStyle(Color(red: 0.48, green: 0.20, blue: 0.13).opacity(0.55))
+                        .stroke(Color(red: 0.86, green: 0.13, blue: 0.11), lineWidth: 2)
+                    Annotation("", coordinate: p.center) {
+                        // Le marqueur reste centré sur le foyer ; l'infobulle
+                        // sombre est décalée dessous, comme sur le site.
                         FireMarker()
+                            .overlay(alignment: .top) {
+                                FireUpdateBubble(
+                                    updatedAt: p.updatedAt ?? service.lastUpdate
+                                )
+                                .offset(y: 52)
+                            }
                     }
                 }
             }
@@ -57,7 +69,7 @@ struct FireMapScreen: View {
                     .background(.regularMaterial, in: Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("Feux de forêt").font(.headline)
+                Text("Carte des feux en cours").font(.headline)
                 Text(
                     perimeters.isEmpty
                         ? "Aucun foyer détecté"
@@ -75,6 +87,38 @@ struct FireMapScreen: View {
     }
 }
 
+/// Infobulle sombre sous le marqueur, identique à celle de feuxdeforet.fr :
+/// « Contour satellite approximatif » + « Mise à jour il y a X h » en italique.
+struct FireUpdateBubble: View {
+    let updatedAt: Date?
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("Contour satellite approximatif")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+            if let ago = agoText {
+                Text(ago)
+                    .font(.caption.italic())
+                    .foregroundStyle(.white.opacity(0.65))
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+        .fixedSize()
+    }
+
+    /// « Mise à jour il y a 3 h » / « … il y a moins d'1 h ».
+    private var agoText: String? {
+        guard let updatedAt else { return nil }
+        let hours = Int(Date().timeIntervalSince(updatedAt) / 3600)
+        return hours < 1
+            ? "Mise à jour il y a moins d'1 h"
+            : "Mise à jour il y a \(hours) h"
+    }
+}
+
 /// Géométrie des contours de feu : regroupe les points chauds proches et calcule
 /// l'enveloppe convexe de chaque groupe (le « contour approximatif »).
 enum FireGeometry {
@@ -82,11 +126,11 @@ enum FireGeometry {
     /// (épouse la forme réelle des pixels détectés) ; à défaut on retombe sur
     /// l'enveloppe convexe, et les points isolés donnent un petit cercle.
     static func perimeters(from fires: [Fire]) -> [FirePerimeter] {
-        let points = fires.map { $0.coordinate }
-        guard !points.isEmpty else { return [] }
-        let clusters = cluster(points, thresholdMeters: 6000)
+        guard !fires.isEmpty else { return [] }
+        let clusters = cluster(fires, thresholdMeters: 6000)
         var out: [FirePerimeter] = []
-        for (i, group) in clusters.enumerated() {
+        for (i, fireGroup) in clusters.enumerated() {
+            let group = fireGroup.map { $0.coordinate }
             let center = centroid(group)
             let polygon: [CLLocationCoordinate2D]
             if group.count >= 4, let concave = concaveHull(group) {
@@ -99,28 +143,32 @@ enum FireGeometry {
             } else {
                 polygon = circle(center, radiusMeters: 3500)
             }
-            out.append(FirePerimeter(id: i, polygon: polygon, center: center))
+            out.append(
+                FirePerimeter(
+                    id: i, polygon: polygon, center: center,
+                    updatedAt: fireGroup.compactMap { $0.detectedAt }.max()))
         }
         return out
     }
 
-    /// Regroupe les points : un point rejoint un groupe s'il est à moins de
+    /// Regroupe les feux : un point rejoint un groupe s'il est à moins de
     /// `thresholdMeters` de l'un de ses membres (agrégation simple).
-    private static func cluster(_ points: [CLLocationCoordinate2D], thresholdMeters: Double)
-        -> [[CLLocationCoordinate2D]]
-    {
-        var groups: [[CLLocationCoordinate2D]] = []
-        for p in points {
+    private static func cluster(_ fires: [Fire], thresholdMeters: Double) -> [[Fire]] {
+        var groups: [[Fire]] = []
+        for f in fires {
+            let p = f.coordinate
             let loc = CLLocation(latitude: p.latitude, longitude: p.longitude)
             if let idx = groups.firstIndex(where: { group in
-                group.contains { q in
-                    loc.distance(from: CLLocation(latitude: q.latitude, longitude: q.longitude))
+                group.contains { g in
+                    let q = g.coordinate
+                    return loc.distance(
+                        from: CLLocation(latitude: q.latitude, longitude: q.longitude))
                         < thresholdMeters
                 }
             }) {
-                groups[idx].append(p)
+                groups[idx].append(f)
             } else {
-                groups.append([p])
+                groups.append([f])
             }
         }
         return groups
