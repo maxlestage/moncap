@@ -608,7 +608,7 @@ fn parse_firms_csv(text: &str) -> Vec<FirePoint> {
     let mut out: Vec<FirePoint> = cells.into_values().collect();
     // Cellules les plus récentes d'abord, pour que le garde-fou coupe les
     // vieilles détections et pas les foyers actifs.
-    out.sort_by(|a, b| b.t.cmp(&a.t));
+    out.sort_by_key(|p| std::cmp::Reverse(p.t));
     out.truncate(FIRES_MAX_POINTS);
     out
 }
