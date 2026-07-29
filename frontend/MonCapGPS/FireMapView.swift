@@ -9,6 +9,8 @@ struct FirePerimeter: Identifiable {
     let center: CLLocationCoordinate2D
     /// Détection satellite la plus récente du foyer (pour « Mise à jour il y a X h »).
     let updatedAt: Date?
+    /// Première détection du foyer sur la fenêtre de 7 jours (« Créé il y a X j »).
+    let createdAt: Date?
 }
 
 /// Écran dédié « Carte des feux » à la manière de feuxdeforet.fr : fond
@@ -24,6 +26,9 @@ struct FireMapScreen: View {
     /// Foyer dont l'infobulle est ouverte (tap sur le marqueur) — une seule à
     /// la fois, sinon les bulles se superposent en masse noire au dézoom.
     @State private var selectedID: Int?
+    /// Noms des foyers (« Feu de Saumos ») par position arrondie, géocodés à la
+    /// demande au tap ; "" = géocodage en cours (évite les requêtes doublons).
+    @State private var names: [String: String] = [:]
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -42,6 +47,8 @@ struct FireMapScreen: View {
                             .overlay(alignment: .top) {
                                 if selectedID == p.id {
                                     FireUpdateBubble(
+                                        name: name(of: p),
+                                        createdAt: p.createdAt,
                                         updatedAt: p.updatedAt ?? service.lastUpdate
                                     )
                                     .offset(y: 52)
@@ -51,6 +58,7 @@ struct FireMapScreen: View {
                                 withAnimation(.spring(duration: 0.25)) {
                                     selectedID = selectedID == p.id ? nil : p.id
                                 }
+                                if selectedID == p.id { loadName(of: p) }
                             }
                     }
                 }
@@ -71,6 +79,33 @@ struct FireMapScreen: View {
         }
     }
 
+    /// Clé de cache d'un foyer : position arrondie (~1 km), stable d'un
+    /// recalcul à l'autre contrairement à l'identifiant de cluster.
+    private func nameKey(_ c: CLLocationCoordinate2D) -> String {
+        "\(Int(c.latitude * 100))|\(Int(c.longitude * 100))"
+    }
+
+    /// Nom géocodé du foyer (« Feu de Saumos »), s'il est déjà connu.
+    private func name(of p: FirePerimeter) -> String? {
+        names[nameKey(p.center)].flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Géocodage inverse du centre du foyer, à la demande (un seul appel par
+    /// foyer, au premier tap) : nomme le feu d'après sa commune, comme le site.
+    private func loadName(of p: FirePerimeter) {
+        let key = nameKey(p.center)
+        guard names[key] == nil else { return }
+        names[key] = ""  // requête en cours
+        let center = p.center
+        Task {
+            let loc = CLLocation(latitude: center.latitude, longitude: center.longitude)
+            let mark = try? await CLGeocoder().reverseGeocodeLocation(loc).first
+            if let city = mark?.locality ?? mark?.subLocality ?? mark?.subAdministrativeArea {
+                names[key] = "Feu de \(city)"
+            }
+        }
+    }
+
     private var header: some View {
         HStack(spacing: 10) {
             Button {
@@ -83,11 +118,17 @@ struct FireMapScreen: View {
                     .background(.regularMaterial, in: Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("Carte des feux en cours").font(.headline)
+                // Compteur en avant, comme le bandeau « 15 feux en cours » du site.
+                Text(
+                    perimeters.isEmpty
+                        ? "Carte des feux en cours"
+                        : "\(perimeters.count) feu\(perimeters.count > 1 ? "x" : "") en cours"
+                )
+                .font(.headline)
                 Text(
                     perimeters.isEmpty
                         ? "Aucun foyer détecté"
-                        : "\(perimeters.count) foyer(s) · contour satellite approximatif"
+                        : "contour satellite · touchez un foyer"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -102,15 +143,23 @@ struct FireMapScreen: View {
 }
 
 /// Infobulle sombre sous le marqueur, identique à celle de feuxdeforet.fr :
-/// « Contour satellite approximatif » + « Mise à jour il y a X h » en italique.
+/// nom du feu (géocodé), « Contour satellite approximatif », puis « Créé il y
+/// a X j · Mise à jour il y a X h » en italique.
 struct FireUpdateBubble: View {
+    let name: String?
+    let createdAt: Date?
     let updatedAt: Date?
 
     var body: some View {
         VStack(spacing: 2) {
+            if let name {
+                Text(name)
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white)
+            }
             Text("Contour satellite approximatif")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.white)
+                .font(name == nil ? .footnote.weight(.semibold) : .caption)
+                .foregroundStyle(name == nil ? .white : .white.opacity(0.8))
             if let ago = agoText {
                 Text(ago)
                     .font(.caption.italic())
@@ -123,19 +172,31 @@ struct FireUpdateBubble: View {
         .fixedSize()
     }
 
-    /// « Mise à jour il y a 3 h » / « … il y a moins d'1 h ».
+    /// « Créé il y a 6 j · Mise à jour il y a 3 h » (chaque moitié omise si
+    /// inconnue ; la création n'apparaît qu'à partir d'un jour).
     private var agoText: String? {
-        guard let updatedAt else { return nil }
-        let hours = Int(Date().timeIntervalSince(updatedAt) / 3600)
-        return hours < 1
-            ? "Mise à jour il y a moins d'1 h"
-            : "Mise à jour il y a \(hours) h"
+        var parts: [String] = []
+        if let createdAt {
+            let days = Int(Date().timeIntervalSince(createdAt) / 86_400)
+            if days >= 1 { parts.append("Créé il y a \(days) j") }
+        }
+        if let updatedAt {
+            let hours = Int(Date().timeIntervalSince(updatedAt) / 3600)
+            parts.append(
+                hours < 1 ? "Mise à jour il y a moins d'1 h" : "Mise à jour il y a \(hours) h")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
 /// Géométrie des contours de feu : regroupe les points chauds proches et calcule
 /// l'enveloppe convexe de chaque groupe (le « contour approximatif »).
 enum FireGeometry {
+    /// Un foyer sans détection depuis ce délai est considéré éteint (l'API
+    /// renvoie 7 jours d'historique pour dater les débuts de feux, mais seuls
+    /// les foyers encore actifs sont affichés — « feux en cours »).
+    private static let activeWindow: TimeInterval = 36 * 3600
+
     /// Construit un contour par foyer. On privilégie un **détourage concave**
     /// (épouse la forme réelle des pixels détectés) ; à défaut on retombe sur
     /// l'enveloppe convexe, et les points isolés donnent un petit cercle.
@@ -143,7 +204,11 @@ enum FireGeometry {
         guard !fires.isEmpty else { return [] }
         let clusters = cluster(fires, thresholdMeters: 6000)
         var out: [FirePerimeter] = []
-        for (i, fireGroup) in clusters.enumerated() {
+        for fireGroup in clusters {
+            // Foyer « en cours » = au moins une détection récente. Sans aucun
+            // horodatage (vieux backend), on affiche par prudence.
+            let updatedAt = fireGroup.compactMap { $0.detectedAt }.max()
+            if let updatedAt, Date().timeIntervalSince(updatedAt) > activeWindow { continue }
             let group = fireGroup.map { $0.coordinate }
             let center = centroid(group)
             let polygon: [CLLocationCoordinate2D]
@@ -159,25 +224,31 @@ enum FireGeometry {
             }
             out.append(
                 FirePerimeter(
-                    id: i, polygon: polygon, center: center,
-                    updatedAt: fireGroup.compactMap { $0.detectedAt }.max()))
+                    id: out.count, polygon: polygon, center: center,
+                    updatedAt: updatedAt,
+                    createdAt: fireGroup.compactMap { $0.firstDetectedAt }.min()))
         }
         return out
     }
 
     /// Regroupe les feux : un point rejoint un groupe s'il est à moins de
-    /// `thresholdMeters` de l'un de ses membres (agrégation simple).
+    /// `thresholdMeters` de l'un de ses membres (agrégation simple). Distance
+    /// équirectangulaire (planaire) : aux échelles de quelques km l'écart avec
+    /// la distance géodésique est négligeable, et c'est ~100× plus rapide que
+    /// `CLLocation.distance` — nécessaire avec 7 jours de détections.
     private static func cluster(_ fires: [Fire], thresholdMeters: Double) -> [[Fire]] {
+        let metersPerDegree = 111_320.0
+        let thresholdSq = thresholdMeters * thresholdMeters
         var groups: [[Fire]] = []
         for f in fires {
             let p = f.coordinate
-            let loc = CLLocation(latitude: p.latitude, longitude: p.longitude)
+            let cosLat = cos(p.latitude * .pi / 180)
             if let idx = groups.firstIndex(where: { group in
                 group.contains { g in
                     let q = g.coordinate
-                    return loc.distance(
-                        from: CLLocation(latitude: q.latitude, longitude: q.longitude))
-                        < thresholdMeters
+                    let dx = (q.longitude - p.longitude) * metersPerDegree * cosLat
+                    let dy = (q.latitude - p.latitude) * metersPerDegree
+                    return dx * dx + dy * dy < thresholdSq
                 }
             }) {
                 groups[idx].append(f)

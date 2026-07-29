@@ -456,16 +456,20 @@ struct Stats {
 }
 
 /// Un foyer d'incendie détecté par satellite (NASA FIRMS), tel qu'exposé aux
-/// clients : latitude / longitude uniquement.
+/// clients.
 #[derive(Clone, Serialize)]
 struct FirePoint {
     lat: f64,
     lon: f64,
-    /// Horodatage (epoch secondes UTC) de la détection satellite, si connu —
-    /// permet au client d'afficher « Mise à jour il y a X h ». Absent du JSON
-    /// quand la colonne CSV manque (compatibilité clients existants).
+    /// Dernière détection satellite (epoch secondes UTC), si connue — permet
+    /// au client d'afficher « Mise à jour il y a X h ». Absente du JSON quand
+    /// la colonne CSV manque (compatibilité clients existants).
     #[serde(skip_serializing_if = "Option::is_none")]
     t: Option<i64>,
+    /// Première détection satellite à cet endroit (epoch secondes UTC) sur la
+    /// fenêtre d'historique — permet « Créé il y a X j ».
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t0: Option<i64>,
 }
 
 /// Cache mémoire des feux : évite d'appeler la NASA à chaque requête client.
@@ -517,39 +521,96 @@ async fn list_fires() -> Json<Vec<FirePoint>> {
 }
 
 /// Interroge l'API FIRMS (CSV) : France métropolitaine (Corse incluse), VIIRS
-/// S-NPP, dernières 24 h. `None` en cas d'échec. Garde-fou à 500 foyers.
+/// S-NPP, **7 derniers jours** (pour dater le début de chaque foyer). `None`
+/// en cas d'échec.
 async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
     // Zone = ouest,sud,est,nord.
     let area = "-5.5,41,10,51.5";
     let url =
-        format!("https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/1");
+        format!("https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/7");
     let resp = http_client().get(&url).send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }
     let text = resp.text().await.ok()?;
+    Some(parse_firms_csv(&text))
+}
 
-    // CSV : latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,...
-    // (première ligne = en-tête).
-    let mut out = Vec::new();
+/// Taille d'une cellule de la grille de dédoublonnage (~550 m ≈ 1 pixel
+/// VIIRS) : sur 7 jours, un même foyer redonne les mêmes pixels chaque
+/// passage ; on n'en garde qu'un par cellule, avec première/dernière détection.
+const FIRES_GRID_DEG: f64 = 0.005;
+/// Garde-fou sur la taille de la réponse (cellules les plus récentes d'abord).
+const FIRES_MAX_POINTS: usize = 4000;
+
+/// Analyse le CSV FIRMS en filtrant les faux positifs (torchères, brûlages,
+/// détections douteuses) : on ne garde que les détections de confiance
+/// nominale ou haute avec une puissance radiative (FRP) ≥ 2 MW, puis on
+/// dédoublonne par cellule de grille en agrégeant première (`t0`) et dernière
+/// (`t`) détection.
+///
+/// Colonnes VIIRS : latitude,longitude,bright_ti4,scan,track,acq_date,
+/// acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight.
+fn parse_firms_csv(text: &str) -> Vec<FirePoint> {
+    use std::collections::HashMap;
+    // Cellule → (point le plus récent, t0 min, t max).
+    let mut cells: HashMap<(i64, i64), FirePoint> = HashMap::new();
     for line in text.lines().skip(1) {
-        let mut cols = line.split(',');
-        let lat = cols.next().and_then(|s| s.trim().parse::<f64>().ok());
-        let lon = cols.next().and_then(|s| s.trim().parse::<f64>().ok());
-        // `nth(3)` saute bright_ti4/scan/track → acq_date, puis acq_time.
-        let date = cols.nth(3);
-        let time = cols.next();
-        if let (Some(lat), Some(lon)) = (lat, lon) {
-            let t = date
-                .zip(time)
-                .and_then(|(d, h)| acq_epoch(d.trim(), h.trim()));
-            out.push(FirePoint { lat, lon, t });
-            if out.len() >= 500 {
-                break;
+        let cols: Vec<&str> = line.split(',').collect();
+        let (Some(lat), Some(lon)) = (
+            cols.first().and_then(|s| s.trim().parse::<f64>().ok()),
+            cols.get(1).and_then(|s| s.trim().parse::<f64>().ok()),
+        ) else {
+            continue;
+        };
+        // Confiance « l » (low) = détection douteuse → écartée. (MODIS code la
+        // confiance en pourcentage ; on écarte < 30 par prudence.)
+        match cols.get(9).map(|s| s.trim()) {
+            Some(c) if c.eq_ignore_ascii_case("l") || c.eq_ignore_ascii_case("low") => continue,
+            Some(c) => {
+                if let Ok(pct) = c.parse::<f64>() {
+                    if pct < 30.0 {
+                        continue;
+                    }
+                }
+            }
+            None => {}
+        }
+        // FRP < 2 MW : trop faible pour un feu de forêt (torchères, reflets).
+        if let Some(frp) = cols.get(12).and_then(|s| s.trim().parse::<f64>().ok()) {
+            if frp < 2.0 {
+                continue;
             }
         }
+        let t = cols
+            .get(5)
+            .zip(cols.get(6))
+            .and_then(|(d, h)| acq_epoch(d.trim(), h.trim()));
+        let cell = (
+            (lat / FIRES_GRID_DEG).round() as i64,
+            (lon / FIRES_GRID_DEG).round() as i64,
+        );
+        cells
+            .entry(cell)
+            .and_modify(|p| {
+                if t > p.t {
+                    // Détection plus récente : la cellule prend sa position.
+                    p.lat = lat;
+                    p.lon = lon;
+                    p.t = t;
+                }
+                if p.t0.is_none() || (t.is_some() && t < p.t0) {
+                    p.t0 = t;
+                }
+            })
+            .or_insert(FirePoint { lat, lon, t, t0: t });
     }
-    Some(out)
+    let mut out: Vec<FirePoint> = cells.into_values().collect();
+    // Cellules les plus récentes d'abord, pour que le garde-fou coupe les
+    // vieilles détections et pas les foyers actifs.
+    out.sort_by(|a, b| b.t.cmp(&a.t));
+    out.truncate(FIRES_MAX_POINTS);
+    out
 }
 
 /// Convertit une acquisition FIRMS (`acq_date` = « AAAA-MM-JJ », `acq_time` =
@@ -2296,6 +2357,28 @@ mod tests {
     #[test]
     fn distance_to_self_is_zero() {
         assert!(haversine_km(&PARIS, &PARIS) < 1e-9);
+    }
+
+    #[test]
+    fn parse_firms_filters_and_merges() {
+        let csv = "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight\n\
+            44.5000,-1.2000,330.1,0.4,0.4,2026-07-26,0342,N,VIIRS,h,2.0NRT,290.0,12.5,N\n\
+            44.5001,-1.2001,331.0,0.4,0.4,2026-07-28,0142,N,VIIRS,n,2.0NRT,291.0,8.0,N\n\
+            45.0000,3.0000,320.0,0.4,0.4,2026-07-28,0142,N,VIIRS,l,2.0NRT,285.0,50.0,N\n\
+            45.1000,3.1000,320.0,0.4,0.4,2026-07-28,0142,N,VIIRS,h,2.0NRT,285.0,0.5,N\n\
+            46.0000,4.0000,325.0,0.4,0.4,2026-07-28,0142,N,VIIRS,85,2.0NRT,287.0,5.0,N\n\
+            46.5000,4.5000,325.0,0.4,0.4,2026-07-28,0142,N,VIIRS,20,2.0NRT,287.0,5.0,N\n";
+        let pts = parse_firms_csv(csv);
+        // Confiance basse (l / 20 %) et FRP < 2 MW écartées ; les deux
+        // premières lignes tombent dans la même cellule → fusionnées.
+        assert_eq!(pts.len(), 2);
+        let merged = pts
+            .iter()
+            .find(|p| (p.lat - 44.5001).abs() < 1e-6)
+            .expect("cellule fusionnée absente");
+        assert_eq!(merged.t0, acq_epoch("2026-07-26", "0342"));
+        assert_eq!(merged.t, acq_epoch("2026-07-28", "0142"));
+        assert!(pts.iter().any(|p| (p.lat - 46.0).abs() < 1e-6));
     }
 
     #[test]
