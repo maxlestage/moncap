@@ -6,13 +6,18 @@ struct Fire: Identifiable {
     /// Identité stable (position) pour un rendu de carte fluide.
     var id: String { "\(Int(coordinate.latitude * 1e4))|\(Int(coordinate.longitude * 1e4))" }
     let coordinate: CLLocationCoordinate2D
-    /// Instant de la détection satellite (UTC), si connu — sert à afficher
+    /// Dernière détection satellite (UTC), si connue — sert à afficher
     /// « Mise à jour il y a X h » sur la carte, comme feuxdeforet.fr.
     let detectedAt: Date?
+    /// Première détection à cet endroit sur la fenêtre d'historique (7 j) —
+    /// sert à afficher « Créé il y a X j ».
+    let firstDetectedAt: Date?
 
-    init(coordinate: CLLocationCoordinate2D, detectedAt: Date? = nil) {
+    init(coordinate: CLLocationCoordinate2D, detectedAt: Date? = nil, firstDetectedAt: Date? = nil)
+    {
         self.coordinate = coordinate
         self.detectedAt = detectedAt
+        self.firstDetectedAt = firstDetectedAt
     }
 }
 
@@ -56,12 +61,13 @@ final class FireService: ObservableObject {
         }
     }
 
-    /// Réponse JSON du backend : `[{ "lat": .., "lon": .., "t": .. }, ...]`
-    /// (`t` = epoch secondes UTC de la détection satellite, optionnel).
+    /// Réponse JSON du backend : `[{ "lat": .., "lon": .., "t": .., "t0": .. },
+    /// ...]` (`t` = dernière détection, `t0` = première, epoch UTC, optionnels).
     private struct Point: Decodable {
         let lat: Double
         let lon: Double
         let t: Double?
+        let t0: Double?
     }
 
     /// Interroge notre backend `GET /fires`. `nonisolated` : décodage hors du
@@ -76,39 +82,87 @@ final class FireService: ObservableObject {
         return points.map {
             Fire(
                 coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) })
+                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) },
+                firstDetectedAt: $0.t0.map { Date(timeIntervalSince1970: $0) })
         }
     }
 
     /// Interroge directement l'API NASA FIRMS (CSV) avec la clé de l'appareil :
-    /// France métropolitaine (Corse incluse), VIIRS S-NPP, dernières 24 h.
+    /// France métropolitaine (Corse incluse), VIIRS S-NPP, **7 derniers jours**
+    /// (pour dater le début des foyers), avec le même filtrage anti-faux
+    /// positifs que le backend.
     nonisolated private static func fetchNASA(key: String) async -> [Fire]? {
         let area = "-5.5,41,10,51.5"  // ouest,sud,est,nord
         guard
             let url = URL(
                 string:
-                    "https://firms.modaps.eosdis.nasa.gov/api/area/csv/\(key)/VIIRS_SNPP_NRT/\(area)/1"
+                    "https://firms.modaps.eosdis.nasa.gov/api/area/csv/\(key)/VIIRS_SNPP_NRT/\(area)/7"
             ),
             let (data, resp) = try? await URLSession.shared.data(from: url),
             (resp as? HTTPURLResponse)?.statusCode == 200,
             let text = String(data: data, encoding: .utf8)
         else { return nil }
-        // CSV : latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,...
-        // (première ligne = en-tête).
-        var out: [Fire] = []
+        return parseFIRMS(text)
+    }
+
+    /// Taille d'une cellule de dédoublonnage (~550 m ≈ 1 pixel VIIRS).
+    private static let gridDeg = 0.005
+    /// Garde-fou sur le nombre de points gardés (les plus récents d'abord).
+    private static let maxPoints = 4000
+
+    /// Analyse le CSV FIRMS comme le backend : écarte les détections de
+    /// confiance basse et de puissance (FRP) < 2 MW (torchères, brûlages,
+    /// reflets), puis dédoublonne par cellule de grille en agrégeant première
+    /// et dernière détection.
+    ///
+    /// Colonnes VIIRS : latitude,longitude,bright_ti4,scan,track,acq_date,
+    /// acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight.
+    nonisolated private static func parseFIRMS(_ text: String) -> [Fire] {
+        struct Cell {
+            var lat: Double
+            var lon: Double
+            var first: Date?
+            var last: Date?
+        }
+        var cells: [Int64: Cell] = [:]
         for line in text.split(whereSeparator: \.isNewline).dropFirst() {
             let cols = line.split(separator: ",", omittingEmptySubsequences: false)
             guard cols.count >= 2, let lat = Double(cols[0]), let lon = Double(cols[1]) else {
                 continue
             }
-            let detected = cols.count >= 7 ? acqDate(String(cols[5]), String(cols[6])) : nil
-            out.append(
-                Fire(
-                    coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon),
-                    detectedAt: detected))
-            if out.count >= 1000 { break }
+            if cols.count >= 10 {
+                let conf = cols[9].trimmingCharacters(in: .whitespaces).lowercased()
+                if conf == "l" || conf == "low" { continue }
+                if let pct = Double(conf), pct < 30 { continue }
+            }
+            if cols.count >= 13, let frp = Double(cols[12]), frp < 2 { continue }
+            let t = cols.count >= 7 ? acqDate(String(cols[5]), String(cols[6])) : nil
+            let key =
+                Int64((lat / gridDeg).rounded()) &* 1_000_000
+                &+ Int64((lon / gridDeg).rounded())
+            if var cell = cells[key] {
+                if let t, cell.last == nil || t > cell.last! {
+                    cell.lat = lat
+                    cell.lon = lon
+                    cell.last = t
+                }
+                if let t, cell.first == nil || t < cell.first! { cell.first = t }
+                cells[key] = cell
+            } else {
+                cells[key] = Cell(lat: lat, lon: lon, first: t, last: t)
+            }
         }
-        return out
+        // Cellules les plus récentes d'abord : le garde-fou coupe les vieilles
+        // détections, pas les foyers actifs.
+        return
+            cells.values
+            .sorted { ($0.last ?? .distantPast) > ($1.last ?? .distantPast) }
+            .prefix(maxPoints)
+            .map {
+                Fire(
+                    coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                    detectedAt: $0.last, firstDetectedAt: $0.first)
+            }
     }
 
     /// Convertit une acquisition FIRMS (`acq_date` = « AAAA-MM-JJ », `acq_time`
