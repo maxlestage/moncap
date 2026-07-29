@@ -4,20 +4,10 @@ name: iOS TestFlight
 # les outils Apple natifs (xcodebuild + altool), sans fastlane. Le certificat
 # de distribution et le profil App Store sont générés en ligne via l'API
 # App Store Connect — aucun Mac ni certificat à fournir.
-# - Automatique : à chaque push sur `master` touchant l'app iOS.
-# - Manuel : onglet Actions → Run workflow.
-# - Tag : en poussant un tag `ios-v*`.
+# Manuel uniquement : onglet Actions → Run workflow (plus aucun déclenchement
+# automatique sur push).
 
 on:
-  push:
-    branches: ["master"]
-    paths:
-      - "frontend/MonCapGPS/**"
-      - "frontend/MonCapGPS.xcodeproj/**"
-      - "frontend/Config/**"
-      - "frontend/scripts/**"
-      - ".github/workflows/ios-testflight.yml"
-    tags: ["ios-v*"]
   workflow_dispatch:
 
 concurrency:
