@@ -10,6 +10,10 @@
 		<string>location</string>
 		<string>audio</string>
 	</array>
+	<!-- Pas un jeu : déclaré explicitement, sinon iOS 27 logge à chaque
+	     lancement « LSSupportsGameMode key not found in Info.plist ». -->
+	<key>LSSupportsGameMode</key>
+	<false/>
 	<!-- Écran de lancement natif : fond bleu de marque (évite le flash blanc
 	     avant l'apparition de la vue SwiftUI de chargement). -->
 	<key>UILaunchScreen</key>
