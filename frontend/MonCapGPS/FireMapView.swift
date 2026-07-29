@@ -21,6 +21,9 @@ struct FireMapScreen: View {
 
     @State private var perimeters: [FirePerimeter] = []
     @State private var camera: MapCameraPosition = .automatic
+    /// Foyer dont l'infobulle est ouverte (tap sur le marqueur) — une seule à
+    /// la fois, sinon les bulles se superposent en masse noire au dézoom.
+    @State private var selectedID: Int?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -33,13 +36,21 @@ struct FireMapScreen: View {
                         .stroke(Color(red: 0.86, green: 0.13, blue: 0.11), lineWidth: 2)
                     Annotation("", coordinate: p.center) {
                         // Le marqueur reste centré sur le foyer ; l'infobulle
-                        // sombre est décalée dessous, comme sur le site.
+                        // sombre ne s'ouvre qu'au tap (une seule à la fois),
+                        // sinon les bulles de tous les foyers se superposent.
                         FireMarker()
                             .overlay(alignment: .top) {
-                                FireUpdateBubble(
-                                    updatedAt: p.updatedAt ?? service.lastUpdate
-                                )
-                                .offset(y: 52)
+                                if selectedID == p.id {
+                                    FireUpdateBubble(
+                                        updatedAt: p.updatedAt ?? service.lastUpdate
+                                    )
+                                    .offset(y: 52)
+                                }
+                            }
+                            .onTapGesture {
+                                withAnimation(.spring(duration: 0.25)) {
+                                    selectedID = selectedID == p.id ? nil : p.id
+                                }
                             }
                     }
                 }
@@ -54,6 +65,9 @@ struct FireMapScreen: View {
         .task(id: service.fires.count) {
             let fires = service.fires
             perimeters = await Task.detached { FireGeometry.perimeters(from: fires) }.value
+            // Les identifiants de foyers changent au recalcul : referme
+            // l'infobulle plutôt que de la laisser sauter sur un autre foyer.
+            selectedID = nil
         }
     }
 
