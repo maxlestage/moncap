@@ -484,55 +484,100 @@ static FIRES_CACHE: OnceLock<tokio::sync::Mutex<Option<FiresCache>>> = OnceLock:
 /// jour que quelques fois par jour).
 const FIRES_TTL: Duration = Duration::from_secs(900);
 
-/// GET /fires — incendies actifs sur la France métropolitaine (NASA FIRMS).
-///
-/// La clé FIRMS (MAP_KEY) est détenue **par le serveur** (variable
-/// d'environnement `FIRMS_MAP_KEY`, repli `FIRMS_KEY`), jamais exposée aux
-/// clients : tous les utilisateurs profitent des feux sans configurer de clé.
-/// Sans clé configurée, renvoie une liste vide (silencieux). Résultat mis en
-/// cache 15 min ; en cas d'échec réseau, le dernier cache est renvoyé.
-async fn list_fires() -> Json<Vec<FirePoint>> {
-    let key = std::env::var("FIRMS_MAP_KEY")
+/// Clé FIRMS (MAP_KEY) détenue **par le serveur** (variable d'environnement
+/// `FIRMS_MAP_KEY`, repli `FIRMS_KEY`), jamais exposée aux clients.
+fn fires_key() -> Option<String> {
+    std::env::var("FIRMS_MAP_KEY")
         .or_else(|_| std::env::var("FIRMS_KEY"))
         .ok()
         .map(|k| k.trim().to_string())
-        .filter(|k| !k.is_empty());
-    let Some(key) = key else { return Json(vec![]) };
+        .filter(|k| !k.is_empty())
+}
+
+/// GET /fires — incendies actifs sur la France métropolitaine (NASA FIRMS).
+///
+/// Répond **immédiatement** avec le dernier cache connu ; si celui-ci est
+/// périmé, un rafraîchissement part en tâche de fond. La requête FIRMS
+/// (7 jours de détections) peut prendre bien plus que le timeout HTTP d'un
+/// client mobile : elle ne doit jamais bloquer la réponse.
+async fn list_fires() -> Json<Vec<FirePoint>> {
+    let Some(key) = fires_key() else {
+        return Json(vec![]);
+    };
 
     let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(None));
-    let mut guard = cache.lock().await;
-    if let Some(c) = guard.as_ref() {
-        if c.fetched_at.elapsed() < FIRES_TTL {
-            return Json(c.data.clone());
-        }
+    let (data, stale) = match cache.lock().await.as_ref() {
+        Some(c) => (c.data.clone(), c.fetched_at.elapsed() >= FIRES_TTL),
+        None => (Vec::new(), true),
+    };
+    if stale {
+        spawn_fires_refresh(key);
     }
+    Json(data)
+}
 
-    match fetch_fires(&key).await {
-        Some(data) => {
-            *guard = Some(FiresCache {
-                fetched_at: Instant::now(),
-                data: data.clone(),
-            });
-            Json(data)
-        }
-        // Échec réseau : on garde le dernier cache connu (sinon vide).
-        None => Json(guard.as_ref().map(|c| c.data.clone()).unwrap_or_default()),
+/// Lance (au plus un à la fois) un rafraîchissement du cache des feux en
+/// tâche de fond. Essaie d'abord 7 jours d'historique (pour « Créé il y a
+/// X j ») ; si la NASA ne répond pas à temps, repli sur 2 jours, bien plus
+/// léger, pour que la carte reste alimentée.
+fn spawn_fires_refresh(key: String) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static REFRESHING: AtomicBool = AtomicBool::new(false);
+    if REFRESHING.swap(true, Ordering::SeqCst) {
+        return;
     }
+    tokio::spawn(async move {
+        let mut data = fetch_fires_days(&key, 7).await;
+        if data.is_none() {
+            tracing::warn!("FIRMS : échec sur 7 jours, repli sur 2 jours");
+            data = fetch_fires_days(&key, 2).await;
+        }
+        match data {
+            Some(data) => {
+                tracing::info!("FIRMS : {} cellules de feu en cache", data.len());
+                let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(None));
+                *cache.lock().await = Some(FiresCache {
+                    fetched_at: Instant::now(),
+                    data,
+                });
+            }
+            // Échec total : cache inchangé (re-tentative à la prochaine requête).
+            None => tracing::warn!("FIRMS : rafraîchissement impossible, cache conservé"),
+        }
+        REFRESHING.store(false, Ordering::SeqCst);
+    });
 }
 
 /// Interroge l'API FIRMS (CSV) : France métropolitaine (Corse incluse), VIIRS
-/// S-NPP, **7 derniers jours** (pour dater le début de chaque foyer). `None`
-/// en cas d'échec.
-async fn fetch_fires(key: &str) -> Option<Vec<FirePoint>> {
+/// S-NPP, `days` derniers jours. `None` en cas d'échec. Timeout dédié large :
+/// le CSV multi-jours est volumineux en pleine saison des feux, et cet appel
+/// tourne en tâche de fond (jamais sur le chemin d'une réponse client).
+async fn fetch_fires_days(key: &str, days: u8) -> Option<Vec<FirePoint>> {
     // Zone = ouest,sud,est,nord.
     let area = "-5.5,41,10,51.5";
-    let url =
-        format!("https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/7");
-    let resp = http_client().get(&url).send().await.ok()?;
+    let url = format!(
+        "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/{days}"
+    );
+    let resp = http_client()
+        .get(&url)
+        .timeout(Duration::from_secs(90))
+        .send()
+        .await
+        .ok()?;
     if !resp.status().is_success() {
+        tracing::warn!("FIRMS : statut HTTP {}", resp.status());
         return None;
     }
     let text = resp.text().await.ok()?;
+    // FIRMS renvoie parfois ses erreurs (clé invalide, quota dépassé…) en 200
+    // avec un message texte : sans l'en-tête CSV attendu, c'est un échec.
+    if !text.starts_with("latitude") {
+        tracing::warn!(
+            "FIRMS : réponse inattendue : {:?}",
+            text.chars().take(120).collect::<String>()
+        );
+        return None;
+    }
     Some(parse_firms_csv(&text))
 }
 
@@ -1123,6 +1168,13 @@ async fn main() {
     Migrator::up(&db, None)
         .await
         .expect("migrations impossibles");
+
+    // Préchauffe le cache des feux dès le démarrage : le dyno Heroku redémarre
+    // chaque jour, et sans cela la carte des feux resterait vide jusqu'au
+    // premier rafraîchissement déclenché par une requête.
+    if let Some(key) = fires_key() {
+        spawn_fires_refresh(key);
+    }
 
     // Canal de diffusion temps réel (WebSocket).
     let (tx, _rx) = broadcast::channel::<String>(256);
