@@ -49,6 +49,16 @@ struct SplashView: View {
                     .opacity(appeared ? 1 : 0)
             }
             .padding()
+
+            // Signature de l'auteur, discrète en bas de l'écran de garde.
+            VStack {
+                Spacer()
+                Text("par Maxime Nathan Lestage")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.bottom, 28)
+                    .opacity(appeared ? 1 : 0)
+            }
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.6)) { appeared = true }
