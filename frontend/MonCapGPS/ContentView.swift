@@ -2962,6 +2962,7 @@ struct MapHomeView: View {
                         Button("Annuler", role: .cancel) {}
                     }
                 }
+                creditsSection
             }
             .navigationTitle("MonCap GPS")
             .toolbar {
@@ -2979,6 +2980,45 @@ struct MapHomeView: View {
             }
             .presentationDetents([.medium, .large])
         }
+    }
+
+    // MARK: - Crédits
+
+    /// Section « À propos » : auteur de l'app, version installée et sources des
+    /// données affichées (les licences imposent de créditer OpenStreetMap et
+    /// les fournisseurs publics).
+    private var creditsSection: some View {
+        Section("À propos") {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("MonCap GPS").font(.headline)
+                Text("par Maxime Nathan Lestage")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(appVersion).font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Données").font(.caption.weight(.semibold))
+                Text(
+                    """
+                    Cartes : Apple Plans · Feux : NASA FIRMS (VIIRS) · \
+                    Trafic : TomTom · Air et météo : Open-Meteo · \
+                    Vitesses : OpenStreetMap · Carburants : data.economie.gouv.fr
+                    """
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    /// « Version 1.0 (42) » d'après le bundle (le numéro de build vient de la CI).
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let v = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let b = info?["CFBundleVersion"] as? String ?? "—"
+        return "Version \(v) (\(b))"
     }
 
     // MARK: - Feuille « Signaler »
