@@ -189,67 +189,100 @@ struct FireUpdateBubble: View {
     }
 }
 
-/// Géométrie des contours de feu : regroupe les points chauds proches et calcule
-/// l'enveloppe convexe de chaque groupe (le « contour approximatif »).
+/// Géométrie des contours de feu.
+///
+/// Le contour d'un foyer est l'**union des empreintes de ses détections**
+/// satellite : chaque point chaud VIIRS (pixel de 375 m) est élargi en un
+/// disque, et l'on trace la frontière de leur réunion. On obtient une forme
+/// organique continue qui épouse la zone brûlée — comme les contours de
+/// feuxdeforet.fr — au lieu des enveloppes anguleuses (triangles, cercles
+/// isolés) que donnait le calcul d'enveloppe convexe/concave sur des points
+/// épars.
+///
+/// Mise en œuvre : champ de distance sur une grille locale, extraction de
+/// l'iso-ligne par *marching squares* orienté (l'intérieur reste à gauche, donc
+/// les segments se chaînent sans ambiguïté en anneaux fermés), puis lissage de
+/// Chaikin.
 enum FireGeometry {
+    /// Rayon de l'empreinte attribuée à une détection. Un pixel VIIRS fait
+    /// 375 m de côté ; on élargit un peu pour couvrir le pourtour réel du feu
+    /// et souder les détections voisines d'un même foyer.
+    private static let footprintMeters = 800.0
+    /// Résolution de la grille de calcul.
+    private static let cellMeters = 150.0
+    /// Distance de regroupement en foyers distincts.
+    private static let clusterMeters = 12_000.0
+    /// Sous ce seuil, un contour est du bruit et n'est pas affiché.
+    private static let minAreaM2 = 300_000.0
+    /// Plafond de cellules par foyer : au-delà, la grille est élargie plutôt
+    /// que de faire exploser le calcul sur un foyer très étendu.
+    private static let maxCells = 250_000
     /// Un foyer sans détection depuis ce délai est considéré éteint (l'API
     /// renvoie 7 jours d'historique pour dater les débuts de feux, mais seuls
     /// les foyers encore actifs sont affichés — « feux en cours »).
     private static let activeWindow: TimeInterval = 36 * 3600
 
-    /// Construit un contour par foyer. On privilégie un **détourage concave**
-    /// (épouse la forme réelle des pixels détectés) ; à défaut on retombe sur
-    /// l'enveloppe convexe, et les points isolés donnent un petit cercle.
+    private static let metersPerDegree = 111_320.0
+
+    /// Construit les contours des foyers **encore actifs**. La forme est bâtie
+    /// sur *tout* l'historique du foyer (la zone brûlée s'accumule), tandis que
+    /// l'activité récente décide seulement de l'affichage.
     static func perimeters(from fires: [Fire]) -> [FirePerimeter] {
         guard !fires.isEmpty else { return [] }
-        let clusters = cluster(fires, thresholdMeters: 6000)
         var out: [FirePerimeter] = []
-        for fireGroup in clusters {
-            // Foyer « en cours » = au moins une détection récente. Sans aucun
-            // horodatage (vieux backend), on affiche par prudence.
-            let updatedAt = fireGroup.compactMap { $0.detectedAt }.max()
-            if let updatedAt, Date().timeIntervalSince(updatedAt) > activeWindow { continue }
-            let group = fireGroup.map { $0.coordinate }
-            let center = centroid(group)
-            let polygon: [CLLocationCoordinate2D]
-            if group.count >= 4, let concave = concaveHull(group) {
-                // Contour détouré : suit les concavités du foyer, sans englober
-                // les zones intactes. Léger arrondi + petit débord (~1 pixel
-                // VIIRS de 375 m) pour couvrir le pourtour réel du feu.
-                polygon = smooth(bufferedRing(concave, factor: 1.06), iterations: 1)
-            } else if group.count >= 3 {
-                polygon = smooth(bufferedRing(convexHull(group), factor: 1.25), iterations: 2)
-            } else {
-                polygon = circle(center, radiusMeters: 3500)
+        for group in cluster(fires, thresholdMeters: clusterMeters) {
+            let latest = group.compactMap { $0.detectedAt }.max()
+            if let latest, Date().timeIntervalSince(latest) > activeWindow { continue }
+            let shapes = rings(of: group)
+            guard !shapes.isEmpty else { continue }
+            let centers = shapes.map { centroid($0) }
+            // Un foyer peut se scinder en plusieurs poches : chaque détection
+            // est rattachée à la poche la plus proche, pour dater chaque
+            // contour avec ses propres détections.
+            var buckets = [[Fire]](repeating: [], count: shapes.count)
+            for f in group {
+                var best = 0
+                var bestDistance = Double.greatestFiniteMagnitude
+                for (i, c) in centers.enumerated() {
+                    let d = squaredMeters(f.coordinate, c)
+                    if d < bestDistance {
+                        bestDistance = d
+                        best = i
+                    }
+                }
+                buckets[best].append(f)
             }
-            out.append(
-                FirePerimeter(
-                    id: out.count, polygon: polygon, center: center,
-                    updatedAt: updatedAt,
-                    createdAt: fireGroup.compactMap { $0.firstDetectedAt }.min()))
+            for (i, ring) in shapes.enumerated() {
+                let own = buckets[i].isEmpty ? group : buckets[i]
+                out.append(
+                    FirePerimeter(
+                        id: out.count, polygon: ring, center: centers[i],
+                        updatedAt: own.compactMap { $0.detectedAt }.max(),
+                        createdAt: own.compactMap { $0.firstDetectedAt }.min()))
+            }
         }
         return out
     }
 
+    private static func squaredMeters(
+        _ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D
+    ) -> Double {
+        let cosLat = cos(a.latitude * .pi / 180)
+        let dx = (b.longitude - a.longitude) * metersPerDegree * cosLat
+        let dy = (b.latitude - a.latitude) * metersPerDegree
+        return dx * dx + dy * dy
+    }
+
     /// Regroupe les feux : un point rejoint un groupe s'il est à moins de
-    /// `thresholdMeters` de l'un de ses membres (agrégation simple). Distance
-    /// équirectangulaire (planaire) : aux échelles de quelques km l'écart avec
-    /// la distance géodésique est négligeable, et c'est ~100× plus rapide que
-    /// `CLLocation.distance` — nécessaire avec 7 jours de détections.
+    /// `thresholdMeters` de l'un de ses membres. Distance équirectangulaire
+    /// (planaire) : à ces échelles l'écart avec la distance géodésique est
+    /// négligeable, et c'est bien plus rapide que `CLLocation.distance`.
     private static func cluster(_ fires: [Fire], thresholdMeters: Double) -> [[Fire]] {
-        let metersPerDegree = 111_320.0
         let thresholdSq = thresholdMeters * thresholdMeters
         var groups: [[Fire]] = []
         for f in fires {
-            let p = f.coordinate
-            let cosLat = cos(p.latitude * .pi / 180)
             if let idx = groups.firstIndex(where: { group in
-                group.contains { g in
-                    let q = g.coordinate
-                    let dx = (q.longitude - p.longitude) * metersPerDegree * cosLat
-                    let dy = (q.latitude - p.latitude) * metersPerDegree
-                    return dx * dx + dy * dy < thresholdSq
-                }
+                group.contains { squaredMeters(f.coordinate, $0.coordinate) < thresholdSq }
             }) {
                 groups[idx].append(f)
             } else {
@@ -261,251 +294,192 @@ enum FireGeometry {
 
     private static func centroid(_ pts: [CLLocationCoordinate2D]) -> CLLocationCoordinate2D {
         let n = Double(pts.count)
-        let lat = pts.reduce(0) { $0 + $1.latitude } / n
-        let lon = pts.reduce(0) { $0 + $1.longitude } / n
-        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        return CLLocationCoordinate2D(
+            latitude: pts.reduce(0) { $0 + $1.latitude } / n,
+            longitude: pts.reduce(0) { $0 + $1.longitude } / n)
     }
 
-    /// Enveloppe convexe (chaîne monotone d'Andrew), lon = x, lat = y.
-    private static func convexHull(_ pts: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
-        let p = Array(Set(pts.map { Pt($0.longitude, $0.latitude) })).sorted()
-        guard p.count >= 3 else { return p.map { CLLocationCoordinate2D(latitude: $0.y, longitude: $0.x) } }
-        func cross(_ o: Pt, _ a: Pt, _ b: Pt) -> Double {
-            (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+    // MARK: - Contour = frontière de l'union des empreintes
+
+    /// Anneaux fermés délimitant l'union des empreintes d'un foyer.
+    private static func rings(of group: [Fire]) -> [[CLLocationCoordinate2D]] {
+        guard let first = group.first?.coordinate else { return [] }
+        let cosLat = cos(first.latitude * .pi / 180)
+        // Projection locale en mètres, ancrée sur la première détection.
+        let pts: [(x: Double, y: Double)] = group.map {
+            (
+                x: ($0.coordinate.longitude - first.longitude) * metersPerDegree * cosLat,
+                y: ($0.coordinate.latitude - first.latitude) * metersPerDegree
+            )
         }
-        var lower: [Pt] = []
-        for pt in p {
-            while lower.count >= 2, cross(lower[lower.count - 2], lower[lower.count - 1], pt) <= 0 {
-                lower.removeLast()
+        // Marge >= empreinte : le champ est négatif au bord, donc les anneaux
+        // sont toujours fermés (sinon le contour sortirait de la grille).
+        var cell = cellMeters
+        let margin = footprintMeters + 3 * cell
+        let xs = pts.map { $0.x }
+        let ys = pts.map { $0.y }
+        let minX = xs.min()! - margin
+        let maxX = xs.max()! + margin
+        let minY = ys.min()! - margin
+        let maxY = ys.max()! + margin
+        // Foyer très étendu : on dégrade la résolution plutôt que d'abandonner.
+        while Int((maxX - minX) / cell + 2) * Int((maxY - minY) / cell + 2) > maxCells {
+            cell *= 2
+        }
+        let nx = Int((maxX - minX) / cell) + 2
+        let ny = Int((maxY - minY) / cell) + 2
+        guard nx > 2, ny > 2 else { return [] }
+
+        // Champ = empreinte − distance à la détection la plus proche.
+        // L'iso-ligne 0 est donc exactement la frontière de l'union des disques.
+        var field = [Double](repeating: -Double.greatestFiniteMagnitude, count: nx * ny)
+        let reach = footprintMeters + cell
+        for p in pts {
+            let i0 = max(0, Int((p.x - reach - minX) / cell))
+            let i1 = min(nx - 1, Int((p.x + reach - minX) / cell) + 1)
+            let j0 = max(0, Int((p.y - reach - minY) / cell))
+            let j1 = min(ny - 1, Int((p.y + reach - minY) / cell) + 1)
+            guard i0 <= i1, j0 <= j1 else { continue }
+            for j in j0...j1 {
+                let dy = (minY + Double(j) * cell) - p.y
+                for i in i0...i1 {
+                    let dx = (minX + Double(i) * cell) - p.x
+                    let v = footprintMeters - (dx * dx + dy * dy).squareRoot()
+                    let k = j * nx + i
+                    if v > field[k] { field[k] = v }
+                }
             }
-            lower.append(pt)
         }
-        var upper: [Pt] = []
-        for pt in p.reversed() {
-            while upper.count >= 2, cross(upper[upper.count - 2], upper[upper.count - 1], pt) <= 0 {
-                upper.removeLast()
+
+        return isoRings(field, nx: nx, ny: ny)
+            .filter { area($0) * cell * cell >= minAreaM2 }
+            .map { ring in
+                smooth(ring, iterations: 2).map { g in
+                    CLLocationCoordinate2D(
+                        latitude: first.latitude + (minY + g.y * cell) / metersPerDegree,
+                        longitude: first.longitude
+                            + (minX + g.x * cell) / (metersPerDegree * cosLat))
+                }
             }
-            upper.append(pt)
-        }
-        let hull = lower.dropLast() + upper.dropLast()
-        return hull.map { CLLocationCoordinate2D(latitude: $0.y, longitude: $0.x) }
     }
 
-    /// Élargit légèrement l'enveloppe autour de son centre pour un contour plus
-    /// « plein » (comme une zone touchée). `factor` proche de 1 = quasi collé
-    /// aux points (détourage précis).
-    private static func bufferedRing(_ ring: [CLLocationCoordinate2D], factor: Double)
-        -> [CLLocationCoordinate2D]
+    /// Aire (en cellules²) d'un anneau, par la formule du lacet.
+    private static func area(_ ring: [(x: Double, y: Double)]) -> Double {
+        var a = 0.0
+        for i in 0..<ring.count {
+            let p = ring[i]
+            let q = ring[(i + 1) % ring.count]
+            a += p.x * q.y - q.x * p.y
+        }
+        return abs(a) / 2
+    }
+
+    /// Clé d'appariement des extrémités de segments (grille au 1/100 000).
+    private struct Key: Hashable {
+        let x: Int
+        let y: Int
+        init(_ p: (x: Double, y: Double)) {
+            x = Int((p.x * 100_000).rounded())
+            y = Int((p.y * 100_000).rounded())
+        }
+    }
+
+    /// *Marching squares* orienté : extrait l'iso-ligne `field == 0` sous forme
+    /// d'anneaux fermés, en coordonnées de grille. Chaque segment est dirigé de
+    /// façon à garder l'intérieur à sa gauche : chaque extrémité a donc une
+    /// seule arête sortante, et le chaînage est déterministe.
+    private static func isoRings(_ field: [Double], nx: Int, ny: Int)
+        -> [[(x: Double, y: Double)]]
     {
-        let c = centroid(ring)
-        return ring.map {
-            CLLocationCoordinate2D(
-                latitude: c.latitude + ($0.latitude - c.latitude) * factor,
-                longitude: c.longitude + ($0.longitude - c.longitude) * factor)
+        // Arêtes de la cellule : 0 = bas, 1 = droite, 2 = haut, 3 = gauche.
+        // Table (depuis, vers) par configuration de coins
+        // (bit 1 = bas-gauche, 2 = bas-droite, 4 = haut-droite, 8 = haut-gauche).
+        let table: [[(Int, Int)]] = [
+            [], [(0, 3)], [(1, 0)], [(1, 3)],
+            [(2, 1)], [(0, 3), (2, 1)], [(2, 0)], [(2, 3)],
+            [(3, 2)], [(0, 2)], [(1, 0), (3, 2)], [(1, 2)],
+            [(3, 1)], [(0, 1)], [(3, 0)], [],
+        ]
+        var next: [Key: Key] = [:]
+        var point: [Key: (x: Double, y: Double)] = [:]
+
+        func cut(
+            _ a: (x: Double, y: Double), _ va: Double,
+            _ b: (x: Double, y: Double), _ vb: Double
+        ) -> (x: Double, y: Double) {
+            let d = vb - va
+            let t = abs(d) < 1e-12 ? 0.5 : min(1, max(0, (0 - va) / d))
+            return (x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
         }
+
+        for j in 0..<(ny - 1) {
+            for i in 0..<(nx - 1) {
+                let vBL = field[j * nx + i]
+                let vBR = field[j * nx + i + 1]
+                let vTR = field[(j + 1) * nx + i + 1]
+                let vTL = field[(j + 1) * nx + i]
+                var code = 0
+                if vBL > 0 { code |= 1 }
+                if vBR > 0 { code |= 2 }
+                if vTR > 0 { code |= 4 }
+                if vTL > 0 { code |= 8 }
+                let segs = table[code]
+                if segs.isEmpty { continue }
+                let bl = (x: Double(i), y: Double(j))
+                let br = (x: Double(i + 1), y: Double(j))
+                let tr = (x: Double(i + 1), y: Double(j + 1))
+                let tl = (x: Double(i), y: Double(j + 1))
+                let edge: [(x: Double, y: Double)] = [
+                    cut(bl, vBL, br, vBR),  // bas
+                    cut(br, vBR, tr, vTR),  // droite
+                    cut(tl, vTL, tr, vTR),  // haut
+                    cut(bl, vBL, tl, vTL),  // gauche
+                ]
+                for (from, to) in segs {
+                    let a = edge[from]
+                    let b = edge[to]
+                    let ka = Key(a)
+                    let kb = Key(b)
+                    if ka == kb { continue }
+                    point[ka] = a
+                    point[kb] = b
+                    next[ka] = kb
+                }
+            }
+        }
+
+        var rings: [[(x: Double, y: Double)]] = []
+        while let start = next.keys.first {
+            var ring: [(x: Double, y: Double)] = []
+            var cur = start
+            while let step = next.removeValue(forKey: cur) {
+                if let p = point[cur] { ring.append(p) }
+                cur = step
+                if cur == start { break }
+            }
+            if ring.count >= 4 { rings.append(ring) }
+        }
+        return rings
     }
 
-    /// Lissage par coupe-coins de Chaikin : arrondit un polygone fermé
-    /// (contour anguleux → organique). Chaque itération double le nombre de
-    /// points en rapprochant chaque segment de son milieu.
-    private static func smooth(_ ring: [CLLocationCoordinate2D], iterations: Int)
-        -> [CLLocationCoordinate2D]
+    /// Lissage par coupe-coins de Chaikin : arrondit un polygone fermé (les
+    /// marches d'escalier de la grille deviennent une courbe organique).
+    private static func smooth(_ ring: [(x: Double, y: Double)], iterations: Int)
+        -> [(x: Double, y: Double)]
     {
         guard ring.count >= 3 else { return ring }
         var pts = ring
         for _ in 0..<iterations {
-            var next: [CLLocationCoordinate2D] = []
-            next.reserveCapacity(pts.count * 2)
+            var out: [(x: Double, y: Double)] = []
+            out.reserveCapacity(pts.count * 2)
             for i in 0..<pts.count {
                 let a = pts[i]
                 let b = pts[(i + 1) % pts.count]
-                next.append(
-                    CLLocationCoordinate2D(
-                        latitude: a.latitude * 0.75 + b.latitude * 0.25,
-                        longitude: a.longitude * 0.75 + b.longitude * 0.25))
-                next.append(
-                    CLLocationCoordinate2D(
-                        latitude: a.latitude * 0.25 + b.latitude * 0.75,
-                        longitude: a.longitude * 0.25 + b.longitude * 0.75))
+                out.append((x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25))
+                out.append((x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75))
             }
-            pts = next
+            pts = out
         }
         return pts
-    }
-
-    /// Polygone circulaire (~24 points) autour d'un centre, rayon en mètres.
-    private static func circle(_ c: CLLocationCoordinate2D, radiusMeters: Double)
-        -> [CLLocationCoordinate2D]
-    {
-        let dLat = radiusMeters / 111_320.0
-        let dLon = radiusMeters / (111_320.0 * cos(c.latitude * .pi / 180))
-        return (0..<24).map { i in
-            let a = Double(i) / 24.0 * 2 * .pi
-            return CLLocationCoordinate2D(
-                latitude: c.latitude + dLat * sin(a),
-                longitude: c.longitude + dLon * cos(a))
-        }
-    }
-
-    // MARK: - Détourage concave (k plus proches voisins)
-
-    /// Enveloppe **concave** (« détourage ») par k plus proches voisins
-    /// (Moreira & Santos, 2007) : contrairement à l'enveloppe convexe, elle
-    /// épouse les concavités du nuage de points. Essaie des k croissants ;
-    /// renvoie `nil` si aucun ne donne un contour valide (l'appelant retombe
-    /// alors proprement sur l'enveloppe convexe).
-    private static func concaveHull(_ coords: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D]? {
-        let uniq = Array(Set(coords.map { Pt($0.longitude, $0.latitude) }))
-        // Sous-échantillonne les très gros foyers (grille) pour garder un calcul
-        // rapide sur le thread de fond, tout en préservant la forme.
-        let pts = downsample(uniq, target: 256)
-        guard pts.count >= 4 else { return nil }
-        var k = 3
-        while k <= min(pts.count - 1, 25) {
-            if let hull = concaveHullK(pts, k: k), hull.count >= 3 {
-                return hull.map { CLLocationCoordinate2D(latitude: $0.y, longitude: $0.x) }
-            }
-            k += 1
-        }
-        return nil
-    }
-
-    /// Réduit un nuage à au plus ~`target` points en n'en gardant qu'un par
-    /// cellule d'une grille (couverture spatiale préservée, doublons éliminés).
-    private static func downsample(_ pts: [Pt], target: Int) -> [Pt] {
-        guard pts.count > target else { return pts }
-        let xs = pts.map { $0.x }
-        let ys = pts.map { $0.y }
-        let minX = xs.min()!, maxX = xs.max()!, minY = ys.min()!, maxY = ys.max()!
-        let grid = max(1, Int(Double(target).squareRoot()))
-        let w = max(maxX - minX, 1e-9)
-        let h = max(maxY - minY, 1e-9)
-        var seen = Set<Int>()
-        var out: [Pt] = []
-        for p in pts {
-            let cx = min(grid - 1, Int((p.x - minX) / w * Double(grid)))
-            let cy = min(grid - 1, Int((p.y - minY) / h * Double(grid)))
-            if seen.insert(cy * grid + cx).inserted { out.append(p) }
-        }
-        return out
-    }
-
-    /// Une passe de l'algorithme pour un k donné. `nil` si le contour se
-    /// recroise ou n'englobe pas tous les points (→ réessai avec k+1).
-    private static func concaveHullK(_ points: [Pt], k: Int) -> [Pt]? {
-        let n = points.count
-        let kk = min(max(k, 3), n - 1)
-        var dataset = points
-        let first = dataset.min(by: { $0.y < $1.y || ($0.y == $1.y && $0.x < $1.x) })!
-        var hull: [Pt] = [first]
-        var current = first
-        dataset.removeAll { $0 == first }
-        var prevAngle = 0.0
-        var step = 2
-        var iterations = 0
-        let maxIter = n * 10
-
-        while (current != first || step == 2) && !dataset.isEmpty {
-            iterations += 1
-            if iterations > maxIter { return nil }
-            if step == 5 { dataset.append(first) }
-            let candidates = kNearest(dataset, to: current, k: kk).sorted {
-                clockwiseTurn(prevAngle, current, $0) > clockwiseTurn(prevAngle, current, $1)
-            }
-            var chosen: Pt? = nil
-            for cand in candidates {
-                // La nouvelle arête (current → cand) ne doit croiser aucune
-                // arête déjà tracée (les arêtes adjacentes partagent un sommet
-                // et sont ignorées par le test de croisement).
-                var intersects = false
-                var i = 1
-                while i <= hull.count - 2 {
-                    if segmentsIntersect(current, cand, hull[i - 1], hull[i]) {
-                        intersects = true
-                        break
-                    }
-                    i += 1
-                }
-                if !intersects {
-                    chosen = cand
-                    break
-                }
-            }
-            guard let next = chosen else { return nil }
-            current = next
-            hull.append(next)
-            prevAngle = atan2(
-                hull[hull.count - 1].y - hull[hull.count - 2].y,
-                hull[hull.count - 1].x - hull[hull.count - 2].x)
-            dataset.removeAll { $0 == next }
-            step += 1
-        }
-
-        // Tous les points doivent être à l'intérieur du contour, sinon k trop
-        // petit → on rejette pour réessayer plus large.
-        for p in points where !hull.contains(p) {
-            if !pointInside(p, hull) { return nil }
-        }
-        return hull
-    }
-
-    /// Les `k` points les plus proches de `p` (distance planaire approchée).
-    private static func kNearest(_ pts: [Pt], to p: Pt, k: Int) -> [Pt] {
-        pts.sorted {
-            let d0 = ($0.x - p.x) * ($0.x - p.x) + ($0.y - p.y) * ($0.y - p.y)
-            let d1 = ($1.x - p.x) * ($1.x - p.x) + ($1.y - p.y) * ($1.y - p.y)
-            return d0 < d1
-        }
-        .prefix(k).map { $0 }
-    }
-
-    /// Angle de rotation horaire entre la direction précédente et `from → to`
-    /// (0…2π) : on choisit le virage le plus « à droite » pour longer le bord.
-    private static func clockwiseTurn(_ prevAngle: Double, _ from: Pt, _ to: Pt) -> Double {
-        let a = atan2(to.y - from.y, to.x - from.x)
-        let twoPi = 2 * Double.pi
-        var d = (prevAngle - a).truncatingRemainder(dividingBy: twoPi)
-        if d < 0 { d += twoPi }
-        return d
-    }
-
-    /// Deux segments se croisent-ils franchement (hors extrémités partagées) ?
-    private static func segmentsIntersect(_ p1: Pt, _ p2: Pt, _ p3: Pt, _ p4: Pt) -> Bool {
-        func cross(_ a: Pt, _ b: Pt, _ c: Pt) -> Double {
-            (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
-        }
-        let d1 = cross(p3, p4, p1)
-        let d2 = cross(p3, p4, p2)
-        let d3 = cross(p1, p2, p3)
-        let d4 = cross(p1, p2, p4)
-        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
-            && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
-    }
-
-    /// Le point est-il à l'intérieur du polygone (lancer de rayon) ?
-    private static func pointInside(_ p: Pt, _ poly: [Pt]) -> Bool {
-        var inside = false
-        var j = poly.count - 1
-        for i in 0..<poly.count {
-            let a = poly[i]
-            let b = poly[j]
-            if (a.y > p.y) != (b.y > p.y) {
-                let xCross = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x)
-                if p.x < xCross { inside.toggle() }
-            }
-            j = i
-        }
-        return inside
-    }
-
-    /// Point 2D avec ordre lexicographique (pour l'enveloppe convexe).
-    private struct Pt: Hashable, Comparable {
-        let x: Double
-        let y: Double
-        init(_ x: Double, _ y: Double) {
-            self.x = x
-            self.y = y
-        }
-        static func < (a: Pt, b: Pt) -> Bool { a.x < b.x || (a.x == b.x && a.y < b.y) }
     }
 }
