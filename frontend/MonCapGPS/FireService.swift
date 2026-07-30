@@ -43,8 +43,9 @@ final class FireService: ObservableObject {
 
     /// Rafraîchit la liste des feux (au plus toutes les 15 min ; immédiat si la
     /// clé change). Si `key` (clé FIRMS saisie dans les réglages) est non vide,
-    /// l'app interroge la NASA **directement** ; sinon elle passe par notre
-    /// backend. Les données FIRMS NRT ne changent que quelques fois par jour.
+    /// l'app interroge la NASA **directement**, avec repli sur 2 jours puis sur
+    /// notre backend ; sinon elle passe directement par le backend. Les données
+    /// FIRMS NRT ne changent que quelques fois par jour.
     func refresh(key: String) {
         let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
         let changed = k != lastKey
@@ -53,10 +54,27 @@ final class FireService: ObservableObject {
         lastKey = k
         let base = baseURL
         Task {
-            let f = k.isEmpty ? await Self.fetchBackend(base: base) : await Self.fetchNASA(key: k)
+            var f: [Fire]?
+            if !k.isEmpty {
+                // 7 jours d'historique (pour dater les foyers) ; la requête est
+                // lourde en pleine saison, d'où le repli sur 2 jours.
+                f = await Self.fetchNASA(key: k, days: 7)
+                if f == nil { f = await Self.fetchNASA(key: k, days: 2) }
+                // Clé refusée ou NASA injoignable : mieux vaut les données du
+                // backend qu'une carte vide.
+                if f == nil { f = await Self.fetchBackend(base: base) }
+            } else {
+                f = await Self.fetchBackend(base: base)
+            }
             if let f {
+                // Une liste vide est une réponse légitime (plus aucun feu) :
+                // on l'applique, sinon la carte garderait des foyers éteints.
                 fires = f
                 lastUpdate = Date()
+            } else {
+                // Échec réel : on rembobine l'étranglement pour retenter au
+                // prochain passage, au lieu de rester 15 min sur une carte vide.
+                lastFetch = .distantPast
             }
         }
     }
@@ -88,19 +106,29 @@ final class FireService: ObservableObject {
     }
 
     /// Interroge directement l'API NASA FIRMS (CSV) avec la clé de l'appareil :
-    /// France métropolitaine (Corse incluse), VIIRS S-NPP, **7 derniers jours**
-    /// (pour dater le début des foyers), avec le même filtrage anti-faux
-    /// positifs que le backend.
-    nonisolated private static func fetchNASA(key: String) async -> [Fire]? {
+    /// France métropolitaine (Corse incluse), VIIRS S-NPP, `days` derniers
+    /// jours, avec le même filtrage anti-faux positifs que le backend.
+    ///
+    /// Délai porté à 90 s comme côté serveur : le CSV multi-jours est
+    /// volumineux en pleine saison des feux et dépassait le délai par défaut.
+    nonisolated private static func fetchNASA(key: String, days: Int) async -> [Fire]? {
         let area = "-5.5,41,10,51.5"  // ouest,sud,est,nord
         guard
             let url = URL(
                 string:
-                    "https://firms.modaps.eosdis.nasa.gov/api/area/csv/\(key)/VIIRS_SNPP_NRT/\(area)/7"
-            ),
-            let (data, resp) = try? await URLSession.shared.data(from: url),
+                    "https://firms.modaps.eosdis.nasa.gov/api/area/csv/\(key)/VIIRS_SNPP_NRT/\(area)/\(days)"
+            )
+        else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 90
+        guard
+            let (data, resp) = try? await URLSession.shared.data(for: request),
             (resp as? HTTPURLResponse)?.statusCode == 200,
-            let text = String(data: data, encoding: .utf8)
+            let text = String(data: data, encoding: .utf8),
+            // FIRMS renvoie parfois ses erreurs (clé invalide, quota dépassé…)
+            // en HTTP 200 avec un message texte : sans l'en-tête CSV attendu,
+            // c'est un échec, pas « zéro feu ».
+            text.hasPrefix("latitude")
         else { return nil }
         return parseFIRMS(text)
     }
