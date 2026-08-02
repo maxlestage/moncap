@@ -8,6 +8,99 @@ struct NavStep {
     let coord: CLLocationCoordinate2D
 }
 
+/// Manœuvre à effectuer, déduite de l'instruction fournie par le moteur
+/// d'itinéraire. Elle porte **à la fois** la flèche affichée et la consigne
+/// annoncée : les deux ne peuvent donc plus se contredire (l'icône du bandeau
+/// était auparavant figée sur « à droite », quelle que soit la manœuvre).
+///
+/// La consigne est volontairement réduite au côté à prendre, sans nom de rue :
+/// plus lisible d'un coup d'œil au volant, et plus court à l'oral.
+enum Maneuver {
+    case left, slightLeft, sharpLeft
+    case right, slightRight, sharpRight
+    case roundaboutLeft, roundaboutRight
+    case uTurn, straight, arrive
+
+    /// Flèche du bandeau (symboles SF garantis présents sur iOS 17+).
+    var icon: String {
+        switch self {
+        case .left: return "arrow.turn.up.left"
+        case .right: return "arrow.turn.up.right"
+        case .slightLeft: return "arrow.up.left"
+        case .slightRight: return "arrow.up.right"
+        case .sharpLeft: return "arrow.uturn.left"
+        case .sharpRight: return "arrow.uturn.right"
+        case .roundaboutLeft: return "arrow.turn.up.left"
+        case .roundaboutRight: return "arrow.turn.up.right"
+        case .uTurn: return "arrow.uturn.down"
+        case .straight: return "arrow.up"
+        case .arrive: return "mappin.and.ellipse"
+        }
+    }
+
+    /// Consigne affichée et annoncée : le côté, rien de plus.
+    var phrase: String {
+        switch self {
+        case .left: return "À gauche"
+        case .right: return "À droite"
+        case .slightLeft: return "Légèrement à gauche"
+        case .slightRight: return "Légèrement à droite"
+        case .sharpLeft: return "Fortement à gauche"
+        case .sharpRight: return "Fortement à droite"
+        case .roundaboutLeft: return "Au rond-point, à gauche"
+        case .roundaboutRight: return "Au rond-point, à droite"
+        case .uTurn: return "Faites demi-tour"
+        case .straight: return "Tout droit"
+        case .arrive: return "Arrivée"
+        }
+    }
+
+    /// Déduit la manœuvre de l'instruction du moteur (Apple Plans en français
+    /// ou en anglais selon la langue de l'appareil, BRouter pour le vélo).
+    init(instruction: String) {
+        var s =
+            instruction
+            .folding(options: .diacriticInsensitive, locale: Locale(identifier: "fr"))
+            .lowercased()
+        // Coupe le nom de la voie (« … sur Rue de la Rive Gauche ») avant
+        // d'analyser le côté : sinon une rue dont le nom contient « gauche »
+        // ou « droite » inverserait la manœuvre.
+        for separator in [" sur ", " onto ", " vers ", " toward"] {
+            if let r = s.range(of: separator) {
+                s = String(s[s.startIndex..<r.lowerBound])
+                break
+            }
+        }
+        let left = s.contains("gauche") || s.contains("left")
+        let right = s.contains("droite") || s.contains("right")
+
+        if s.contains("arriv") || s.contains("destination") {
+            self = .arrive
+        } else if s.contains("demi-tour") || s.contains("demi tour") || s.contains("u-turn") {
+            self = .uTurn
+        } else if s.contains("rond-point") || s.contains("giratoire") || s.contains("roundabout") {
+            // Sortie de rond-point : le côté n'est pas toujours nommé.
+            self = left ? .roundaboutLeft : (right ? .roundaboutRight : .straight)
+        } else if left || right {
+            let slight = s.contains("legerement") || s.contains("slight") || s.contains("serrez")
+                || s.contains("keep")
+            let sharp = s.contains("fortement") || s.contains("sharp")
+            if slight {
+                self = left ? .slightLeft : .slightRight
+            } else if sharp {
+                self = left ? .sharpLeft : .sharpRight
+            } else {
+                self = left ? .left : .right
+            }
+        } else if s.contains("sortie") || s.contains("exit") {
+            // Sortie d'axe rapide sans côté précisé : par la droite en France.
+            self = .slightRight
+        } else {
+            self = .straight
+        }
+    }
+}
+
 /// Navigation turn-by-turn avec annonces vocales et recalcul automatique
 /// quand on sort de l'itinéraire.
 @MainActor
@@ -15,6 +108,9 @@ final class NavigationManager: ObservableObject {
     @Published var active = false
     @Published var rerouting = false
     @Published var instruction = "Calcul de l'itinéraire…"
+    /// Manœuvre courante : pilote la flèche du bandeau, toujours cohérente
+    /// avec `instruction` puisque les deux en découlent.
+    @Published var maneuver: Maneuver = .straight
     @Published var distanceToNext: Double = 0
     @Published var remainingKm: Double = 0
     @Published var etaMinutes: Double = 0
@@ -155,7 +251,7 @@ final class NavigationManager: ObservableObject {
 
         let d = distance(coord, steps[stepIndex].coord)
         distanceToNext = d
-        instruction = stepText(steps[stepIndex])
+        apply(steps[stepIndex])
 
         // Juste après une manœuvre : on enchaîne avec la suivante, pour
         // conduire à l'oreille sans regarder l'écran.
@@ -225,6 +321,7 @@ final class NavigationManager: ObservableObject {
         offRouteHits = 0
         lastReroute = Date()
         rerouting = true
+        maneuver = .straight
         instruction = "Recalcul de l'itinéraire…"
         speak("Recalcul de l'itinéraire.")
         onReroute?()
@@ -246,7 +343,7 @@ final class NavigationManager: ObservableObject {
         chainAnnouncePending = false
         lastEtaSpoken = Date()
         if stepIndex < steps.count {
-            instruction = stepText(steps[stepIndex])
+            apply(steps[stepIndex])
             if announceStart { speak("Départ. " + instruction) }
         }
     }
@@ -266,8 +363,12 @@ final class NavigationManager: ObservableObject {
         }
     }
 
-    private func stepText(_ step: NavStep) -> String {
-        step.text.isEmpty ? "Continuez tout droit" : step.text
+    /// Applique une étape : consigne courte (sans nom de rue) + flèche
+    /// correspondante, dérivées de la même manœuvre.
+    private func apply(_ step: NavStep) {
+        let m = Maneuver(instruction: step.text)
+        maneuver = m
+        instruction = m.phrase
     }
 
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
