@@ -55,7 +55,14 @@ struct NavInstruction {
     static let waiting = NavInstruction(
         maneuver: .straight, display: "Calcul de l'itinéraire…", detail: nil,
         spoken: "calcul de l'itinéraire")
+}
 
+/// Analyse d'une instruction de moteur d'itinéraire.
+///
+/// Déclarée en extension à dessein : un initialiseur écrit dans le corps
+/// d'une struct supprime l'initialiseur memberwise, dont dépendent ici
+/// toutes les branches (`self.init(maneuver:display:detail:spoken:)`).
+extension NavInstruction {
     /// Analyse l'instruction du moteur (Apple Plans en français ou en anglais
     /// selon la langue de l'appareil, BRouter pour le vélo).
     init(from instruction: String) {
