@@ -38,20 +38,28 @@ enum Maneuver {
         }
     }
 
-    /// Consigne affichée et annoncée : le côté, rien de plus.
+    /// Consigne affichée : un seul mot, lisible d'un coup d'œil. Les nuances
+    /// (léger, serré, rond-point) restent portées par la flèche, pas par le
+    /// texte.
     var phrase: String {
         switch self {
-        case .left: return "À gauche"
-        case .right: return "À droite"
-        case .slightLeft: return "Légèrement à gauche"
-        case .slightRight: return "Légèrement à droite"
-        case .sharpLeft: return "Fortement à gauche"
-        case .sharpRight: return "Fortement à droite"
-        case .roundaboutLeft: return "Au rond-point, à gauche"
-        case .roundaboutRight: return "Au rond-point, à droite"
-        case .uTurn: return "Faites demi-tour"
+        case .left, .slightLeft, .sharpLeft, .roundaboutLeft: return "Gauche"
+        case .right, .slightRight, .sharpRight, .roundaboutRight: return "Droite"
+        case .uTurn: return "Demi-tour"
         case .straight: return "Tout droit"
         case .arrive: return "Arrivée"
+        }
+    }
+
+    /// Consigne annoncée à voix haute : même simplicité, tournure naturelle
+    /// (« Dans 200 mètres, à droite »).
+    var spoken: String {
+        switch self {
+        case .left, .slightLeft, .sharpLeft, .roundaboutLeft: return "à gauche"
+        case .right, .slightRight, .sharpRight, .roundaboutRight: return "à droite"
+        case .uTurn: return "faites demi-tour"
+        case .straight: return "tout droit"
+        case .arrive: return "vous êtes arrivé"
         }
     }
 
@@ -111,6 +119,9 @@ final class NavigationManager: ObservableObject {
     /// Manœuvre courante : pilote la flèche du bandeau, toujours cohérente
     /// avec `instruction` puisque les deux en découlent.
     @Published var maneuver: Maneuver = .straight
+    /// Formulation orale de la consigne courante (« à droite »), plus naturelle
+    /// à l'écoute que le mot affiché (« Droite »).
+    private var spokenInstruction = "tout droit"
     @Published var distanceToNext: Double = 0
     @Published var remainingKm: Double = 0
     @Published var etaMinutes: Double = 0
@@ -126,15 +137,10 @@ final class NavigationManager: ObservableObject {
     /// Distance et durée totales de l'itinéraire (pour estimer le restant).
     private var totalKm = 0.0
     private var totalMin = 0.0
-    /// Pré-annonce à 1 km déjà faite pour l'étape courante.
-    private var spokenFar = false
-    /// Annonce d'enchaînement en attente (juste après une manœuvre).
-    private var chainAnnouncePending = false
+    /// Annonce de préparation déjà faite pour l'étape courante.
+    private var spokenPrepare = false
     /// Dernier point d'étape vocal (heure d'arrivée).
     private var lastEtaSpoken = Date()
-    private var spokenApproach = false
-    private var spokenNear = false
-    private var spokenImminent = false
     private var offRouteHits = 0
     private var lastReroute = Date.distantPast
 
@@ -253,39 +259,18 @@ final class NavigationManager: ObservableObject {
         distanceToNext = d
         apply(steps[stepIndex])
 
-        // Juste après une manœuvre : on enchaîne avec la suivante, pour
-        // conduire à l'oreille sans regarder l'écran.
-        if chainAnnouncePending {
-            chainAnnouncePending = false
-            if d > 2500 {
-                speak(String(format: "Continuez tout droit sur %.0f kilomètres.", d / 1000))
-            } else {
-                speak("Ensuite, \(distancePhrase(d)), \(instruction)")
-            }
-        }
-        // Pré-annonce à 1 kilomètre.
-        if d < 1100, d >= 400, !spokenFar {
-            speak("Dans 1 kilomètre, \(instruction)")
-            spokenFar = true
-        }
-        if d < 250, !spokenApproach {
-            speak("Dans \(roundedMeters(d)) mètres, \(instruction)")
-            spokenApproach = true
-        }
-        // Assistance rapprochée : 100 m, puis 50 m, puis au point exact.
-        if d < 120, !spokenNear {
-            speak("Dans \(roundedMeters(d)) mètres, \(instruction)")
-            spokenNear = true
-        }
-        if d < 60, !spokenImminent {
-            speak("À \(roundedMeters(d)) mètres, \(instruction)")
-            spokenImminent = true
+        // Deux annonces par manœuvre, pas plus : une pour préparer, une au
+        // moment de tourner. (Il y en avait jusqu'à six, qui répétaient la
+        // même consigne.)
+        if d < 300, !spokenPrepare {
+            speak("Dans \(roundedMeters(d)) mètres, \(spokenInstruction)")
+            spokenPrepare = true
         }
         if d < 25 {
             // Dernière consigne au moment de tourner (sauf à l'arrivée, qui a
             // sa propre annonce).
             if stepIndex < steps.count - 1 {
-                speak("Maintenant, \(instruction)")
+                speak("Maintenant, \(spokenInstruction)")
             }
             advance()
         }
@@ -295,16 +280,6 @@ final class NavigationManager: ObservableObject {
             lastEtaSpoken = Date()
             speak("Arrivée prévue vers \(Self.arrivalString(inMinutes: etaMinutes)).")
         }
-    }
-
-    /// « dans X kilomètres » / « dans X mètres » selon la distance.
-    private func distancePhrase(_ d: Double) -> String {
-        if d >= 950 {
-            let km = (d / 100).rounded() / 10
-            return km < 1.95
-                ? "dans 1 kilomètre" : String(format: "dans %.0f kilomètres", km.rounded())
-        }
-        return "dans \(roundedMeters(d)) mètres"
     }
 
     /// Heure d'arrivée estimée (« 18:32 »).
@@ -336,30 +311,20 @@ final class NavigationManager: ObservableObject {
         remainingKm = km
         etaMinutes = min
         stepIndex = steps.firstIndex { !$0.text.isEmpty } ?? 0
-        spokenApproach = false
-        spokenNear = false
-        spokenImminent = false
-        spokenFar = false
-        chainAnnouncePending = false
+        spokenPrepare = false
         lastEtaSpoken = Date()
         if stepIndex < steps.count {
             apply(steps[stepIndex])
-            if announceStart { speak("Départ. " + instruction) }
+            if announceStart { speak("Départ, " + spokenInstruction) }
         }
     }
 
     private func advance() {
         stepIndex += 1
-        spokenApproach = false
-        spokenNear = false
-        spokenImminent = false
-        spokenFar = false
+        spokenPrepare = false
         if stepIndex >= steps.count {
             speak("Vous êtes arrivé à destination.")
             active = false
-        } else {
-            // À la prochaine position, annonce l'étape suivante à l'oreille.
-            chainAnnouncePending = true
         }
     }
 
@@ -369,6 +334,7 @@ final class NavigationManager: ObservableObject {
         let m = Maneuver(instruction: step.text)
         maneuver = m
         instruction = m.phrase
+        spokenInstruction = m.spoken
     }
 
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
