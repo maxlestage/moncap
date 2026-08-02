@@ -1896,10 +1896,12 @@ struct MapHomeView: View {
 
     private var navBanner: some View {
         HStack(spacing: 14) {
+            // La flèche suit la manœuvre réelle (elle était figée sur « à
+            // droite », même pour un virage à gauche).
             Image(systemName: nav.rerouting
                 ? "arrow.triangle.2.circlepath"
-                : "arrow.triangle.turn.up.right.diamond.fill")
-                .font(.title)
+                : nav.maneuver.icon)
+                .font(.title.weight(.bold))
                 .foregroundStyle(.white)
                 .symbolEffect(.pulse, isActive: nav.rerouting)
             VStack(alignment: .leading, spacing: 2) {
