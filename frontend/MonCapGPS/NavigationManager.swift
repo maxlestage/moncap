@@ -9,12 +9,10 @@ struct NavStep {
 }
 
 /// Manœuvre à effectuer, déduite de l'instruction fournie par le moteur
-/// d'itinéraire. Elle porte **à la fois** la flèche affichée et la consigne
-/// annoncée : les deux ne peuvent donc plus se contredire (l'icône du bandeau
-/// était auparavant figée sur « à droite », quelle que soit la manœuvre).
-///
-/// La consigne est volontairement réduite au côté à prendre, sans nom de rue :
-/// plus lisible d'un coup d'œil au volant, et plus court à l'oral.
+/// d'itinéraire. Elle porte la flèche affichée : celle-ci découle donc de la
+/// même analyse que la consigne et ne peut pas la contredire (l'icône du
+/// bandeau était auparavant figée sur « à droite », quelle que soit la
+/// manœuvre).
 enum Maneuver {
     case left, slightLeft, sharpLeft
     case right, slightRight, sharpRight
@@ -37,39 +35,36 @@ enum Maneuver {
         case .arrive: return "mappin.and.ellipse"
         }
     }
+}
 
-    /// Consigne affichée : un seul mot, lisible d'un coup d'œil. Les nuances
-    /// (léger, serré, rond-point) restent portées par la flèche, pas par le
-    /// texte.
-    var phrase: String {
-        switch self {
-        case .left, .slightLeft, .sharpLeft, .roundaboutLeft: return "Gauche"
-        case .right, .slightRight, .sharpRight, .roundaboutRight: return "Droite"
-        case .uTurn: return "Demi-tour"
-        case .straight: return "Tout droit"
-        case .arrive: return "Arrivée"
-        }
-    }
+/// Consigne de navigation prête à afficher et à annoncer.
+///
+/// L'affichage tient en un mot (« Droite »), lisible d'un coup d'œil au
+/// volant, et le **détail utile** — numéro de sortie d'un rond-point, virage
+/// serré — vient sur une seconde ligne plutôt que d'alourdir la consigne.
+/// Aucun nom de rue : seul le côté à prendre compte.
+struct NavInstruction {
+    let maneuver: Maneuver
+    /// Consigne principale, en un mot.
+    let display: String
+    /// Précision secondaire (« 2e sortie », « serrez »), nil si inutile.
+    let detail: String?
+    /// Formulation orale complète, naturelle à l'écoute.
+    let spoken: String
 
-    /// Consigne annoncée à voix haute : même simplicité, tournure naturelle
-    /// (« Dans 200 mètres, à droite »).
-    var spoken: String {
-        switch self {
-        case .left, .slightLeft, .sharpLeft, .roundaboutLeft: return "à gauche"
-        case .right, .slightRight, .sharpRight, .roundaboutRight: return "à droite"
-        case .uTurn: return "faites demi-tour"
-        case .straight: return "tout droit"
-        case .arrive: return "vous êtes arrivé"
-        }
-    }
+    static let waiting = NavInstruction(
+        maneuver: .straight, display: "Calcul de l'itinéraire…", detail: nil,
+        spoken: "calcul de l'itinéraire")
 
-    /// Déduit la manœuvre de l'instruction du moteur (Apple Plans en français
-    /// ou en anglais selon la langue de l'appareil, BRouter pour le vélo).
-    init(instruction: String) {
+    /// Analyse l'instruction du moteur (Apple Plans en français ou en anglais
+    /// selon la langue de l'appareil, BRouter pour le vélo).
+    init(from instruction: String) {
         var s =
             instruction
             .folding(options: .diacriticInsensitive, locale: Locale(identifier: "fr"))
             .lowercased()
+        // Le numéro de sortie se lit AVANT de couper le nom de la voie.
+        let exit = Self.roundaboutExit(in: s)
         // Coupe le nom de la voie (« … sur Rue de la Rive Gauche ») avant
         // d'analyser le côté : sinon une rue dont le nom contient « gauche »
         // ou « droite » inverserait la manœuvre.
@@ -81,31 +76,102 @@ enum Maneuver {
         }
         let left = s.contains("gauche") || s.contains("left")
         let right = s.contains("droite") || s.contains("right")
+        let slight = s.contains("legerement") || s.contains("slight") || s.contains("serrez")
+            || s.contains("keep")
+        let sharp = s.contains("fortement") || s.contains("sharp")
 
         if s.contains("arriv") || s.contains("destination") {
-            self = .arrive
+            self.init(maneuver: .arrive, display: "Arrivée", detail: nil,
+                      spoken: "vous êtes arrivé")
         } else if s.contains("demi-tour") || s.contains("demi tour") || s.contains("u-turn") {
-            self = .uTurn
+            self.init(maneuver: .uTurn, display: "Demi-tour", detail: nil,
+                      spoken: "faites demi-tour")
         } else if s.contains("rond-point") || s.contains("giratoire") || s.contains("roundabout") {
-            // Sortie de rond-point : le côté n'est pas toujours nommé.
-            self = left ? .roundaboutLeft : (right ? .roundaboutRight : .straight)
-        } else if left || right {
-            let slight = s.contains("legerement") || s.contains("slight") || s.contains("serrez")
-                || s.contains("keep")
-            let sharp = s.contains("fortement") || s.contains("sharp")
-            if slight {
-                self = left ? .slightLeft : .slightRight
-            } else if sharp {
-                self = left ? .sharpLeft : .sharpRight
+            // Au rond-point, le numéro de sortie prime sur le côté.
+            let m: Maneuver = left ? .roundaboutLeft : .roundaboutRight
+            let side = left ? "à gauche" : "à droite"
+            if let exit {
+                let nth = exit == 1 ? "1re" : "\(exit)e"
+                self.init(
+                    maneuver: m, display: "\(nth) sortie", detail: "rond-point",
+                    spoken: "au rond-point, prenez la \(nth) sortie")
             } else {
-                self = left ? .left : .right
+                self.init(
+                    maneuver: m, display: left ? "Gauche" : "Droite", detail: "rond-point",
+                    spoken: "au rond-point, \(side)")
             }
+        } else if left || right {
+            let m: Maneuver
+            if slight {
+                m = left ? .slightLeft : .slightRight
+            } else if sharp {
+                m = left ? .sharpLeft : .sharpRight
+            } else {
+                m = left ? .left : .right
+            }
+            let side = left ? "à gauche" : "à droite"
+            self.init(
+                maneuver: m,
+                display: left ? "Gauche" : "Droite",
+                detail: slight ? "serrez" : (sharp ? "virage serré" : nil),
+                spoken: slight ? "serrez \(side)" : (sharp ? "franchement \(side)" : side))
         } else if s.contains("sortie") || s.contains("exit") {
             // Sortie d'axe rapide sans côté précisé : par la droite en France.
-            self = .slightRight
+            // Le numéro d'échangeur (« sortie 12 ») suit le mot, contrairement
+            // au rang de sortie d'un rond-point (« 2e sortie ») qui le précède.
+            if let number = Self.exitNumber(in: s) {
+                self.init(
+                    maneuver: .slightRight, display: "Sortie \(number)", detail: "sortie",
+                    spoken: "prenez la sortie \(number)")
+            } else if let exit {
+                let nth = exit == 1 ? "1re" : "\(exit)e"
+                self.init(
+                    maneuver: .slightRight, display: "\(nth) sortie", detail: "sortie",
+                    spoken: "prenez la \(nth) sortie")
+            } else {
+                self.init(
+                    maneuver: .slightRight, display: "Sortie", detail: nil,
+                    spoken: "prenez la sortie")
+            }
         } else {
-            self = .straight
+            self.init(maneuver: .straight, display: "Tout droit", detail: nil,
+                      spoken: "tout droit")
         }
+    }
+
+    /// Numéro d'échangeur qui **suit** le mot sortie (« sortie 12 », « exit
+    /// 23a »). nil si absent.
+    private static func exitNumber(in s: String) -> String? {
+        for keyword in ["sortie ", "exit "] {
+            guard let r = s.range(of: keyword) else { continue }
+            let after = s[r.upperBound...].prefix { $0.isNumber || $0.isLetter }
+            let label = String(after)
+            // Doit commencer par un chiffre : sinon c'est un mot (« sortie
+            // suivante »), pas un numéro.
+            if let f = label.first, f.isNumber, label.count <= 4 { return label }
+        }
+        return nil
+    }
+
+    /// Rang de sortie d'un rond-point (« la 2e sortie », « the 2nd exit »,
+    /// « la deuxième sortie ») — il **précède** le mot. nil si absent.
+    private static func roundaboutExit(in s: String) -> Int? {
+        let words = [
+            "premiere": 1, "deuxieme": 2, "troisieme": 3, "quatrieme": 4,
+            "cinquieme": 5, "sixieme": 6, "first": 1, "second": 2, "third": 3,
+        ]
+        for (word, n) in words where s.contains(word) {
+            return n
+        }
+        // Forme chiffrée : on prend le nombre qui précède « sortie » / « exit ».
+        for keyword in ["sortie", "exit"] {
+            guard let r = s.range(of: keyword) else { continue }
+            let before = s[s.startIndex..<r.lowerBound]
+            let digits = before.reversed().drop { !$0.isNumber }.prefix { $0.isNumber }
+            let value = Int(String(digits.reversed()))
+            if let value, (1...9).contains(value) { return value }
+        }
+        return nil
     }
 }
 
@@ -115,13 +181,15 @@ enum Maneuver {
 final class NavigationManager: ObservableObject {
     @Published var active = false
     @Published var rerouting = false
-    @Published var instruction = "Calcul de l'itinéraire…"
+    @Published var instruction = NavInstruction.waiting.display
+    /// Précision secondaire affichée sous la consigne (« 2e sortie »).
+    @Published var detail: String?
     /// Manœuvre courante : pilote la flèche du bandeau, toujours cohérente
-    /// avec `instruction` puisque les deux en découlent.
+    /// avec `instruction` puisque les deux découlent de la même analyse.
     @Published var maneuver: Maneuver = .straight
-    /// Formulation orale de la consigne courante (« à droite »), plus naturelle
-    /// à l'écoute que le mot affiché (« Droite »).
-    private var spokenInstruction = "tout droit"
+    /// Formulation orale de la consigne courante, plus naturelle à l'écoute
+    /// que le mot affiché.
+    private var spokenInstruction = NavInstruction.waiting.spoken
     @Published var distanceToNext: Double = 0
     @Published var remainingKm: Double = 0
     @Published var etaMinutes: Double = 0
@@ -298,6 +366,7 @@ final class NavigationManager: ObservableObject {
         rerouting = true
         maneuver = .straight
         instruction = "Recalcul de l'itinéraire…"
+        detail = nil
         speak("Recalcul de l'itinéraire.")
         onReroute?()
     }
@@ -331,10 +400,11 @@ final class NavigationManager: ObservableObject {
     /// Applique une étape : consigne courte (sans nom de rue) + flèche
     /// correspondante, dérivées de la même manœuvre.
     private func apply(_ step: NavStep) {
-        let m = Maneuver(instruction: step.text)
-        maneuver = m
-        instruction = m.phrase
-        spokenInstruction = m.spoken
+        let n = NavInstruction(from: step.text)
+        maneuver = n.maneuver
+        instruction = n.display
+        detail = n.detail
+        spokenInstruction = n.spoken
     }
 
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {

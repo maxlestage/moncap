@@ -1909,9 +1909,17 @@ struct MapHomeView: View {
                     Text("\(Int(nav.distanceToNext)) m").font(.title3.weight(.bold)).foregroundStyle(.white)
                 }
                 Text(nav.instruction)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(.white)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                // Précision utile (numéro de sortie, virage serré) : sur une
+                // seconde ligne, pour garder la consigne lisible d'un coup d'œil.
+                if let detail = nav.detail, !nav.rerouting {
+                    Text(detail)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
             Spacer()
         }
