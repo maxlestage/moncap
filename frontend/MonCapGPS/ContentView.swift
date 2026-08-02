@@ -428,7 +428,6 @@ struct MapHomeView: View {
     @StateObject private var placeSearch = PlaceSearch()
     @StateObject private var speedLimit = SpeedLimitService()
     @StateObject private var fuel = FuelPriceService()
-    @StateObject private var airQuality = AirQualityService()
     @StateObject private var weather = WeatherService()
     @StateObject private var fires = FireService()
     @StateObject private var traffic = TrafficService()
@@ -538,14 +537,10 @@ struct MapHomeView: View {
     @State private var showTrips = false
     /// « Prévenir un proche » (message d'arrivée à un contact).
     @State private var showArrive = false
-    /// Carte qualité de l'air (carte de chaleur maison, écran dédié).
-    @State private var showAirMap = false
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
     /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
     @AppStorage("moncap.firmsKey") private var firmsKey = ""
-    /// Précharge une seule fois la carte de chaleur air (affichage instantané).
-    @State private var airPrefetched = false
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
     @State private var displayedTrip: Trip?
@@ -610,9 +605,6 @@ struct MapHomeView: View {
         } message: {
             Text(shareError ?? "")
         }
-        .fullScreenCover(isPresented: $showAirMap) {
-            AirQualityMapScreen(center: location.coordinate)
-        }
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(service: fires)
         }
@@ -673,18 +665,10 @@ struct MapHomeView: View {
             }
             // Prix du carburant local (cache 6 h, pour le coût des trajets).
             fuel.refresh(near: c, type: fuelType)
-            // Qualité de l'air en temps réel (indice européen).
-            airQuality.update(c)
             // Météo en temps réel (température + conditions).
             weather.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
             fires.refresh(key: firmsKey)
-            // Précharge la carte de chaleur air autour de la position (une fois)
-            // pour qu'elle s'affiche instantanément à l'ouverture.
-            if !airPrefetched {
-                airPrefetched = true
-                Task { await AirHeat.prefetch(center: c) }
-            }
             // Partage de position en direct (throttle interne à 5 s).
             liveShare.update(c, heading: location.course, speed: location.speedKmh)
             // Jour / nuit selon la position réelle du soleil : recalcul au plus
@@ -2248,13 +2232,11 @@ struct MapHomeView: View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 weatherPill
-                airQualityPill
                 speedPill
             }
             Spacer()
             VStack(spacing: 14) {
                 fireMapButton
-                airMapButton
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
@@ -2271,18 +2253,6 @@ struct MapHomeView: View {
             Image(systemName: "flame.fill")
                 .font(.title3)
                 .foregroundStyle(.orange)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(.regularMaterial))
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
-        }
-    }
-
-    /// Ouvre la carte qualité de l'air (carte de chaleur maison) en plein écran.
-    private var airMapButton: some View {
-        Button { showAirMap = true } label: {
-            Image(systemName: "aqi.medium")
-                .font(.title3)
-                .foregroundStyle(.blue)
                 .frame(width: 48, height: 48)
                 .background(Circle().fill(.regularMaterial))
                 .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
@@ -2320,23 +2290,6 @@ struct MapHomeView: View {
             .padding(.vertical, 6)
             .background(.regularMaterial, in: Capsule())
             .overlay(Capsule().stroke(.blue.opacity(0.35), lineWidth: 1.5))
-            .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
-        }
-    }
-
-    /// Qualité de l'air en temps réel (indice européen), au-dessus de la vitesse.
-    @ViewBuilder private var airQualityPill: some View {
-        if let aqi = airQuality.aqi {
-            let lvl = AirQualityService.level(aqi)
-            HStack(spacing: 6) {
-                Circle().fill(lvl.color).frame(width: 10, height: 10)
-                Text("Air \(aqi)").font(.subheadline.weight(.bold))
-                Text(lvl.label).font(.caption2).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().stroke(lvl.color.opacity(0.6), lineWidth: 1.5))
             .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
         }
     }
@@ -3002,7 +2955,7 @@ struct MapHomeView: View {
                 Text(
                     """
                     Cartes : Apple Plans · Feux : NASA FIRMS (VIIRS) · \
-                    Trafic : TomTom · Air et météo : Open-Meteo · \
+                    Trafic : TomTom · Météo : Open-Meteo · \
                     Vitesses : OpenStreetMap · Carburants : data.economie.gouv.fr
                     """
                 )
