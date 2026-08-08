@@ -218,6 +218,11 @@ final class NavigationManager: ObservableObject {
     private var lastEtaSpoken = Date()
     private var offRouteHits = 0
     private var lastReroute = Date.distantPast
+    /// Recalculs consécutifs échoués (typiquement hors réseau) : espace les
+    /// tentatives suivantes au lieu de réessayer toutes les 5 s.
+    private var rerouteFailures = 0
+    /// L'absence de réseau n'est annoncée qu'une fois par épisode.
+    private var toldOffline = false
 
     private let synth = AVSpeechSynthesizer()
 
@@ -281,6 +286,8 @@ final class NavigationManager: ObservableObject {
              km: route.distance / 1000, min: route.expectedTravelTime / 60,
              announceStart: false)
         rerouting = false
+        rerouteFailures = 0
+        toldOffline = false
         speak("Nouvel itinéraire.")
     }
 
@@ -300,6 +307,9 @@ final class NavigationManager: ObservableObject {
     func stop() {
         active = false
         rerouting = false
+        rerouteFailures = 0
+        toldOffline = false
+        RouteStore.clear()
         synth.stopSpeaking(at: .immediate)
         steps = []
         routeCoords = []
@@ -319,7 +329,8 @@ final class NavigationManager: ObservableObject {
             let deviation = distanceToRoute(coord)
             if deviation > 55 {
                 offRouteHits += 1
-                if offRouteHits >= 3, Date().timeIntervalSince(lastReroute) > 5 {
+                let retryDelay = 5.0 * Double(min(6, 1 + rerouteFailures))
+                if offRouteHits >= 3, Date().timeIntervalSince(lastReroute) > retryDelay {
                     triggerReroute()
                     return
                 }
@@ -378,6 +389,22 @@ final class NavigationManager: ObservableObject {
         onReroute?()
     }
 
+    /// Le recalcul a échoué (réseau indisponible le plus souvent).
+    ///
+    /// Sans cela `rerouting` restait vrai indéfiniment : le bandeau se figeait
+    /// sur « Recalcul de l'itinéraire… » et le guidage ne reprenait jamais. On
+    /// conserve donc l'itinéraire précédent, qui reste exploitable hors ligne.
+    func rerouteFailed() {
+        guard rerouting else { return }
+        rerouting = false
+        rerouteFailures += 1
+        if stepIndex < steps.count { apply(steps[stepIndex]) }
+        if !toldOffline {
+            toldOffline = true
+            speak("Recalcul impossible. Je garde l'itinéraire.")
+        }
+    }
+
     private func load(steps: [NavStep], coords: [CLLocationCoordinate2D],
                       km: Double, min: Double, announceStart: Bool) {
         self.steps = steps
@@ -393,6 +420,11 @@ final class NavigationManager: ObservableObject {
             apply(steps[stepIndex])
             if announceStart { speak("Départ, " + spokenInstruction) }
         }
+        // Mémorise l'itinéraire : il ne pourrait pas être recalculé hors ligne.
+        if let destination {
+            RouteStore.save(
+                destination: destination, coords: coords, steps: steps, km: km, minutes: min)
+        }
     }
 
     private func advance() {
@@ -401,6 +433,7 @@ final class NavigationManager: ObservableObject {
         if stepIndex >= steps.count {
             speak("Vous êtes arrivé à destination.")
             active = false
+            RouteStore.clear()
         }
     }
 
