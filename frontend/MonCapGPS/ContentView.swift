@@ -522,6 +522,8 @@ struct MapHomeView: View {
     @State private var lastCamHeading: Double = -1
     /// Roulait-on au dernier recadrage ? Sert à dézoomer dès l'arrêt.
     @State private var wasDriving = false
+    /// Itinéraire interrompu retrouvé au lancement, en attente de reprise.
+    @State private var resumable: SavedRoute?
     /// Mode nuit automatique (selon la position réelle du soleil).
     @State private var nightMode = false
     /// Dernier calcul jour/nuit (recalcul limité à 1×/min : le soleil bouge
@@ -610,6 +612,32 @@ struct MapHomeView: View {
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(service: fires)
         }
+        // Reprise d'une navigation interrompue : le guidage repart sur
+        // l'itinéraire mémorisé, sans avoir besoin du réseau.
+        .alert(
+            "Reprendre la navigation ?", isPresented: Binding(
+                get: { resumable != nil }, set: { if !$0 { resumable = nil } })
+        ) {
+            Button("Reprendre") {
+                if let r = resumable {
+                    nav.start(
+                        steps: r.navSteps, coordinates: r.coordinates,
+                        distanceKm: r.km, etaMinutes: r.minutes,
+                        destination: r.destinationCoordinate)
+                    speedLimit.preload(along: r.coordinates)
+                    followsRoute = true
+                }
+                resumable = nil
+            }
+            Button("Abandonner", role: .destructive) {
+                RouteStore.clear()
+                resumable = nil
+            }
+        } message: {
+            Text(
+                resumable.map { String(format: "Itinéraire de %.1f km en cours.", $0.km) }
+                    ?? "")
+        }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
             alertToVote.map { "\(emoji(for: $0.category)) \($0.label.isEmpty ? $0.category : $0.label)" }
@@ -638,6 +666,10 @@ struct MapHomeView: View {
             location.start()
             realtime.onPositionsChanged = { Task { await refresh() } }
             nav.onReroute = { Task { await recomputeRoute() } }
+            // Navigation interrompue (app relancée, téléphone redémarré) : on
+            // propose de la reprendre. Utile surtout hors réseau, où elle ne
+            // pourrait pas être recalculée.
+            if !nav.active { resumable = RouteStore.load() }
             realtime.connect()
             await refresh()
             await loadTrips()
@@ -3341,13 +3373,21 @@ struct MapHomeView: View {
     /// Recalcule l'itinéraire depuis la position actuelle (sortie de route),
     /// dans le mode de déplacement courant.
     private func recomputeRoute() async {
-        guard let from = location.coordinate, let to = nav.destination else { return }
-        if let route = await drivingRoute(from: from, to: to,
-                                          transportType: travelMode.transportType) {
-            nav.applyReroute(route: route)
-            // Les limites de vitesse suivent le nouveau tracé.
-            speedLimit.preload(along: route.polyline.coordinates)
+        guard let from = location.coordinate, let to = nav.destination else {
+            nav.rerouteFailed()
+            return
         }
+        guard let route = await drivingRoute(from: from, to: to,
+                                             transportType: travelMode.transportType)
+        else {
+            // Hors réseau, le calcul est impossible : on garde l'itinéraire en
+            // cours plutôt que de laisser le bandeau figé sur « Recalcul… ».
+            nav.rerouteFailed()
+            return
+        }
+        nav.applyReroute(route: route)
+        // Les limites de vitesse suivent le nouveau tracé.
+        speedLimit.preload(along: route.polyline.coordinates)
     }
 
     /// Itinéraire le plus simple entre deux points, selon le mode donné.
