@@ -520,6 +520,8 @@ struct MapHomeView: View {
     /// Dernière caméra 3D appliquée (anti-tremblement à l'arrêt).
     @State private var lastCamCoord: CLLocationCoordinate2D?
     @State private var lastCamHeading: Double = -1
+    /// Roulait-on au dernier recadrage ? Sert à dézoomer dès l'arrêt.
+    @State private var wasDriving = false
     /// Mode nuit automatique (selon la position réelle du soleil).
     @State private var nightMode = false
     /// Dernier calcul jour/nuit (recalcul limité à 1×/min : le soleil bouge
@@ -696,30 +698,26 @@ struct MapHomeView: View {
                 checkJamAhead(from: c)
                 checkStuckInTraffic(from: c)
                 // Recentre en permanence : si on a touché la carte, le suivi
-                // reprend tout seul après 8 s — 3D comme 2D.
+                // reprend tout seul après 8 s.
                 if !followsRoute, Date().timeIntervalSince(lastMapInteraction) > 8 {
                     followsRoute = true
-                    if !is3D {
-                        withAnimation {
-                            camera = .userLocation(followsHeading: true, fallback: .automatic)
-                        }
-                    }
                 }
-                // Vue conduite 3D : caméra fluide (animation linéaire continue),
-                // mise à jour seulement en cas de vrai mouvement pour éviter les
-                // tremblements dus au bruit GPS à l'arrêt.
-                if is3D, !previewing, followsRoute {
+                // Caméra de suivi, 2D comme 3D : recadrée en cas de vrai
+                // mouvement (le bruit GPS à l'arrêt ferait trembler la vue) et
+                // au passage arrêt ↔ conduite, qui change le niveau de zoom.
+                if !previewing, followsRoute {
                     let heading = location.course
+                    let driving = location.speedKmh >= Self.stoppedKmh
                     let moved = lastCamCoord.map { metersBetween($0, c) } ?? .infinity
                     var headingDelta = abs(heading - lastCamHeading)
                     if headingDelta > 180 { headingDelta = 360 - headingDelta }
-                    if moved >= 2 || headingDelta >= 3 {
+                    let paceChanged = driving != wasDriving
+                    if moved >= 2 || (driving && headingDelta >= 3) || paceChanged {
                         lastCamCoord = c
-                        lastCamHeading = heading
-                        withAnimation(.linear(duration: 1.0)) {
-                            camera = .camera(MapCamera(
-                                centerCoordinate: c, distance: 500,
-                                heading: heading, pitch: 60))
+                        if driving { lastCamHeading = heading }
+                        wasDriving = driving
+                        withAnimation(.easeInOut(duration: 1.0)) {
+                            camera = followCamera(c)
                         }
                     }
                 }
@@ -2987,29 +2985,44 @@ struct MapHomeView: View {
     // MARK: - Feuille « Signaler »
 
     private var reportsSheet: some View {
-        VStack(spacing: 16) {
-            Text("Signaler").font(.headline).padding(.top, 8)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                ForEach(alertTypes, id: \.category) { t in
-                    Button {
-                        report(category: t.category, label: t.label)
-                        showReports = false
-                    } label: {
-                        VStack(spacing: 8) {
-                            Text(t.emoji).font(.largeTitle)
-                            Text(t.label).font(.subheadline.weight(.semibold))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(t.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 18))
-                    }
-                    .buttonStyle(.plain)
+        // Défilable et refermable : la grille dépassait la hauteur du demi-écran
+        // et se retrouvait rognée, sans moyen de revenir à la carte.
+        ScrollView {
+            VStack(spacing: 16) {
+                HStack {
+                    Text("Signaler").font(.headline)
+                    Spacer()
+                    Button("Fermer") { showReports = false }
+                        .font(.subheadline.weight(.semibold))
                 }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16
+                ) {
+                    ForEach(alertTypes, id: \.category) { t in
+                        Button {
+                            report(category: t.category, label: t.label)
+                            showReports = false
+                        } label: {
+                            VStack(spacing: 8) {
+                                Text(t.emoji).font(.largeTitle)
+                                Text(t.label).font(.subheadline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(
+                                t.color.opacity(0.15), in: RoundedRectangle(cornerRadius: 18))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
+            .padding(.bottom, 16)
         }
-        .padding(.bottom, 16)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     // MARK: - Feuille « Mes trajets » (historique)
@@ -3368,20 +3381,36 @@ struct MapHomeView: View {
 
     private func recenter() {
         followsRoute = true
+        guard let c = location.coordinate else { return }
         if nav.active {
-            if is3D, let c = location.coordinate {
-                withAnimation {
-                    camera = .camera(MapCamera(
-                        centerCoordinate: c, distance: 500,
-                        heading: location.course, pitch: 60))
-                }
-            } else {
-                withAnimation { camera = .userLocation(followsHeading: true, fallback: .automatic) }
-            }
+            withAnimation { camera = followCamera(c) }
             return
         }
-        guard let c = location.coordinate else { return }
         withAnimation { camera = userCamera(c) }
+    }
+
+    /// Vitesse en dessous de laquelle on considère être à l'arrêt.
+    private static let stoppedKmh = 5.0
+
+    /// Caméra de suivi adaptée à l'allure — une seule règle pour la 2D et la 3D.
+    ///
+    /// En roulant, la caméra descend et se rapproche : on voit la rue et la
+    /// prochaine manœuvre, et plus on va vite plus elle recule pour regarder
+    /// loin devant. À l'arrêt, elle prend de la hauteur et dézoome pour situer
+    /// les environs.
+    private func followCamera(_ c: CLLocationCoordinate2D) -> MapCameraPosition {
+        let speed = max(0, location.speedKmh)
+        if speed < Self.stoppedKmh {
+            // À l'arrêt le cap GPS n'est plus fiable : on garde le dernier connu.
+            return .camera(MapCamera(
+                centerCoordinate: c, distance: 1600,
+                heading: max(0, lastCamHeading), pitch: is3D ? 35 : 0))
+        }
+        // 380 m en ville, jusqu'à 1100 m sur voie rapide.
+        let distance = min(1100, 380 + max(0, speed - 10) * 9)
+        return .camera(MapCamera(
+            centerCoordinate: c, distance: distance,
+            heading: location.course, pitch: is3D ? 70 : 0))
     }
 
     /// Caméra centrée sur un point, inclinée si le mode 3D est actif.
@@ -3399,12 +3428,7 @@ struct MapHomeView: View {
         followsRoute = true
         guard let c = location.coordinate else { return }
         if nav.active {
-            withAnimation {
-                camera = is3D
-                    ? .camera(MapCamera(centerCoordinate: c, distance: 500,
-                                        heading: location.course, pitch: 60))
-                    : .userLocation(followsHeading: true, fallback: .automatic)
-            }
+            withAnimation { camera = followCamera(c) }
         } else {
             withAnimation { camera = userCamera(c) }
         }

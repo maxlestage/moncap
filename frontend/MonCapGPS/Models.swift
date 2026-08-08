@@ -176,6 +176,8 @@ struct Alert: Identifiable, Codable {
 
 /// Événement reçu du serveur via WebSocket (enum « tagué » par `kind`).
 enum ServerEvent {
+    /// Identifiant de notre propre connexion, envoyé à l'ouverture.
+    case hello(Int)
     case positionsChanged
     case live(LiveUser)
     case liveGone(Int)
@@ -192,6 +194,8 @@ extension ServerEvent: Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .kind) {
+        case "hello":
+            self = .hello(try c.decode(Int.self, forKey: .id))
         case "positions_changed":
             self = .positionsChanged
         case "live":
