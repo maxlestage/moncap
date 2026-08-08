@@ -14,6 +14,10 @@ final class RealtimeClient: ObservableObject {
     /// Appelé quand les positions enregistrées changent (le client recharge).
     var onPositionsChanged: (() -> Void)?
 
+    /// Identifiant de notre connexion, donné par le serveur à l'ouverture :
+    /// sert à ignorer notre propre position live dans la diffusion.
+    private var myID: Int?
+
     private let url: URL
     private var task: URLSessionWebSocketTask?
     private var pruneTimer: Timer?
@@ -37,6 +41,9 @@ final class RealtimeClient: ObservableObject {
     }
 
     private func openSocket() {
+        // Le serveur attribue un identifiant par connexion : le précédent
+        // n'est plus le nôtre après une reconnexion.
+        myID = nil
         let task = URLSession.shared.webSocketTask(with: url)
         self.task = task
         task.resume()
@@ -94,9 +101,17 @@ final class RealtimeClient: ObservableObject {
         else { return }
 
         switch event {
+        case .hello(let id):
+            myID = id
+            // Une position à nous a pu arriver avant l'identification.
+            liveUsers[id] = nil
         case .positionsChanged:
             onPositionsChanged?()
         case .live(let user):
+            // Notre propre position nous revient par la diffusion : on
+            // l'ignore, sinon on apparaît deux fois sur la carte (avatar
+            // local + écho du serveur).
+            guard user.id != myID else { return }
             liveUsers[user.id] = user
         case .liveGone(let id):
             liveUsers[id] = nil
