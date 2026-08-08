@@ -121,6 +121,11 @@ enum ClientEvent {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum ServerEvent {
+    /// Identifiant attribué à cette connexion, envoyé juste après l'ouverture.
+    /// Le client s'en sert pour ignorer sa propre position live, que la
+    /// diffusion lui renvoie comme aux autres (sinon il s'affiche deux fois :
+    /// son avatar local plus l'écho du serveur).
+    Hello { id: u64 },
     /// Les positions enregistrées ont changé → le client recharge.
     PositionsChanged,
     /// Position live d'un utilisateur.
@@ -1656,6 +1661,12 @@ async fn ws_handler(
 async fn handle_socket(mut socket: WebSocket, state: AppState, uid: i32) {
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let mut rx = state.tx.subscribe();
+
+    // Identité de la connexion : permet au client de reconnaître sa propre
+    // position live parmi les événements diffusés.
+    if let Ok(json) = serde_json::to_string(&ServerEvent::Hello { id }) {
+        let _ = socket.send(Message::Text(json)).await;
+    }
 
     // Instantané des signalements en cours (persistés), envoyé à la connexion.
     let snapshot = ServerEvent::Alerts {
