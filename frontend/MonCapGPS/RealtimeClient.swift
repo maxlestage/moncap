@@ -22,6 +22,8 @@ final class RealtimeClient: ObservableObject {
     private var task: URLSessionWebSocketTask?
     private var pruneTimer: Timer?
     private var shouldReconnect = false
+    /// Délai avant la prochaine tentative de reconnexion (croissant hors réseau).
+    private var retryDelay: Double = 3
 
     init(url: URL) {
         self.url = url
@@ -29,6 +31,7 @@ final class RealtimeClient: ObservableObject {
 
     func connect() {
         shouldReconnect = true
+        retryDelay = 3
         startPruning()
         openSocket()
     }
@@ -51,12 +54,19 @@ final class RealtimeClient: ObservableObject {
         receive()
     }
 
-    /// Reconnexion automatique après une coupure (3 s).
+    /// Reconnexion automatique après une coupure, avec délai croissant.
+    ///
+    /// Hors réseau la tentative échoue immédiatement : à cadence fixe on
+    /// réessayait toutes les 3 s indéfiniment, pour rien et au détriment de la
+    /// batterie. Le délai double jusqu'à 30 s, et repart à 3 s dès qu'une
+    /// connexion aboutit.
     private func handleDisconnect() {
         connected = false
         guard shouldReconnect else { return }
+        let delay = retryDelay
+        retryDelay = Swift.min(30, delay * 2)
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             if shouldReconnect { openSocket() }
         }
     }
@@ -102,6 +112,8 @@ final class RealtimeClient: ObservableObject {
 
         switch event {
         case .hello(let id):
+            // Le serveur nous répond : la connexion est bien établie.
+            retryDelay = 3
             myID = id
             // Une position à nous a pu arriver avant l'identification.
             liveUsers[id] = nil
