@@ -39,7 +39,12 @@ enum TileSource {
         let trimmed = custom.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallback = URL(string: defaultStyle)!
         guard trimmed.hasPrefix("http"), let url = URL(string: trimmed) else { return fallback }
-        return await StyleProbe.check(url) == .ok ? url : fallback
+        // Injoignable n'est pas la même chose qu'inexistant : sans réseau,
+        // tout échoue, et basculer sur le fond par défaut rendrait
+        // inutilisables les zones téléchargées, qui sont liées au style avec
+        // lequel elles ont été enregistrées. On ne l'écarte que si le serveur
+        // répond bel et bien qu'il n'a pas de cartes.
+        return await StyleProbe.check(url) == .notConfigured ? fallback : url
     }
 }
 

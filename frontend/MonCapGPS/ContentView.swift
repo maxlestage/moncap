@@ -439,7 +439,11 @@ struct MapHomeView: View {
     @State private var positions: [Position] = []
     @State private var stats: Stats?
     @State private var routeInfo: String?
-    @State private var camera: MapCam?
+    /// Cadrage de départ sur la France : tant qu'aucune position n'est
+    /// connue, mieux vaut cela que le cadrage par défaut du style, qui est le
+    /// monde entier centré sur le golfe de Guinée.
+    @State private var camera: MapCam? = MapCam(
+        center: CLLocationCoordinate2D(latitude: 46.6, longitude: 2.4), zoom: 4.6)
     @State private var showPlaces = false
     @State private var showSearch = false
     @State private var destQuery = ""
@@ -759,6 +763,16 @@ struct MapHomeView: View {
                             camera = followCamera(c)
                         }
                     }
+                }
+            } else if !previewing, followsRoute {
+                // Hors navigation aussi : sans cela rien ne posait jamais de
+                // caméra, et la carte restait sur le cadrage par défaut du
+                // style — le monde entier — jusqu'à ce qu'on appuie sur
+                // recentrer. Le suivi s'arrête dès qu'on touche la carte.
+                let moved = lastCamCoord.map { metersBetween($0, c) } ?? .infinity
+                if moved >= 20 {
+                    lastCamCoord = c
+                    withAnimation(.easeInOut(duration: 1.0)) { camera = userCamera(c) }
                 }
             }
         }
@@ -3648,55 +3662,6 @@ struct MapHomeView: View {
         showPlaces = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             Sharer.present([url])
-        }
-    }
-}
-
-/// Marqueur d'incendie identique à celui de feuxdeforet.fr : pastille rouge
-/// pleine cerclée d'anneaux rouges translucides concentriques (le halo externe
-/// « respire » doucement), flamme dorée au centre.
-struct FireMarker: View {
-    @State private var pulse = false
-
-    /// Rouge vif du site (même teinte que le liseré des contours).
-    private let red = Color(red: 0.86, green: 0.13, blue: 0.11)
-
-    var body: some View {
-        ZStack {
-            // Halo externe diffus, pulsation lente.
-            Circle()
-                .fill(red.opacity(0.30))
-                .frame(width: 64, height: 64)
-                .scaleEffect(pulse ? 1.15 : 0.95)
-            // Anneau intermédiaire, plus soutenu.
-            Circle()
-                .fill(red.opacity(0.50))
-                .frame(width: 50, height: 50)
-            // Cœur plein : disque rouge légèrement bombé (dégradé radial).
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Color(red: 1.0, green: 0.30, blue: 0.22), red],
-                        center: .init(x: 0.42, y: 0.38), startRadius: 2, endRadius: 22)
-                )
-                .frame(width: 38, height: 38)
-            // Flamme dorée, cœur clair en haut comme l'icône du site.
-            Image(systemName: "flame.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 1.0, green: 0.95, blue: 0.55), .yellow,
-                            Color(red: 1.0, green: 0.68, blue: 0.10),
-                        ],
-                        startPoint: .top, endPoint: .bottom)
-                )
-                .scaleEffect(pulse ? 1.06 : 0.96)
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                pulse = true
-            }
         }
     }
 }

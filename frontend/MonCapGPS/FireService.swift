@@ -40,6 +40,11 @@ final class FireService: ObservableObject {
 
     private var lastFetch = Date.distantPast
     private var lastKey = ""
+    /// Récupération en cours. Chaque frappe dans le champ « clé FIRMS » relance
+    /// un rafraîchissement : sans annuler le précédent, plusieurs requêtes
+    /// lourdes couraient de front et la dernière arrivée — pas la dernière
+    /// demandée — écrivait la liste.
+    private var fetch: Task<Void, Never>?
 
     /// Rafraîchit la liste des feux (au plus toutes les 15 min ; immédiat si la
     /// clé change). Si `key` (clé FIRMS saisie dans les réglages) est non vide,
@@ -53,7 +58,8 @@ final class FireService: ObservableObject {
         lastFetch = Date()
         lastKey = k
         let base = baseURL
-        Task {
+        fetch?.cancel()
+        fetch = Task {
             var f: [Fire]?
             if !k.isEmpty {
                 // 7 jours d'historique (pour dater les foyers) ; la requête est
@@ -66,6 +72,8 @@ final class FireService: ObservableObject {
             } else {
                 f = await Self.fetchBackend(base: base)
             }
+            // Une demande plus récente a pris le relais : ne pas écrire.
+            if Task.isCancelled { return }
             if let f {
                 // Une liste vide est une réponse légitime (plus aucun feu) :
                 // on l'applique, sinon la carte garderait des foyers éteints.
@@ -134,9 +142,13 @@ final class FireService: ObservableObject {
     }
 
     /// Taille d'une cellule de dédoublonnage (~550 m ≈ 1 pixel VIIRS).
-    private static let gridDeg = 0.005
+    ///
+    /// Hors acteur : ces constantes sont lues depuis l'analyse du CSV, qui
+    /// tourne en dehors du fil principal. Immuables, leur lecture y est sûre —
+    /// mais Swift 6 l'interdira sans cette mention.
+    nonisolated private static let gridDeg = 0.005
     /// Garde-fou sur le nombre de points gardés (les plus récents d'abord).
-    private static let maxPoints = 4000
+    nonisolated private static let maxPoints = 4000
 
     /// Analyse le CSV FIRMS comme le backend : écarte les détections de
     /// confiance basse et de puissance (FRP) < 2 MW (torchères, brûlages,

@@ -30,6 +30,21 @@ struct VectorMapView: UIViewRepresentable {
     func updateUIView(_ view: MLNMapView, context: Context) {
         // Le centre n'est pas réimposé après l'ouverture : l'utilisateur
         // resterait sinon collé au point de départ à chaque rafraîchissement.
+        //
+        // Le style, lui, doit suivre : il est résolu de façon asynchrone et
+        // arrive après la construction de la vue. Sans cela un serveur
+        // personnel n'était jamais affiché, et les zones téléchargées ne
+        // correspondaient pas à la carte visible.
+        // La comparaison porte sur ce qu'on a demandé, pas sur ce que la vue
+        // renvoie : pendant le chargement celle-ci ne vaut pas encore la valeur
+        // posée, et le style repartirait de zéro sans jamais aboutir.
+        if context.coordinator.appliedStyle != styleURL {
+            context.coordinator.appliedStyle = styleURL
+            view.styleURL = styleURL
+        }
+        // Le tracé mémorisé est lu après coup (`onAppear`) : figé à la
+        // création, il valait toujours la liste vide.
+        context.coordinator.update(route: route, on: view)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -37,8 +52,10 @@ struct VectorMapView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
-        private let route: [CLLocationCoordinate2D]
+        private var route: [CLLocationCoordinate2D]
         private let onRegionChange: (MLNCoordinateBounds) -> Void
+        /// Style demandé à la vue ; fait foi pendant le chargement.
+        var appliedStyle: URL?
 
         init(
             route: [CLLocationCoordinate2D],
@@ -48,9 +65,38 @@ struct VectorMapView: UIViewRepresentable {
             self.onRegionChange = onRegionChange
         }
 
+        /// Mémorise le tracé et le dessine si le style est déjà là.
+        func update(route: [CLLocationCoordinate2D], on view: MLNMapView) {
+            guard !same(route, self.route) else { return }
+            self.route = route
+            if let style = view.style { draw(on: style) }
+        }
+
+        /// Deux tracés identiques ? Le nombre de points seul ne suffit pas :
+        /// un itinéraire recalculé en compte souvent autant.
+        private func same(_ a: [CLLocationCoordinate2D], _ b: [CLLocationCoordinate2D]) -> Bool {
+            guard a.count == b.count else { return false }
+            guard let x = a.first, let y = b.first, let u = a.last, let v = b.last else {
+                return true
+            }
+            return abs(x.latitude - y.latitude) < 1e-7 && abs(x.longitude - y.longitude) < 1e-7
+                && abs(u.latitude - v.latitude) < 1e-7 && abs(u.longitude - v.longitude) < 1e-7
+        }
+
         /// L'itinéraire ne peut être ajouté qu'une fois le style chargé : les
         /// couches se greffent dessus.
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
+            // Rechargé, le style a perdu ses couches : le tracé est reposé.
+            draw(on: style)
+        }
+
+        private func draw(on style: MLNStyle) {
+            if let layer = style.layer(withIdentifier: "itineraire-trace") {
+                style.removeLayer(layer)
+            }
+            if let source = style.source(withIdentifier: "itineraire") {
+                style.removeSource(source)
+            }
             guard route.count >= 2 else { return }
             var coords = route
             let line = MLNPolylineFeature(coordinates: &coords, count: UInt(coords.count))
@@ -122,6 +168,9 @@ final class VectorPackDownloader: NSObject, ObservableObject {
         for pack in packs {
             MLNOfflineStorage.shared.removePack(pack, withCompletionHandler: nil)
         }
+        // Un pack retiré ne signale plus rien : sans cela le panneau restait
+        // sur « Téléchargement en cours… » indéfiniment.
+        running = false
         progress = 0
         message = nil
     }

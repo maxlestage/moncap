@@ -1,4 +1,5 @@
 import MapKit
+import MapLibre
 import SwiftUI
 
 /// Un contour de feu approximatif : polygone (enveloppe des points chauds d'un
@@ -17,66 +18,245 @@ struct FirePerimeter: Identifiable {
 /// satellite, contours de feu en rouge translucide et marqueurs flamme. Séparé
 /// de la carte GPS pour ne pas l'alourdir. Les contours sont approximés à partir
 /// des points chauds satellite (NASA FIRMS) regroupés par foyer.
+/// Fond satellite de la carte des feux.
+///
+/// L'IGN diffuse l'orthophotographie de la France en 20 cm sous Licence
+/// Ouverte, sans clé ni inscription — meilleure résolution que le fond
+/// satellite d'Apple, et les feux suivis sont métropolitains de toute façon.
+/// L'attribution est affichée à l'écran, la licence l'exige.
+enum OrthoSource {
+    static let template =
+        "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
+        + "&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg"
+        + "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+    static let attribution = "© IGN · © OpenStreetMap"
+}
+
+/// Carte des feux rendue par MapLibre : orthophoto par-dessus le fond
+/// OpenStreetMap, contours de feu et marqueurs.
+struct FireMapLibreView: UIViewRepresentable {
+    let styleURL: URL
+    let perimeters: [FirePerimeter]
+    /// Identifiant du foyer touché.
+    let onSelect: (Int) -> Void
+
+    func makeUIView(context: Context) -> MLNMapView {
+        let view = MLNMapView(frame: .zero, styleURL: styleURL)
+        view.delegate = context.coordinator
+        view.showsUserLocation = false
+        view.logoView.isHidden = false
+        view.attributionButtonPosition = .bottomRight
+        return view
+    }
+
+    func updateUIView(_ view: MLNMapView, context: Context) {
+        context.coordinator.onSelect = onSelect
+        context.coordinator.sync(perimeters, on: view)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, MLNMapViewDelegate {
+        var onSelect: (Int) -> Void = { _ in }
+        private var styleReady = false
+        private var drawn: [Int] = []
+        /// Le cadrage n'est fait qu'une fois : le refaire à chaque
+        /// rafraîchissement ramènerait l'utilisateur de force.
+        private var fitted = false
+        private var pending: [FirePerimeter] = []
+
+        func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
+            addOrtho(to: style)
+            styleReady = true
+            if !pending.isEmpty {
+                let p = pending
+                pending = []
+                drawn = []
+                sync(p, on: mapView)
+            }
+        }
+
+        /// Orthophoto posée au-dessus du fond : les libellés disparaissent
+        /// dessous, c'est l'effet recherché pour une vue satellite.
+        private func addOrtho(to style: MLNStyle) {
+            guard style.source(withIdentifier: "ortho") == nil else { return }
+            let source = MLNRasterTileSource(
+                identifier: "ortho",
+                tileURLTemplates: [OrthoSource.template],
+                options: [.tileSize: 256, .minimumZoomLevel: 2, .maximumZoomLevel: 19])
+            style.addSource(source)
+            let layer = MLNRasterStyleLayer(identifier: "ortho-fond", source: source)
+            style.addLayer(layer)
+        }
+
+        func sync(_ perimeters: [FirePerimeter], on view: MLNMapView) {
+            guard styleReady, let style = view.style else {
+                pending = perimeters
+                return
+            }
+            let ids = perimeters.map(\.id)
+            guard ids != drawn else { return }
+            drawn = ids
+
+            for name in ["feux-contour", "feux-liseré"] {
+                if let layer = style.layer(withIdentifier: name) { style.removeLayer(layer) }
+            }
+            if let source = style.source(withIdentifier: "feux-src") { style.removeSource(source) }
+            view.removeAnnotations(view.annotations ?? [])
+            guard !perimeters.isEmpty else { return }
+
+            // Un seul jeu de formes pour tous les foyers : deux couches
+            // suffisent alors, quel que soit leur nombre.
+            var shapes: [MLNShape] = []
+            for p in perimeters where p.polygon.count >= 3 {
+                var coords = p.polygon
+                shapes.append(MLNPolygonFeature(coordinates: &coords, count: UInt(coords.count)))
+            }
+            let source = MLNShapeSource(
+                identifier: "feux-src", shape: MLNShapeCollectionFeature(shapes: shapes),
+                options: nil)
+            style.addSource(source)
+
+            let fill = MLNFillStyleLayer(identifier: "feux-contour", source: source)
+            // Brun brûlé translucide cerné de rouge vif, comme feuxdeforet.fr.
+            fill.fillColor = NSExpression(
+                forConstantValue: UIColor(red: 0.48, green: 0.20, blue: 0.13, alpha: 1))
+            fill.fillOpacity = NSExpression(forConstantValue: 0.55)
+            style.addLayer(fill)
+
+            let stroke = MLNLineStyleLayer(identifier: "feux-liseré", source: source)
+            stroke.lineColor = NSExpression(
+                forConstantValue: UIColor(red: 0.86, green: 0.13, blue: 0.11, alpha: 1))
+            stroke.lineWidth = NSExpression(forConstantValue: 2)
+            style.addLayer(stroke)
+
+            for p in perimeters {
+                let a = PinAnnotation()
+                a.coordinate = p.center
+                a.pinID = "\(p.id)"
+                a.look = .flame
+                view.addAnnotation(a)
+            }
+            fitIfNeeded(perimeters, on: view)
+        }
+
+        /// Cadre sur l'ensemble des foyers, une seule fois.
+        private func fitIfNeeded(_ perimeters: [FirePerimeter], on view: MLNMapView) {
+            guard !fitted else { return }
+            let points = perimeters.flatMap(\.polygon)
+            guard let first = points.first else { return }
+            var minLat = first.latitude, maxLat = first.latitude
+            var minLon = first.longitude, maxLon = first.longitude
+            for c in points {
+                minLat = min(minLat, c.latitude); maxLat = max(maxLat, c.latitude)
+                minLon = min(minLon, c.longitude); maxLon = max(maxLon, c.longitude)
+            }
+            fitted = true
+            // Marge pour que les foyers de bord ne collent pas au bandeau.
+            let bounds = MLNCoordinateBounds(
+                sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLon),
+                ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLon))
+            view.setVisibleCoordinateBounds(
+                bounds,
+                edgePadding: UIEdgeInsets(top: 130, left: 40, bottom: 190, right: 40),
+                animated: false, completionHandler: nil)
+        }
+
+        func mapView(_ mapView: MLNMapView, imageFor annotation: MLNAnnotation)
+            -> MLNAnnotationImage?
+        {
+            guard let pin = annotation as? PinAnnotation, let look = pin.look else { return nil }
+            let key = String(look.hashValue)
+            if let cached = mapView.dequeueReusableAnnotationImage(withIdentifier: key) {
+                return cached
+            }
+            return MLNAnnotationImage(image: PinRenderer.image(for: look), reuseIdentifier: key)
+        }
+
+        func mapView(_ mapView: MLNMapView, annotationCanShowCallout annotation: MLNAnnotation)
+            -> Bool { false }
+
+        func mapView(_ mapView: MLNMapView, didSelect annotation: MLNAnnotation) {
+            mapView.deselectAnnotation(annotation, animated: false)
+            guard let pin = annotation as? PinAnnotation, let id = Int(pin.pinID) else { return }
+            onSelect(id)
+        }
+    }
+}
+
+/// Écran dédié « Carte des feux » à la manière de feuxdeforet.fr : orthophoto
+/// IGN, contours de feu en rouge translucide et marqueurs flamme. Séparé de la
+/// carte GPS pour ne pas l'alourdir. Les contours sont approximés à partir des
+/// points chauds satellite (NASA FIRMS) regroupés par foyer.
 struct FireMapScreen: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var service: FireService
+    @AppStorage(TileSource.styleKey) private var styleURLString = ""
 
     @State private var perimeters: [FirePerimeter] = []
-    @State private var camera: MapCameraPosition = .automatic
-    /// Foyer dont l'infobulle est ouverte (tap sur le marqueur) — une seule à
-    /// la fois, sinon les bulles se superposent en masse noire au dézoom.
+    @State private var style = URL(string: TileSource.defaultStyle)!
+    /// Foyer dont la fiche est ouverte (tap sur le marqueur) — une seule à la
+    /// fois, en bas de l'écran plutôt qu'en bulle : au dézoom les bulles de
+    /// tous les foyers se superposaient en masse noire.
     @State private var selectedID: Int?
     /// Noms des foyers (« Feu de Saumos ») par position arrondie, géocodés à la
     /// demande au tap ; "" = géocodage en cours (évite les requêtes doublons).
     @State private var names: [String: String] = [:]
 
+    private var selected: FirePerimeter? {
+        selectedID.flatMap { id in perimeters.first { $0.id == id } }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
-            Map(position: $camera) {
-                ForEach(perimeters) { p in
-                    // Zone touchée : brun brûlé translucide cerné de rouge vif,
-                    // comme les contours de feuxdeforet.fr sur fond satellite.
-                    MapPolygon(coordinates: p.polygon)
-                        .foregroundStyle(Color(red: 0.48, green: 0.20, blue: 0.13).opacity(0.55))
-                        .stroke(Color(red: 0.86, green: 0.13, blue: 0.11), lineWidth: 2)
-                    Annotation("", coordinate: p.center) {
-                        // Le marqueur reste centré sur le foyer ; l'infobulle
-                        // sombre ne s'ouvre qu'au tap (une seule à la fois),
-                        // sinon les bulles de tous les foyers se superposent.
-                        FireMarker()
-                            .overlay(alignment: .top) {
-                                if selectedID == p.id {
-                                    FireUpdateBubble(
-                                        name: name(of: p),
-                                        createdAt: p.createdAt,
-                                        updatedAt: p.updatedAt ?? service.lastUpdate
-                                    )
-                                    .offset(y: 52)
-                                }
-                            }
-                            .onTapGesture {
-                                withAnimation(.spring(duration: 0.25)) {
-                                    selectedID = selectedID == p.id ? nil : p.id
-                                }
-                                if selectedID == p.id { loadName(of: p) }
-                            }
-                    }
-                }
+            FireMapLibreView(styleURL: style, perimeters: perimeters) { id in
+                withAnimation(.spring(duration: 0.25)) { selectedID = id }
+                if let p = perimeters.first(where: { $0.id == id }) { loadName(of: p) }
             }
-            .mapStyle(.hybrid(elevation: .flat))
             .ignoresSafeArea()
 
             header
+
+            if let p = selected {
+                VStack {
+                    Spacer()
+                    fiche(p)
+                }
+            }
+        }
+        .task(id: styleURLString) {
+            style = await TileSource.resolvedStyle(custom: styleURLString)
         }
         // Recalcule les contours dès que la liste des feux change (arrivée des
         // données), hors du thread principal.
         .task(id: service.fires.count) {
             let fires = service.fires
             perimeters = await Task.detached { FireGeometry.perimeters(from: fires) }.value
-            // Les identifiants de foyers changent au recalcul : referme
-            // l'infobulle plutôt que de la laisser sauter sur un autre foyer.
+            // Les identifiants de foyers changent au recalcul : referme la
+            // fiche plutôt que de la laisser sauter sur un autre foyer.
             selectedID = nil
         }
+    }
+
+    /// Fiche du foyer touché, en bas de l'écran.
+    private func fiche(_ p: FirePerimeter) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            FireUpdateBubble(
+                name: name(of: p),
+                createdAt: p.createdAt,
+                updatedAt: p.updatedAt ?? service.lastUpdate)
+            Button {
+                withAnimation(.spring(duration: 0.25)) { selectedID = nil }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(width: 28, height: 28)
+                    .background(Color.black.opacity(0.72), in: Circle())
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 28)
     }
 
     /// Clé de cache d'un foyer : position arrondie (~1 km), stable d'un
@@ -132,6 +312,9 @@ struct FireMapScreen: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                Text(OrthoSource.attribution)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
