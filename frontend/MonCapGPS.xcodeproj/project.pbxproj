@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA0000000000000000000030 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000032 /* MapLibre */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000010 /* MonCapGPS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -19,6 +23,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000030 /* MapLibre in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -64,6 +69,9 @@
 				AA0000000000000000000010 /* MonCapGPS */,
 			);
 			name = MonCapGPS;
+			packageProductDependencies = (
+				AA0000000000000000000032 /* MapLibre */,
+			);
 			productName = MonCapGPS;
 			productReference = AA0000000000000000000003 /* MonCapGPS.app */;
 			productType = "com.apple.product-type.application";
@@ -92,6 +100,9 @@
 				Base,
 			);
 			mainGroup = AA0000000000000000000001;
+			packageReferences = (
+				AA0000000000000000000031 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			productRefGroup = AA0000000000000000000002 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -299,6 +310,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA0000000000000000000031 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.28.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000000032 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000000031 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA0000000000000000000006 /* Project object */;
 }

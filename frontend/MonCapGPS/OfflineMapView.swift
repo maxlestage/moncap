@@ -1,4 +1,5 @@
 import MapKit
+import MapLibre
 import SwiftUI
 
 /// Carte à tuiles téléchargées, en UIKit.
@@ -81,6 +82,18 @@ struct OfflineMapScreen: View {
     let center: CLLocationCoordinate2D?
 
     @AppStorage(TileSource.defaultsKey) private var tileURL = ""
+    /// Style vectoriel : renseigné, la carte est rendue par MapLibre plutôt
+    /// que par des tuiles images.
+    @AppStorage(TileSource.styleKey) private var styleURLString = ""
+    @StateObject private var packs = VectorPackDownloader()
+    @State private var bounds: MLNCoordinateBounds?
+
+    /// Style vectoriel exploitable, s'il y en a un.
+    private var vectorStyle: URL? {
+        let trimmed = styleURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("http") else { return nil }
+        return URL(string: trimmed)
+    }
 
     /// Un serveur de tuiles exploitable est renseigné. Basé sur la valeur
     /// observée, pour que l'écran se mette à jour dès la saisie.
@@ -122,7 +135,15 @@ struct OfflineMapScreen: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            if configured {
+            if let style = vectorStyle {
+                VectorMapView(
+                    styleURL: style,
+                    route: route,
+                    initialCenter: startRegion.center,
+                    onRegionChange: { bounds = $0 }
+                )
+                .ignoresSafeArea()
+            } else if configured {
                 OfflineMapView(
                     route: route,
                     initialRegion: startRegion,
@@ -136,19 +157,26 @@ struct OfflineMapScreen: View {
             header
             VStack {
                 Spacer()
-                if configured { panel }
+                if vectorStyle != nil {
+                    vectorPanel
+                } else if configured {
+                    panel
+                }
             }
         }
         .onAppear {
             region = startRegion
             route = RouteStore.load()?.coordinates ?? []
-            storedBytes = TileCache.sizeBytes()
+            storedBytes = vectorStyle != nil ? packs.storedBytes() : TileCache.sizeBytes()
             refreshEstimate()
         }
         .onChange(of: region.center.latitude) { _, _ in refreshEstimate() }
         .onChange(of: depth) { _, _ in refreshEstimate() }
         .onChange(of: downloader.running) { _, running in
             if !running { storedBytes = TileCache.sizeBytes() }
+        }
+        .onChange(of: packs.running) { _, running in
+            if !running { storedBytes = packs.storedBytes() }
         }
     }
 
@@ -250,6 +278,57 @@ struct OfflineMapScreen: View {
             }
             Button("Annuler", role: .cancel) {}
         }
+    }
+
+    /// Panneau de téléchargement en mode vectoriel : MapLibre gère lui-même le
+    /// découpage en tuiles et leur conservation.
+    private var vectorPanel: some View {
+        VStack(spacing: 12) {
+            Picker("Détail", selection: $depth) {
+                ForEach(Depth.allCases) { d in Text(d.rawValue).tag(d) }
+            }
+            .pickerStyle(.segmented)
+
+            if packs.running {
+                VStack(spacing: 6) {
+                    ProgressView(value: packs.progress)
+                    Text("Téléchargement en cours…")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Button {
+                    if let style = vectorStyle, let bounds {
+                        packs.start(
+                            styleURL: style, bounds: bounds,
+                            maxZoom: Double(depth.zooms.upperBound))
+                    }
+                } label: {
+                    Label("Télécharger cette zone", systemImage: "arrow.down.circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.blue.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .disabled(bounds == nil)
+                if let message = packs.message {
+                    Text(message).font(.caption2).foregroundStyle(.orange)
+                }
+            }
+
+            HStack {
+                Text("© OpenStreetMap contributors")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                Button("Tout effacer", role: .destructive) {
+                    packs.clearAll()
+                    storedBytes = 0
+                }
+                .font(.caption.weight(.semibold))
+            }
+        }
+        .padding(14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .padding()
     }
 
     /// Écran d'explication tant qu'aucun serveur de tuiles n'est renseigné.

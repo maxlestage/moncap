@@ -9,6 +9,8 @@ import MapKit
 /// Vide = fonction désactivée.
 enum TileSource {
     static let defaultsKey = "moncap.tileURL"
+    /// Style vectoriel MapLibre. Renseigné, il prime sur les tuiles images.
+    static let styleKey = "moncap.styleURL"
 
     /// Modèle d'adresse, par exemple `https://exemple.fr/{z}/{x}/{y}.png`.
     static var template: String {
