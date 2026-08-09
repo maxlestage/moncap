@@ -127,6 +127,66 @@ curl localhost:3000/stats
 # {"count":2,"total_km":390.9,"bbox":{...},"centroid":{"lat":47.3,"lon":3.6}}
 ```
 
+## Cartes hors ligne (tuiles)
+
+L'app peut télécharger des zones de carte pour les consulter sans réseau
+(écran « Carte hors ligne »). Apple Plans ne permettant ni de télécharger ni
+de conserver ses tuiles, cela repose sur une **seconde source, en images**.
+
+Le backend expose un relais : `GET /tiles/:z/:x/:y`, configuré par deux
+variables d'environnement.
+
+| Variable | Rôle |
+| --- | --- |
+| `TILES_UPSTREAM` | Serveur amont, format `https://…/{z}/{x}/{y}.png`. Non défini → l'endpoint répond 404 et la fonction reste inactive. |
+| `TILES_USER_AGENT` | Identification envoyée à l'amont. La plupart des fournisseurs refusent les requêtes sans `User-Agent` identifiable. |
+
+Le relais borne `z`, `x` et `y` (sinon n'importe qui pourrait lui faire
+relayer des requêtes arbitraires), garde 1500 tuiles en cache mémoire et
+dispose de sa propre limite de débit — la limite générale de 300 req/min
+couperait un téléchargement de zone au bout de 300 tuiles.
+
+### ⚠️ Ne pas pointer sur le serveur public d'OpenStreetMap
+
+Le règlement d'OpenStreetMap **interdit le téléchargement de zones
+entières**. Via un relais, toutes les requêtes sortent de surcroît d'une
+seule adresse IP : le blocage du serveur est l'issue la plus probable.
+
+### Héberger ses propres tuiles à partir d'OpenStreetMap
+
+C'est en revanche parfaitement autorisé, les données étant sous licence
+ODbL (attribution « © OpenStreetMap contributors », déjà affichée dans
+l'app). Deux chemins, selon le format voulu.
+
+**Tuiles images (ce que l'app attend aujourd'hui).** Le rendu demande une
+chaîne complète — base PostGIS + moteur de rendu — qui ne tient pas dans un
+dyno Heroku. On la fait tourner **une fois**, sur une machine de travail, et
+l'on publie le résultat sur un hébergement statique :
+
+```bash
+# 1. Extrait régional (exemple : Aquitaine)
+wget https://download.geofabrik.de/europe/france/aquitaine-latest.osm.pbf
+
+# 2. Rendu en tuiles images — voir switch2osm.org pour la chaîne complète
+#    (osm2pgsql + renderd/mod_tile). Compter plusieurs heures.
+
+# 3. Publier le dossier {z}/{x}/{y}.png sur un hébergement statique,
+#    puis pointer le relais dessus :
+heroku config:set \
+  TILES_UPSTREAM='https://mon-stockage.example/{z}/{x}/{y}.png' \
+  -a mon-app
+```
+
+Ordres de grandeur : une région française jusqu'au zoom 13 représente
+quelques milliers de tuiles (quelques centaines de Mo) ; aller jusqu'au zoom
+16 multiplie ce volume par 15 environ.
+
+**Tuiles vectorielles.** Nettement plus légères (un fichier `.pmtiles` unique
+pour toute une région) et sans chaîne de rendu à opérer, mais l'app devrait
+alors embarquer un moteur de rendu vectoriel — MapLibre — à la place de la
+couche `MKTileOverlay` actuelle. C'est le choix à faire si le volume des
+tuiles images devient un problème.
+
 ## Déploiement Heroku (buildpack — 100 % navigateur, sans CLI)
 
 L'app se déploie via un **buildpack Rust** : la crate est à la racine,
