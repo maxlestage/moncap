@@ -14,7 +14,10 @@ struct VectorMapView: UIViewRepresentable {
     let styleURL: URL
     /// Tracé de l'itinéraire mémorisé, s'il y en a un.
     let route: [CLLocationCoordinate2D]
-    let initialCenter: CLLocationCoordinate2D
+    /// Cadrage demandé : à l'ouverture, puis à chaque lieu choisi dans la
+    /// recherche. Chaque valeur porte une identité, donc redemander le même
+    /// endroit y ramène bien.
+    let cam: MapCam
     /// Remonte la zone visible, pour savoir quoi télécharger.
     let onRegionChange: (MLNCoordinateBounds) -> Void
 
@@ -22,7 +25,8 @@ struct VectorMapView: UIViewRepresentable {
         let view = MLNMapView(frame: .zero, styleURL: styleURL)
         view.delegate = context.coordinator
         view.showsUserLocation = true
-        view.setCenter(initialCenter, zoomLevel: 12, animated: false)
+        view.setCenter(cam.center, zoomLevel: cam.zoom, animated: false)
+        context.coordinator.appliedCam = cam
         view.logoView.isHidden = false  // attribution requise par la licence
         return view
     }
@@ -44,6 +48,10 @@ struct VectorMapView: UIViewRepresentable {
         }
         // Le tracé mémorisé est lu après coup (`onAppear`) : figé à la
         // création, il valait toujours la liste vide.
+        if cam != context.coordinator.appliedCam {
+            context.coordinator.appliedCam = cam
+            view.setCenter(cam.center, zoomLevel: cam.zoom, animated: true)
+        }
         context.coordinator.update(route: route, on: view)
     }
 
@@ -56,6 +64,7 @@ struct VectorMapView: UIViewRepresentable {
         private let onRegionChange: (MLNCoordinateBounds) -> Void
         /// Style demandé à la vue ; fait foi pendant le chargement.
         var appliedStyle: URL?
+        var appliedCam: MapCam?
 
         init(
             route: [CLLocationCoordinate2D],
