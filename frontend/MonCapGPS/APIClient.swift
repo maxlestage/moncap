@@ -288,6 +288,9 @@ struct APIClient {
     /// quelles : c'est MapKit qui les remplace.
     var tilesTemplate: String { baseURL.absoluteString + "/tiles/{z}/{x}/{y}.png" }
 
+    /// Style vectoriel servi par notre backend, à charger par MapLibre.
+    var tilesStyleURL: String { baseURL.absoluteString + "/tiles/style.json" }
+
     func accountInfo() async throws -> AccountInfo {
         try await send(authedRequest("account"))
     }
