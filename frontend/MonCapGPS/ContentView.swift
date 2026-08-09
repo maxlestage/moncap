@@ -528,6 +528,8 @@ struct MapHomeView: View {
     @State private var showOfflineMap = false
     /// Serveur de tuiles pour les cartes hors ligne. Vide = fonction inactive.
     @AppStorage(TileSource.defaultsKey) private var tileURL = ""
+    /// Style vectoriel MapLibre : renseigné, il prime sur les tuiles images.
+    @AppStorage(TileSource.styleKey) private var styleURL = ""
     /// Mode nuit automatique (selon la position réelle du soleil).
     @State private var nightMode = false
     /// Dernier calcul jour/nuit (recalcul limité à 1×/min : le soleil bouge
@@ -2465,19 +2467,27 @@ struct MapHomeView: View {
                         .font(.system(.footnote, design: .monospaced))
                     Button {
                         tileURL = api.tilesTemplate
+                        styleURL = api.tilesStyleURL
                     } label: {
                         Label("Utiliser le serveur MonCap", systemImage: "server.rack")
                     }
-                    .disabled(tileURL == api.tilesTemplate)
+                    .disabled(tileURL == api.tilesTemplate && styleURL == api.tilesStyleURL)
+                    if !styleURL.isEmpty {
+                        Button(role: .destructive) {
+                            styleURL = ""
+                        } label: {
+                            Label("Revenir aux tuiles images", systemImage: "photo")
+                        }
+                    }
                     Button {
                         showPlaces = false
                         showOfflineMap = true
                     } label: {
                         Label("Télécharger des zones", systemImage: "arrow.down.circle")
                     }
-                    .disabled(!TileSource.isConfigured)
+                    .disabled(!TileSource.isConfigured && styleURL.isEmpty)
                     Text(
-                        "Apple Plans ne permet pas d'enregistrer ses cartes. Le serveur MonCap relaie les tuiles s'il est configuré ; sinon indique un serveur auquel tu as droit."
+                        "Apple Plans ne permet pas d'enregistrer ses cartes. Le serveur MonCap sert des cartes vectorielles (légères) s'il est configuré ; sinon indique un serveur de tuiles auquel tu as droit."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
