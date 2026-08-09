@@ -1217,10 +1217,11 @@ struct MapHomeView: View {
         var pins: [MapPin] = []
         // Les incendies ne surchargent plus la carte GPS : ils ont leur écran
         // dédié (bouton 🔥 → carte des feux sur satellite).
-        // Mon avatar à ma position (hors navigation, où la flèche suffit).
-        if let me = location.coordinate, !nav.active {
+        // Mon avatar à ma position. Il marque seul l'endroit où je suis : la
+        // pastille bleue de la carte est éteinte.
+        if let me = location.coordinate {
             pins.append(
-                MapPin(id: "moi", coordinate: me, title: "Moi", look: .avatar(liveAvatar, 40)))
+                MapPin(id: "moi", coordinate: me, title: "Moi", look: .avatar(liveAvatar, 44)))
         }
         for p in positions {
             pins.append(
@@ -3506,21 +3507,23 @@ struct MapHomeView: View {
     private func followCamera(_ c: CLLocationCoordinate2D) -> MapCam {
         let speed = max(0, location.speedKmh)
         if speed < Self.stoppedKmh {
-            // À l'arrêt le cap GPS n'est plus fiable : on garde le dernier connu.
+            // À l'arrêt on prend du recul pour situer les environs, et le cap
+            // GPS n'étant plus fiable, on garde le dernier connu.
             return MapCam(
-                center: c, distance: 1600,
+                center: c, zoom: 14.5,
                 heading: max(0, lastCamHeading), pitch: is3D ? 35 : 0)
         }
-        // 380 m en ville, jusqu'à 1100 m sur voie rapide.
-        let distance = min(1100, 380 + max(0, speed - 10) * 9)
+        // En roulant on se rapproche de la rue, et plus on va vite plus on
+        // recule pour voir loin devant.
+        let zoom = max(14, 16.5 - speed / 40)
         return MapCam(
-            center: c, distance: distance,
-            heading: location.course, pitch: is3D ? 70 : 0)
+            center: c, zoom: zoom,
+            heading: location.course, pitch: is3D ? 60 : 0)
     }
 
     /// Caméra centrée sur un point, inclinée si le mode 3D est actif.
-    private func userCamera(_ c: CLLocationCoordinate2D, distance: Double = 1200) -> MapCam {
-        MapCam(center: c, distance: distance, heading: 0, pitch: is3D ? 60 : 0)
+    private func userCamera(_ c: CLLocationCoordinate2D, zoom: Double = 15) -> MapCam {
+        MapCam(center: c, zoom: zoom, heading: 0, pitch: is3D ? 60 : 0)
     }
 
     /// Active/désactive la vue 3D et l'applique immédiatement.
@@ -3567,8 +3570,8 @@ struct MapHomeView: View {
                 let heading = bearingBetween(c, coords[j])
                 withAnimation(.linear(duration: 0.3)) {
                     camera = MapCam(
-                        center: c, distance: 700,
-                        heading: heading, pitch: is3D ? 70 : 45)
+                        center: c, zoom: 15.5,
+                        heading: heading, pitch: is3D ? 60 : 45)
                 }
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 i += step
