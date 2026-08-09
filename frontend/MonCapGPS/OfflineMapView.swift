@@ -2,78 +2,6 @@ import MapKit
 import MapLibre
 import SwiftUI
 
-/// Carte à tuiles téléchargées, en UIKit.
-///
-/// Le composant `Map` de SwiftUI ne sait pas afficher de tuiles personnalisées :
-/// cet écran passe donc par `MKMapView`, seul moyen d'ajouter une couche
-/// `MKTileOverlay`. La carte principale reste inchangée.
-struct OfflineMapView: UIViewRepresentable {
-    /// Tracé de l'itinéraire mémorisé, s'il y en a un.
-    let route: [CLLocationCoordinate2D]
-    /// Région d'ouverture (position de l'utilisateur en général).
-    let initialRegion: MKCoordinateRegion
-    /// Réseau disponible : hors ligne, on ne tente aucune requête de tuile.
-    let online: Bool
-    /// Remonte la région visible, pour savoir quoi télécharger.
-    let onRegionChange: (MKCoordinateRegion) -> Void
-
-    func makeUIView(context: Context) -> MKMapView {
-        let view = MKMapView()
-        view.delegate = context.coordinator
-        view.showsUserLocation = true
-        view.setRegion(initialRegion, animated: false)
-
-        let overlay = CachedTileOverlay(urlTemplate: TileSource.template)
-        // Remplace le fond Apple : hors ligne il resterait vide, et les deux
-        // fonds superposés seraient illisibles.
-        overlay.canReplaceMapContent = true
-        overlay.allowsNetwork = online
-        context.coordinator.overlay = overlay
-        view.addOverlay(overlay, level: .aboveLabels)
-
-        if route.count >= 2 {
-            view.addOverlay(MKPolyline(coordinates: route, count: route.count))
-        }
-        return view
-    }
-
-    func updateUIView(_ view: MKMapView, context: Context) {
-        context.coordinator.overlay?.allowsNetwork = online
-        // La région n'est jamais réimposée après l'ouverture : l'utilisateur
-        // resterait sinon collé au point de départ à chaque rafraîchissement.
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onRegionChange: onRegionChange)
-    }
-
-    final class Coordinator: NSObject, MKMapViewDelegate {
-        var overlay: CachedTileOverlay?
-        private let onRegionChange: (MKCoordinateRegion) -> Void
-
-        init(onRegionChange: @escaping (MKCoordinateRegion) -> Void) {
-            self.onRegionChange = onRegionChange
-        }
-
-        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let tiles = overlay as? MKTileOverlay {
-                return MKTileOverlayRenderer(tileOverlay: tiles)
-            }
-            if let line = overlay as? MKPolyline {
-                let renderer = MKPolylineRenderer(polyline: line)
-                renderer.strokeColor = UIColor.systemBlue
-                renderer.lineWidth = 6
-                return renderer
-            }
-            return MKOverlayRenderer(overlay: overlay)
-        }
-
-        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            onRegionChange(mapView.region)
-        }
-    }
-}
-
 /// Écran « Carte hors ligne » : consultation des tuiles enregistrées et
 /// téléchargement de la zone visible.
 struct OfflineMapScreen: View {
@@ -81,7 +9,6 @@ struct OfflineMapScreen: View {
     /// Position d'ouverture de la carte.
     let center: CLLocationCoordinate2D?
 
-    @AppStorage(TileSource.defaultsKey) private var tileURL = ""
     /// Style vectoriel : renseigné, la carte est rendue par MapLibre plutôt
     /// que par des tuiles images.
     @AppStorage(TileSource.styleKey) private var styleURLString = ""
@@ -91,29 +18,11 @@ struct OfflineMapScreen: View {
     /// carte grise sans le moindre message.
     @State private var styleStatus = StyleStatus.checking
 
-    /// Style vectoriel à rendre, s'il y a lieu.
-    ///
-    /// Ordre de préférence : le style de l'utilisateur, puis ses éventuelles
-    /// tuiles images, et à défaut notre style par défaut — de sorte que la
-    /// carte fonctionne sans aucun réglage.
-    private var vectorStyle: URL? {
-        let trimmed = styleURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("http"), let url = URL(string: trimmed) { return url }
-        if configured { return nil }
-        return URL(string: TileSource.defaultStyle)
-    }
-
-    /// Un serveur de tuiles exploitable est renseigné. Basé sur la valeur
-    /// observée, pour que l'écran se mette à jour dès la saisie.
-    private var configured: Bool {
-        tileURL.contains("{z}") && tileURL.contains("{x}") && tileURL.contains("{y}")
-    }
-    @StateObject private var downloader = TileDownloader()
-    @State private var region = MKCoordinateRegion()
+    /// Fond réellement affiché : celui de l'utilisateur s'il répond, sinon le
+    /// nôtre. Vérifié à l'ouverture, pour ne jamais rester devant un écran vide.
+    @State private var style = URL(string: TileSource.defaultStyle)!
     @State private var storedBytes = 0
-    @State private var estimate: (count: Int, bytes: Int) = (0, 0)
     @State private var depth = Depth.ville
-    @State private var confirmClear = false
     /// Tracé mémorisé, lu une seule fois (le corps de la vue est réévalué
     /// souvent : y lire le disque serait coûteux).
     @State private var route: [CLLocationCoordinate2D] = []
@@ -143,23 +52,13 @@ struct OfflineMapScreen: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            if let style = vectorStyle {
-                VectorMapView(
-                    styleURL: style,
-                    route: route,
-                    initialCenter: startRegion.center,
-                    onRegionChange: { bounds = $0 }
-                )
-                .ignoresSafeArea()
-            } else if configured {
-                OfflineMapView(
-                    route: route,
-                    initialRegion: startRegion,
-                    online: true,
-                    onRegionChange: { region = $0 }
-                )
-                .ignoresSafeArea()
-            }
+            VectorMapView(
+                styleURL: style,
+                route: route,
+                initialCenter: startRegion.center,
+                onRegionChange: { bounds = $0 }
+            )
+            .ignoresSafeArea()
             VStack(spacing: 0) {
                 header
                 // La carte reste affichée malgré l'alerte : les zones déjà
@@ -176,31 +75,19 @@ struct OfflineMapScreen: View {
             }
             VStack {
                 Spacer()
-                if vectorStyle != nil {
-                    vectorPanel
-                } else if configured {
-                    panel
-                }
+                vectorPanel
             }
         }
         .task(id: styleURLString) {
-            guard let style = vectorStyle else {
-                styleStatus = .ok  // mode tuiles images : pas de style à vérifier
-                return
-            }
             styleStatus = .checking
+            style = await TileSource.resolvedStyle(custom: styleURLString)
+            // Le fond retenu répond, sauf absence de réseau : c'est le seul
+            // cas qui mérite encore un message.
             styleStatus = await StyleProbe.check(style)
         }
         .onAppear {
-            region = startRegion
             route = RouteStore.load()?.coordinates ?? []
-            storedBytes = vectorStyle != nil ? packs.storedBytes() : TileCache.sizeBytes()
-            refreshEstimate()
-        }
-        .onChange(of: region.center.latitude) { _, _ in refreshEstimate() }
-        .onChange(of: depth) { _, _ in refreshEstimate() }
-        .onChange(of: downloader.running) { _, running in
-            if !running { storedBytes = TileCache.sizeBytes() }
+            storedBytes = packs.storedBytes()
         }
         .onChange(of: packs.running) { _, running in
             if !running { storedBytes = packs.storedBytes() }
@@ -232,79 +119,6 @@ struct OfflineMapScreen: View {
             Spacer()
         }
         .padding()
-    }
-
-    /// Panneau de téléchargement de la zone visible.
-    private var panel: some View {
-        VStack(spacing: 12) {
-            Picker("Détail", selection: $depth) {
-                ForEach(Depth.allCases) { d in Text(d.rawValue).tag(d) }
-            }
-            .pickerStyle(.segmented)
-
-            if downloader.running {
-                VStack(spacing: 6) {
-                    ProgressView(value: downloader.progress)
-                    HStack {
-                        Text("\(downloader.done) / \(downloader.total) tuiles")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Arrêter") { downloader.cancel() }
-                            .font(.caption.weight(.semibold))
-                    }
-                }
-            } else {
-                Button {
-                    downloader.start(region: region, zooms: depth.zooms)
-                } label: {
-                    Label(
-                        estimate.count == 0
-                            ? "Zone déjà enregistrée"
-                            : "Télécharger cette zone · \(Self.megabytes(estimate.bytes))",
-                        systemImage: "arrow.down.circle.fill"
-                    )
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        (estimate.count == 0 ? Color.gray : Color.blue).opacity(0.18),
-                        in: RoundedRectangle(cornerRadius: 14))
-                }
-                .disabled(estimate.count == 0)
-                if estimate.count >= TileDownloader.maxTiles {
-                    Text("Zone trop vaste : seules les premières tuiles seront enregistrées. Zoome davantage pour tout couvrir.")
-                        .font(.caption2).foregroundStyle(.orange)
-                }
-                if downloader.failed > 0 {
-                    Text("\(downloader.failed) tuile(s) non téléchargée(s).")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-
-            HStack {
-                Text("© OpenStreetMap contributors")
-                    .font(.caption2).foregroundStyle(.secondary)
-                Spacer()
-                if storedBytes > 0 {
-                    Button("Tout effacer", role: .destructive) { confirmClear = true }
-                        .font(.caption.weight(.semibold))
-                }
-            }
-        }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .padding()
-        .confirmationDialog(
-            "Effacer toutes les cartes enregistrées ?", isPresented: $confirmClear,
-            titleVisibility: .visible
-        ) {
-            Button("Tout effacer", role: .destructive) {
-                TileCache.clear()
-                storedBytes = 0
-                refreshEstimate()
-            }
-            Button("Annuler", role: .cancel) {}
-        }
     }
 
     /// Panneau de téléchargement en mode vectoriel : MapLibre gère lui-même le
@@ -358,10 +172,6 @@ struct OfflineMapScreen: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding()
-    }
-
-    private func refreshEstimate() {
-        estimate = TileDownloader.estimate(region: region, zooms: depth.zooms)
     }
 
     /// « 24 Mo » — l'espace disque parle plus qu'un nombre de tuiles.
