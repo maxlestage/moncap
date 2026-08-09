@@ -13,6 +13,22 @@ enum TileSource {
     /// Style vectoriel MapLibre. Renseigné, il prime sur les tuiles images.
     static let styleKey = "moncap.styleURL"
 
+    /// Style par défaut : OpenFreeMap sert des tuiles vectorielles OpenStreetMap
+    /// libres, sans clé ni inscription, polices et icônes comprises.
+    ///
+    /// C'est ce qui rend la carte utilisable sans rien installer. Un serveur
+    /// personnel (archive PMTiles) reste possible : il suffit de le renseigner
+    /// dans les réglages, il prend alors le pas sur cette valeur.
+    static let defaultStyle = "https://tiles.openfreemap.org/styles/liberty"
+
+    /// Style effectivement utilisé : celui de l'utilisateur, sinon le nôtre.
+    static var styleURL: URL {
+        let custom = (UserDefaults.standard.string(forKey: styleKey) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if custom.hasPrefix("http"), let url = URL(string: custom) { return url }
+        return URL(string: defaultStyle)!
+    }
+
     /// Modèle d'adresse, par exemple `https://exemple.fr/{z}/{x}/{y}.png`.
     static var template: String {
         (UserDefaults.standard.string(forKey: defaultsKey) ?? "")
