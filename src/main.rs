@@ -726,6 +726,19 @@ impl TileCache {
     }
 }
 
+/// En-tête d'identification envoyé au serveur amont.
+///
+/// La plupart des fournisseurs de tuiles — OpenStreetMap en tête — refusent
+/// les requêtes sans `User-Agent` identifiable, et le client HTTP par défaut
+/// n'en envoie pas de significatif. Ajustable par `TILES_USER_AGENT`.
+fn tiles_user_agent() -> String {
+    std::env::var("TILES_USER_AGENT")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "MonCapGPS/1.0 (+https://github.com/maxlestage/moncap)".to_string())
+}
+
 /// Serveur amont des tuiles, configuré côté serveur (variable d'environnement
 /// `TILES_UPSTREAM`), au format `https://exemple.fr/{z}/{x}/{y}.png`.
 ///
@@ -774,7 +787,12 @@ async fn tile(Path((z, x, y)): Path<(u32, u32, String)>) -> Response {
         .replace("{z}", &z.to_string())
         .replace("{x}", &x.to_string())
         .replace("{y}", &y.to_string());
-    let Ok(resp) = http_client().get(&url).send().await else {
+    let Ok(resp) = http_client()
+        .get(&url)
+        .header(reqwest::header::USER_AGENT, tiles_user_agent())
+        .send()
+        .await
+    else {
         return (StatusCode::BAD_GATEWAY, "amont injoignable").into_response();
     };
     if !resp.status().is_success() {
