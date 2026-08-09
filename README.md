@@ -140,6 +140,7 @@ variables d'environnement.
 | --- | --- |
 | `TILES_PMTILES` | **Archive PMTiles auto-hébergée** (URL). Prioritaire : c'est le mode conforme, où l'on sert ses propres tuiles. |
 | `TILES_UPSTREAM` | Serveur amont relayé, format `https://…/{z}/{x}/{y}.png`. Utilisé si aucune archive n'est définie. |
+| `TILES_GLYPHS` | Polices des libellés (`https://…/{fontstack}/{range}.pbf`). Non défini → carte sans libellés. |
 | `TILES_USER_AGENT` | Identification envoyée à l'amont. La plupart des fournisseurs refusent les requêtes sans `User-Agent` identifiable. |
 
 Le relais borne `z`, `x` et `y` (sinon n'importe qui pourrait lui faire
@@ -176,11 +177,14 @@ heroku config:set \
   -a mon-app
 ```
 
-⚠️ `planetiler` produit des tuiles **vectorielles**. Le backend les sert
-correctement (type MIME et compression relayés), mais l'écran hors ligne de
-l'app affiche aujourd'hui des tuiles **images** : il faudra lui adjoindre un
-moteur de rendu vectoriel (MapLibre) pour en profiter. Une archive PMTiles
-*raster*, elle, fonctionne immédiatement.
+`planetiler` produit des tuiles **vectorielles**, que l'app rend avec
+**MapLibre** (écran « Carte hors ligne »). Le serveur fournit la feuille de
+style correspondante sur `GET /tiles/style.json`, et le bouton « Utiliser le
+serveur MonCap » des réglages configure l'app en un appui.
+
+Les **libellés** (noms de villes et de rues) sont omis par défaut : ils
+exigent des polices matricielles à héberger. Renseigner `TILES_GLYPHS`
+(format `https://…/{fontstack}/{range}.pbf`) les active.
 
 **Tuiles images.** Le rendu demande une
 chaîne complète — base PostGIS + moteur de rendu — qui ne tient pas dans un

@@ -879,6 +879,87 @@ async fn tile_from_archive(url: &str, z: u32, x: u32, y: u32) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
+/// GET /tiles/style.json — feuille de style MapLibre pour les tuiles servies.
+///
+/// Les tuiles vectorielles ne sont que des données : c'est le style qui décide
+/// des couleurs et de l'épaisseur des traits. On en sert un minimal, au schéma
+/// OpenMapTiles (celui que produit `planetiler`), pointant sur notre propre
+/// endpoint de tuiles.
+///
+/// Les libellés sont **omis par défaut** : ils exigent des polices matricielles
+/// (« glyphs ») à héberger séparément. Renseigner `TILES_GLYPHS` les active.
+async fn tiles_style(headers: HeaderMap) -> Response {
+    if tiles_archive().is_none() && tiles_upstream().is_none() {
+        return (StatusCode::NOT_FOUND, "tuiles non configurées").into_response();
+    }
+    // Adresse publique déduite de la requête : le style doit pointer sur le
+    // même hôte que celui par lequel l'app nous a joints.
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost:3000");
+    let scheme = if host.starts_with("localhost") || host.starts_with("127.") {
+        "http"
+    } else {
+        "https"
+    };
+    let tiles = format!("{scheme}://{host}/tiles/{{z}}/{{x}}/{{y}}");
+    let glyphs = std::env::var("TILES_GLYPHS").ok().filter(|v| !v.is_empty());
+
+    let mut style = serde_json::json!({
+        "version": 8,
+        "name": "MonCap hors ligne",
+        "sources": {
+            "osm": {
+                "type": "vector",
+                "tiles": [tiles],
+                "minzoom": 0,
+                "maxzoom": 14,
+                "attribution": "© OpenStreetMap contributors"
+            }
+        },
+        "layers": [
+            { "id": "fond", "type": "background",
+              "paint": { "background-color": "#f2efe9" } },
+            { "id": "eau", "type": "fill", "source": "osm", "source-layer": "water",
+              "paint": { "fill-color": "#a8c8e8" } },
+            { "id": "espaces-verts", "type": "fill", "source": "osm",
+              "source-layer": "landcover",
+              "paint": { "fill-color": "#cde6c0", "fill-opacity": 0.6 } },
+            { "id": "batiments", "type": "fill", "source": "osm",
+              "source-layer": "building", "minzoom": 13.0,
+              "paint": { "fill-color": "#e0dcd4" } },
+            // Les petites routes n'apparaissent qu'en zoomant : sinon la carte
+            // devient illisible et le rendu s'alourdit pour rien.
+            { "id": "routes-secondaires", "type": "line", "source": "osm",
+              "source-layer": "transportation", "minzoom": 11.0,
+              "paint": { "line-color": "#ffffff", "line-width": 2.0 } },
+            { "id": "routes-principales", "type": "line", "source": "osm",
+              "source-layer": "transportation",
+              "filter": ["in", "class", "motorway", "trunk", "primary"],
+              "paint": { "line-color": "#f6c05a", "line-width": 3.5 } }
+        ]
+    });
+
+    if let Some(glyphs) = glyphs {
+        style["glyphs"] = serde_json::Value::String(glyphs);
+        if let Some(layers) = style["layers"].as_array_mut() {
+            layers.push(serde_json::json!({
+                "id": "noms-lieux", "type": "symbol", "source": "osm",
+                "source-layer": "place", "minzoom": 8.0,
+                "layout": {
+                    "text-field": ["get", "name"],
+                    "text-font": ["Noto Sans Regular"],
+                    "text-size": 13.0
+                },
+                "paint": { "text-color": "#33322f", "text-halo-color": "#ffffff",
+                           "text-halo-width": 1.2 }
+            }));
+        }
+    }
+    Json(style).into_response()
+}
+
 /// GET /tiles/:z/:x/:y — tuile de carte, pour les cartes hors ligne de l'app.
 ///
 /// Relais vers le serveur amont configuré, avec cache mémoire. **La licence
@@ -1364,6 +1445,9 @@ fn build_app(state: AppState) -> Router {
 
     // Tuiles : limite propre, appliquée ici et non par la limite générale.
     let tile_routes = Router::new()
+        // Déclarée avant la route paramétrée, sinon « style.json » serait
+        // interprété comme un niveau de zoom.
+        .route("/tiles/style.json", get(tiles_style))
         .route("/tiles/:z/:x/:y", get(tile))
         .layer(middleware::from_fn(move |req, next| {
             rate_limit(tiles_rl.clone(), req, next)
@@ -2961,6 +3045,82 @@ mod tests {
         let parsed = parse_gpx_waypoints(xml);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].label, "Point 1");
+    }
+
+    /// Le style doit rester valide et pointer sur notre propre endpoint : une
+    /// erreur ici donne une carte vide, sans message d'erreur côté app.
+    #[tokio::test]
+    async fn style_json_is_valid_and_self_referencing() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        std::env::set_var("TILES_PMTILES", "https://exemple.invalid/a.pmtiles");
+        std::env::remove_var("TILES_GLYPHS");
+        let app: Router = Router::new().route("/tiles/style.json", get(tiles_style));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/tiles/style.json")
+                    .header("host", "moncap.example")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let style: serde_json::Value = serde_json::from_slice(&body).expect("JSON valide");
+
+        assert_eq!(style["version"], 8);
+        let tiles = style["sources"]["osm"]["tiles"][0].as_str().unwrap();
+        assert_eq!(tiles, "https://moncap.example/tiles/{z}/{x}/{y}");
+        // Sans polices hébergées, aucune couche de libellés : elle échouerait
+        // au chargement du style.
+        assert!(style.get("glyphs").is_none());
+        let layers = style["layers"].as_array().unwrap();
+        assert!(!layers.is_empty());
+        assert!(
+            layers.iter().all(|l| l["type"] != "symbol"),
+            "pas de libellés sans glyphs"
+        );
+        std::env::remove_var("TILES_PMTILES");
+    }
+
+    /// Avec des polices hébergées, les libellés apparaissent.
+    #[tokio::test]
+    async fn style_json_adds_labels_with_glyphs() {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        std::env::set_var("TILES_PMTILES", "https://exemple.invalid/a.pmtiles");
+        std::env::set_var(
+            "TILES_GLYPHS",
+            "https://exemple.invalid/{fontstack}/{range}.pbf",
+        );
+        let app: Router = Router::new().route("/tiles/style.json", get(tiles_style));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/tiles/style.json")
+                    .header("host", "moncap.example")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let style: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(style["glyphs"].is_string());
+        let layers = style["layers"].as_array().unwrap();
+        assert!(layers.iter().any(|l| l["type"] == "symbol"));
+        std::env::remove_var("TILES_GLYPHS");
+        std::env::remove_var("TILES_PMTILES");
     }
 
     /// Les tuiles ne doivent PAS tomber sous la limite générale : un
