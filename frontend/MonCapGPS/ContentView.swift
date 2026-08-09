@@ -1175,12 +1175,25 @@ struct MapHomeView: View {
 
     // MARK: - Carte
 
+    /// Un fond de carte personnel a répondu et est exploitable.
+    @State private var customStyleOK = false
+
+    /// Fond de carte réellement affiché.
+    ///
+    /// Un style personnel injoignable (serveur éteint, adresse périmée, cartes
+    /// pas encore installées) donnait une carte entièrement blanche, sans rien
+    /// pour le comprendre. Tant qu'il n'a pas répondu, on affiche le fond par
+    /// défaut : mieux vaut une carte que rien.
+    private var effectiveStyleURL: URL {
+        if customStyleOK, styleURL.hasPrefix("http"), let url = URL(string: styleURL) {
+            return url
+        }
+        return URL(string: TileSource.defaultStyle) ?? TileSource.styleURL
+    }
+
     private var map: some View {
         MainMapView(
-            // Lu depuis la valeur observée : changer de fond dans les réglages
-            // se voit tout de suite.
-            styleURL: styleURL.hasPrefix("http")
-                ? (URL(string: styleURL) ?? TileSource.styleURL) : TileSource.styleURL,
+            styleURL: effectiveStyleURL,
             cam: camera,
             pins: mapPins,
             lines: mapLines,
@@ -1202,6 +1215,13 @@ struct MapHomeView: View {
             onUserGesture: userTouchedMap
         )
         .ignoresSafeArea()
+        .task(id: styleURL) {
+            guard styleURL.hasPrefix("http"), let url = URL(string: styleURL) else {
+                customStyleOK = false
+                return
+            }
+            customStyleOK = await StyleProbe.check(url) == .ok
+        }
     }
 
     /// Épingles de la carte, dans l'ordre où elles s'empilent.
@@ -2464,37 +2484,41 @@ struct MapHomeView: View {
                     .foregroundStyle(.secondary)
                 }
                 Section("Cartes hors ligne 🗺️") {
-                    TextField("https://exemple.fr/{z}/{x}/{y}.png", text: $tileURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .font(.system(.footnote, design: .monospaced))
-                    Button {
-                        tileURL = api.tilesTemplate
-                        styleURL = api.tilesStyleURL
-                    } label: {
-                        Label("Utiliser le serveur MonCap", systemImage: "server.rack")
-                    }
-                    .disabled(tileURL == api.tilesTemplate && styleURL == api.tilesStyleURL)
-                    if !styleURL.isEmpty {
-                        Button(role: .destructive) {
-                            styleURL = ""
-                        } label: {
-                            Label("Revenir aux tuiles images", systemImage: "photo")
-                        }
-                    }
                     Button {
                         showPlaces = false
                         showOfflineMap = true
                     } label: {
                         Label("Télécharger des zones", systemImage: "arrow.down.circle")
                     }
-                    .disabled(!TileSource.isConfigured && styleURL.isEmpty)
                     Text(
-                        "Apple Plans ne permet pas d'enregistrer ses cartes. Le serveur MonCap sert des cartes vectorielles (légères) s'il est configuré ; sinon indique un serveur de tuiles auquel tu as droit."
+                        "Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                    // Repli manuel : n'a d'intérêt que pour qui héberge ses
+                    // propres cartes. Renseigné et joignable, il prend le pas
+                    // sur le fond par défaut ; sinon il est simplement ignoré.
+                    DisclosureGroup("Serveur de cartes personnel") {
+                        TextField("https://exemple.fr/style.json", text: $styleURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .font(.system(.footnote, design: .monospaced))
+                        if !styleURL.isEmpty {
+                            Button(role: .destructive) {
+                                styleURL = ""
+                                tileURL = ""
+                            } label: {
+                                Label("Revenir au fond par défaut", systemImage: "arrow.uturn.backward")
+                            }
+                        }
+                        Text(
+                            "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
                 }
                 // Trafic temps réel TomTom : clé optionnelle saisie sur
                 // l'appareil (sinon le serveur fournit le trafic si configuré).
