@@ -689,6 +689,129 @@ fn acq_epoch(date: &str, time: &str) -> Option<i64> {
     Some(days * 86_400 + h * 3_600 + min * 60)
 }
 
+// MARK: - Tuiles de carte (cartes hors ligne)
+
+/// Zoom maximal servi. Au-delà, une zone téléchargée pèserait très lourd et
+/// la charge amont exploserait.
+const TILES_MAX_ZOOM: u32 = 17;
+/// Nombre de tuiles gardées en mémoire (~18 Ko pièce, soit ~27 Mo au plus).
+const TILES_CACHE_MAX: usize = 1500;
+
+/// Cache mémoire des tuiles déjà servies. Le disque de Heroku étant éphémère,
+/// un cache mémoire borné est le meilleur compromis : il absorbe les
+/// re-demandes d'une même session sans rien promettre de durable.
+static TILES_CACHE: OnceLock<Mutex<TileCache>> = OnceLock::new();
+
+/// Cache borné, éviction du plus ancien inséré.
+#[derive(Default)]
+struct TileCache {
+    map: HashMap<(u32, u32, u32), (Vec<u8>, String)>,
+    order: std::collections::VecDeque<(u32, u32, u32)>,
+}
+
+impl TileCache {
+    fn get(&self, key: &(u32, u32, u32)) -> Option<(Vec<u8>, String)> {
+        self.map.get(key).cloned()
+    }
+
+    fn put(&mut self, key: (u32, u32, u32), value: (Vec<u8>, String)) {
+        if self.map.insert(key, value).is_none() {
+            self.order.push_back(key);
+            while self.order.len() > TILES_CACHE_MAX {
+                if let Some(old) = self.order.pop_front() {
+                    self.map.remove(&old);
+                }
+            }
+        }
+    }
+}
+
+/// Serveur amont des tuiles, configuré côté serveur (variable d'environnement
+/// `TILES_UPSTREAM`), au format `https://exemple.fr/{z}/{x}/{y}.png`.
+///
+/// La clé éventuelle du fournisseur reste ainsi sur le serveur, jamais dans
+/// l'app — même principe que la clé FIRMS. Non configuré, l'endpoint répond
+/// 404 : la fonction est simplement inactive.
+fn tiles_upstream() -> Option<String> {
+    std::env::var("TILES_UPSTREAM")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| v.contains("{z}") && v.contains("{x}") && v.contains("{y}"))
+}
+
+/// GET /tiles/:z/:x/:y — tuile de carte, pour les cartes hors ligne de l'app.
+///
+/// Relais vers le serveur amont configuré, avec cache mémoire. **La licence
+/// applicable est celle de l'amont** : ce relais ne rend pas légitime une
+/// source qui interdirait le téléchargement de zones.
+async fn tile(Path((z, x, y)): Path<(u32, u32, String)>) -> Response {
+    let Some(upstream) = tiles_upstream() else {
+        return (StatusCode::NOT_FOUND, "tuiles non configurées").into_response();
+    };
+    // `y` arrive avec son extension éventuelle (« 12.png ») : on ne garde que
+    // le nombre, l'amont décidant du format.
+    let y_num = y.split('.').next().unwrap_or_default();
+    let Ok(y) = y_num.parse::<u32>() else {
+        return (StatusCode::BAD_REQUEST, "tuile invalide").into_response();
+    };
+    // Bornes strictes : sans cela, n'importe qui pourrait faire relayer des
+    // requêtes arbitraires et saturer l'amont.
+    if z > TILES_MAX_ZOOM {
+        return (StatusCode::BAD_REQUEST, "zoom trop élevé").into_response();
+    }
+    let limit = 1u32 << z;
+    if x >= limit || y >= limit {
+        return (StatusCode::BAD_REQUEST, "tuile hors limites").into_response();
+    }
+
+    let key = (z, x, y);
+    let cache = TILES_CACHE.get_or_init(|| Mutex::new(TileCache::default()));
+    if let Some((bytes, mime)) = cache.lock().ok().and_then(|c| c.get(&key)) {
+        return tile_response(bytes, mime);
+    }
+
+    let url = upstream
+        .replace("{z}", &z.to_string())
+        .replace("{x}", &x.to_string())
+        .replace("{y}", &y.to_string());
+    let Ok(resp) = http_client().get(&url).send().await else {
+        return (StatusCode::BAD_GATEWAY, "amont injoignable").into_response();
+    };
+    if !resp.status().is_success() {
+        return (StatusCode::BAD_GATEWAY, "amont en erreur").into_response();
+    }
+    let mime = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("image/png")
+        .to_string();
+    let Ok(bytes) = resp.bytes().await else {
+        return (StatusCode::BAD_GATEWAY, "tuile illisible").into_response();
+    };
+    let bytes = bytes.to_vec();
+    if let Ok(mut c) = cache.lock() {
+        c.put(key, (bytes.clone(), mime.clone()));
+    }
+    tile_response(bytes, mime)
+}
+
+/// Réponse tuile : cache long côté client, le rendu d'une tuile ne changeant
+/// qu'exceptionnellement.
+fn tile_response(bytes: Vec<u8>, mime: String) -> Response {
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, mime),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "public, max-age=2592000, immutable".to_string(),
+            ),
+        ],
+        bytes,
+    )
+        .into_response()
+}
+
 /// Client HTTP sortant partagé (pool de connexions + pile TLS construits une
 /// seule fois) — réutilisé par tous les appels externes (FIRMS, TomTom).
 fn http_client() -> &'static reqwest::Client {
@@ -1106,6 +1229,7 @@ fn build_app(state: AppState) -> Router {
         .route("/account", get(account_info).delete(delete_account))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
+        .route("/tiles/:z/:x/:y", get(tile))
         .route("/traffic", get(list_traffic))
         .route("/live", post(live_start))
         .route(
@@ -2669,6 +2793,76 @@ mod tests {
         let parsed = parse_gpx_waypoints(xml);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].label, "Point 1");
+    }
+
+    /// Le relais de tuiles doit refuser tout ce qui sort des bornes : sans
+    /// cela, n'importe qui pourrait lui faire relayer des requêtes arbitraires
+    /// et saturer le serveur amont.
+    #[tokio::test]
+    async fn tiles_rejects_out_of_bounds() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        // Amont configuré, sinon tout répondrait 404 sans rien valider.
+        std::env::set_var("TILES_UPSTREAM", "https://exemple.invalid/{z}/{x}/{y}.png");
+        let app: Router = Router::new().route("/tiles/:z/:x/:y", get(tile));
+
+        // Au zoom 1 il n'existe que les tuiles 0 et 1 sur chaque axe.
+        for uri in [
+            "/tiles/1/2/0",
+            "/tiles/1/0/2",
+            "/tiles/99/0/0",
+            "/tiles/1/0/abc",
+        ] {
+            let resp = app
+                .clone()
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::BAD_REQUEST,
+                "{uri} aurait dû être refusée"
+            );
+        }
+        std::env::remove_var("TILES_UPSTREAM");
+    }
+
+    /// Sans amont configuré, la fonction est simplement inactive.
+    #[tokio::test]
+    async fn tiles_absent_without_upstream() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        std::env::remove_var("TILES_UPSTREAM");
+        let app: Router = Router::new().route("/tiles/:z/:x/:y", get(tile));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/tiles/10/511/340.png")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    /// Le cache borné évince bien les plus anciennes tuiles.
+    #[test]
+    fn tile_cache_evicts_oldest() {
+        let mut cache = TileCache::default();
+        for i in 0..(TILES_CACHE_MAX as u32 + 10) {
+            cache.put((10, i, 0), (vec![1, 2, 3], "image/png".into()));
+        }
+        assert_eq!(cache.map.len(), TILES_CACHE_MAX);
+        assert!(
+            cache.get(&(10, 0, 0)).is_none(),
+            "la plus ancienne doit sortir"
+        );
+        assert!(cache.get(&(10, TILES_CACHE_MAX as u32 + 5, 0)).is_some());
     }
 
     /// Un panic dans un handler est converti en réponse 500 (pas de connexion
