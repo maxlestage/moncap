@@ -283,6 +283,11 @@ struct APIClient {
     /// Page de politique de confidentialité (servie par le backend).
     var privacyURL: URL { baseURL.appendingPathComponent("privacy") }
 
+    /// Modèle d'adresse des tuiles relayées par notre serveur, à coller dans
+    /// le réglage des cartes hors ligne. Les accolades doivent rester telles
+    /// quelles : c'est MapKit qui les remplace.
+    var tilesTemplate: String { baseURL.absoluteString + "/tiles/{z}/{x}/{y}.png" }
+
     func accountInfo() async throws -> AccountInfo {
         try await send(authedRequest("account"))
     }
