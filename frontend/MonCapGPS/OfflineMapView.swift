@@ -21,8 +21,10 @@ struct OfflineMapScreen: View {
     /// Fond réellement affiché : celui de l'utilisateur s'il répond, sinon le
     /// nôtre. Vérifié à l'ouverture, pour ne jamais rester devant un écran vide.
     @State private var style = URL(string: TileSource.defaultStyle)!
-    @State private var storedBytes = 0
     @State private var depth = Depth.ville
+    /// Champ de recherche actif : le panneau du bas se retire alors, sinon le
+    /// clavier le remonte par-dessus la saisie et on n'y voit plus rien.
+    @FocusState private var searching: Bool
     /// Tracé mémorisé, lu une seule fois (le corps de la vue est réévalué
     /// souvent : y lire le disque serait coûteux).
     @State private var route: [CLLocationCoordinate2D] = []
@@ -63,7 +65,7 @@ struct OfflineMapScreen: View {
                 searchBar
                 // La carte reste affichée malgré l'alerte : les zones déjà
                 // enregistrées s'affichent sans réseau ni serveur.
-                if let warning = styleStatus.message(hasStored: storedBytes > 0) {
+                if let warning = styleStatus.message(hasStored: packs.packCount > 0) {
                     Text(warning)
                         .font(.caption)
                         .multilineTextAlignment(.center)
@@ -73,9 +75,11 @@ struct OfflineMapScreen: View {
                         .padding(.horizontal)
                 }
             }
-            VStack {
-                Spacer()
-                vectorPanel
+            if !searching {
+                VStack {
+                    Spacer()
+                    vectorPanel
+                }
             }
         }
         .task(id: styleURLString) {
@@ -87,12 +91,9 @@ struct OfflineMapScreen: View {
         }
         .onAppear {
             route = RouteStore.load()?.coordinates ?? []
-            storedBytes = packs.storedBytes()
+            packs.refresh()
             search.center = center
             if let center { cam = MapCam(center: center, zoom: 11) }
-        }
-        .onChange(of: packs.running) { _, running in
-            if !running { storedBytes = packs.storedBytes() }
         }
     }
 
@@ -108,8 +109,9 @@ struct OfflineMapScreen: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Carte hors ligne").font(.headline)
                 Text(
-                    storedBytes > 0
-                        ? "\(Self.megabytes(storedBytes)) enregistrés"
+                    packs.packCount > 0
+                        ? "\(packs.packCount) zone\(packs.packCount > 1 ? "s" : "") · "
+                            + Self.megabytes(packs.storedBytes)
                         : "Aucune zone enregistrée"
                 )
                 .font(.caption)
@@ -140,28 +142,37 @@ struct OfflineMapScreen: View {
                 }
             } else {
                 let devis = estimate
+                // Déjà enregistrée : réappuyer empilerait une copie de la même
+                // zone, occupant à nouveau la place pour rien.
+                let deja =
+                    bounds.map {
+                        packs.covers(bounds: $0, maxZoom: Double(depth.zooms.upperBound))
+                    } ?? false
+                let bloque = deja || devis?.toolarge == true
                 Button {
-                    if let bounds, let devis, !devis.toolarge {
+                    if let bounds, let devis, !devis.toolarge, !deja {
                         packs.start(
                             styleURL: style, bounds: bounds,
                             maxZoom: Double(depth.zooms.upperBound))
                     }
                 } label: {
                     Label(
-                        devis.map { "Télécharger cette zone · \(Self.megabytes($0.bytes))" }
-                            ?? "Télécharger cette zone",
-                        systemImage: "arrow.down.circle.fill"
+                        deja
+                            ? "Zone déjà enregistrée"
+                            : devis.map { "Télécharger cette zone · \(Self.megabytes($0.bytes))" }
+                                ?? "Télécharger cette zone",
+                        systemImage: deja ? "checkmark.circle.fill" : "arrow.down.circle.fill"
                     )
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(
-                        (devis?.toolarge == true ? Color.gray : Color.blue).opacity(0.18),
+                        (bloque ? Color.gray : Color.blue).opacity(0.18),
                         in: RoundedRectangle(cornerRadius: 14))
                 }
                 // Télécharger d'un serveur sans cartes ne produirait qu'un
                 // pack vide, sans erreur visible.
-                .disabled(bounds == nil || !styleStatus.canDownload || devis?.toolarge == true)
+                .disabled(bounds == nil || !styleStatus.canDownload || bloque)
                 if let devis, devis.toolarge {
                     Text(
                         "Zone trop vaste : \(Self.megabytes(devis.bytes)) environ. "
@@ -181,7 +192,6 @@ struct OfflineMapScreen: View {
                 Spacer()
                 Button("Tout effacer", role: .destructive) {
                     packs.clearAll()
-                    storedBytes = 0
                 }
                 .font(.caption.weight(.semibold))
             }
@@ -204,6 +214,7 @@ struct OfflineMapScreen: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Chercher un lieu, une ville, un pays", text: $query)
+                    .focused($searching)
                     .autocorrectionDisabled()
                     .onChange(of: query) { _, q in search.search(q) }
                     .onSubmit { search.search(query) }
@@ -231,6 +242,7 @@ struct OfflineMapScreen: View {
                                 cam = MapCam(center: c, zoom: 11)
                                 query = ""
                                 search.clear()
+                                searching = false
                             } label: {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(item.name ?? "Lieu").font(.subheadline)
