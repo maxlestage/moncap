@@ -439,7 +439,7 @@ struct MapHomeView: View {
     @State private var positions: [Position] = []
     @State private var stats: Stats?
     @State private var routeInfo: String?
-    @State private var camera: MapCameraPosition = .userLocation(fallback: .automatic)
+    @State private var camera: MapCam?
     @State private var showPlaces = false
     @State private var showSearch = false
     @State private var destQuery = ""
@@ -466,8 +466,6 @@ struct MapHomeView: View {
     @State private var visibleRegion: MKCoordinateRegion?
     /// Région du dernier chargement de lieux (anti-rechargements inutiles).
     @State private var lastPOIRegion: MKCoordinateRegion?
-    /// Lieu Apple natif touché directement sur la carte (resto, hôtel, musée…).
-    @State private var selectedFeature: MapFeature?
     /// Signalement touché sur la carte (pour voter 👍/👎).
     @State private var alertToVote: Alert?
     /// Favoris Domicile / Travail (stockés sur l'appareil).
@@ -813,12 +811,6 @@ struct MapHomeView: View {
             if let o = routeOptions.first(where: { $0.id == id }), routeWarning(o) != nil {
                 warnHaptic()
             }
-        }
-        .onChange(of: selectedFeature) { _, feature in
-            // Un lieu Apple touché sur la carte → propose les itinéraires.
-            guard let feature, !nav.active else { return }
-            selectedFeature = nil
-            Task { await presentRouteOptions(to: feature.coordinate) }
         }
         .onChange(of: avoidTolls) { _, _ in reroutePreferencesChanged() }
         .onChange(of: avoidHighways) { _, _ in reroutePreferencesChanged() }
@@ -1184,164 +1176,175 @@ struct MapHomeView: View {
     // MARK: - Carte
 
     private var map: some View {
-        MapReader { proxy in
-        Map(position: $camera, selection: $selectedFeature) {
-            UserAnnotation()
-            // Les incendies ne surchargent plus la carte GPS : ils ont leur
-            // écran dédié (bouton 🔥 → carte des feux sur satellite).
-            // Mon avatar affiché à ma position (hors navigation).
-            if let me = location.coordinate, !nav.active {
-                Annotation("Moi", coordinate: me) {
-                    avatarMarker(liveAvatar, size: 40)
+        MainMapView(
+            // Lu depuis la valeur observée : changer de fond dans les réglages
+            // se voit tout de suite.
+            styleURL: styleURL.hasPrefix("http")
+                ? (URL(string: styleURL) ?? TileSource.styleURL) : TileSource.styleURL,
+            cam: camera,
+            pins: mapPins,
+            lines: mapLines,
+            buildings3D: is3D,
+            onPinTap: handlePinTap,
+            onPlaceTap: { coord, _ in
+                // Un lieu du fond de carte touché → propose les itinéraires.
+                guard !nav.active else { return }
+                Task { await presentRouteOptions(to: coord) }
+            },
+            onMapTap: handleMapTap,
+            onRegionChange: { region in
+                visibleRegion = region
+                // Recharge les lieux seulement si la carte a vraiment bougé.
+                if let kind = poiKind, !nav.active, regionChangedEnough(region) {
+                    Task { await loadPOIs(kind) }
                 }
-            }
-            ForEach(positions) { p in
-                Marker(p.label, coordinate: .init(latitude: p.lat, longitude: p.lon))
-            }
-            // Lieux de la catégorie choisie : un appui propose les itinéraires.
-            if !nav.active {
-                ForEach(pois) { p in
-                    Annotation(p.name, coordinate: p.coordinate) {
-                        Button {
-                            Task { await presentRouteOptions(to: p.coordinate) }
-                        } label: {
-                            ZStack {
-                                // Contour léger plutôt qu'une ombre : bien moins
-                                // coûteux à dessiner quand il y a beaucoup
-                                // d'épingles (fluidité).
-                                Circle().fill(.white)
-                                    .frame(width: 34, height: 34)
-                                    .overlay(Circle().stroke(.black.opacity(0.15), lineWidth: 0.5))
-                                Text(poiKind?.emoji ?? "📍").font(.body)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            // Options d'itinéraire : chacune sa couleur ; celle prévisualisée
-            // est mise en avant (plus épaisse, opaque) et dessinée par-dessus.
-            if !routeOptions.isEmpty && !nav.active {
-                ForEach(routeOptions.filter { $0.id != selectedRouteID }) { o in
-                    MapPolyline(coordinates: o.coordinates)
-                        .stroke(o.color.opacity(0.45),
-                                style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-                }
-                ForEach(routeOptions.filter { $0.id == selectedRouteID }) { o in
-                    MapPolyline(coordinates: o.coordinates)
-                        .stroke(o.color,
-                                style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
-                }
-                // Aperçu par itinéraire : bulle durée + coût au milieu du
-                // tracé, tapable pour sélectionner l'itinéraire.
-                ForEach(routeOptions.filter { $0.coordinates.count >= 2 }) { o in
-                    Annotation("", coordinate: o.coordinates[o.coordinates.count / 2]) {
-                        let isSel = o.id == selectedRouteID
-                        Button {
-                            withAnimation { selectedRouteID = o.id }
-                        } label: {
-                            VStack(spacing: 0) {
-                                Text(String(format: "%.0f min", o.minutes))
-                                    .font(.caption.weight(.bold))
-                                if let cost = routeCostShort(o) {
-                                    Text(cost).font(.caption2.weight(.semibold))
-                                }
-                            }
-                            .foregroundStyle(isSel ? .white : .primary)
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(
-                                isSel ? AnyShapeStyle(o.color) : AnyShapeStyle(.regularMaterial),
-                                in: Capsule())
-                            .overlay(Capsule().stroke(o.color, lineWidth: 2))
-                            .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            } else if !multiRoutes.isEmpty && !nav.active {
-                // Plusieurs trajets simultanés (un par point), chacun sa couleur.
-                ForEach(multiRoutes) { r in
-                    MapPolyline(coordinates: r.coordinates)
-                        .stroke(r.color, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
-                }
-            } else if !displayedRoute.isEmpty {
-                // Itinéraire routier le plus simple, en vert.
-                MapPolyline(coordinates: displayedRoute)
-                    .stroke(.green, style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
-            } else if positions.count >= 2 {
-                // Repli : tracé direct si le routage n'a rien renvoyé.
-                MapPolyline(coordinates: positions.map { .init(latitude: $0.lat, longitude: $0.lon) })
-                    .stroke(.green.opacity(0.5), style: StrokeStyle(lineWidth: 5, dash: [8, 6]))
-            }
-            // Trajet enregistré sélectionné dans l'historique (en indigo).
-            if let t = displayedTrip, !nav.active {
-                let coords = t.coordinates.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
-                MapPolyline(coordinates: coords)
-                    .stroke(.indigo, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
-                if let start = coords.first {
-                    Marker("Départ", systemImage: "flag.fill", coordinate: start).tint(.indigo)
-                }
-                if let end = coords.last {
-                    Marker("Arrivée", systemImage: "flag.checkered", coordinate: end).tint(.indigo)
-                }
-            }
-            ForEach(liveCars) { u in
-                Annotation(u.label, coordinate: .init(latitude: u.lat, longitude: u.lon)) {
-                    avatarMarker(u.avatar, size: 44)
-                }
-            }
-            ForEach(realtime.alerts) { a in
-                Annotation(a.label.isEmpty ? a.category : a.label,
-                           coordinate: .init(latitude: a.lat, longitude: a.lon)) {
-                    // Toucher un signalement permet de le confirmer/infirmer.
-                    Button { alertToVote = a } label: {
-                        ZStack(alignment: .topTrailing) {
-                            ZStack {
-                                Circle().fill(.white).frame(width: 34, height: 34).shadow(radius: 2)
-                                Text(emoji(for: a.category)).font(.body)
-                            }
-                            if let up = a.confirms, up > 0 {
-                                Text("\(up)")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 4).padding(.vertical, 1)
-                                    .background(Color.green, in: Capsule())
-                                    .offset(x: 8, y: -6)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .mapControls { MapCompass() }
-        // Tous les lieux Apple (restos, hôtels, musées…) visibles en permanence
-        // sur la carte, et tapables pour y aller.
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .all))
-        // Suit la zone visible ; recharge les lieux de la catégorie active
-        // quand on déplace la carte (fin de geste uniquement).
-        .onMapCameraChange(frequency: .onEnd) { ctx in
-            visibleRegion = ctx.region
-            // Recharge les lieux seulement si la carte a vraiment bougé.
-            if let kind = poiKind, !nav.active, regionChangedEnough(ctx.region) {
-                Task { await loadPOIs(kind) }
-            }
-        }
-        // Toucher (près d')un tracé le sélectionne directement sur la carte.
-        .onTapGesture(coordinateSpace: .local) { point in
-            handleMapTap(point, proxy: proxy)
-        }
-        // Manipuler la carte à la main (déplacement OU zoom) débraye le suivi
-        // automatique ; il reprend tout seul 8 s après le dernier geste (en
-        // navigation). Le zoom était auparavant ignoré : la caméra le suivait
-        // et « ramenait » la vue, rendant le zoom impossible.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 8).onChanged { _ in userTouchedMap() }
+            },
+            onUserGesture: userTouchedMap
         )
-        .simultaneousGesture(
-            MagnifyGesture().onChanged { _ in userTouchedMap() }
-        )
+        .ignoresSafeArea()
+    }
+
+    /// Épingles de la carte, dans l'ordre où elles s'empilent.
+    private var mapPins: [MapPin] {
+        var pins: [MapPin] = []
+        // Les incendies ne surchargent plus la carte GPS : ils ont leur écran
+        // dédié (bouton 🔥 → carte des feux sur satellite).
+        // Mon avatar à ma position (hors navigation, où la flèche suffit).
+        if let me = location.coordinate, !nav.active {
+            pins.append(
+                MapPin(id: "moi", coordinate: me, title: "Moi", look: .avatar(liveAvatar, 40)))
+        }
+        for p in positions {
+            pins.append(
+                MapPin(
+                    id: "pos-\(p.id)",
+                    coordinate: CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon),
+                    title: p.label, look: .marker("mappin", "#FF3B30")))
+        }
+        // Lieux de la catégorie choisie : un appui propose les itinéraires.
+        if !nav.active {
+            for p in pois {
+                pins.append(
+                    MapPin(
+                        id: "poi-\(p.id)", coordinate: p.coordinate, title: p.name,
+                        look: .emoji(poiKind?.emoji ?? "📍", 34)))
+            }
+        }
+        // Aperçu par itinéraire : bulle durée + coût au milieu du tracé,
+        // tapable pour sélectionner l'itinéraire.
+        if !routeOptions.isEmpty && !nav.active {
+            for o in routeOptions where o.coordinates.count >= 2 {
+                pins.append(
+                    MapPin(
+                        id: "opt-\(o.id)",
+                        coordinate: o.coordinates[o.coordinates.count / 2],
+                        title: "",
+                        look: .bubble(
+                            String(format: "%.0f min", o.minutes), routeCostShort(o),
+                            o.color.hex, o.id == selectedRouteID)))
+            }
+        }
+        if let t = displayedTrip, !nav.active {
+            let coords = t.coordinates.map {
+                CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+            }
+            if let start = coords.first {
+                pins.append(
+                    MapPin(
+                        id: "trip-start", coordinate: start, title: "Départ",
+                        look: .marker("flag.fill", "#5856D6")))
+            }
+            if let end = coords.last {
+                pins.append(
+                    MapPin(
+                        id: "trip-end", coordinate: end, title: "Arrivée",
+                        look: .marker("flag.checkered", "#5856D6")))
+            }
+        }
+        for u in liveCars {
+            pins.append(
+                MapPin(
+                    id: "live-\(u.id)",
+                    coordinate: CLLocationCoordinate2D(latitude: u.lat, longitude: u.lon),
+                    title: u.label, look: .avatar(u.avatar, 44)))
+        }
+        for a in realtime.alerts {
+            pins.append(
+                MapPin(
+                    id: "alert-\(a.id)",
+                    coordinate: CLLocationCoordinate2D(latitude: a.lat, longitude: a.lon),
+                    title: a.label.isEmpty ? a.category : a.label,
+                    look: .report(emoji(for: a.category), a.confirms ?? 0)))
+        }
+        return pins
+    }
+
+    /// Tracés de la carte, du fond vers le dessus.
+    private var mapLines: [MapLine] {
+        var lines: [MapLine] = []
+        // Options d'itinéraire : chacune sa couleur ; celle prévisualisée est
+        // mise en avant (plus épaisse, opaque) et dessinée par-dessus.
+        if !routeOptions.isEmpty && !nav.active {
+            for o in routeOptions where o.id != selectedRouteID {
+                lines.append(
+                    MapLine(
+                        id: "opt-\(o.id)", coordinates: o.coordinates, color: o.color.hex,
+                        width: 5, opacity: 0.45))
+            }
+            for o in routeOptions where o.id == selectedRouteID {
+                lines.append(
+                    MapLine(
+                        id: "opt-\(o.id)", coordinates: o.coordinates, color: o.color.hex,
+                        width: 8))
+            }
+        } else if !multiRoutes.isEmpty && !nav.active {
+            // Plusieurs trajets simultanés (un par point), chacun sa couleur.
+            for r in multiRoutes {
+                lines.append(
+                    MapLine(
+                        id: "multi-\(r.id)", coordinates: r.coordinates, color: r.color.hex,
+                        width: 6))
+            }
+        } else if !displayedRoute.isEmpty {
+            // Itinéraire routier le plus simple, en vert.
+            lines.append(
+                MapLine(id: "route", coordinates: displayedRoute, color: "#34C759", width: 7))
+        } else if positions.count >= 2 {
+            // Repli : tracé direct si le routage n'a rien renvoyé.
+            lines.append(
+                MapLine(
+                    id: "direct",
+                    coordinates: positions.map {
+                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+                    },
+                    color: "#34C759", width: 5, opacity: 0.5, dashed: true))
+        }
+        // Trajet enregistré sélectionné dans l'historique (en indigo).
+        if let t = displayedTrip, !nav.active {
+            lines.append(
+                MapLine(
+                    id: "trip",
+                    coordinates: t.coordinates.map {
+                        CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+                    },
+                    color: "#5856D6", width: 6))
+        }
+        return lines
+    }
+
+    /// Un appui sur une épingle, selon ce qu'elle représente.
+    private func handlePinTap(_ id: String) {
+        if let raw = id.strippingPrefix("opt-") {
+            if let o = routeOptions.first(where: { "\($0.id)" == raw }) {
+                withAnimation { selectedRouteID = o.id }
+            }
+        } else if let raw = id.strippingPrefix("poi-") {
+            if let p = pois.first(where: { "\($0.id)" == raw }) {
+                Task { await presentRouteOptions(to: p.coordinate) }
+            }
+        } else if let raw = id.strippingPrefix("alert-") {
+            // Toucher un signalement permet de le confirmer/infirmer.
+            alertToVote = realtime.alerts.first(where: { "\($0.id)" == raw })
         }
     }
 
@@ -1354,13 +1357,14 @@ struct MapHomeView: View {
     }
 
     /// Sélectionne l'itinéraire dont le tracé est le plus proche du point touché.
-    private func handleMapTap(_ point: CGPoint, proxy: MapProxy) {
-        guard !nav.active, !routeOptions.isEmpty,
-            let tapped = proxy.convert(point, from: .local)
-        else { return }
-        // Tolérance ≈ largeur d'un doigt, convertie en mètres au zoom courant.
-        let offset = proxy.convert(CGPoint(x: point.x + 24, y: point.y), from: .local)
-        let tolerance = offset.map { distanceMeters(tapped, $0) } ?? 80
+    private func handleMapTap(_ tapped: CLLocationCoordinate2D) {
+        guard !nav.active, !routeOptions.isEmpty else { return }
+        // Tolérance ≈ largeur d'un doigt : environ 5 % de la largeur visible,
+        // ce qui la fait grandir quand on dézoome.
+        let visibleMeters =
+            (visibleRegion?.span.longitudeDelta ?? 0.05) * 111_320
+            * cos(tapped.latitude * .pi / 180)
+        let tolerance = max(40, visibleMeters * 0.05)
 
         var best: (id: UUID, dist: Double)?
         for o in routeOptions {
@@ -3252,7 +3256,7 @@ struct MapHomeView: View {
             latitudeDelta: (lats.max()! - lats.min()!) * 1.4 + 0.01,
             longitudeDelta: (lons.max()! - lons.min()!) * 1.4 + 0.01)
         withAnimation {
-            camera = .region(MKCoordinateRegion(center: center, span: span))
+            camera = MapCam(region: MKCoordinateRegion(center: center, span: span))
         }
     }
 
@@ -3265,9 +3269,7 @@ struct MapHomeView: View {
         nav.start(route: route, destination: to)
         showPlaces = false
         // Vue « conduite » : la carte suit et tourne dans le sens de la marche.
-        withAnimation {
-            camera = .userLocation(followsHeading: true, fallback: .automatic)
-        }
+        withAnimation { camera = followCamera(from) }
     }
 
     /// Calcule plusieurs itinéraires vers une destination et les propose :
@@ -3416,13 +3418,8 @@ struct MapHomeView: View {
         selectedRouteID = nil
         routesExpanded = false
         pendingDestination = nil
-        withAnimation {
-            if is3D, let c = location.coordinate {
-                camera = .camera(MapCamera(centerCoordinate: c, distance: 500,
-                                           heading: location.course, pitch: 60))
-            } else {
-                camera = .userLocation(followsHeading: true, fallback: .automatic)
-            }
+        if let c = location.coordinate {
+            withAnimation { camera = followCamera(c) }
         }
     }
 
@@ -3494,28 +3491,24 @@ struct MapHomeView: View {
     /// prochaine manœuvre, et plus on va vite plus elle recule pour regarder
     /// loin devant. À l'arrêt, elle prend de la hauteur et dézoome pour situer
     /// les environs.
-    private func followCamera(_ c: CLLocationCoordinate2D) -> MapCameraPosition {
+    private func followCamera(_ c: CLLocationCoordinate2D) -> MapCam {
         let speed = max(0, location.speedKmh)
         if speed < Self.stoppedKmh {
             // À l'arrêt le cap GPS n'est plus fiable : on garde le dernier connu.
-            return .camera(MapCamera(
-                centerCoordinate: c, distance: 1600,
-                heading: max(0, lastCamHeading), pitch: is3D ? 35 : 0))
+            return MapCam(
+                center: c, distance: 1600,
+                heading: max(0, lastCamHeading), pitch: is3D ? 35 : 0)
         }
         // 380 m en ville, jusqu'à 1100 m sur voie rapide.
         let distance = min(1100, 380 + max(0, speed - 10) * 9)
-        return .camera(MapCamera(
-            centerCoordinate: c, distance: distance,
-            heading: location.course, pitch: is3D ? 70 : 0))
+        return MapCam(
+            center: c, distance: distance,
+            heading: location.course, pitch: is3D ? 70 : 0)
     }
 
     /// Caméra centrée sur un point, inclinée si le mode 3D est actif.
-    private func userCamera(_ c: CLLocationCoordinate2D, distance: Double = 1200) -> MapCameraPosition {
-        if is3D {
-            return .camera(MapCamera(centerCoordinate: c, distance: distance, heading: 0, pitch: 60))
-        }
-        return .region(MKCoordinateRegion(
-            center: c, latitudinalMeters: distance, longitudinalMeters: distance))
+    private func userCamera(_ c: CLLocationCoordinate2D, distance: Double = 1200) -> MapCam {
+        MapCam(center: c, distance: distance, heading: 0, pitch: is3D ? 60 : 0)
     }
 
     /// Active/désactive la vue 3D et l'applique immédiatement.
@@ -3561,9 +3554,9 @@ struct MapHomeView: View {
                 let j = min(i + step, n - 1)
                 let heading = bearingBetween(c, coords[j])
                 withAnimation(.linear(duration: 0.3)) {
-                    camera = .camera(MapCamera(
-                        centerCoordinate: c, distance: 700,
-                        heading: heading, pitch: is3D ? 70 : 45))
+                    camera = MapCam(
+                        center: c, distance: 700,
+                        heading: heading, pitch: is3D ? 70 : 45)
                 }
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 i += step
@@ -3626,7 +3619,7 @@ struct MapHomeView: View {
             latitudeDelta: (lats.max()! - lats.min()!) * 1.4 + 0.01,
             longitudeDelta: (lons.max()! - lons.min()!) * 1.4 + 0.01)
         withAnimation {
-            camera = .region(MKCoordinateRegion(center: center, span: span))
+            camera = MapCam(region: MKCoordinateRegion(center: center, span: span))
         }
     }
 
