@@ -159,7 +159,7 @@ struct FireMapLibreView: UIViewRepresentable {
             view.setVisibleCoordinateBounds(
                 bounds,
                 edgePadding: UIEdgeInsets(top: 130, left: 40, bottom: 190, right: 40),
-                animated: false)
+                animated: false, completionHandler: nil)
         }
 
         func mapView(_ mapView: MLNMapView, imageFor annotation: MLNAnnotation)
