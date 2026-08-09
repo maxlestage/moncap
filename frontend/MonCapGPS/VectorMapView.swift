@@ -104,8 +104,12 @@ final class VectorPackDownloader: NSObject, ObservableObject {
             [weak self] pack, error in
             guard let self else { return }
             if let error {
-                self.running = false
-                self.message = error.localizedDescription
+                // MapLibre rappelle hors du fil principal : publier l'état
+                // directement mettrait à jour l'interface depuis un autre fil.
+                Task { @MainActor in
+                    self.running = false
+                    self.message = error.localizedDescription
+                }
                 return
             }
             pack?.resume()
