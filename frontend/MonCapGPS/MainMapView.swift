@@ -24,8 +24,12 @@ import UIKit
 struct MapCam: Equatable {
     let id = UUID()
     var center: CLLocationCoordinate2D
-    /// Distance caméra ↔ centre, en mètres, comme `MapCamera`.
-    var distance: Double = 1200
+    /// Niveau de zoom MapLibre.
+    ///
+    /// Exprimé ainsi, et non en mètres : convertir une distance en altitude
+    /// dépend de la taille de la vue et du moteur, et donnait un cadrage
+    /// imprévisible. Un niveau de zoom, lui, veut dire la même chose partout.
+    var zoom: Double = 15
     var heading: Double = 0
     var pitch: Double = 0
 
@@ -38,10 +42,11 @@ extension MapCam {
     /// Déclarée dans une extension à dessein : un initialiseur écrit dans le
     /// corps de la structure supprimerait l'initialiseur membre à membre.
     init(region: MKCoordinateRegion) {
-        let meters = max(
-            region.span.latitudeDelta * 111_320,
-            region.span.longitudeDelta * 111_320 * cos(region.center.latitude * .pi / 180))
-        self.init(center: region.center, distance: max(200, meters), heading: 0, pitch: 0)
+        // Chaque niveau de zoom couvre deux fois moins de degrés que le
+        // précédent ; 548 est ce qu'un écran de téléphone couvre au zoom 0.
+        let span = max(region.span.longitudeDelta, region.span.latitudeDelta * 1.3, 0.0005)
+        self.init(center: region.center, zoom: max(2, min(17, log2(548 / span))),
+                  heading: 0, pitch: 0)
     }
 }
 
@@ -110,15 +115,16 @@ struct MainMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> SizedMapView {
         let view = SizedMapView(frame: .zero, styleURL: styleURL)
         context.coordinator.appliedStyle = styleURL
-        // La caméra ne peut être posée qu'une fois la vue mesurée : MapLibre
-        // convertit une altitude en zoom d'après la hauteur affichée, et sans
-        // hauteur le calcul donne la vue du monde entier.
+        // Filet de sécurité : la toute première caméra arrive parfois avant que
+        // la carte n'ait sa place à l'écran, et à l'arrêt rien ne la réémet.
         view.onLayout = { [weak view, weak coordinator = context.coordinator] in
             guard let view, let coordinator else { return }
             coordinator.applyPendingCam(to: view)
         }
         view.delegate = context.coordinator
-        view.showsUserLocation = true
+        // Pas de pastille bleue : la position est marquée par l'avatar,
+        // posé comme épingle par la vue appelante.
+        view.showsUserLocation = false
         view.attributionButtonPosition = .bottomRight
         // La boussole d'Apple avait son équivalent ici ; le logo doit rester
         // visible, la licence des données l'exige.
@@ -189,8 +195,8 @@ struct MainMapView: UIViewRepresentable {
         /// Style demandé à la vue. Fait foi : la vue, elle, ne le renvoie
         /// qu'une fois le chargement terminé.
         var appliedStyle: URL?
-        /// Caméra reçue avant que la vue ait une taille.
-        private var pendingCam: MapCam?
+        /// La vue a-t-elle déjà été mesurée une fois ?
+        private var laidOut = false
         /// Épingles en place, par identifiant.
         private var placed: [String: PinAnnotation] = [:]
         /// Signature des tracés déjà dessinés, pour ne rien refaire pour rien.
@@ -220,36 +226,27 @@ struct MainMapView: UIViewRepresentable {
 
         // MARK: Caméra
 
-        /// Zoom MapLibre correspondant à une distance de caméra.
-        ///
-        /// MapLibre raisonne en niveaux de zoom, `MapCamera` en mètres : à la
-        /// latitude 45°, un niveau couvre environ 2 × 10⁷ / 2^z mètres de large.
-        static func zoom(for distance: Double) -> Double {
-            let d = max(50, distance)
-            return max(2, min(20, log2(4.0e7 / d)))
-        }
-
         func apply(_ cam: MapCam, to view: MLNMapView) {
-            // Tant que la vue n'est pas mesurée, on garde la caméra de côté :
-            // l'appliquer donnerait un zoom aberrant, et à l'arrêt elle ne
-            // serait jamais réémise (rien ne bouge), donc la vue resterait
-            // bloquée sur le monde entier.
-            guard view.bounds.height > 10 else {
-                pendingCam = cam
-                return
+            // L'inclinaison d'abord, sans animation : elle ne dépend ni du
+            // centre ni du zoom, et `setCenter` la laisse intacte.
+            let pitch = CGFloat(max(0, min(60, cam.pitch)))
+            if abs(view.camera.pitch - pitch) > 1 {
+                let tilted = view.camera
+                tilted.pitch = pitch
+                view.setCamera(tilted, animated: false)
             }
-            pendingCam = nil
-            let camera = MLNMapCamera(
-                lookingAtCenter: cam.center,
-                altitude: max(50, cam.distance),
-                pitch: CGFloat(max(0, min(60, cam.pitch))),
-                heading: cam.heading)
-            view.setCamera(camera, withDuration: 0.8, animationTimingFunction: nil)
+            // Puis centre, zoom et cap en une fois. Aucune altitude n'entre en
+            // jeu : ce chemin ne dépend pas de la taille de la vue.
+            view.setCenter(
+                cam.center, zoomLevel: max(2, min(19, cam.zoom)),
+                direction: cam.heading, animated: true)
         }
 
-        /// Pose la caméra restée en attente, une fois la vue mesurée.
+        /// Repose la dernière caméra une fois la vue mesurée : la toute
+        /// première arrive parfois avant que la carte n'ait sa place à l'écran.
         func applyPendingCam(to view: MLNMapView) {
-            guard let cam = pendingCam else { return }
+            guard let cam = appliedCam, !laidOut, view.bounds.height > 10 else { return }
+            laidOut = true
             apply(cam, to: view)
         }
 
