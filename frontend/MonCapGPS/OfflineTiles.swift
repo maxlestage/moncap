@@ -150,14 +150,46 @@ struct OfflineEstimate {
             let tall = dLat / (360 / n * cos(lat * .pi / 180))
             let count = (Int(across.rounded(.up)) + 1) * (Int(tall.rounded(.up)) + 1)
             tiles += count
-            bytes += count * weight(z)
+            bytes += count * weightFor(z)
         }
         return OfflineEstimate(tiles: tiles, bytes: bytes)
     }
 
     /// Poids moyen d'une tuile vectorielle, mesuré sur OpenFreeMap : les bas
     /// niveaux couvrent large et pèsent lourd, les hauts sont plus légers.
-    private static func weight(_ z: Int) -> Int {
+    static func weightFor(_ z: Int) -> Int {
         z < 10 ? 250_000 : (z < 13 ? 200_000 : 120_000)
+    }
+}
+
+extension OfflineEstimate {
+    /// Volume attendu pour un couloir suivant un tracé.
+    ///
+    /// Un trajet est un ruban, pas un rectangle : n'enregistrer que les tuiles
+    /// traversées divise le volume par dix sur un long parcours — 400 km
+    /// passent de sept gigaoctets à quelques centaines de mégaoctets.
+    static func of(route: [CLLocationCoordinate2D], zooms: ClosedRange<Int>) -> OfflineEstimate {
+        guard route.count >= 2 else { return OfflineEstimate(tiles: 0, bytes: 0) }
+        var tiles = 0
+        var bytes = 0
+        for z in zooms {
+            let n = pow(2.0, Double(z))
+            var vues = Set<Int64>()
+            for c in route {
+                let x = Int((c.longitude + 180) / 360 * n)
+                let rad = c.latitude * .pi / 180
+                let y = Int((1 - log(tan(rad) + 1 / cos(rad)) / .pi) / 2 * n)
+                // Une tuile de marge de part et d'autre : un couloir large
+                // d'une seule tuile serait quitté au moindre écart.
+                for dx in -1...1 {
+                    for dy in -1...1 {
+                        vues.insert(Int64(x + dx) * 1_000_000 + Int64(y + dy))
+                    }
+                }
+            }
+            tiles += vues.count
+            bytes += vues.count * weightFor(z)
+        }
+        return OfflineEstimate(tiles: tiles, bytes: bytes)
     }
 }

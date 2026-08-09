@@ -173,6 +173,33 @@ struct OfflineMapScreen: View {
                 // Télécharger d'un serveur sans cartes ne produirait qu'un
                 // pack vide, sans erreur visible.
                 .disabled(bounds == nil || !styleStatus.canDownload || bloque)
+                // Le trajet mémorisé se télécharge en couloir : sur plusieurs
+                // centaines de kilomètres, le rectangle englobant réclamerait
+                // dix à trente fois plus de tuiles pour la même route.
+                if route.count >= 2, let trajet = routeEstimate, !trajet.toolarge {
+                    Button {
+                        packs.startRoute(
+                            styleURL: style, route: route,
+                            maxZoom: Double(depth.zooms.upperBound))
+                    } label: {
+                        Label(
+                            "Mon itinéraire · \(Self.megabytes(trajet.bytes))",
+                            systemImage: "point.topleft.down.to.point.bottomright.curvepath.fill"
+                        )
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.green.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+                    }
+                    .disabled(!styleStatus.canDownload)
+                } else if route.count >= 2, let trajet = routeEstimate {
+                    Text(
+                        "Itinéraire trop long à ce niveau de détail "
+                            + "(\(Self.megabytes(trajet.bytes))). Choisis « Région »."
+                    )
+                    .font(.caption2).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                }
                 if let devis, devis.toolarge {
                     Text(
                         "Zone trop vaste : \(Self.megabytes(devis.bytes)) environ. "
@@ -199,6 +226,12 @@ struct OfflineMapScreen: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding()
+    }
+
+    /// Volume attendu pour un couloir suivant l'itinéraire mémorisé.
+    private var routeEstimate: OfflineEstimate? {
+        guard route.count >= 2 else { return nil }
+        return OfflineEstimate.of(route: route, zooms: depth.zooms)
     }
 
     /// Volume attendu pour la zone visible et le niveau de détail choisi.
