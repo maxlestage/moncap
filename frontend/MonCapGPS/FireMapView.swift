@@ -55,6 +55,10 @@ struct FireMapLibreView: UIViewRepresentable {
             guard let view, let coordinator else { return }
             coordinator.layoutReady(view)
         }
+
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        view.addGestureRecognizer(tap)
         return view
     }
 
@@ -88,7 +92,8 @@ struct FireMapLibreView: UIViewRepresentable {
         func changeStyle(to url: URL, on view: MLNMapView) {
             appliedStyle = url
             styleReady = false
-            view.removeAnnotations(view.annotations ?? [])
+            // Tout étant en couches de style, le rechargement fait le ménage :
+            // il ne reste rien à retirer à la main.
             drawn = []
             view.styleURL = url
         }
@@ -139,11 +144,12 @@ struct FireMapLibreView: UIViewRepresentable {
             guard signature != drawn else { return }
             drawn = signature
 
-            for name in ["feux-contour", "feux-liseré"] {
+            for name in ["feux-coeur", "feux-halo", "feux-liseré", "feux-contour"] {
                 if let layer = style.layer(withIdentifier: name) { style.removeLayer(layer) }
             }
-            if let source = style.source(withIdentifier: "feux-src") { style.removeSource(source) }
-            view.removeAnnotations(view.annotations ?? [])
+            for name in ["feux-src", "feux-pts"] {
+                if let source = style.source(withIdentifier: name) { style.removeSource(source) }
+            }
             guard !perimeters.isEmpty else { return }
 
             // Un seul jeu de formes pour tous les foyers : deux couches
@@ -171,13 +177,38 @@ struct FireMapLibreView: UIViewRepresentable {
             stroke.lineWidth = NSExpression(forConstantValue: 2)
             style.addLayer(stroke)
 
+            // Marqueurs en couches de style plutôt qu'en épingles.
+            //
+            // Les contours mesurent quelques kilomètres : à l'échelle de la
+            // France ils sont sous le pixel, seul le marqueur situe le foyer.
+            // Une couche de cercles se dessine par le même chemin que les
+            // contours et tient sans effort à cent exemplaires.
+            var points: [MLNPointFeature] = []
             for p in perimeters {
-                let a = PinAnnotation()
-                a.coordinate = p.center
-                a.pinID = "\(p.id)"
-                a.look = .flame
-                view.addAnnotation(a)
+                let f = MLNPointFeature()
+                f.coordinate = p.center
+                f.attributes = ["feu": p.id]
+                points.append(f)
             }
+            let centres = MLNShapeSource(
+                identifier: "feux-pts", shape: MLNShapeCollectionFeature(shapes: points),
+                options: nil)
+            style.addSource(centres)
+
+            let red = UIColor(red: 0.86, green: 0.13, blue: 0.11, alpha: 1)
+            let halo = MLNCircleStyleLayer(identifier: "feux-halo", source: centres)
+            halo.circleRadius = NSExpression(forConstantValue: 13)
+            halo.circleColor = NSExpression(forConstantValue: red)
+            halo.circleOpacity = NSExpression(forConstantValue: 0.28)
+            style.addLayer(halo)
+
+            let coeur = MLNCircleStyleLayer(identifier: "feux-coeur", source: centres)
+            coeur.circleRadius = NSExpression(forConstantValue: 5.5)
+            coeur.circleColor = NSExpression(forConstantValue: red)
+            coeur.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+            coeur.circleStrokeWidth = NSExpression(forConstantValue: 1.5)
+            style.addLayer(coeur)
+
             fitIfNeeded(perimeters, on: view)
         }
 
@@ -203,24 +234,18 @@ struct FireMapLibreView: UIViewRepresentable {
                 animated: false, completionHandler: nil)
         }
 
-        func mapView(_ mapView: MLNMapView, imageFor annotation: MLNAnnotation)
-            -> MLNAnnotationImage?
-        {
-            guard let pin = annotation as? PinAnnotation, let look = pin.look else { return nil }
-            let key = String(look.hashValue)
-            if let cached = mapView.dequeueReusableAnnotationImage(withIdentifier: key) {
-                return cached
+        /// Foyer touché : interrogation des couches de marqueurs sous le doigt.
+        @objc func handleTap(_ g: UITapGestureRecognizer) {
+            guard let view = g.view as? MLNMapView else { return }
+            let point = g.location(in: view)
+            let touchés = view.visibleFeatures(
+                at: point, styleLayerIdentifiers: ["feux-coeur", "feux-halo"])
+            for f in touchés {
+                if let n = f.attribute(forKey: "feu") as? NSNumber {
+                    onSelect(n.intValue)
+                    return
+                }
             }
-            return MLNAnnotationImage(image: PinRenderer.image(for: look), reuseIdentifier: key)
-        }
-
-        func mapView(_ mapView: MLNMapView, annotationCanShowCallout annotation: MLNAnnotation)
-            -> Bool { false }
-
-        func mapView(_ mapView: MLNMapView, didSelect annotation: MLNAnnotation) {
-            mapView.deselectAnnotation(annotation, animated: false)
-            guard let pin = annotation as? PinAnnotation, let id = Int(pin.pinID) else { return }
-            onSelect(id)
         }
     }
 }
