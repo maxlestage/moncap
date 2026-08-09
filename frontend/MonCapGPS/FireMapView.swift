@@ -42,6 +42,7 @@ struct FireMapLibreView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> SizedMapView {
         let view = SizedMapView(frame: .zero, styleURL: styleURL)
+        context.coordinator.appliedStyle = styleURL
         view.delegate = context.coordinator
         view.showsUserLocation = false
         view.logoView.isHidden = false
@@ -59,6 +60,12 @@ struct FireMapLibreView: UIViewRepresentable {
 
     func updateUIView(_ view: SizedMapView, context: Context) {
         context.coordinator.onSelect = onSelect
+        // Le style est résolu après coup (vérification réseau) : sans ce
+        // report, un serveur personnel n'était jamais honoré ici. Comparé à la
+        // demande, jamais à ce que la vue renvoie pendant un chargement.
+        if context.coordinator.appliedStyle != styleURL {
+            context.coordinator.changeStyle(to: styleURL, on: view)
+        }
         context.coordinator.sync(perimeters, on: view)
     }
 
@@ -68,12 +75,23 @@ struct FireMapLibreView: UIViewRepresentable {
         var onSelect: (Int) -> Void = { _ in }
         private var styleReady = false
         private var laidOut = false
-        private var drawn: [Int] = []
+        private var drawn: [String] = []
         /// Le cadrage n'est fait qu'une fois : le refaire à chaque
         /// rafraîchissement ramènerait l'utilisateur de force.
         private var fitted = false
         /// Derniers foyers reçus, rejoués dès que style ET mise en page sont là.
         private var last: [FirePerimeter] = []
+        /// Style demandé à la vue ; fait foi pendant le chargement.
+        var appliedStyle: URL?
+
+        /// Bascule vers un autre fond : tout sera reposé au rechargement.
+        func changeStyle(to url: URL, on view: MLNMapView) {
+            appliedStyle = url
+            styleReady = false
+            view.removeAnnotations(view.annotations ?? [])
+            drawn = []
+            view.styleURL = url
+        }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             addOrtho(to: style)
@@ -111,9 +129,15 @@ struct FireMapLibreView: UIViewRepresentable {
         func sync(_ perimeters: [FirePerimeter], on view: MLNMapView) {
             last = perimeters
             guard styleReady, laidOut, let style = view.style else { return }
-            let ids = perimeters.map(\.id)
-            guard ids != drawn else { return }
-            drawn = ids
+            // Les identifiants sont séquentiels (0..n-1) : ils n'encodent que
+            // le nombre de foyers. La garde porte sur la géométrie réelle,
+            // sinon un foyer qui grossit à effectif constant restait figé.
+            let signature = perimeters.map {
+                "\(Int($0.center.latitude * 1e5)),\(Int($0.center.longitude * 1e5))"
+                    + ",\($0.polygon.count),\(Int($0.updatedAt?.timeIntervalSince1970 ?? 0))"
+            }
+            guard signature != drawn else { return }
+            drawn = signature
 
             for name in ["feux-contour", "feux-liseré"] {
                 if let layer = style.layer(withIdentifier: name) { style.removeLayer(layer) }
@@ -244,9 +268,10 @@ struct FireMapScreen: View {
         .task(id: styleURLString) {
             style = await TileSource.resolvedStyle(custom: styleURLString)
         }
-        // Recalcule les contours dès que la liste des feux change (arrivée des
-        // données), hors du thread principal.
-        .task(id: service.fires.count) {
+        // Recalcule les contours à chaque rafraîchissement réussi — daté par
+        // `lastUpdate`, car le simple compte de points peut rester identique
+        // alors que les données ont changé (fenêtre glissante de 7 jours).
+        .task(id: service.lastUpdate) {
             let fires = service.fires
             perimeters = await Task.detached { FireGeometry.perimeters(from: fires) }.value
             // Les identifiants de foyers changent au recalcul : referme la
@@ -299,6 +324,10 @@ struct FireMapScreen: View {
             let mark = try? await CLGeocoder().reverseGeocodeLocation(loc).first
             if let city = mark?.locality ?? mark?.subLocality ?? mark?.subAdministrativeArea {
                 names[key] = "Feu de \(city)"
+            } else {
+                // Échec (réseau, quota) : oublier la sentinelle « en cours »,
+                // sinon plus aucune tentative n'était possible pour ce foyer.
+                names.removeValue(forKey: key)
             }
         }
     }
