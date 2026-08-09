@@ -87,6 +87,9 @@ struct OfflineMapScreen: View {
     @AppStorage(TileSource.styleKey) private var styleURLString = ""
     @StateObject private var packs = VectorPackDownloader()
     @State private var bounds: MLNCoordinateBounds?
+    /// Le style est-il réellement servi ? Un serveur sans cartes rendrait une
+    /// carte grise sans le moindre message.
+    @State private var styleStatus = StyleStatus.checking
 
     /// Style vectoriel exploitable, s'il y en a un.
     private var vectorStyle: URL? {
@@ -154,7 +157,20 @@ struct OfflineMapScreen: View {
             } else {
                 setupHelp
             }
-            header
+            VStack(spacing: 0) {
+                header
+                // La carte reste affichée malgré l'alerte : les zones déjà
+                // enregistrées s'affichent sans réseau ni serveur.
+                if let warning = styleStatus.message(hasStored: storedBytes > 0) {
+                    Text(warning)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                        .padding(10)
+                        .frame(maxWidth: .infinity)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal)
+                }
+            }
             VStack {
                 Spacer()
                 if vectorStyle != nil {
@@ -163,6 +179,14 @@ struct OfflineMapScreen: View {
                     panel
                 }
             }
+        }
+        .task(id: styleURLString) {
+            guard let style = vectorStyle else {
+                styleStatus = .ok  // mode tuiles images : pas de style à vérifier
+                return
+            }
+            styleStatus = .checking
+            styleStatus = await StyleProbe.check(style)
         }
         .onAppear {
             region = startRegion
@@ -309,7 +333,9 @@ struct OfflineMapScreen: View {
                         .padding(.vertical, 12)
                         .background(Color.blue.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
                 }
-                .disabled(bounds == nil)
+                // Télécharger d'un serveur sans cartes ne produirait qu'un
+                // pack vide, sans erreur visible.
+                .disabled(bounds == nil || !styleStatus.canDownload)
                 if let message = packs.message {
                     Text(message).font(.caption2).foregroundStyle(.orange)
                 }
