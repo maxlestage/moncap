@@ -43,9 +43,12 @@ extension MapCam {
     /// corps de la structure supprimerait l'initialiseur membre à membre.
     init(region: MKCoordinateRegion) {
         // Chaque niveau de zoom couvre deux fois moins de degrés que le
-        // précédent ; 548 est ce qu'un écran de téléphone couvre au zoom 0.
+        // précédent. Au zoom 0 le tour du monde fait 512 **points** chez
+        // MapLibre : un écran d'environ 390 points en couvre donc 360 × 390 /
+        // 512 ≈ 274 degrés. Compter en pixels donnait un niveau de trop, et
+        // les itinéraires est-ouest sortaient de l'écran.
         let span = max(region.span.longitudeDelta, region.span.latitudeDelta * 1.3, 0.0005)
-        self.init(center: region.center, zoom: max(2, min(17, log2(548 / span))),
+        self.init(center: region.center, zoom: max(2, min(17, log2(274 / span))),
                   heading: 0, pitch: 0)
     }
 }
@@ -65,6 +68,8 @@ enum PinLook: Hashable {
     case bubble(String, String?, String, Bool)
     /// Repère simple, avec un symbole système.
     case marker(String, String)
+    /// Foyer d'incendie : disque rouge cerné de son halo, flamme au centre.
+    case flame
 }
 
 /// Épingle posée sur la carte.
@@ -89,7 +94,18 @@ struct MapLine: Identifiable {
     /// Résumé de l'apparence : reconstruire les couches n'a de sens que si
     /// quelque chose a changé.
     var signature: String {
-        "\(id)|\(coordinates.count)|\(color)|\(width)|\(opacity)|\(dashed)"
+        // Les extrémités et le milieu entrent dans le compte : un itinéraire
+        // recalculé garde souvent le même nombre de points, et sans eux le
+        // tracé affiché restait celui d'avant.
+        let a = coordinates.first
+        let b = coordinates[coordinates.count / 2 % max(1, coordinates.count)]
+        let c = coordinates.last
+        func k(_ p: CLLocationCoordinate2D?) -> String {
+            guard let p else { return "-" }
+            return "\(Int(p.latitude * 1e5)),\(Int(p.longitude * 1e5))"
+        }
+        return "\(id)|\(coordinates.count)|\(k(a))|\(k(b))|\(k(c))"
+            + "|\(color)|\(width)|\(opacity)|\(dashed)"
     }
 }
 
@@ -133,8 +149,14 @@ struct MainMapView: UIViewRepresentable {
 
         let tap = UITapGestureRecognizer(
             target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
-        // Ne pas voler les appuis destinés aux épingles.
         tap.delegate = context.coordinator
+        // Sans cela, le premier appui d'un double-tap de zoom déclenchait déjà
+        // une action — un calcul d'itinéraire, par exemple. MapLibre impose la
+        // même contrainte à son propre appui simple.
+        for existing in view.gestureRecognizers ?? []
+        where (existing as? UITapGestureRecognizer)?.numberOfTapsRequired == 2 {
+            tap.require(toFail: existing)
+        }
         view.addGestureRecognizer(tap)
 
         let pan = UIPanGestureRecognizer(
@@ -218,6 +240,10 @@ struct MainMapView: UIViewRepresentable {
         func changeStyle(to url: URL, on view: MLNMapView) {
             appliedStyle = url
             styleReady = false
+            // Les épingles appartiennent à la vue, pas au style : les oublier
+            // sans les retirer les aurait laissées en place, puis dupliquées
+            // au rechargement.
+            view.removeAnnotations(Array(placed.values))
             placed = [:]
             lineSignatures = []
             lineIDs = []
@@ -245,9 +271,12 @@ struct MainMapView: UIViewRepresentable {
         /// Repose la dernière caméra une fois la vue mesurée : la toute
         /// première arrive parfois avant que la carte n'ait sa place à l'écran.
         func applyPendingCam(to view: MLNMapView) {
-            guard let cam = appliedCam, !laidOut, view.bounds.height > 10 else { return }
+            guard !laidOut, view.bounds.height > 10 else { return }
+            // Marqué dès la première mise en page utile, même sans caméra à
+            // poser : sinon une mise en page ultérieure (rotation, clavier)
+            // rejouerait une caméra périmée et ramènerait la carte en arrière.
             laidOut = true
-            apply(cam, to: view)
+            if let cam = appliedCam { apply(cam, to: view) }
         }
 
         // MARK: Épingles
@@ -336,8 +365,10 @@ struct MainMapView: UIViewRepresentable {
 
         func setBuildings3D(_ on: Bool, on view: MLNMapView) {
             buildings3D = on
-            // Sans style chargé, la valeur est réappliquée à son arrivée.
-            view.style?.layer(withIdentifier: "building-3d")?.isVisible = on
+            // Rien à masquer : au-delà du zoom 14, `building-3d` est la seule
+            // couche de bâti du style (`building` s'arrête là). La cacher en
+            // 2D effaçait les bâtiments sur toute la plage de conduite ; à
+            // plat, une extrusion se lit simplement comme une empreinte.
         }
 
         // MARK: Délégué
@@ -396,6 +427,12 @@ struct MainMapView: UIViewRepresentable {
         @objc func handleTap(_ g: UITapGestureRecognizer) {
             guard let view = g.view as? MLNMapView else { return }
             let point = g.location(in: view)
+
+            // Une épingle sous le doigt est déjà traitée par MapLibre, qui
+            // appelle `didSelect`. Sans ce test, l'appui déclenchait les deux
+            // chemins : sélection de l'épingle ET action « lieu du fond ».
+            if annotation(near: point, in: view) != nil { return }
+
             let coord = view.convert(point, toCoordinateFrom: view)
 
             // Un lieu du fond de carte l'emporte : c'est ce que l'utilisateur
@@ -409,6 +446,16 @@ struct MainMapView: UIViewRepresentable {
                 return
             }
             onMapTap(coord)
+        }
+
+        /// Épingle posée sous le point touché, à portée du doigt.
+        private func annotation(near point: CGPoint, in view: MLNMapView) -> PinAnnotation? {
+            let reach: CGFloat = 30
+            for pin in placed.values {
+                let p = view.convert(pin.coordinate, toPointTo: view)
+                if abs(p.x - point.x) <= reach && abs(p.y - point.y) <= reach { return pin }
+            }
+            return nil
         }
 
         @objc func handleGesture(_ g: UIGestureRecognizer) {
@@ -461,6 +508,40 @@ enum PinRenderer {
             return bubble(text: text, sub: sub, color: UIColor(hex: color), selected: selected)
         case let .marker(symbol, color):
             return marker(symbol: symbol, color: UIColor(hex: color))
+        case .flame:
+            return flame()
+        }
+    }
+
+    /// Marqueur de foyer, repris du site : halo diffus, anneau soutenu, cœur
+    /// rouge et flamme dorée. La pulsation d'origine disparaît — une image ne
+    /// s'anime pas — mais le halo reste, et l'épingle tient à des dizaines
+    /// d'exemplaires sans peser sur la carte.
+    private static func flame() -> UIImage {
+        let side: CGFloat = 64
+        let red = UIColor(red: 0.86, green: 0.13, blue: 0.11, alpha: 1)
+        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let mid = side / 2
+            func disc(_ diameter: CGFloat, _ color: UIColor) {
+                color.setFill()
+                ctx.cgContext.fillEllipse(
+                    in: CGRect(
+                        x: mid - diameter / 2, y: mid - diameter / 2,
+                        width: diameter, height: diameter))
+            }
+            disc(60, red.withAlphaComponent(0.30))
+            disc(48, red.withAlphaComponent(0.50))
+            disc(36, red)
+            let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+            let gold = UIColor(red: 1, green: 0.85, blue: 0.40, alpha: 1)
+            if let glyph = UIImage(systemName: "flame.fill", withConfiguration: config)?
+                .withTintColor(gold, renderingMode: .alwaysOriginal)
+            {
+                glyph.draw(
+                    in: CGRect(
+                        x: mid - glyph.size.width / 2, y: mid - glyph.size.height / 2,
+                        width: glyph.size.width, height: glyph.size.height))
+            }
         }
     }
 
