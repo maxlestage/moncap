@@ -439,7 +439,11 @@ struct MapHomeView: View {
     @State private var positions: [Position] = []
     @State private var stats: Stats?
     @State private var routeInfo: String?
-    @State private var camera: MapCam?
+    /// Cadrage de départ sur la France : tant qu'aucune position n'est
+    /// connue, mieux vaut cela que le cadrage par défaut du style, qui est le
+    /// monde entier centré sur le golfe de Guinée.
+    @State private var camera: MapCam? = MapCam(
+        center: CLLocationCoordinate2D(latitude: 46.6, longitude: 2.4), zoom: 4.6)
     @State private var showPlaces = false
     @State private var showSearch = false
     @State private var destQuery = ""
@@ -759,6 +763,16 @@ struct MapHomeView: View {
                             camera = followCamera(c)
                         }
                     }
+                }
+            } else if !previewing, followsRoute {
+                // Hors navigation aussi : sans cela rien ne posait jamais de
+                // caméra, et la carte restait sur le cadrage par défaut du
+                // style — le monde entier — jusqu'à ce qu'on appuie sur
+                // recentrer. Le suivi s'arrête dès qu'on touche la carte.
+                let moved = lastCamCoord.map { metersBetween($0, c) } ?? .infinity
+                if moved >= 20 {
+                    lastCamCoord = c
+                    withAnimation(.easeInOut(duration: 1.0)) { camera = userCamera(c) }
                 }
             }
         }

@@ -40,6 +40,11 @@ final class FireService: ObservableObject {
 
     private var lastFetch = Date.distantPast
     private var lastKey = ""
+    /// Récupération en cours. Chaque frappe dans le champ « clé FIRMS » relance
+    /// un rafraîchissement : sans annuler le précédent, plusieurs requêtes
+    /// lourdes couraient de front et la dernière arrivée — pas la dernière
+    /// demandée — écrivait la liste.
+    private var fetch: Task<Void, Never>?
 
     /// Rafraîchit la liste des feux (au plus toutes les 15 min ; immédiat si la
     /// clé change). Si `key` (clé FIRMS saisie dans les réglages) est non vide,
@@ -53,7 +58,8 @@ final class FireService: ObservableObject {
         lastFetch = Date()
         lastKey = k
         let base = baseURL
-        Task {
+        fetch?.cancel()
+        fetch = Task {
             var f: [Fire]?
             if !k.isEmpty {
                 // 7 jours d'historique (pour dater les foyers) ; la requête est
@@ -66,6 +72,8 @@ final class FireService: ObservableObject {
             } else {
                 f = await Self.fetchBackend(base: base)
             }
+            // Une demande plus récente a pris le relais : ne pas écrire.
+            if Task.isCancelled { return }
             if let f {
                 // Une liste vide est une réponse légitime (plus aucun feu) :
                 // on l'applique, sinon la carte garderait des foyers éteints.
