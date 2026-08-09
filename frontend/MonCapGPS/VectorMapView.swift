@@ -133,6 +133,10 @@ final class VectorPackDownloader: NSObject, ObservableObject {
     @Published private(set) var running = false
     @Published private(set) var progress: Double = 0
     @Published private(set) var message: String?
+    /// Espace occupé par les zones enregistrées, en octets.
+    @Published private(set) var storedBytes = 0
+    /// Nombre de zones enregistrées.
+    @Published private(set) var packCount = 0
 
     override init() {
         super.init()
@@ -182,12 +186,56 @@ final class VectorPackDownloader: NSObject, ObservableObject {
         running = false
         progress = 0
         message = nil
+        storedBytes = 0
+        packCount = 0
     }
 
-    /// Espace occupé par les zones enregistrées, en octets.
-    func storedBytes() -> Int {
-        guard let packs = MLNOfflineStorage.shared.packs else { return 0 }
-        return packs.reduce(0) { $0 + Int($1.progress.countOfBytesCompleted) }
+    /// Redemande leur état aux zones enregistrées.
+    ///
+    /// Une zone au repos ignore sa propre taille : MapLibre ne remplit
+    /// `progress` qu'à la demande. Sans cela l'écran annonçait « Aucune zone
+    /// enregistrée » alors que les cartes étaient bien présentes.
+    ///
+    /// La liste elle-même se charge en tâche de fond : au lancement elle est
+    /// encore absente, sans que rien ne le signale — d'où les tentatives.
+    func refresh(retries: Int = 6) {
+        guard let packs = MLNOfflineStorage.shared.packs else {
+            guard retries > 0 else { return }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                self.refresh(retries: retries - 1)
+            }
+            return
+        }
+        packCount = packs.count
+        for pack in packs { pack.requestProgress() }
+        recount(packs)
+    }
+
+    private func recount(_ packs: [MLNOfflinePack]) {
+        packCount = packs.count
+        storedBytes = packs.reduce(0) { $0 + Int($1.progress.countOfBytesCompleted) }
+    }
+
+    /// Une zone déjà enregistrée couvre-t-elle celle-ci, au même détail ?
+    ///
+    /// Sans ce test, réappuyer sur « Télécharger » empilait des copies de la
+    /// même zone, chacune occupant à nouveau la place.
+    func covers(bounds: MLNCoordinateBounds, maxZoom: Double) -> Bool {
+        for pack in MLNOfflineStorage.shared.packs ?? [] {
+            guard let r = pack.region as? MLNTilePyramidOfflineRegion,
+                r.maximumZoomLevel >= maxZoom
+            else { continue }
+            let marge = 1e-6
+            if r.bounds.sw.latitude <= bounds.sw.latitude + marge,
+                r.bounds.sw.longitude <= bounds.sw.longitude + marge,
+                r.bounds.ne.latitude >= bounds.ne.latitude - marge,
+                r.bounds.ne.longitude >= bounds.ne.longitude - marge
+            {
+                return true
+            }
+        }
+        return false
     }
 
     @objc private func progressChanged(_ note: Notification) {
@@ -199,6 +247,9 @@ final class VectorPackDownloader: NSObject, ObservableObject {
             if p.countOfResourcesCompleted >= expected {
                 self.running = false
             }
+            // Chaque signal renseigne aussi la place occupée : c'est par ce
+            // chemin que les zones au repos finissent par se déclarer.
+            self.recount(MLNOfflineStorage.shared.packs ?? [])
         }
     }
 
