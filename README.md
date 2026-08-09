@@ -138,7 +138,8 @@ variables d'environnement.
 
 | Variable | Rôle |
 | --- | --- |
-| `TILES_UPSTREAM` | Serveur amont, format `https://…/{z}/{x}/{y}.png`. Non défini → l'endpoint répond 404 et la fonction reste inactive. |
+| `TILES_PMTILES` | **Archive PMTiles auto-hébergée** (URL). Prioritaire : c'est le mode conforme, où l'on sert ses propres tuiles. |
+| `TILES_UPSTREAM` | Serveur amont relayé, format `https://…/{z}/{x}/{y}.png`. Utilisé si aucune archive n'est définie. |
 | `TILES_USER_AGENT` | Identification envoyée à l'amont. La plupart des fournisseurs refusent les requêtes sans `User-Agent` identifiable. |
 
 Le relais borne `z`, `x` et `y` (sinon n'importe qui pourrait lui faire
@@ -158,7 +159,30 @@ C'est en revanche parfaitement autorisé, les données étant sous licence
 ODbL (attribution « © OpenStreetMap contributors », déjà affichée dans
 l'app). Deux chemins, selon le format voulu.
 
-**Tuiles images (ce que l'app attend aujourd'hui).** Le rendu demande une
+**Le plus simple : une archive PMTiles.** `planetiler` produit, en une
+commande et sans base de données, un **fichier unique** à partir d'un extrait
+OpenStreetMap. Le backend sait le lire par plages d'octets (`TILES_PMTILES`),
+il suffit donc de l'héberger quelque part qui accepte les requêtes de plage —
+tout stockage objet le fait.
+
+```bash
+# 1. Extrait régional -> une archive .pmtiles (quelques minutes)
+java -Xmx8g -jar planetiler.jar --download --area=aquitaine \
+     --output=aquitaine.pmtiles
+
+# 2. Publier le fichier sur un stockage objet, puis :
+heroku config:set \
+  TILES_PMTILES='https://mon-stockage.example/aquitaine.pmtiles' \
+  -a mon-app
+```
+
+⚠️ `planetiler` produit des tuiles **vectorielles**. Le backend les sert
+correctement (type MIME et compression relayés), mais l'écran hors ligne de
+l'app affiche aujourd'hui des tuiles **images** : il faudra lui adjoindre un
+moteur de rendu vectoriel (MapLibre) pour en profiter. Une archive PMTiles
+*raster*, elle, fonctionne immédiatement.
+
+**Tuiles images.** Le rendu demande une
 chaîne complète — base PostGIS + moteur de rendu — qui ne tient pas dans un
 dyno Heroku. On la fait tourner **une fois**, sur une machine de travail, et
 l'on publie le résultat sur un hébergement statique :
@@ -180,12 +204,6 @@ heroku config:set \
 Ordres de grandeur : une région française jusqu'au zoom 13 représente
 quelques milliers de tuiles (quelques centaines de Mo) ; aller jusqu'au zoom
 16 multiplie ce volume par 15 environ.
-
-**Tuiles vectorielles.** Nettement plus légères (un fichier `.pmtiles` unique
-pour toute une région) et sans chaîne de rendu à opérer, mais l'app devrait
-alors embarquer un moteur de rendu vectoriel — MapLibre — à la place de la
-couche `MKTileOverlay` actuelle. C'est le choix à faire si le volume des
-tuiles images devient un problème.
 
 ## Déploiement Heroku (buildpack — 100 % navigateur, sans CLI)
 
