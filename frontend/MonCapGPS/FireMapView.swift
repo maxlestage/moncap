@@ -40,16 +40,24 @@ struct FireMapLibreView: UIViewRepresentable {
     /// Identifiant du foyer touché.
     let onSelect: (Int) -> Void
 
-    func makeUIView(context: Context) -> MLNMapView {
-        let view = MLNMapView(frame: .zero, styleURL: styleURL)
+    func makeUIView(context: Context) -> SizedMapView {
+        let view = SizedMapView(frame: .zero, styleURL: styleURL)
         view.delegate = context.coordinator
         view.showsUserLocation = false
         view.logoView.isHidden = false
         view.attributionButtonPosition = .bottomRight
+        // Rien de ce qui dépend de la taille ne doit courir avant la première
+        // mise en page : le style peut sortir du cache et les feux être déjà
+        // en mémoire, tout arrivait alors sur une vue de taille nulle — cadrage
+        // sur le monde entier, épingles perdues — et ne se rejouait jamais.
+        view.onLayout = { [weak view, weak coordinator = context.coordinator] in
+            guard let view, let coordinator else { return }
+            coordinator.layoutReady(view)
+        }
         return view
     }
 
-    func updateUIView(_ view: MLNMapView, context: Context) {
+    func updateUIView(_ view: SizedMapView, context: Context) {
         context.coordinator.onSelect = onSelect
         context.coordinator.sync(perimeters, on: view)
     }
@@ -59,21 +67,32 @@ struct FireMapLibreView: UIViewRepresentable {
     final class Coordinator: NSObject, MLNMapViewDelegate {
         var onSelect: (Int) -> Void = { _ in }
         private var styleReady = false
+        private var laidOut = false
         private var drawn: [Int] = []
         /// Le cadrage n'est fait qu'une fois : le refaire à chaque
         /// rafraîchissement ramènerait l'utilisateur de force.
         private var fitted = false
-        private var pending: [FirePerimeter] = []
+        /// Derniers foyers reçus, rejoués dès que style ET mise en page sont là.
+        private var last: [FirePerimeter] = []
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             addOrtho(to: style)
             styleReady = true
-            if !pending.isEmpty {
-                let p = pending
-                pending = []
-                drawn = []
-                sync(p, on: mapView)
-            }
+            redraw(on: mapView)
+        }
+
+        /// Première mise en page utile : la vue a enfin une taille.
+        func layoutReady(_ view: MLNMapView) {
+            guard !laidOut, view.bounds.height > 10 else { return }
+            laidOut = true
+            redraw(on: view)
+        }
+
+        /// Redessine tout depuis `last`, en oubliant ce qui a pu être posé
+        /// sur une vue pas encore prête.
+        private func redraw(on view: MLNMapView) {
+            drawn = []
+            sync(last, on: view)
         }
 
         /// Orthophoto posée au-dessus du fond : les libellés disparaissent
@@ -90,10 +109,8 @@ struct FireMapLibreView: UIViewRepresentable {
         }
 
         func sync(_ perimeters: [FirePerimeter], on view: MLNMapView) {
-            guard styleReady, let style = view.style else {
-                pending = perimeters
-                return
-            }
+            last = perimeters
+            guard styleReady, laidOut, let style = view.style else { return }
             let ids = perimeters.map(\.id)
             guard ids != drawn else { return }
             drawn = ids
@@ -142,7 +159,7 @@ struct FireMapLibreView: UIViewRepresentable {
 
         /// Cadre sur l'ensemble des foyers, une seule fois.
         private func fitIfNeeded(_ perimeters: [FirePerimeter], on view: MLNMapView) {
-            guard !fitted else { return }
+            guard !fitted, view.bounds.height > 10 else { return }
             let points = perimeters.flatMap(\.polygon)
             guard let first = points.first else { return }
             var minLat = first.latitude, maxLat = first.latitude
@@ -308,14 +325,15 @@ struct FireMapScreen: View {
                 Text(
                     perimeters.isEmpty
                         ? "Aucun foyer détecté"
-                        : "contour satellite · touchez un foyer"
+                        : "touchez un foyer · \(OrthoSource.attribution)"
                 )
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
-                Text(OrthoSource.attribution)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
+            // Une ligne par texte, réduite au besoin : en grande taille de
+            // police le bandeau enflait jusqu'à couvrir la moitié de l'écran.
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.regularMaterial, in: Capsule())
