@@ -112,3 +112,52 @@ enum StyleProbe {
         }
     }
 }
+
+/// Volume d'une zone à télécharger, estimé avant de commencer.
+///
+/// MapLibre n'annonce rien tant qu'il n'a pas commencé : sans cette estimation
+/// un simple appui pouvait lancer plusieurs gigaoctets en silence — une région
+/// entière au niveau « Rue » en représente une vingtaine.
+struct OfflineEstimate {
+    let tiles: Int
+    let bytes: Int
+
+    /// Plafonds : de quoi couvrir une ville rue par rue, une agglomération au
+    /// niveau « Ville » ou une région au niveau « Région » — mais pas un pays
+    /// entier, qui se compterait en gigaoctets.
+    ///
+    /// Le poids prime sur le nombre de tuiles : c'est lui qui remplit le
+    /// téléphone et le forfait.
+    static let maxBytes = 500_000_000
+    static let maxTiles = 12_000
+
+    var toolarge: Bool { bytes > Self.maxBytes || tiles > Self.maxTiles }
+
+    /// Nombre de tuiles et poids attendus pour une zone et une plage de zooms.
+    static func of(
+        sw: CLLocationCoordinate2D, ne: CLLocationCoordinate2D, zooms: ClosedRange<Int>
+    ) -> OfflineEstimate {
+        let dLat = abs(ne.latitude - sw.latitude)
+        let dLon = abs(ne.longitude - sw.longitude)
+        let lat = (ne.latitude + sw.latitude) / 2
+        var tiles = 0
+        var bytes = 0
+        for z in zooms {
+            let n = pow(2.0, Double(z))
+            let across = dLon / 360 * n
+            // Une tuile couvre d'autant moins de latitude qu'on s'éloigne de
+            // l'équateur : la projection étire les hautes latitudes.
+            let tall = dLat / (360 / n * cos(lat * .pi / 180))
+            let count = (Int(across.rounded(.up)) + 1) * (Int(tall.rounded(.up)) + 1)
+            tiles += count
+            bytes += count * weight(z)
+        }
+        return OfflineEstimate(tiles: tiles, bytes: bytes)
+    }
+
+    /// Poids moyen d'une tuile vectorielle, mesuré sur OpenFreeMap : les bas
+    /// niveaux couvrent large et pèsent lourd, les hauts sont plus légers.
+    private static func weight(_ z: Int) -> Int {
+        z < 10 ? 250_000 : (z < 13 ? 200_000 : 120_000)
+    }
+}
