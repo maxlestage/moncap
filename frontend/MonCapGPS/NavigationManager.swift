@@ -237,13 +237,17 @@ final class NavigationManager: ObservableObject {
 
     /// Démarre la navigation à partir d'étapes et d'un tracé déjà assemblés
     /// (utile pour un itinéraire composé de plusieurs tronçons).
+    /// `resumingAt` : position actuelle lors de la reprise d'un trajet
+    /// interrompu. Sans elle, le guidage repartirait de la première consigne,
+    /// déjà franchie — jamais atteinte, donc affichée jusqu'à l'arrivée.
     func start(steps: [NavStep], coordinates: [CLLocationCoordinate2D],
                distanceKm: Double, etaMinutes: Double,
-               destination: CLLocationCoordinate2D) {
+               destination: CLLocationCoordinate2D,
+               resumingAt: CLLocationCoordinate2D? = nil) {
         self.destination = destination
         configureAudio()
         load(steps: steps, coords: coordinates, km: distanceKm, min: etaMinutes,
-             announceStart: true)
+             announceStart: true, resumingAt: resumingAt)
         active = true
     }
 
@@ -385,8 +389,29 @@ final class NavigationManager: ObservableObject {
         maneuver = .straight
         instruction = "Recalcul de l'itinéraire…"
         detail = nil
-        speak("Recalcul de l'itinéraire.")
+        // Annoncé à la première tentative seulement : hors réseau elles
+        // s'enchaînent toutes les 30 s sans jamais aboutir, et l'annonce
+        // répétée devenait un radotage.
+        if rerouteFailures == 0 { speak("Recalcul de l'itinéraire.") }
         onReroute?()
+    }
+
+    /// Cale l'étape courante sur la position réelle, à la reprise d'un trajet.
+    ///
+    /// L'étape n'avance que lorsqu'on passe à moins de 25 m de son point : une
+    /// consigne située loin derrière ne serait jamais atteinte, et resterait
+    /// affichée pour le reste du parcours.
+    private func snapStep(to coord: CLLocationCoordinate2D) {
+        var best: Int?
+        var bestDistance = Double.greatestFiniteMagnitude
+        for (i, step) in steps.enumerated() where !step.text.isEmpty {
+            let d = distance(coord, step.coord)
+            if d < bestDistance {
+                bestDistance = d
+                best = i
+            }
+        }
+        if let best { stepIndex = best }
     }
 
     /// Le recalcul a échoué (réseau indisponible le plus souvent).
@@ -406,7 +431,8 @@ final class NavigationManager: ObservableObject {
     }
 
     private func load(steps: [NavStep], coords: [CLLocationCoordinate2D],
-                      km: Double, min: Double, announceStart: Bool) {
+                      km: Double, min: Double, announceStart: Bool,
+                      resumingAt: CLLocationCoordinate2D? = nil) {
         self.steps = steps
         routeCoords = coords
         totalKm = km
@@ -414,6 +440,7 @@ final class NavigationManager: ObservableObject {
         remainingKm = km
         etaMinutes = min
         stepIndex = steps.firstIndex { !$0.text.isEmpty } ?? 0
+        if let resumingAt { snapStep(to: resumingAt) }
         spokenPrepare = false
         lastEtaSpoken = Date()
         if stepIndex < steps.count {

@@ -634,7 +634,10 @@ struct MapHomeView: View {
                     nav.start(
                         steps: r.navSteps, coordinates: r.coordinates,
                         distanceKm: r.km, etaMinutes: r.minutes,
-                        destination: r.destinationCoordinate)
+                        destination: r.destinationCoordinate,
+                        // Reprise en cours de route : le guidage doit repartir
+                        // d'ici, pas du départ du trajet.
+                        resumingAt: location.coordinate)
                     speedLimit.preload(along: r.coordinates)
                     followsRoute = true
                 }
