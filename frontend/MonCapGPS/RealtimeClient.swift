@@ -100,7 +100,10 @@ final class RealtimeClient: ObservableObject {
                 if case .string(let text) = message {
                     Task { @MainActor in self.handle(text) }
                 }
-                self.receive()  // boucle de réception
+                // La boucle repart depuis le fil principal : `receive` y lit
+                // `task`, qui appartient à l'acteur. URLSession, lui, rappelle
+                // depuis l'un de ses propres fils.
+                Task { @MainActor in self.receive() }
             }
         }
     }
