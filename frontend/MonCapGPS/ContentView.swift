@@ -524,6 +524,10 @@ struct MapHomeView: View {
     @State private var wasDriving = false
     /// Itinéraire interrompu retrouvé au lancement, en attente de reprise.
     @State private var resumable: SavedRoute?
+    /// Carte hors ligne (tuiles téléchargées, écran dédié).
+    @State private var showOfflineMap = false
+    /// Serveur de tuiles pour les cartes hors ligne. Vide = fonction inactive.
+    @AppStorage(TileSource.defaultsKey) private var tileURL = ""
     /// Mode nuit automatique (selon la position réelle du soleil).
     @State private var nightMode = false
     /// Dernier calcul jour/nuit (recalcul limité à 1×/min : le soleil bouge
@@ -611,6 +615,9 @@ struct MapHomeView: View {
         }
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(service: fires)
+        }
+        .fullScreenCover(isPresented: $showOfflineMap) {
+            OfflineMapScreen(center: location.coordinate)
         }
         // Reprise d'une navigation interrompue : le guidage repart sur
         // l'itinéraire mémorisé, sans avoir besoin du réseau.
@@ -2277,6 +2284,7 @@ struct MapHomeView: View {
             Spacer()
             VStack(spacing: 14) {
                 fireMapButton
+                offlineMapButton
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
@@ -2293,6 +2301,18 @@ struct MapHomeView: View {
             Image(systemName: "flame.fill")
                 .font(.title3)
                 .foregroundStyle(.orange)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(.regularMaterial))
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+    }
+
+    /// Ouvre la carte hors ligne (tuiles téléchargées) en plein écran.
+    private var offlineMapButton: some View {
+        Button { showOfflineMap = true } label: {
+            Image(systemName: "square.and.arrow.down.on.square")
+                .font(.title3)
+                .foregroundStyle(.blue)
                 .frame(width: 48, height: 48)
                 .background(Circle().fill(.regularMaterial))
                 .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
@@ -2433,6 +2453,25 @@ struct MapHomeView: View {
                     .font(.footnote)
                     Text(
                         "Colle ta clé FIRMS pour afficher les vrais foyers (carte des feux, menu) sans attendre le serveur. \(fires.fires.count) foyer(s) actuellement."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+                Section("Cartes hors ligne 🗺️") {
+                    TextField("https://exemple.fr/{z}/{x}/{y}.png", text: $tileURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.system(.footnote, design: .monospaced))
+                    Button {
+                        showPlaces = false
+                        showOfflineMap = true
+                    } label: {
+                        Label("Télécharger des zones", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(!TileSource.isConfigured)
+                    Text(
+                        "Apple Plans ne permet pas d'enregistrer ses cartes. Indique un serveur de tuiles auquel tu as droit (ton propre serveur ou un fournisseur) pour consulter des zones sans réseau."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -2996,7 +3035,8 @@ struct MapHomeView: View {
                     """
                     Cartes : Apple Plans · Feux : NASA FIRMS (VIIRS) · \
                     Trafic : TomTom · Météo : Open-Meteo · \
-                    Vitesses : OpenStreetMap · Carburants : data.economie.gouv.fr
+                    Vitesses : OpenStreetMap · Carburants : data.economie.gouv.fr · \
+                    Cartes hors ligne : serveur de tuiles configuré
                     """
                 )
                 .font(.caption2)
