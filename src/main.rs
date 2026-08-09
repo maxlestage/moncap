@@ -1,6 +1,7 @@
 mod auth;
 mod entity;
 mod migration;
+mod pmtiles;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -752,15 +753,142 @@ fn tiles_upstream() -> Option<String> {
         .filter(|v| v.contains("{z}") && v.contains("{x}") && v.contains("{y}"))
 }
 
+/// Archive PMTiles auto-hébergée (variable `TILES_PMTILES`), interrogée par
+/// plages d'octets. Prioritaire sur le relais : c'est le mode conforme, où
+/// l'on sert ses propres tuiles issues d'OpenStreetMap.
+fn tiles_archive() -> Option<String> {
+    std::env::var("TILES_PMTILES")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| v.starts_with("http"))
+}
+
+/// En-tête et répertoire racine, lus une seule fois : minuscules devant les
+/// données de tuiles, et nécessaires à chaque requête.
+struct PmArchive {
+    header: pmtiles::Header,
+    root: Vec<pmtiles::Entry>,
+}
+
+static PM_ARCHIVE: OnceLock<tokio::sync::Mutex<Option<Arc<PmArchive>>>> = OnceLock::new();
+/// Répertoires feuilles déjà lus, repérés par (décalage, longueur) : évite de
+/// les redemander à chaque tuile.
+type LeafCache = Mutex<HashMap<(u64, u32), Arc<Vec<pmtiles::Entry>>>>;
+static PM_LEAVES: OnceLock<LeafCache> = OnceLock::new();
+
+/// Lit une plage d'octets de l'archive.
+async fn pm_range(url: &str, offset: u64, length: u32) -> Option<Vec<u8>> {
+    let end = offset + length as u64 - 1;
+    let resp = http_client()
+        .get(url)
+        .header(reqwest::header::RANGE, format!("bytes={offset}-{end}"))
+        .header(reqwest::header::USER_AGENT, tiles_user_agent())
+        .send()
+        .await
+        .ok()?;
+    // 206 attendu ; un 200 signifierait que l'hébergeur ignore les plages et
+    // renverrait toute l'archive — refusé, elle peut peser des gigaoctets.
+    if resp.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        tracing::warn!("PMTiles : hébergeur sans support des plages d'octets");
+        return None;
+    }
+    resp.bytes().await.ok().map(|b| b.to_vec())
+}
+
+/// En-tête + répertoire racine, chargés à la première demande.
+async fn pm_archive(url: &str) -> Option<Arc<PmArchive>> {
+    let cell = PM_ARCHIVE.get_or_init(|| tokio::sync::Mutex::new(None));
+    let mut guard = cell.lock().await;
+    if let Some(a) = guard.as_ref() {
+        return Some(a.clone());
+    }
+    let head = pm_range(url, 0, pmtiles::HEADER_LEN as u32).await?;
+    let header = pmtiles::Header::parse(&head)?;
+    let raw = pm_range(url, header.root_offset, header.root_length as u32).await?;
+    let root = pmtiles::parse_directory(&pmtiles::decompress(&raw, header.internal_compression)?)?;
+    let archive = Arc::new(PmArchive { header, root });
+    *guard = Some(archive.clone());
+    Some(archive)
+}
+
+/// Sert une tuile depuis l'archive auto-hébergée.
+async fn tile_from_archive(url: &str, z: u32, x: u32, y: u32) -> Response {
+    let Some(archive) = pm_archive(url).await else {
+        return (StatusCode::BAD_GATEWAY, "archive illisible").into_response();
+    };
+    if z as u8 > archive.header.max_zoom || (z as u8) < archive.header.min_zoom {
+        return (StatusCode::NOT_FOUND, "zoom absent de l'archive").into_response();
+    }
+    let id = pmtiles::tile_id(z as u8, x, y);
+
+    // Racine, puis éventuellement un répertoire feuille.
+    let mut found = pmtiles::find(&archive.root, id);
+    if let pmtiles::Found::Leaf { offset, length } = found {
+        let key = (offset, length);
+        let cached = PM_LEAVES
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&key).cloned());
+        let leaf = match cached {
+            Some(l) => l,
+            None => {
+                let raw = pm_range(url, archive.header.leaf_offset + offset, length).await;
+                let Some(raw) = raw else {
+                    return (StatusCode::BAD_GATEWAY, "répertoire illisible").into_response();
+                };
+                let Some(entries) = pmtiles::decompress(&raw, archive.header.internal_compression)
+                    .and_then(|d| pmtiles::parse_directory(&d))
+                else {
+                    return (StatusCode::BAD_GATEWAY, "répertoire invalide").into_response();
+                };
+                let entries = Arc::new(entries);
+                if let Ok(mut m) = PM_LEAVES.get_or_init(|| Mutex::new(HashMap::new())).lock() {
+                    m.insert(key, entries.clone());
+                }
+                entries
+            }
+        };
+        found = pmtiles::find(&leaf, id);
+    }
+
+    let pmtiles::Found::Tile { offset, length } = found else {
+        // Trou dans la couverture : normal en bord de zone.
+        return (StatusCode::NOT_FOUND, "tuile absente").into_response();
+    };
+    let Some(bytes) = pm_range(url, archive.header.tile_data_offset + offset, length).await else {
+        return (StatusCode::BAD_GATEWAY, "tuile illisible").into_response();
+    };
+
+    let mut builder = Response::builder()
+        .header(
+            axum::http::header::CONTENT_TYPE,
+            archive.header.content_type(),
+        )
+        .header(
+            axum::http::header::CACHE_CONTROL,
+            "public, max-age=2592000, immutable",
+        );
+    // Les tuiles vectorielles sont stockées compressées : on relaie le codage
+    // tel quel plutôt que de décompresser pour rien.
+    if archive.header.tile_compression == 2 {
+        builder = builder.header(axum::http::header::CONTENT_ENCODING, "gzip");
+    }
+    builder
+        .body(axum::body::Body::from(bytes))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
 /// GET /tiles/:z/:x/:y — tuile de carte, pour les cartes hors ligne de l'app.
 ///
 /// Relais vers le serveur amont configuré, avec cache mémoire. **La licence
 /// applicable est celle de l'amont** : ce relais ne rend pas légitime une
 /// source qui interdirait le téléchargement de zones.
 async fn tile(Path((z, x, y)): Path<(u32, u32, String)>) -> Response {
-    let Some(upstream) = tiles_upstream() else {
+    let upstream = tiles_upstream();
+    if upstream.is_none() && tiles_archive().is_none() {
         return (StatusCode::NOT_FOUND, "tuiles non configurées").into_response();
-    };
+    }
     // `y` arrive avec son extension éventuelle (« 12.png ») : on ne garde que
     // le nombre, l'amont décidant du format.
     let y_num = y.split('.').next().unwrap_or_default();
@@ -777,12 +905,20 @@ async fn tile(Path((z, x, y)): Path<(u32, u32, String)>) -> Response {
         return (StatusCode::BAD_REQUEST, "tuile hors limites").into_response();
     }
 
+    // Archive auto-hébergée d'abord : c'est le mode conforme.
+    if let Some(url) = tiles_archive() {
+        return tile_from_archive(&url, z, x, y).await;
+    }
+
     let key = (z, x, y);
     let cache = TILES_CACHE.get_or_init(|| Mutex::new(TileCache::default()));
     if let Some((bytes, mime)) = cache.lock().ok().and_then(|c| c.get(&key)) {
         return tile_response(bytes, mime);
     }
 
+    let Some(upstream) = upstream else {
+        return (StatusCode::NOT_FOUND, "tuiles non configurées").into_response();
+    };
     let url = upstream
         .replace("{z}", &z.to_string())
         .replace("{x}", &x.to_string())
