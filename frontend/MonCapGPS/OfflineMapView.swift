@@ -26,6 +26,12 @@ struct OfflineMapScreen: View {
     /// Tracé mémorisé, lu une seule fois (le corps de la vue est réévalué
     /// souvent : y lire le disque serait coûteux).
     @State private var route: [CLLocationCoordinate2D] = []
+    /// Recherche de lieu : télécharger une zone suppose de pouvoir s'y rendre,
+    /// or on prépare souvent un voyage depuis chez soi.
+    @StateObject private var search = PlaceSearch()
+    @State private var query = ""
+    @State private var cam = MapCam(
+        center: CLLocationCoordinate2D(latitude: 46.6, longitude: 2.4), zoom: 4.6)
 
     /// Profondeur de zoom téléchargée : plus on descend, plus c'est détaillé
     /// et lourd.
@@ -43,24 +49,18 @@ struct OfflineMapScreen: View {
         }
     }
 
-    private var startRegion: MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: center ?? CLLocationCoordinate2D(latitude: 46.6, longitude: 2.4),
-            latitudinalMeters: center == nil ? 900_000 : 12_000,
-            longitudinalMeters: center == nil ? 900_000 : 12_000)
-    }
-
     var body: some View {
         ZStack(alignment: .top) {
             VectorMapView(
                 styleURL: style,
                 route: route,
-                initialCenter: startRegion.center,
+                cam: cam,
                 onRegionChange: { bounds = $0 }
             )
             .ignoresSafeArea()
             VStack(spacing: 0) {
                 header
+                searchBar
                 // La carte reste affichée malgré l'alerte : les zones déjà
                 // enregistrées s'affichent sans réseau ni serveur.
                 if let warning = styleStatus.message(hasStored: storedBytes > 0) {
@@ -88,6 +88,8 @@ struct OfflineMapScreen: View {
         .onAppear {
             route = RouteStore.load()?.coordinates ?? []
             storedBytes = packs.storedBytes()
+            search.center = center
+            if let center { cam = MapCam(center: center, zoom: 11) }
         }
         .onChange(of: packs.running) { _, running in
             if !running { storedBytes = packs.storedBytes() }
@@ -137,22 +139,37 @@ struct OfflineMapScreen: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             } else {
+                let devis = estimate
                 Button {
-                    if let bounds {
+                    if let bounds, let devis, !devis.toolarge {
                         packs.start(
                             styleURL: style, bounds: bounds,
                             maxZoom: Double(depth.zooms.upperBound))
                     }
                 } label: {
-                    Label("Télécharger cette zone", systemImage: "arrow.down.circle.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.blue.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+                    Label(
+                        devis.map { "Télécharger cette zone · \(Self.megabytes($0.bytes))" }
+                            ?? "Télécharger cette zone",
+                        systemImage: "arrow.down.circle.fill"
+                    )
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        (devis?.toolarge == true ? Color.gray : Color.blue).opacity(0.18),
+                        in: RoundedRectangle(cornerRadius: 14))
                 }
                 // Télécharger d'un serveur sans cartes ne produirait qu'un
                 // pack vide, sans erreur visible.
-                .disabled(bounds == nil || !styleStatus.canDownload)
+                .disabled(bounds == nil || !styleStatus.canDownload || devis?.toolarge == true)
+                if let devis, devis.toolarge {
+                    Text(
+                        "Zone trop vaste : \(Self.megabytes(devis.bytes)) environ. "
+                            + "Rapproche-toi, ou choisis un niveau de détail moindre."
+                    )
+                    .font(.caption2).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                }
                 if let message = packs.message {
                     Text(message).font(.caption2).foregroundStyle(.orange)
                 }
@@ -172,6 +189,72 @@ struct OfflineMapScreen: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding()
+    }
+
+    /// Volume attendu pour la zone visible et le niveau de détail choisi.
+    private var estimate: OfflineEstimate? {
+        guard let bounds else { return nil }
+        return OfflineEstimate.of(sw: bounds.sw, ne: bounds.ne, zooms: depth.zooms)
+    }
+
+    /// Barre de recherche : sans elle on ne pouvait enregistrer que là où l'on
+    /// se trouve, alors qu'on prépare un voyage avant de partir.
+    private var searchBar: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Chercher un lieu, une ville, un pays", text: $query)
+                    .autocorrectionDisabled()
+                    .onChange(of: query) { _, q in search.search(q) }
+                    .onSubmit { search.search(query) }
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        search.clear()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+
+            if !search.results.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(search.results, id: \.self) { item in
+                            Button {
+                                let c = item.placemark.coordinate
+                                // Zoom « ville » : la zone à enregistrer tient
+                                // alors à l'écran d'un seul tenant.
+                                cam = MapCam(center: c, zoom: 11)
+                                query = ""
+                                search.clear()
+                            } label: {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.name ?? "Lieu").font(.subheadline)
+                                    if let city = item.placemark.locality
+                                        ?? item.placemark.country
+                                    {
+                                        Text(city).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 14)
+                            }
+                            .buttonStyle(.plain)
+                            Divider()
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 4)
     }
 
     /// « 24 Mo » — l'espace disque parle plus qu'un nombre de tuiles.

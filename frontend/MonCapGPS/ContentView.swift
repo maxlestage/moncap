@@ -1693,13 +1693,13 @@ struct MapHomeView: View {
         var west = region.center.longitude - lonSpan / 2
         var east = region.center.longitude + lonSpan / 2
 
-        // Seulement en France 🇫🇷 : zone découpée à la métropole (Corse incluse).
-        let fr = (south: 41.0, west: -5.6, north: 51.4, east: 9.9)
-        south = max(south, fr.south)
-        north = min(north, fr.north)
-        west = max(west, fr.west)
-        east = min(east, fr.east)
-        // Hors de France : succès vide (les épingles s'effacent, pas d'appel).
+        // Overpass couvre le monde entier : la zone n'est plus découpée à la
+        // France. Le plafond d'étendue au-dessus suffit à borner le coût de la
+        // requête, où qu'on soit.
+        south = max(south, -85)
+        north = min(north, 85)
+        west = max(west, -180)
+        east = min(east, 180)
         guard south < north, west < east else { return [] }
 
         let bbox = "(\(south),\(west),\(north),\(east))"
