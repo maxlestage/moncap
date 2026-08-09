@@ -91,11 +91,16 @@ struct OfflineMapScreen: View {
     /// carte grise sans le moindre message.
     @State private var styleStatus = StyleStatus.checking
 
-    /// Style vectoriel exploitable, s'il y en a un.
+    /// Style vectoriel à rendre, s'il y a lieu.
+    ///
+    /// Ordre de préférence : le style de l'utilisateur, puis ses éventuelles
+    /// tuiles images, et à défaut notre style par défaut — de sorte que la
+    /// carte fonctionne sans aucun réglage.
     private var vectorStyle: URL? {
         let trimmed = styleURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("http") else { return nil }
-        return URL(string: trimmed)
+        if trimmed.hasPrefix("http"), let url = URL(string: trimmed) { return url }
+        if configured { return nil }
+        return URL(string: TileSource.defaultStyle)
     }
 
     /// Un serveur de tuiles exploitable est renseigné. Basé sur la valeur
@@ -154,8 +159,6 @@ struct OfflineMapScreen: View {
                     onRegionChange: { region = $0 }
                 )
                 .ignoresSafeArea()
-            } else {
-                setupHelp
             }
             VStack(spacing: 0) {
                 header
@@ -355,32 +358,6 @@ struct OfflineMapScreen: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding()
-    }
-
-    /// Écran d'explication tant qu'aucun serveur de tuiles n'est renseigné.
-    private var setupHelp: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "square.and.arrow.down.on.square")
-                .font(.system(size: 44))
-                .foregroundStyle(.blue)
-            Text("Cartes hors ligne").font(.title3.weight(.bold))
-            Text(
-                """
-                Apple Plans ne permet pas d'enregistrer ses cartes. Indique un \
-                serveur de tuiles dans les réglages pour télécharger des zones \
-                et les consulter sans réseau.
-                """
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            Text("Format attendu : https://exemple.fr/{z}/{x}/{y}.png")
-                .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
     }
 
     private func refreshEstimate() {
