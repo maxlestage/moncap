@@ -109,6 +109,7 @@ struct MainMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MLNMapView {
         let view = MLNMapView(frame: .zero, styleURL: styleURL)
+        context.coordinator.appliedStyle = styleURL
         view.delegate = context.coordinator
         view.showsUserLocation = true
         view.attributionButtonPosition = .bottomRight
@@ -149,7 +150,13 @@ struct MainMapView: UIViewRepresentable {
 
         // Changer de style recharge tout : les couches et épingles seront
         // reposées à la fin du chargement.
-        if view.styleURL != styleURL { c.changeStyle(to: styleURL, on: view) }
+        //
+        // La comparaison porte sur ce qu'on a demandé, jamais sur ce que la
+        // vue renvoie : pendant le chargement `styleURL` ne vaut pas encore la
+        // valeur posée, et comme cette vue est réévaluée en continu (GPS,
+        // vitesse, météo), le style repartait de zéro à chaque fois sans
+        // jamais aboutir — la carte restait blanche.
+        if c.appliedStyle != styleURL { c.changeStyle(to: styleURL, on: view) }
 
         if let cam, cam != c.appliedCam {
             c.appliedCam = cam
@@ -172,6 +179,9 @@ struct MainMapView: UIViewRepresentable {
         var onUserGesture: () -> Void = {}
 
         var appliedCam: MapCam?
+        /// Style demandé à la vue. Fait foi : la vue, elle, ne le renvoie
+        /// qu'une fois le chargement terminé.
+        var appliedStyle: URL?
         /// Épingles en place, par identifiant.
         private var placed: [String: PinAnnotation] = [:]
         /// Signature des tracés déjà dessinés, pour ne rien refaire pour rien.
@@ -191,6 +201,7 @@ struct MainMapView: UIViewRepresentable {
 
         /// Bascule vers un autre fond de carte.
         func changeStyle(to url: URL, on view: MLNMapView) {
+            appliedStyle = url
             styleReady = false
             placed = [:]
             lineSignatures = []
