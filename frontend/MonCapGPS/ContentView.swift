@@ -2464,6 +2464,12 @@ struct MapHomeView: View {
                         .keyboardType(.URL)
                         .font(.system(.footnote, design: .monospaced))
                     Button {
+                        tileURL = api.tilesTemplate
+                    } label: {
+                        Label("Utiliser le serveur MonCap", systemImage: "server.rack")
+                    }
+                    .disabled(tileURL == api.tilesTemplate)
+                    Button {
                         showPlaces = false
                         showOfflineMap = true
                     } label: {
@@ -2471,7 +2477,7 @@ struct MapHomeView: View {
                     }
                     .disabled(!TileSource.isConfigured)
                     Text(
-                        "Apple Plans ne permet pas d'enregistrer ses cartes. Indique un serveur de tuiles auquel tu as droit (ton propre serveur ou un fournisseur) pour consulter des zones sans réseau."
+                        "Apple Plans ne permet pas d'enregistrer ses cartes. Le serveur MonCap relaie les tuiles s'il est configuré ; sinon indique un serveur auquel tu as droit."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
