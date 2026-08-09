@@ -154,6 +154,11 @@ final class VectorPackDownloader: NSObject, ObservableObject {
         guard !running else { return }
         let region = MLNTilePyramidOfflineRegion(
             styleURL: styleURL, bounds: bounds, fromZoomLevel: 8, toZoomLevel: maxZoom)
+        launch(region)
+    }
+
+    /// Enregistre une région, quelle que soit sa forme.
+    private func launch(_ region: MLNOfflineRegion) {
         // Le contexte est libre : on y met de quoi reconnaître nos packs.
         let context = Data("moncap".utf8)
         running = true
@@ -173,6 +178,20 @@ final class VectorPackDownloader: NSObject, ObservableObject {
             }
             pack?.resume()
         }
+    }
+
+    /// Enregistre un couloir suivant l'itinéraire.
+    ///
+    /// C'est ce qui rend un long trajet praticable hors réseau : seules les
+    /// tuiles traversées sont gardées, là où le rectangle englobant en
+    /// réclamerait dix à trente fois plus sur plusieurs centaines de kilomètres.
+    func startRoute(styleURL: URL, route: [CLLocationCoordinate2D], maxZoom: Double) {
+        guard !running, route.count >= 2 else { return }
+        var coords = route
+        let line = MLNPolyline(coordinates: &coords, count: UInt(coords.count))
+        let region = MLNShapeOfflineRegion(
+            styleURL: styleURL, shape: line, fromZoomLevel: 6, toZoomLevel: maxZoom)
+        launch(region)
     }
 
     /// Supprime toutes les zones enregistrées.
