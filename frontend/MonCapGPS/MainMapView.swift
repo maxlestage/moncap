@@ -65,6 +65,8 @@ enum PinLook: Hashable {
     case bubble(String, String?, String, Bool)
     /// Repère simple, avec un symbole système.
     case marker(String, String)
+    /// Foyer d'incendie : disque rouge cerné de son halo, flamme au centre.
+    case flame
 }
 
 /// Épingle posée sur la carte.
@@ -461,6 +463,40 @@ enum PinRenderer {
             return bubble(text: text, sub: sub, color: UIColor(hex: color), selected: selected)
         case let .marker(symbol, color):
             return marker(symbol: symbol, color: UIColor(hex: color))
+        case .flame:
+            return flame()
+        }
+    }
+
+    /// Marqueur de foyer, repris du site : halo diffus, anneau soutenu, cœur
+    /// rouge et flamme dorée. La pulsation d'origine disparaît — une image ne
+    /// s'anime pas — mais le halo reste, et l'épingle tient à des dizaines
+    /// d'exemplaires sans peser sur la carte.
+    private static func flame() -> UIImage {
+        let side: CGFloat = 64
+        let red = UIColor(red: 0.86, green: 0.13, blue: 0.11, alpha: 1)
+        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let mid = side / 2
+            func disc(_ diameter: CGFloat, _ color: UIColor) {
+                color.setFill()
+                ctx.cgContext.fillEllipse(
+                    in: CGRect(
+                        x: mid - diameter / 2, y: mid - diameter / 2,
+                        width: diameter, height: diameter))
+            }
+            disc(60, red.withAlphaComponent(0.30))
+            disc(48, red.withAlphaComponent(0.50))
+            disc(36, red)
+            let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+            let gold = UIColor(red: 1, green: 0.85, blue: 0.40, alpha: 1)
+            if let glyph = UIImage(systemName: "flame.fill", withConfiguration: config)?
+                .withTintColor(gold, renderingMode: .alwaysOriginal)
+            {
+                glyph.draw(
+                    in: CGRect(
+                        x: mid - glyph.size.width / 2, y: mid - glyph.size.height / 2,
+                        width: glyph.size.width, height: glyph.size.height))
+            }
         }
     }
 
