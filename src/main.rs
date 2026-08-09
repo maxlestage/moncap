@@ -1209,9 +1209,14 @@ fn build_app(state: AppState) -> Router {
     // avec index.html en repli (SPA).
     let web = ServeDir::new("web/dist").not_found_service(ServeFile::new("web/dist/index.html"));
 
-    // Limiteurs : général (par IP) + strict sur l'authentification (anti brute-force).
+    // Limiteurs : général (par IP), strict sur l'authentification
+    // (anti brute-force), large sur les tuiles.
     let general = Arc::new(RateLimiter::new(300, 60));
     let auth_rl = Arc::new(RateLimiter::new(20, 60));
+    // Une carte affiche des dizaines de tuiles et le téléchargement d'une
+    // zone en demande des milliers : sous la limite générale, un
+    // téléchargement serait coupé net au bout de 300 tuiles.
+    let tiles_rl = Arc::new(RateLimiter::new(6000, 60));
 
     // Routes d'auth, sous limite stricte.
     let auth_routes = Router::new()
@@ -1219,6 +1224,13 @@ fn build_app(state: AppState) -> Router {
         .route("/auth/login", post(login))
         .layer(middleware::from_fn(move |req, next| {
             rate_limit(auth_rl.clone(), req, next)
+        }));
+
+    // Tuiles : limite propre, appliquée ici et non par la limite générale.
+    let tile_routes = Router::new()
+        .route("/tiles/:z/:x/:y", get(tile))
+        .layer(middleware::from_fn(move |req, next| {
+            rate_limit(tiles_rl.clone(), req, next)
         }));
 
     // Routes volontairement minimales.
@@ -1247,7 +1259,6 @@ fn build_app(state: AppState) -> Router {
         .route("/account", get(account_info).delete(delete_account))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
-        .route("/tiles/:z/:x/:y", get(tile))
         .route("/traffic", get(list_traffic))
         .route("/live", post(live_start))
         .route(
@@ -1262,6 +1273,9 @@ fn build_app(state: AppState) -> Router {
         .layer(middleware::from_fn(move |req, next| {
             rate_limit(general.clone(), req, next)
         }))
+        // Fusionné après la limite générale : en axum une couche ne s'applique
+        // qu'aux routes déjà présentes, les tuiles gardent donc la leur.
+        .merge(tile_routes)
         .layer(TraceLayer::new_for_http())
         // Compresse les réponses (gzip/brotli) selon Accept-Encoding — utile
         // surtout pour les payloads texte (listes JSON, export GPX).
@@ -2811,6 +2825,68 @@ mod tests {
         let parsed = parse_gpx_waypoints(xml);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].label, "Point 1");
+    }
+
+    /// Les tuiles ne doivent PAS tomber sous la limite générale : un
+    /// téléchargement de zone en demande des milliers, et serait coupé au bout
+    /// de 300. On vérifie la mécanique de superposition d'axum — une couche ne
+    /// s'applique qu'aux routes déjà présentes au moment où on l'ajoute.
+    #[tokio::test]
+    async fn tiles_escape_the_general_rate_limit() {
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        async fn ok() -> StatusCode {
+            StatusCode::OK
+        }
+        let general = Arc::new(RateLimiter::new(3, 60));
+        let tiles_rl = Arc::new(RateLimiter::new(100, 60));
+        let tile_routes =
+            Router::new()
+                .route("/tiles/:z/:x/:y", get(ok))
+                .layer(middleware::from_fn(move |req, next| {
+                    rate_limit(tiles_rl.clone(), req, next)
+                }));
+        let app: Router = Router::new()
+            .route("/autre", get(ok))
+            .layer(middleware::from_fn(move |req, next| {
+                rate_limit(general.clone(), req, next)
+            }))
+            .merge(tile_routes);
+
+        // 10 tuiles passent malgré une limite générale fixée à 3.
+        for i in 0..10 {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/tiles/10/0/{i}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "tuile {i} bloquée à tort");
+        }
+        // La limite générale s'applique toujours au reste.
+        let mut blocked = false;
+        for _ in 0..6 {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/autre")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            if resp.status() == StatusCode::TOO_MANY_REQUESTS {
+                blocked = true;
+            }
+        }
+        assert!(blocked, "la limite générale doit rester active ailleurs");
     }
 
     /// Le relais de tuiles doit refuser tout ce qui sort des bornes : sans
