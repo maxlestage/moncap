@@ -1175,25 +1175,17 @@ struct MapHomeView: View {
 
     // MARK: - Carte
 
-    /// Un fond de carte personnel a répondu et est exploitable.
-    @State private var customStyleOK = false
-
-    /// Fond de carte réellement affiché.
+    /// Fond de carte réellement affiché : celui de l'utilisateur s'il répond,
+    /// sinon le nôtre.
     ///
-    /// Un style personnel injoignable (serveur éteint, adresse périmée, cartes
-    /// pas encore installées) donnait une carte entièrement blanche, sans rien
-    /// pour le comprendre. Tant qu'il n'a pas répondu, on affiche le fond par
-    /// défaut : mieux vaut une carte que rien.
-    private var effectiveStyleURL: URL {
-        if customStyleOK, styleURL.hasPrefix("http"), let url = URL(string: styleURL) {
-            return url
-        }
-        return URL(string: TileSource.defaultStyle) ?? TileSource.styleURL
-    }
+    /// Une adresse personnelle injoignable donnait une carte blanche sans rien
+    /// pour le comprendre. En attendant la vérification, le fond par défaut est
+    /// affiché : mieux vaut une carte tout de suite que rien.
+    @State private var mapStyle = URL(string: TileSource.defaultStyle)!
 
     private var map: some View {
         MainMapView(
-            styleURL: effectiveStyleURL,
+            styleURL: mapStyle,
             cam: camera,
             pins: mapPins,
             lines: mapLines,
@@ -1216,11 +1208,7 @@ struct MapHomeView: View {
         )
         .ignoresSafeArea()
         .task(id: styleURL) {
-            guard styleURL.hasPrefix("http"), let url = URL(string: styleURL) else {
-                customStyleOK = false
-                return
-            }
-            customStyleOK = await StyleProbe.check(url) == .ok
+            mapStyle = await TileSource.resolvedStyle(custom: styleURL)
         }
     }
 

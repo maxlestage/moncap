@@ -107,9 +107,16 @@ struct MainMapView: UIViewRepresentable {
     /// Geste manuel : sert à débrayer le suivi automatique.
     let onUserGesture: () -> Void
 
-    func makeUIView(context: Context) -> MLNMapView {
-        let view = MLNMapView(frame: .zero, styleURL: styleURL)
+    func makeUIView(context: Context) -> SizedMapView {
+        let view = SizedMapView(frame: .zero, styleURL: styleURL)
         context.coordinator.appliedStyle = styleURL
+        // La caméra ne peut être posée qu'une fois la vue mesurée : MapLibre
+        // convertit une altitude en zoom d'après la hauteur affichée, et sans
+        // hauteur le calcul donne la vue du monde entier.
+        view.onLayout = { [weak view, weak coordinator = context.coordinator] in
+            guard let view, let coordinator else { return }
+            coordinator.applyPendingCam(to: view)
+        }
         view.delegate = context.coordinator
         view.showsUserLocation = true
         view.attributionButtonPosition = .bottomRight
@@ -134,13 +141,13 @@ struct MainMapView: UIViewRepresentable {
         view.addGestureRecognizer(pinch)
 
         if let cam {
-            view.setCenter(cam.center, zoomLevel: Coordinator.zoom(for: cam.distance), animated: false)
             context.coordinator.appliedCam = cam
+            context.coordinator.apply(cam, to: view)
         }
         return view
     }
 
-    func updateUIView(_ view: MLNMapView, context: Context) {
+    func updateUIView(_ view: SizedMapView, context: Context) {
         let c = context.coordinator
         c.onPinTap = onPinTap
         c.onPlaceTap = onPlaceTap
@@ -182,6 +189,8 @@ struct MainMapView: UIViewRepresentable {
         /// Style demandé à la vue. Fait foi : la vue, elle, ne le renvoie
         /// qu'une fois le chargement terminé.
         var appliedStyle: URL?
+        /// Caméra reçue avant que la vue ait une taille.
+        private var pendingCam: MapCam?
         /// Épingles en place, par identifiant.
         private var placed: [String: PinAnnotation] = [:]
         /// Signature des tracés déjà dessinés, pour ne rien refaire pour rien.
@@ -221,12 +230,27 @@ struct MainMapView: UIViewRepresentable {
         }
 
         func apply(_ cam: MapCam, to view: MLNMapView) {
+            // Tant que la vue n'est pas mesurée, on garde la caméra de côté :
+            // l'appliquer donnerait un zoom aberrant, et à l'arrêt elle ne
+            // serait jamais réémise (rien ne bouge), donc la vue resterait
+            // bloquée sur le monde entier.
+            guard view.bounds.height > 10 else {
+                pendingCam = cam
+                return
+            }
+            pendingCam = nil
             let camera = MLNMapCamera(
                 lookingAtCenter: cam.center,
                 altitude: max(50, cam.distance),
                 pitch: CGFloat(max(0, min(60, cam.pitch))),
                 heading: cam.heading)
             view.setCamera(camera, withDuration: 0.8, animationTimingFunction: nil)
+        }
+
+        /// Pose la caméra restée en attente, une fois la vue mesurée.
+        func applyPendingCam(to view: MLNMapView) {
+            guard let cam = pendingCam else { return }
+            apply(cam, to: view)
         }
 
         // MARK: Épingles
@@ -398,6 +422,19 @@ struct MainMapView: UIViewRepresentable {
             _ g: UIGestureRecognizer,
             shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
         ) -> Bool { true }
+    }
+}
+
+/// Carte MapLibre qui signale sa mise en page.
+///
+/// `UIViewRepresentable` n'expose aucun moment « la vue a sa taille » ; sans
+/// ce signal, une caméra reçue trop tôt resterait sans effet.
+final class SizedMapView: MLNMapView {
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
     }
 }
 

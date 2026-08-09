@@ -29,6 +29,19 @@ enum TileSource {
         return URL(string: defaultStyle)!
     }
 
+    /// Fond à utiliser : celui de l'utilisateur s'il répond vraiment, sinon le
+    /// nôtre.
+    ///
+    /// Une adresse enregistrée qui ne sert aucune carte donnait un écran vide.
+    /// La vérifier avant de la retenir évite d'y rester bloqué, et se fait ici
+    /// une seule fois pour tous les écrans.
+    static func resolvedStyle(custom: String) async -> URL {
+        let trimmed = custom.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = URL(string: defaultStyle)!
+        guard trimmed.hasPrefix("http"), let url = URL(string: trimmed) else { return fallback }
+        return await StyleProbe.check(url) == .ok ? url : fallback
+    }
+
     /// Modèle d'adresse, par exemple `https://exemple.fr/{z}/{x}/{y}.png`.
     static var template: String {
         (UserDefaults.standard.string(forKey: defaultsKey) ?? "")
@@ -62,8 +75,9 @@ enum StyleStatus: Equatable {
         case .checking, .ok:
             return nil
         case .notConfigured:
-            return "Le serveur MonCap n'a pas encore de cartes installées. "
-                + "Renseigne la variable TILES_PMTILES côté serveur."
+            // Le fond personnel injoignable est écarté en amont : rester ici
+            // signifie que même le fond par défaut ne sert rien.
+            return "Fond de carte indisponible pour le moment."
         case .unreachable:
             return hasStored
                 ? nil
