@@ -138,7 +138,7 @@ struct OfflineMapScreen: View {
                 }
             } else {
                 Button {
-                    if let style = vectorStyle, let bounds {
+                    if let bounds {
                         packs.start(
                             styleURL: style, bounds: bounds,
                             maxZoom: Double(depth.zooms.upperBound))
