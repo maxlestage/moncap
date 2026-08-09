@@ -142,9 +142,13 @@ final class FireService: ObservableObject {
     }
 
     /// Taille d'une cellule de dédoublonnage (~550 m ≈ 1 pixel VIIRS).
-    private static let gridDeg = 0.005
+    ///
+    /// Hors acteur : ces constantes sont lues depuis l'analyse du CSV, qui
+    /// tourne en dehors du fil principal. Immuables, leur lecture y est sûre —
+    /// mais Swift 6 l'interdira sans cette mention.
+    nonisolated private static let gridDeg = 0.005
     /// Garde-fou sur le nombre de points gardés (les plus récents d'abord).
-    private static let maxPoints = 4000
+    nonisolated private static let maxPoints = 4000
 
     /// Analyse le CSV FIRMS comme le backend : écarte les détections de
     /// confiance basse et de puissance (FRP) < 2 MW (torchères, brûlages,
