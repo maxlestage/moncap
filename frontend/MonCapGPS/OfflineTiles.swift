@@ -1,3 +1,4 @@
+import Foundation
 import MapKit
 
 /// Serveur de tuiles choisi par l'utilisateur (réglages), sur le modèle des
@@ -21,6 +22,70 @@ enum TileSource {
     static var isConfigured: Bool {
         let t = template
         return t.contains("{z}") && t.contains("{x}") && t.contains("{y}")
+    }
+}
+
+/// État d'un style vectoriel, vérifié avant de rendre la carte.
+///
+/// Sans cette vérification, un serveur sans cartes configurées donne une carte
+/// **grise et muette** : MapLibre échoue en silence. On préfère le dire.
+enum StyleStatus: Equatable {
+    case checking
+    case ok
+    /// Le serveur répond, mais aucune carte n'y est installée.
+    case notConfigured
+    /// Serveur injoignable (pas de réseau, ou en panne).
+    case unreachable
+
+    /// Message à afficher, ou `nil` si tout va bien.
+    ///
+    /// `hasStored` : des zones sont déjà enregistrées. Sans réseau elles
+    /// restent consultables — inutile d'alarmer l'utilisateur.
+    func message(hasStored: Bool) -> String? {
+        switch self {
+        case .checking, .ok:
+            return nil
+        case .notConfigured:
+            return "Le serveur MonCap n'a pas encore de cartes installées. "
+                + "Renseigne la variable TILES_PMTILES côté serveur."
+        case .unreachable:
+            return hasStored
+                ? nil
+                : "Serveur de cartes injoignable. Les zones déjà enregistrées restent consultables."
+        }
+    }
+
+    /// Télécharger n'a de sens que si le serveur a bien des cartes.
+    var canDownload: Bool { self == .ok }
+}
+
+/// Vérifie qu'une feuille de style est réellement servie et exploitable.
+enum StyleProbe {
+    /// Classe une réponse HTTP. Séparé du réseau pour rester vérifiable.
+    static func classify(status: Int, body: Data) -> StyleStatus {
+        // 404 : notre backend répond ainsi tant que ni TILES_PMTILES ni
+        // TILES_UPSTREAM ne sont renseignés.
+        guard status == 200 else {
+            return status == 404 ? .notConfigured : .unreachable
+        }
+        // Un style utilisable a des sources : sans elles, la carte serait vide.
+        guard
+            let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+            let sources = json["sources"] as? [String: Any], !sources.isEmpty
+        else { return .notConfigured }
+        return .ok
+    }
+
+    static func check(_ url: URL) async -> StyleStatus {
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 10
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            return classify(status: status, body: data)
+        } catch {
+            return .unreachable
+        }
     }
 }
 
