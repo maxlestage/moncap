@@ -17,8 +17,12 @@ connexion compris — vit derrière `/app` ; le bouton « Se connecter » y mèn
 
 `dist/` est **versionné**, contrairement à l'usage. Le buildpack Heroku ne
 compile que la crate Rust : aucun Bun ne tourne sur le dyno, donc le résultat
-de la construction doit être dans le dépôt. Après une modification de `src/`,
-relancer `bun run build` et committer `dist/`.
+de la construction doit être dans le dépôt.
+
+Il n'y a rien à lancer à la main pour autant : `.github/workflows/vitrine.yml`
+reconstruit et verse `dist/` à chaque changement de `src/`, poussé sur
+`master`. Ce dépôt se tient depuis un navigateur — un « n'oublie pas de
+reconstruire » y serait un piège, pas une consigne.
 
 Pour la même raison, la feuille de style porte un nom **fixe** (`styles.css`)
 et non une empreinte : une route Rust ne peut pas suivre un nom qui change à
