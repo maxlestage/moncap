@@ -37,7 +37,7 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, os
 
-          # Découpage Geofabrik de la France, outre-mer compris, plus l'Espagne.
+          # Découpage Geofabrik de la France, outre-mer compris.
           francaises = [
               "alsace", "aquitaine", "auvergne", "basse-normandie", "bourgogne",
               "bretagne", "centre", "champagne-ardenne", "corse", "franche-comte",
@@ -46,12 +46,26 @@ jobs:
               "midi-pyrenees", "nord-pas-de-calais", "pays-de-la-loire", "picardie",
               "poitou-charentes", "provence-alpes-cote-d-azur", "reunion", "rhone-alpes",
           ]
+          # L'Espagne est découpée par communauté autonome, et non prise d'un
+          # bloc : entière elle produit 2,1 Go de tuiles, au-dessus des 2 Gio
+          # qu'accepte une pièce jointe de Release — et un tel téléchargement
+          # serait de toute façon irréaliste sur un forfait mobile.
+          espagnoles = [
+              "andalucia", "aragon", "asturias", "cantabria", "castilla-la-mancha",
+              "castilla-y-leon", "cataluna", "ceuta", "extremadura", "galicia",
+              "islas-baleares", "la-rioja", "madrid", "melilla", "murcia", "navarra",
+              "pais-vasco", "valencia",
+          ]
           toutes = [{"chemin": f"europe/france/{n}", "tag": f"tuiles-{n}"} for n in francaises]
-          toutes.append({"chemin": "europe/spain", "tag": "tuiles-espagne"})
+          toutes += [{"chemin": f"europe/spain/{n}", "tag": f"tuiles-es-{n}"} for n in espagnoles]
 
           demande = os.environ["DEMANDE"].strip().lower()
           if demande in ("toutes", "all", ""):
               choisies = toutes
+          elif demande in ("espagne", "spain"):
+              choisies = [r for r in toutes if r["tag"].startswith("tuiles-es-")]
+          elif demande in ("france",):
+              choisies = [r for r in toutes if not r["tag"].startswith("tuiles-es-")]
           else:
               voulues = {m.strip() for m in demande.split(",") if m.strip()}
               choisies = [r for r in toutes if r["tag"].removeprefix("tuiles-") in voulues]
@@ -112,6 +126,16 @@ jobs:
             '
           ls -lh data/tuiles.tar data/valhalla.json
           echo "TAILLE=$(du -h data/tuiles.tar | cut -f1)" >> "$GITHUB_ENV"
+          # Une pièce jointe de Release plafonne à 2 Gio ; au-delà l'envoi
+          # échoue sur un « 422 Validation Failed » qui ne dit pas pourquoi.
+          # Mieux vaut l'annoncer ici, avec le découpage à faire.
+          octets=$(stat -c%s data/tuiles.tar)
+          if [ "$octets" -ge 2147483648 ]; then
+            echo "::error::${{ matrix.region.chemin }} produit $TAILLE de tuiles," \
+              "au-dessus des 2 Gio d'une pièce jointe de Release." \
+              "Découper la région en sous-régions Geofabrik."
+            exit 1
+          fi
 
       - name: Publie la Release
         env:
