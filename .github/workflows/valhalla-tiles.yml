@@ -70,7 +70,7 @@ jobs:
               valhalla_build_tiles -c /data/valhalla.json /data/extrait.osm.pbf
               valhalla_build_extract -c /data/valhalla.json -v
             '
-          ls -lh data/tuiles.tar
+          ls -lh data/tuiles.tar data/valhalla.json
           echo "TAILLE=$(du -h data/tuiles.tar | cut -f1)" >> "$GITHUB_ENV"
 
       - name: Publie la Release
@@ -79,6 +79,11 @@ jobs:
         run: |
           set -euo pipefail
           mv data/tuiles.tar "data/${{ inputs.tag }}.tar"
+          # La configuration engendrée accompagne les tuiles : elle porte les
+          # dizaines de réglages qu'attend Valhalla, qu'il serait absurde de
+          # réécrire à la main dans l'app. Seuls les chemins y seront corrigés,
+          # l'appareil ne connaissant évidemment pas /data.
+          cp data/valhalla.json "data/${{ inputs.tag }}.json"
           # `--clobber` : reconstruire une région remplace ses tuiles au lieu
           # d'échouer, l'adresse de téléchargement reste donc la même.
           # `-R` : le dépôt est nommé explicitement, faute de clone local —
@@ -87,7 +92,9 @@ jobs:
           gh release create "${{ inputs.tag }}" -R "$depot" --title "${{ inputs.tag }}" \
             --notes "Tuiles Valhalla · ${{ inputs.region }} · $TAILLE · OpenStreetMap (ODbL)" \
             || echo "Release déjà présente"
-          gh release upload "${{ inputs.tag }}" "data/${{ inputs.tag }}.tar" -R "$depot" --clobber
+          gh release upload "${{ inputs.tag }}" \
+            "data/${{ inputs.tag }}.tar" "data/${{ inputs.tag }}.json" \
+            -R "$depot" --clobber
 
       - name: Récapitulatif
         run: |

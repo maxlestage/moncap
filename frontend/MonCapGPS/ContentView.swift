@@ -430,6 +430,9 @@ struct MapHomeView: View {
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var weather = WeatherService()
     @StateObject private var fires = FireService()
+    /// Calcul d'itinéraire sur l'appareil : observé pour suivre l'installation
+    /// des tuiles depuis les réglages.
+    @ObservedObject private var router = OfflineRouter.shared
     @StateObject private var traffic = TrafficService()
     /// Clé TomTom optionnelle saisie sur l'appareil : si présente, l'app
     /// interroge TomTom directement (sinon elle passe par le backend).
@@ -2505,6 +2508,50 @@ struct MapHomeView: View {
                     // Repli manuel : n'a d'intérêt que pour qui héberge ses
                     // propres cartes. Renseigné et joignable, il prend le pas
                     // sur le fond par défaut ; sinon il est simplement ignoré.
+                    // Calcul d'itinéraire sans réseau : distinct des cartes,
+                    // car il repose sur d'autres données — un graphe routier,
+                    // pas des tuiles d'affichage.
+                    DisclosureGroup("Itinéraires sans réseau 🧭") {
+                        if let region = OfflineRouter.shared.installed {
+                            Label(
+                                OfflineRouter.Region.toutes
+                                    .first { $0.id == region }?.nom ?? region,
+                                systemImage: "checkmark.circle.fill"
+                            )
+                            .foregroundStyle(.green)
+                            Button(role: .destructive) {
+                                OfflineRouter.shared.remove()
+                            } label: {
+                                Label("Effacer", systemImage: "trash")
+                            }
+                        } else if router.downloading {
+                            ProgressView(value: router.progress) {
+                                Text("Téléchargement · \(Int(router.progress * 100)) %")
+                                    .font(.footnote)
+                            }
+                        } else {
+                            ForEach(OfflineRouter.Region.toutes) { region in
+                                Button {
+                                    Task { await router.install(region) }
+                                } label: {
+                                    Label(
+                                        "\(region.nom) · \(region.taille)",
+                                        systemImage: "arrow.down.circle")
+                                }
+                            }
+                        }
+                        if let m = router.message {
+                            Text(m).font(.caption2).foregroundStyle(.orange)
+                        }
+                        Text(
+                            "Permet de recalculer un itinéraire sans réseau. "
+                                + "Sans cela, s'écarter de sa route hors couverture laisse "
+                                + "l'app sans rien à proposer."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+
                     DisclosureGroup("Serveur de cartes personnel") {
                         TextField("https://exemple.fr/style.json", text: $styleURL)
                             .textInputAutocapitalization(.never)
@@ -3463,8 +3510,20 @@ struct MapHomeView: View {
         guard let route = await drivingRoute(from: from, to: to,
                                              transportType: travelMode.transportType)
         else {
-            // Hors réseau, le calcul est impossible : on garde l'itinéraire en
-            // cours plutôt que de laisser le bandeau figé sur « Recalcul… ».
+            // Apple exige une connexion. Si les tuiles de la région sont
+            // installées, le calcul se fait sur l'appareil — c'est tout
+            // l'intérêt : rater une sortie hors couverture ne condamne plus.
+            if travelMode == .car,
+                let local = OfflineRouter.shared.route(from: from, to: to)
+            {
+                nav.applyReroute(
+                    steps: local.steps, coords: local.coordinates,
+                    km: local.km, minutes: local.minutes)
+                speedLimit.preload(along: local.coordinates)
+                return
+            }
+            // Sans tuiles : on garde l'itinéraire en cours plutôt que de
+            // laisser le bandeau figé sur « Recalcul… ».
             nav.rerouteFailed()
             return
         }
