@@ -309,9 +309,12 @@ Fichiers utilisés :
 
 Le buildpack ne compile **que** la crate Rust : aucun Bun ne tourne sur le
 dyno. Les deux fronts sont donc versionnés construits (`web/dist`,
-`vitrine/dist`) — sans quoi le serveur n'aurait rien à servir. Après une
-modification de `vitrine/src`, relancer `bun run build` dans `vitrine/` et
-committer le résultat.
+`vitrine/dist`) — sans quoi le serveur n'aurait rien à servir.
+
+Pour la vitrine, c'est le CI qui s'en charge : `.github/workflows/vitrine.yml`
+la reconstruit et verse `dist/` dès que `vitrine/src` change sur `master`. La
+poussée qui en résulte déclenche à son tour le déploiement Heroku. Rien à
+lancer depuis un navigateur, ce qui est le seul outil disponible ici.
 
 Le front web vise la **même origine** par défaut : servi par le dyno, il
 parle à l'API sans configuration.
