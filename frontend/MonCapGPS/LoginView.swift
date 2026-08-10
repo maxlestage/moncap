@@ -34,7 +34,7 @@ struct LoginView: View {
                 .textCase(nil)
 
             if !errorMessage.isEmpty {
-                Text(errorMessage).font(.footnote).foregroundStyle(.red)
+                Text(LocalizedStringKey(errorMessage)).font(.footnote).foregroundStyle(.red)
             }
 
             Button(action: submit) {

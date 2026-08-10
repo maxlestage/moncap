@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+"""Génère `MonCapGPS/Localizable.xcstrings` à partir du tableau ci-dessous.
+
+Le français est la langue source : chaque clé **est** la chaîne française
+écrite dans le code Swift. SwiftUI la cherche dans le catalogue et retombe
+sur la clé elle-même quand la traduction manque — une entrée oubliée donne
+donc du français, jamais un trou ni un plantage.
+
+Écrire le tableau ici plutôt que le JSON à la main : le format `.xcstrings`
+est verbeux et se relit mal, alors qu'une colonne par langue se vérifie d'un
+coup d'œil. Relancer après toute modification :
+
+    python3 frontend/traductions.py
+"""
+
+import json
+import pathlib
+
+# clé française -> (espagnol, anglais)
+# Ne sont listées que les chaînes qui changent : « GPX », « SP95 » ou
+# « MonCap GPS » s'écrivent pareil partout et n'ont rien à faire ici.
+T: dict[str, tuple[str, str]] = {
+    # --- Actions et boutons ---
+    "Abandonner": ("Abandonar", "Discard"),
+    "Annuler": ("Cancelar", "Cancel"),
+    "Fermer": ("Cerrar", "Close"),
+    "Quitter": ("Salir", "Exit"),
+    "Démarrer": ("Empezar", "Start"),
+    "Reprendre": ("Reanudar", "Resume"),
+    "Effacer": ("Borrar", "Clear"),
+    "Tout effacer": ("Borrar todo", "Clear all"),
+    "Signaler": ("Avisar", "Report"),
+    "Y aller": ("Ir", "Go"),
+    "Détail": ("Detalle", "Details"),
+    "Déconnexion": ("Cerrar sesión", "Sign out"),
+    "Enregistrer ma position": ("Guardar mi posición", "Save my position"),
+    "Redéfinir sur ma position": ("Fijar en mi posición", "Set to my position"),
+    "Envoyer le message": ("Enviar el mensaje", "Send the message"),
+    "Renvoyer le lien de suivi": ("Reenviar el enlace de seguimiento", "Resend the tracking link"),
+    "Partager ma position en direct": ("Compartir mi posición en directo", "Share my position live"),
+    "Arrêter le partage en direct": ("Dejar de compartir en directo", "Stop sharing live"),
+    "Prévenir que je suis arrivé": ("Avisar de que he llegado", "Let them know I've arrived"),
+    "Prévenir un proche": ("Avisar a un allegado", "Let someone know"),
+    "Télécharger des zones": ("Descargar zonas", "Download areas"),
+    "Naviguer hors ligne": ("Navegar sin conexión", "Navigate offline"),
+    "Revenir au fond par défaut": ("Volver al fondo por defecto", "Back to the default background"),
+    "Obtenir une clé gratuite": ("Conseguir una clave gratuita", "Get a free key"),
+    "Obtenir une clé gratuite (2 500 req./jour)": (
+        "Conseguir una clave gratuita (2 500 pet./día)",
+        "Get a free key (2,500 req./day)",
+    ),
+    "Supprimer mon compte": ("Eliminar mi cuenta", "Delete my account"),
+    "Tout supprimer définitivement": ("Eliminarlo todo definitivamente", "Delete everything permanently"),
+    "👍 Toujours là": ("👍 Sigue ahí", "👍 Still there"),
+    "👎 Plus là": ("👎 Ya no está", "👎 Gone"),
+    # --- Titres et sections ---
+    "Mes trajets": ("Mis viajes", "My trips"),
+    "Destinations": ("Destinos", "Destinations"),
+    "Favoris": ("Favoritos", "Favourites"),
+    "Récentes": ("Recientes", "Recent"),
+    "Suggestions": ("Sugerencias", "Suggestions"),
+    "Alertes": ("Avisos", "Reports"),
+    "Alertes à proximité": ("Avisos cercanos", "Nearby reports"),
+    "Statistiques": ("Estadísticas", "Statistics"),
+    "Compte": ("Cuenta", "Account"),
+    "Données": ("Datos", "Data"),
+    "Mode": ("Modo", "Mode"),
+    "Message": ("Mensaje", "Message"),
+    "Ton message": ("Tu mensaje", "Your message"),
+    "Destinataire": ("Destinatario", "Recipient"),
+    "Mon avatar": ("Mi avatar", "My avatar"),
+    "Avatar actuel": ("Avatar actual", "Current avatar"),
+    "Mon véhicule": ("Mi vehículo", "My vehicle"),
+    "Carburant": ("Combustible", "Fuel"),
+    "Consommation": ("Consumo", "Consumption"),
+    "Prix carburant": ("Precio del combustible", "Fuel price"),
+    "Carte hors ligne": ("Mapa sin conexión", "Offline map"),
+    "Carte des feux de forêt": ("Mapa de incendios forestales", "Wildfire map"),
+    "Cartes hors ligne 🗺️": ("Mapas sin conexión 🗺️", "Offline maps 🗺️"),
+    "Itinéraires sans réseau 🧭": ("Rutas sin cobertura 🧭", "Routes without signal 🧭"),
+    "Trafic 🚦 (TomTom)": ("Tráfico 🚦 (TomTom)", "Traffic 🚦 (TomTom)"),
+    "Incendies 🔥 (NASA FIRMS)": ("Incendios 🔥 (NASA FIRMS)", "Wildfires 🔥 (NASA FIRMS)"),
+    "Serveur de cartes personnel": ("Servidor de mapas propio", "Personal map server"),
+    "Classement des contributeurs": ("Clasificación de contribuyentes", "Contributor leaderboard"),
+    "Politique de confidentialité": ("Política de privacidad", "Privacy policy"),
+    "À propos": ("Acerca de", "About"),
+    "Navigation en temps réel": ("Navegación en tiempo real", "Real-time navigation"),
+    "par Maxime Nathan Lestage": ("por Maxime Nathan Lestage", "by Maxime Nathan Lestage"),
+    # --- Champs et invites ---
+    "Où allez-vous ?": ("¿Adónde vas?", "Where are you going?"),
+    "Chercher un lieu, une ville, un pays": (
+        "Buscar un lugar, una ciudad, un país",
+        "Search a place, a city, a country",
+    ),
+    "Chercher une région": ("Buscar una región", "Search a region"),
+    "e-mail": ("correo electrónico", "email"),
+    "mot de passe": ("contraseña", "password"),
+    "Clé API TomTom": ("Clave de API TomTom", "TomTom API key"),
+    "Clé FIRMS (MAP_KEY)": ("Clave FIRMS (MAP_KEY)", "FIRMS key (MAP_KEY)"),
+    "Éviter les péages": ("Evitar peajes", "Avoid tolls"),
+    "Éviter les autoroutes": ("Evitar autopistas", "Avoid motorways"),
+    "Un trajet vers chaque point": ("Una ruta hasta cada punto", "One route to each point"),
+    "Itinéraire le plus simple": ("La ruta más sencilla", "The simplest route"),
+    "Gazole": ("Gasóleo", "Diesel"),
+    # --- Phrases et explications ---
+    "Reprendre la navigation ?": ("¿Reanudar la navegación?", "Resume navigation?"),
+    "Partage impossible": ("No se puede compartir", "Sharing failed"),
+    "Messages indisponible": ("Mensajes no disponible", "Messages unavailable"),
+    "Aucune région de ce nom.": ("Ninguna región con ese nombre.", "No region by that name."),
+    "Téléchargement en cours…": ("Descargando…", "Downloading…"),
+    "Contour satellite approximatif": ("Contorno aproximado por satélite", "Approximate satellite outline"),
+    "Aucune position — utilise « Enregistrer ma position ».": (
+        "Ninguna posición — usa «Guardar mi posición».",
+        "No position — use “Save my position”.",
+    ),
+    "Aucun trajet enregistré pour l'instant. Lance une navigation : ton trajet sera sauvegardé automatiquement à l'arrivée.": (
+        "Todavía no hay ningún viaje guardado. Inicia una navegación: tu viaje se guardará solo al llegar.",
+        "No trip saved yet. Start navigating: your trip is saved automatically on arrival.",
+    ),
+    "Tape une adresse ou un lieu, puis choisis une destination.": (
+        "Escribe una dirección o un lugar y elige un destino.",
+        "Type an address or a place, then pick a destination.",
+    ),
+    "Coche des points pour tracer plusieurs trajets à la fois.": (
+        "Marca puntos para trazar varias rutas a la vez.",
+        "Tick points to draw several trips at once.",
+    ),
+    "Liste des régions indisponible — il faut du réseau une fois.": (
+        "Lista de regiones no disponible: hace falta cobertura una vez.",
+        "Region list unavailable — signal is needed once.",
+    ),
+    "Télécharge d'abord une région, ci-dessous.": (
+        "Descarga primero una región, aquí debajo.",
+        "Download a region first, below.",
+    ),
+    "Les itinéraires sont calculés sur l'appareil. ": (
+        "Las rutas se calculan en el dispositivo. ",
+        "Routes are computed on the device. ",
+    ),
+    "Permet de recalculer un itinéraire sans réseau. ": (
+        "Permite recalcular una ruta sin cobertura. ",
+        "Lets a route be recomputed without signal. ",
+    ),
+    "Itinéraire trop long à ce niveau de détail ": (
+        "Ruta demasiado larga con este nivel de detalle ",
+        "Route too long at this level of detail ",
+    ),
+    "Cet appareil ne peut pas envoyer de SMS. Copie ton message et envoie-le autrement.": (
+        "Este dispositivo no puede enviar SMS. Copia tu mensaje y envíalo de otro modo.",
+        "This device cannot send texts. Copy your message and send it another way.",
+    ),
+    "Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription.": (
+        "No hace falta ninguna clave: los mapas vienen de OpenStreetMap a través de OpenFreeMap, libres y sin registro.",
+        "No key is needed: the maps come from OpenStreetMap via OpenFreeMap, free and without signing up.",
+    ),
+    "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut.": (
+        "Déjalo vacío si no alojas nada. Una dirección que no responde se ignora: el mapa sigue mostrándose con el fondo por defecto.",
+        "Leave empty if you host nothing. An address that doesn't answer is ignored: the map stays up with the default background.",
+    ),
+    "Colle ta clé TomTom pour activer les vrais bouchons en temps réel : la navigation contournera automatiquement les embouteillages sur ta route.": (
+        "Pega tu clave TomTom para activar los atascos reales en tiempo real: la navegación esquivará sola las retenciones de tu ruta.",
+        "Paste your TomTom key to switch on real live jams: navigation will route around the congestion ahead of you.",
+    ),
+    "Reçois une notification quand un signalement (police, accident, danger…) se trouve à moins de 600 m, même écran verrouillé.": (
+        "Recibe un aviso cuando un reporte (policía, accidente, peligro…) esté a menos de 600 m, incluso con la pantalla bloqueada.",
+        "Get a notification when a report (police, crash, hazard…) is within 600 m, even with the screen locked.",
+    ),
+    "Supprimer définitivement ton compte et toutes tes données (positions, trajets, recherches, signalements) ?": (
+        "¿Eliminar definitivamente tu cuenta y todos tus datos (posiciones, viajes, búsquedas, avisos)?",
+        "Permanently delete your account and all your data (positions, trips, searches, reports)?",
+    ),
+    # --- Chaînes interpolées ---------------------------------------------
+    # SwiftUI transforme `Text("Mes trajets (\(n))")` en clé « Mes trajets
+    # (%lld) ». Un spécificateur mal deviné ne casse rien : la traduction ne
+    # s'applique pas et le français reste.
+    "Mes trajets (%lld)": ("Mis viajes (%lld)", "My trips (%lld)"),
+    "Afficher les trajets cochés (%lld)": (
+        "Mostrar los viajes marcados (%lld)",
+        "Show the ticked trips (%lld)",
+    ),
+    "Supprimer les points cochés (%lld)": (
+        "Eliminar los puntos marcados (%lld)",
+        "Delete the ticked points (%lld)",
+    ),
+    "Définir %@ sur ma position": ("Fijar %@ en mi posición", "Set %@ to my position"),
+    "Confirmé %lld fois · infirmé %lld fois": (
+        "Confirmado %lld veces · desmentido %lld veces",
+        "Confirmed %lld times · denied %lld times",
+    ),
+    "%lld trajets affichés": ("%lld viajes mostrados", "%lld trips shown"),
+    "%lld signalements · %lld trajets": (
+        "%lld avisos · %lld viajes",
+        "%lld reports · %lld trips",
+    ),
+    "%lld points · %@": ("%lld puntos · %@", "%lld points · %@"),
+    "%lld régions · %@": ("%lld regiones · %@", "%lld regions · %@"),
+    "Mon itinéraire · %@": ("Mi ruta · %@", "My route · %@"),
+    "%lld bouchon(s) détecté(s) autour de toi (temps réel).": (
+        "%lld atasco(s) detectado(s) a tu alrededor (tiempo real).",
+        "%lld jam(s) detected around you (live).",
+    ),
+    # --- Chaînes de `String(format:)` -------------------------------------
+    # Enveloppées dans `NSLocalizedString` côté Swift : sans cela,
+    # `String(format:)` ne consulte aucun catalogue.
+    "%.0f min · %.1f km · %d virages · arr. %@": (
+        "%.0f min · %.1f km · %d giros · lleg. %@",
+        "%.0f min · %.1f km · %d turns · arr. %@",
+    ),
+    "%.1f km restants": ("%.1f km restantes", "%.1f km left"),
+    "Itinéraire de %.1f km en cours.": (
+        "Ruta de %.1f km en curso.",
+        "Route of %.1f km in progress.",
+    ),
+    "↗ %.0f m de côte · ↘ %.0f m de descente": (
+        "↗ %.0f m de subida · ↘ %.0f m de bajada",
+        "↗ %.0f m of climb · ↘ %.0f m of descent",
+    ),
+    "⚠️ Forte côte (%.0f m)": ("⚠️ Subida fuerte (%.0f m)", "⚠️ Steep climb (%.0f m)"),
+    "⚠️ Forte descente (%.0f m)": ("⚠️ Bajada fuerte (%.0f m)", "⚠️ Steep descent (%.0f m)"),
+    "⚠️ Forte côte (%.0f m) et forte descente (%.0f m)": (
+        "⚠️ Subida fuerte (%.0f m) y bajada fuerte (%.0f m)",
+        "⚠️ Steep climb (%.0f m) and steep descent (%.0f m)",
+    ),
+    "⛽ ~%.2f € · sans péage": ("⛽ ~%.2f € · sin peaje", "⛽ ~%.2f € · no tolls"),
+    "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €": (
+        "⛽ ~%.2f € · 🛣️ peajes ~%.2f € · total ~%.2f €",
+        "⛽ ~%.2f € · 🛣️ tolls ~%.2f € · total ~%.2f €",
+    ),
+    # --- Catégories de lieux et modes de déplacement -----------------------
+    # Ces libellés viennent d'énumérations, pas de littéraux : les sites
+    # d'appel passent par `LocalizedStringKey` pour que la recherche ait lieu.
+    "Essence": ("Gasolinera", "Fuel"),
+    "Parking": ("Aparcamiento", "Parking"),
+    "Handicapé": ("Accesible", "Accessible"),
+    "Recharge": ("Recarga", "Charging"),
+    "Toilettes": ("Aseos", "Toilets"),
+    "Baignade": ("Baño", "Swimming"),
+    "Pharmacie": ("Farmacia", "Pharmacy"),
+    "Distributeur": ("Cajero", "ATM"),
+    "Supermarché": ("Supermercado", "Supermarket"),
+    "Camping": ("Camping", "Campsite"),
+    "Eau potable": ("Agua potable", "Drinking water"),
+    "Point de vue": ("Mirador", "Viewpoint"),
+    "Fast-food": ("Comida rápida", "Fast food"),
+    "Restaurants": ("Restaurantes", "Restaurants"),
+    "Hôtels": ("Hoteles", "Hotels"),
+    "Tourisme": ("Turismo", "Sightseeing"),
+    "Sorties": ("Ocio", "Nightlife"),
+    # Conditions météo (Weather.describe) : affichées par `Text(String)`.
+    "Ensoleillé": ("Soleado", "Sunny"),
+    "Éclaircies": ("Claros", "Partly cloudy"),
+    "Couvert": ("Cubierto", "Overcast"),
+    "Brouillard": ("Niebla", "Fog"),
+    "Bruine": ("Llovizna", "Drizzle"),
+    "Pluie": ("Lluvia", "Rain"),
+    "Neige": ("Nieve", "Snow"),
+    "Averses": ("Chubascos", "Showers"),
+    "Orage": ("Tormenta", "Thunderstorm"),
+    "Météo": ("Tiempo", "Weather"),
+    # Étiquettes du comparateur : construites dans une structure, donc
+    # passées par `LocalizedStringKey` à l'affichage.
+    "Le plus simple": ("La más sencilla", "The simplest"),
+    "Le plus rapide": ("La más rápida", "The fastest"),
+    "Le plus court": ("La más corta", "The shortest"),
+    "Alternative": ("Alternativa", "Alternative"),
+    "Itinéraire": ("Ruta", "Route"),
+    # Messages de validation : affichés par `Text(String)`, donc passés par
+    # `LocalizedStringKey` au site d'appel.
+    "Adresse e-mail invalide.": ("Correo electrónico no válido.", "Invalid email address."),
+    "Mot de passe : 6 caractères minimum.": (
+        "Contraseña: 6 caracteres como mínimo.",
+        "Password: 6 characters minimum.",
+    ),
+    "À pied": ("A pie", "On foot"),
+    "Vélo": ("Bici", "Bike"),
+    "Voiture": ("Coche", "Car"),
+}
+
+
+# Les libellés que la vitrine reproduit dans ses maquettes. Les exporter
+# depuis ce tableau plutôt que les retaper garantit qu'un écran dessiné sur
+# le site dit exactement ce que l'application affiche.
+VITRINE = [
+    "À pied", "Vélo", "Voiture", "Démarrer",
+    "Le plus simple", "Le plus rapide", "Le plus court",
+    "Essence", "Parking", "Recharge", "Restaurants", "Hôtels", "Supermarché",
+    "Pharmacie", "Distributeur", "Toilettes", "Eau potable", "Handicapé",
+    "Baignade", "Surf", "Skatepark", "Camping", "Point de vue", "Fast-food",
+    "Tourisme", "Sorties", "Éclaircies",
+    # Les formats de `String(format:)` : la vitrine les remplit avec des
+    # valeurs d'exemple plutôt que de recopier des phrases toutes faites.
+    "%.0f min · %.1f km · %d virages · arr. %@",
+    "↗ %.0f m de côte · ↘ %.0f m de descente",
+    "⚠️ Forte côte (%.0f m)",
+    "⛽ ~%.2f € · sans péage",
+    "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €",
+]
+
+
+def exporte_vitrine(chemin: pathlib.Path) -> None:
+    """Écrit le module TypeScript que la vitrine importe pour ses maquettes."""
+    lignes = [
+        "// Généré par frontend/traductions.py — ne pas modifier à la main.",
+        "//",
+        "// Les libellés que les maquettes reproduisent, dans les trois langues,",
+        "// tirés du même tableau que le catalogue de l'application. Un écran",
+        "// dessiné sur le site dit ainsi exactement ce que l'app affiche.",
+        "",
+        'export type LangueApp = "fr" | "es" | "en";',
+        "",
+        "export const APP: Record<LangueApp, Record<string, string>> = {",
+    ]
+    for langue in ("fr", "es", "en"):
+        lignes.append(f"  {langue}: {{")
+        for cle in VITRINE:
+            # Absent du tableau : le mot ne change pas d'une langue à
+            # l'autre (« Surf », « Skatepark »). Retomber sur la clé, c'est
+            # exactement ce que fait l'application.
+            es, en = T.get(cle, (cle, cle))
+            valeur = {"fr": cle, "es": es, "en": en}[langue]
+            lignes.append(f'    {json.dumps(cle, ensure_ascii=False)}: '
+                          f'{json.dumps(valeur, ensure_ascii=False)},')
+        lignes.append("  },")
+    lignes += ["};", ""]
+    chemin.write_text("\n".join(lignes), encoding="utf-8")
+    print(f"{chemin.name} : {len(VITRINE)} libellés × 3 langues")
+
+
+def main() -> None:
+    strings = {
+        cle: {
+            "localizations": {
+                langue: {"stringUnit": {"state": "translated", "value": valeur}}
+                for langue, valeur in (("en", en), ("es", es))
+            }
+        }
+        for cle, (es, en) in T.items()
+    }
+    catalogue = {
+        "sourceLanguage": "fr",
+        "strings": dict(sorted(strings.items())),
+        "version": "1.0",
+    }
+    chemin = pathlib.Path(__file__).parent / "MonCapGPS" / "Localizable.xcstrings"
+    chemin.write_text(
+        json.dumps(catalogue, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"{chemin.name} : {len(T)} clés, 2 langues")
+
+    exporte_vitrine(pathlib.Path(__file__).parent.parent / "vitrine" / "src" / "appstrings.ts")
+
+
+if __name__ == "__main__":
+    main()
