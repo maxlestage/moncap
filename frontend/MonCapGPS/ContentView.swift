@@ -437,6 +437,10 @@ struct MapHomeView: View {
     /// Clé TomTom optionnelle saisie sur l'appareil : si présente, l'app
     /// interroge TomTom directement (sinon elle passe par le backend).
     @AppStorage("moncap.tomtomKey") private var tomtomKey = ""
+    /// Calculer les itinéraires sur l'appareil, sans jamais interroger le
+    /// réseau. Choisi, et non subi : partir en montagne ou à l'étranger se
+    /// décide avant de perdre le signal, pas après.
+    @AppStorage("moncap.horsLigne") private var horsLigne = false
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -2515,6 +2519,22 @@ struct MapHomeView: View {
                     // car il repose sur d'autres données — un graphe routier,
                     // pas des tuiles d'affichage.
                     DisclosureGroup("Itinéraires sans réseau 🧭") {
+                        Toggle("Naviguer hors ligne", isOn: $horsLigne)
+                            .disabled(router.installed == nil)
+                        if horsLigne && router.installed != nil {
+                            Text(
+                                "Les itinéraires sont calculés sur l'appareil. "
+                                    + "Un seul trajet proposé au lieu de plusieurs, "
+                                    + "et pas de trafic en direct."
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        } else if router.installed == nil {
+                            Text("Télécharge d'abord une région, ci-dessous.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
                         if let region = router.installed {
                             Label(
                                 router.installedNom ?? region,
@@ -3394,6 +3414,14 @@ struct MapHomeView: View {
         guard let from = location.coordinate else { return }
         multiRoutes = []
         let to = CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon)
+        if horsLigne, let local = router.route(from: from, to: to) {
+            nav.start(steps: local.steps, coordinates: local.coordinates,
+                      distanceKm: local.km, etaMinutes: local.minutes, destination: to)
+            speedLimit.preload(along: local.coordinates)
+            showPlaces = false
+            withAnimation { camera = followCamera(from) }
+            return
+        }
         guard let route = await drivingRoute(from: from, to: to) else { return }
         nav.start(route: route, destination: to)
         showPlaces = false
@@ -3410,7 +3438,16 @@ struct MapHomeView: View {
         routeInfo = nil
 
         var builds: [RouteBuild]
-        if travelMode == .bike {
+        if horsLigne, travelMode == .car, let local = router.route(from: from, to: dest) {
+            // Hors ligne assumé : rien ne part sur le réseau. Un seul
+            // itinéraire — Valhalla n'en propose pas d'autres ici, et les
+            // variantes par points de passage demanderaient autant de calculs
+            // sur l'appareil.
+            builds = [
+                RouteBuild(coords: local.coordinates, steps: local.steps,
+                           km: local.km, minutes: local.minutes)
+            ]
+        } else if travelMode == .bike {
             // Vélo : vrai routage cyclable (pistes) via BRouter, sans clé API.
             builds = await bikeRoutes(from: from, to: dest)
             if builds.isEmpty {
@@ -3557,6 +3594,16 @@ struct MapHomeView: View {
     private func recomputeRoute() async {
         guard let from = location.coordinate, let to = nav.destination else {
             nav.rerouteFailed()
+            return
+        }
+        // Hors ligne assumé : on ne tente même pas le réseau. Attendre son
+        // échec ferait patienter le bandeau « Recalcul… » plusieurs secondes,
+        // au pire moment — celui où l'on vient de rater une sortie.
+        if horsLigne, travelMode == .car, let local = router.route(from: from, to: to) {
+            nav.applyReroute(
+                steps: local.steps, coords: local.coordinates,
+                km: local.km, minutes: local.minutes)
+            speedLimit.preload(along: local.coordinates)
             return
         }
         guard let route = await drivingRoute(from: from, to: to,
