@@ -106,31 +106,86 @@ jobs:
               propre = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", p)).strip() for p in parts]
               return " · ".join(reversed(propre))
 
+          # Groupes bâtis d'un bloc, de plusieurs extraits à la fois.
+          #
+          # Réunir après coup des tuiles construites séparément ne marche pas,
+          # et ce n'est pas qu'une affaire de format : chaque région a coupé ses
+          # routes au bord de son extrait, et rien ne les recolle ensuite. Un
+          # trajet d'une région à l'autre exige donc un graphe bâti des deux
+          # extraits ensemble — mesuré : Bordeaux → Toulouse, 244,9 km, sur un
+          # paquet Aquitaine + Midi-Pyrénées de 572 Mo.
+          #
+          # Le découpage Geofabrik de la France date d'avant 2016 ; ces groupes
+          # rendent les treize régions d'aujourd'hui, celles dont on parle.
+          GROUPES = {
+              "france-auvergne-rhone-alpes": ("France · Auvergne-Rhône-Alpes",
+                                              ["auvergne", "rhone-alpes"]),
+              "france-bourgogne-franche-comte": ("France · Bourgogne-Franche-Comté",
+                                                 ["bourgogne", "franche-comte"]),
+              "france-bretagne": ("France · Bretagne", ["bretagne"]),
+              "france-centre-val-de-loire": ("France · Centre-Val de Loire", ["centre"]),
+              "france-corse": ("France · Corse", ["corse"]),
+              "france-grand-est": ("France · Grand Est",
+                                   ["alsace", "champagne-ardenne", "lorraine"]),
+              "france-hauts-de-france": ("France · Hauts-de-France",
+                                         ["nord-pas-de-calais", "picardie"]),
+              "france-ile-de-france": ("France · Île-de-France", ["ile-de-france"]),
+              "france-normandie": ("France · Normandie",
+                                   ["basse-normandie", "haute-normandie"]),
+              "france-nouvelle-aquitaine": ("France · Nouvelle-Aquitaine",
+                                            ["aquitaine", "limousin", "poitou-charentes"]),
+              "france-occitanie": ("France · Occitanie",
+                                   ["languedoc-roussillon", "midi-pyrenees"]),
+              "france-pays-de-la-loire": ("France · Pays de la Loire", ["pays-de-la-loire"]),
+              "france-provence-alpes-cote-d-azur": ("France · Provence-Alpes-Côte d'Azur",
+                                                    ["provence-alpes-cote-d-azur"]),
+              "france-guadeloupe": ("France · Guadeloupe", ["guadeloupe"]),
+              "france-guyane": ("France · Guyane", ["guyane"]),
+              "france-martinique": ("France · Martinique", ["martinique"]),
+              "france-mayotte": ("France · Mayotte", ["mayotte"]),
+              "france-reunion": ("France · La Réunion", ["reunion"]),
+          }
+          ENSEMBLES = {"grandes-regions": list(GROUPES)}
+
           alias = {"toutes": "europe", "all": "europe", "": "europe",
                    "espagne": "spain", "allemagne": "germany", "italie": "italy",
                    "portugal": "portugal", "suisse": "switzerland", "belgique": "belgium"}
           demandes = [m.strip().lower() for m in os.environ["DEMANDE"].split(",")]
           demandes = [alias.get(m, m) for m in demandes if m or len(demandes) == 1]
-
-          acc = []
+          # Un ensemble se déplie en ses groupes.
+          deplie = []
           for d in demandes:
-              if d not in noeuds:
-                  print(f"::error::Zone Geofabrik inconnue : « {d} »")
+              deplie.extend(ENSEMBLES.get(d, [d]))
+
+          choisies, acc = [], []
+          for d in deplie:
+              if d in GROUPES:
+                  nom, zones = GROUPES[d]
+                  choisies.append({
+                      "tag": "tuiles-eu-" + d,
+                      "nom": nom,
+                      "chemins": " ".join(f"europe/france/{z}" for z in zones),
+                  })
+              elif d in noeuds:
+                  descend(d, acc)
+              else:
+                  print(f"::error::Zone inconnue : « {d} »")
                   raise SystemExit(1)
-              descend(d, acc)
+
+          choisies += [
+              {"tag": "tuiles-eu-" + chemin(r)[len("europe/"):].replace("/", "-"),
+               "nom": libelle(r),
+               "chemins": chemin(r)}
+              for r in acc
+          ]
 
           # Une matrice GitHub plafonne à 256 tâches ; au-delà le lancement
           # échoue en bloc. Mieux vaut le dire, et laisser découper.
-          if len(acc) > 250:
-              print(f"::error::{len(acc)} zones demandées, au-dessus des 250 "
+          if len(choisies) > 250:
+              print(f"::error::{len(choisies)} zones demandées, au-dessus des 250 "
                     "que porte une matrice. Lancer pays par pays.")
               raise SystemExit(1)
 
-          choisies = [
-              {"chemin": chemin(r), "tag": "tuiles-eu-" + chemin(r)[len("europe/"):].replace("/", "-"),
-               "nom": libelle(r)}
-              for r in acc
-          ]
           print(f"{len(choisies)} zones", file=sys.stderr)
           print("matrice=" + json.dumps({"region": choisies}))
           PY
@@ -160,14 +215,20 @@ jobs:
             /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           df -h / | tail -1
 
-      - name: Télécharge l'extrait OpenStreetMap
+      - name: Télécharge les extraits OpenStreetMap
+        env:
+          CHEMINS: ${{ matrix.region.chemins }}
         run: |
           set -euo pipefail
           mkdir -p data
-          url="https://download.geofabrik.de/${{ matrix.region.chemin }}-latest.osm.pbf"
-          echo "Extrait : $url"
-          curl -fSL --retry 4 --retry-delay 5 -o data/extrait.osm.pbf "$url"
-          ls -lh data/extrait.osm.pbf
+          i=0
+          for c in $CHEMINS; do
+            i=$((i + 1))
+            url="https://download.geofabrik.de/$c-latest.osm.pbf"
+            echo "Extrait : $url"
+            curl -fSL --retry 4 --retry-delay 5 -o "data/extrait-$i.osm.pbf" "$url"
+          done
+          ls -lh data/*.osm.pbf
 
       - name: Construit les tuiles
         run: |
@@ -184,8 +245,11 @@ jobs:
               # Fuseaux et limites administratives : sans eux les consignes
               # ignorent le pays traversé et le sens de circulation.
               valhalla_build_timezones > /data/tuiles/timezones.sqlite
-              valhalla_build_admins -c /data/valhalla.json /data/extrait.osm.pbf
-              valhalla_build_tiles -c /data/valhalla.json /data/extrait.osm.pbf
+              # Tous les extraits d'un coup : c'est ce qui raccorde les routes
+              # d'une région à l'autre. Construits séparément puis réunis, les
+              # jeux de tuiles restent coupés au bord de chaque extrait.
+              valhalla_build_admins -c /data/valhalla.json /data/extrait-*.osm.pbf
+              valhalla_build_tiles -c /data/valhalla.json /data/extrait-*.osm.pbf
               valhalla_build_extract -c /data/valhalla.json -v
             '
           ls -lh data/tuiles.tar data/valhalla.json
@@ -195,7 +259,7 @@ jobs:
           # Mieux vaut l'annoncer ici, avec le découpage à faire.
           octets=$(stat -c%s data/tuiles.tar)
           if [ "$octets" -ge 2147483648 ]; then
-            echo "::error::${{ matrix.region.chemin }} produit $TAILLE de tuiles," \
+            echo "::error::${{ matrix.region.tag }} produit $TAILLE de tuiles," \
               "au-dessus des 2 Gio d'une pièce jointe de Release." \
               "Découper la région en sous-régions Geofabrik."
             exit 1
@@ -208,7 +272,7 @@ jobs:
           # porte apostrophes et parenthèses, que le shell interpréterait.
           TAG: ${{ matrix.region.tag }}
           NOM: ${{ matrix.region.nom }}
-          CHEMIN: ${{ matrix.region.chemin }}
+          CHEMINS: ${{ matrix.region.chemins }}
           DEPOT: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -218,7 +282,7 @@ jobs:
           # réécrire à la main dans l'app. Seuls les chemins y seront corrigés,
           # l'appareil ne connaissant évidemment pas /data.
           cp data/valhalla.json "data/$TAG.json"
-          notes="Tuiles Valhalla · $CHEMIN · $TAILLE · OpenStreetMap (ODbL)"
+          notes="Tuiles Valhalla · $CHEMINS · $TAILLE · OpenStreetMap (ODbL)"
           # Le titre porte le nom lisible : c'est lui que l'app affiche, elle
           # tire toute sa liste de régions des Releases plutôt que d'une copie
           # embarquée qui vieillirait à chaque construction.
@@ -233,11 +297,11 @@ jobs:
       - name: Récapitulatif
         env:
           NOM: ${{ matrix.region.nom }}
-          CHEMIN: ${{ matrix.region.chemin }}
+          CHEMINS: ${{ matrix.region.chemins }}
         run: |
           {
             echo "### $NOM"
             echo ""
-            echo "- Zone : \`$CHEMIN\`"
+            echo "- Zones : \`$CHEMINS\`"
             echo "- Taille : **$TAILLE**"
           } >> "$GITHUB_STEP_SUMMARY"
