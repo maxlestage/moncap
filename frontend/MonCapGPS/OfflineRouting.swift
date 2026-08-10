@@ -239,27 +239,30 @@ final class OfflineRouter: NSObject, ObservableObject {
         progress = 0
         message = nil
 
-        // La configuration d'abord : quelques kilooctets, et elle doit être
-        // sur le disque avant que l'archive n'arrive — la fin du transfert
-        // peut survenir alors que l'app n'est plus lancée.
-        guard let (configData, _) = try? await URLSession.shared.data(from: region.config),
-            let corrigee = try? Self.corrige(config: configData, pour: region.id),
-            (try? corrigee.write(to: Self.configPath(region.id))) != nil
-        else {
-            downloading = false
-            message = "Région indisponible."
-            return
-        }
-
         attentes[region.id] = region.nom
-        let tache = session.downloadTask(with: region.archive)
-        // L'étiquette survit à la mort de l'app : c'est par elle qu'on
-        // retrouve de quelle région il s'agissait.
-        tache.taskDescription = region.id
-        tache.resume()
+        // Les deux fichiers passent par la session de fond, y compris la
+        // configuration pourtant minuscule : une requête ordinaire serait
+        // suspendue si l'on bascule vers une autre app dans la seconde qui
+        // suit, et plus rien ne démarrerait.
+        for (url, nature) in [(region.config, Self.nConfig), (region.archive, Self.nArchive)] {
+            let tache = session.downloadTask(with: url)
+            // L'étiquette survit à la mort de l'app : c'est par elle qu'on
+            // retrouve la région et la nature du fichier.
+            tache.taskDescription = "\(region.id)|\(nature)"
+            tache.resume()
+        }
     }
 
-    /// Régions dont l'archive est en cours de transfert, par identifiant.
+    nonisolated static let nConfig = "config"
+    nonisolated static let nArchive = "archive"
+
+    /// Sépare l'étiquette d'une tâche en région et nature de fichier.
+    nonisolated static func etiquette(_ brut: String?) -> (id: String, nature: String)? {
+        guard let parts = brut?.components(separatedBy: "|"), parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    /// Régions dont les fichiers sont en cours de transfert, par identifiant.
     private var attentes: [String: String] {
         get {
             UserDefaults.standard.dictionary(forKey: Self.keyAttentes) as? [String: String] ?? [:]
@@ -289,20 +292,20 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
     }
 
-    /// Inscrit une région dont l'archive est arrivée.
+    /// Inscrit une région une fois ses deux fichiers arrivés.
+    ///
+    /// Appelée à chaque fichier reçu : tant que l'autre manque, elle ne fait
+    /// rien. Les deux tâches arrivent dans un ordre que le système décide,
+    /// et l'archive met bien plus longtemps que la configuration.
     fileprivate func termine(_ id: String) {
-        let chemin = Self.archivePath(id)
-        let taille = (try? FileManager.default.attributesOfItem(atPath: chemin.path)[.size])
-        let octets = (taille as? NSNumber)?.intValue ?? 0
+        let octets = Self.poids(Self.archivePath(id))
+        guard octets > 0, Self.poids(Self.configPath(id)) > 0 else { return }
+
         var restantes = attentes
         let nom = restantes.removeValue(forKey: id) ?? id
         attentes = restantes
         downloading = !restantes.isEmpty
 
-        guard octets > 0 else {
-            message = "Téléchargement interrompu."
-            return
-        }
         moteurs[id] = nil
         if !installees.contains(where: { $0.id == id }) {
             installees.append(Installee(id: id, nom: nom, octets: octets))
@@ -311,13 +314,21 @@ final class OfflineRouter: NSObject, ObservableObject {
         progress = 1
     }
 
+    nonisolated static func poids(_ url: URL) -> Int {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attrs?[.size] as? NSNumber)?.intValue ?? 0
+    }
+
     fileprivate func echoue(_ id: String) {
         var restantes = attentes
         restantes.removeValue(forKey: id)
         attentes = restantes
         downloading = !restantes.isEmpty
         message = "Téléchargement interrompu."
+        // Les deux fichiers partent ensemble : en garder un seul laisserait
+        // une région à moitié installée, que rien ne viendrait compléter.
         try? FileManager.default.removeItem(at: Self.archivePath(id))
+        try? FileManager.default.removeItem(at: Self.configPath(id))
     }
 
     /// Efface une région gardée.
@@ -345,7 +356,7 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// Elle porte des chemins absolus (`/data/…`) qui n'existent pas sur
     /// l'appareil : seuls ceux-là changent, tout le reste — des dizaines de
     /// réglages de coût, de vitesse et de tri — est conservé tel quel.
-    static func corrige(config: Data, pour id: String) throws -> Data {
+    nonisolated static func corrige(config: Data, pour id: String) throws -> Data {
         guard
             var racine = try JSONSerialization.jsonObject(with: config) as? [String: Any],
             var mjolnir = racine["mjolnir"] as? [String: Any]
@@ -496,10 +507,21 @@ extension OfflineRouter: URLSessionDownloadDelegate {
     ) {
         // Le fichier temporaire disparaît au retour de cette méthode : il faut
         // le déplacer ici même, sans attendre de repasser sur le fil principal.
-        guard let id = downloadTask.taskDescription else { return }
-        let destination = OfflineRouter.archivePath(id)
-        try? FileManager.default.removeItem(at: destination)
-        try? FileManager.default.moveItem(at: location, to: destination)
+        guard let (id, nature) = OfflineRouter.etiquette(downloadTask.taskDescription) else {
+            return
+        }
+        if nature == OfflineRouter.nConfig {
+            // La configuration porte les chemins du runner : elle est corrigée
+            // ici, sur ce fil-ci, l'app pouvant ne plus être là ensuite.
+            guard let brut = try? Data(contentsOf: location),
+                let corrigee = try? OfflineRouter.corrige(config: brut, pour: id)
+            else { return }
+            try? corrigee.write(to: OfflineRouter.configPath(id))
+        } else {
+            let destination = OfflineRouter.archivePath(id)
+            try? FileManager.default.removeItem(at: destination)
+            try? FileManager.default.moveItem(at: location, to: destination)
+        }
         Task { @MainActor in OfflineRouter.shared.termine(id) }
     }
 
@@ -517,7 +539,9 @@ extension OfflineRouter: URLSessionDownloadDelegate {
         _ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?
     ) {
         // Sans erreur, c'est `didFinishDownloadingTo` qui a déjà tout fait.
-        guard error != nil, let id = task.taskDescription else { return }
+        guard error != nil,
+            let (id, _) = OfflineRouter.etiquette(task.taskDescription)
+        else { return }
         Task { @MainActor in OfflineRouter.shared.echoue(id) }
     }
 
