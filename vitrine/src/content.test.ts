@@ -138,6 +138,17 @@ test("chaque langue garde la même matière", () => {
     expect(valeurs).toContain("206");
     expect(valeurs).toContain("49");
 
+    // Le plafond doit se lire comme un plafond. « 15 itinéraires » seul
+    // laisserait croire qu'il y en a toujours quinze : la légende doit dire
+    // que c'est un maximum, et l'intro du comparateur reprendre le nombre.
+    const plafond = l.chiffres.find((n) => n.valeur === String(ITINERAIRES_MAX));
+    expect(plafond?.legende, `${l.code}`).toMatch(
+      /maximum|máximo|at most|jusqu|hasta|up to/i,
+    );
+    expect(l.comparateur.intro, `${l.code}`).toContain(
+      String(ITINERAIRES_MAX),
+    );
+
     // Le chiffre des catégories doit suivre la liste, pas la contredire.
     const cat = l.chiffres.find((n) => /cat[ée]g/i.test(n.legende));
     expect(cat?.valeur, `${l.code}`).toBe(String(LIEUX.length));

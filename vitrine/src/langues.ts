@@ -94,7 +94,7 @@ const FR: Contenu = {
   },
   langueLibelle: "Langue",
   chiffres: [
-    { valeur: String(ITINERAIRES_MAX), legende: "itinéraires comparés" },
+    { valeur: String(ITINERAIRES_MAX), legende: "itinéraires au maximum" },
     { valeur: "19", legende: "catégories de lieux" },
     { valeur: "206", legende: "régions téléchargeables" },
     { valeur: "49", legende: "pays d'Europe" },
@@ -228,7 +228,7 @@ const ES: Contenu = {
   },
   langueLibelle: "Idioma",
   chiffres: [
-    { valeur: String(ITINERAIRES_MAX), legende: "rutas comparadas" },
+    { valeur: String(ITINERAIRES_MAX), legende: "rutas como máximo" },
     { valeur: "19", legende: "categorías de lugares" },
     { valeur: "206", legende: "regiones descargables" },
     { valeur: "49", legende: "países de Europa" },
@@ -363,7 +363,7 @@ const EN: Contenu = {
   },
   langueLibelle: "Language",
   chiffres: [
-    { valeur: String(ITINERAIRES_MAX), legende: "routes compared" },
+    { valeur: String(ITINERAIRES_MAX), legende: "routes at most" },
     { valeur: "19", legende: "place categories" },
     { valeur: "206", legende: "downloadable regions" },
     { valeur: "49", legende: "European countries" },

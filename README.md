@@ -356,11 +356,29 @@ docker run -p 3000:3000 \
 
 App iOS qui affiche une carte (MapKit), la position de l'appareil
 (CoreLocation), les positions enregistrées et l'itinéraire qui les relie
-(polyligne). Fonctions : enregistrer sa position, **itinéraire routier le plus simple
-tracé en vert** (MapKit `MKDirections`, distance + durée), **navigation
-turn-by-turn avec annonces vocales** (depuis ta position vers la
-destination, carte qui suit le cap, **recalcul automatique si tu sors de la
-route**), export GPX, liste avec suppression.
+(polyligne). Fonctions : enregistrer sa position, **navigation turn-by-turn
+avec annonces vocales** (depuis ta position vers la destination, carte qui
+suit le cap, **recalcul automatique si tu sors de la route**), export GPX,
+liste avec suppression.
+
+### Comparateur d'itinéraires
+
+**Jusqu'à 15 itinéraires** sont proposés pour un même trajet — c'est un
+plafond dur, `options.prefix(15)` dans `ContentView.swift`, appliqué après
+dédoublonnage et tri (le plus simple d'abord, puis par durée). Au-delà, la
+liste devient plus longue à parcourir que le trajet à choisir.
+
+Chacun porte :
+
+| | |
+| --- | --- |
+| Étiquette | le plus simple (le moins de manœuvres), le plus rapide, le plus court |
+| Trajet | durée, distance, nombre de virages, heure d'arrivée |
+| Relief | dénivelé ↗ / ↘, avec avertissement au-delà de 150 m |
+| Coût | carburant (consommation du véhicule × prix local réel) + péages estimés |
+
+Hors ligne, Valhalla n'en renvoie qu'un seul : le comparateur suppose le
+réseau.
 
 **Temps réel (WebSocket)** :
 
