@@ -117,35 +117,76 @@ jobs:
           #
           # Le découpage Geofabrik de la France date d'avant 2016 ; ces groupes
           # rendent les treize régions d'aujourd'hui, celles dont on parle.
-          GROUPES = {
-              "france-auvergne-rhone-alpes": ("France · Auvergne-Rhône-Alpes",
-                                              ["auvergne", "rhone-alpes"]),
-              "france-bourgogne-franche-comte": ("France · Bourgogne-Franche-Comté",
-                                                 ["bourgogne", "franche-comte"]),
-              "france-bretagne": ("France · Bretagne", ["bretagne"]),
-              "france-centre-val-de-loire": ("France · Centre-Val de Loire", ["centre"]),
-              "france-corse": ("France · Corse", ["corse"]),
-              "france-grand-est": ("France · Grand Est",
-                                   ["alsace", "champagne-ardenne", "lorraine"]),
-              "france-hauts-de-france": ("France · Hauts-de-France",
-                                         ["nord-pas-de-calais", "picardie"]),
-              "france-ile-de-france": ("France · Île-de-France", ["ile-de-france"]),
-              "france-normandie": ("France · Normandie",
-                                   ["basse-normandie", "haute-normandie"]),
-              "france-nouvelle-aquitaine": ("France · Nouvelle-Aquitaine",
-                                            ["aquitaine", "limousin", "poitou-charentes"]),
-              "france-occitanie": ("France · Occitanie",
-                                   ["languedoc-roussillon", "midi-pyrenees"]),
-              "france-pays-de-la-loire": ("France · Pays de la Loire", ["pays-de-la-loire"]),
-              "france-provence-alpes-cote-d-azur": ("France · Provence-Alpes-Côte d'Azur",
-                                                    ["provence-alpes-cote-d-azur"]),
-              "france-guadeloupe": ("France · Guadeloupe", ["guadeloupe"]),
-              "france-guyane": ("France · Guyane", ["guyane"]),
-              "france-martinique": ("France · Martinique", ["martinique"]),
-              "france-mayotte": ("France · Mayotte", ["mayotte"]),
-              "france-reunion": ("France · La Réunion", ["reunion"]),
+          REGIONS = {
+              "auvergne-rhone-alpes": ("Auvergne-Rhône-Alpes", ["auvergne", "rhone-alpes"]),
+              "bourgogne-franche-comte": ("Bourgogne-Franche-Comté",
+                                          ["bourgogne", "franche-comte"]),
+              "bretagne": ("Bretagne", ["bretagne"]),
+              "centre-val-de-loire": ("Centre-Val de Loire", ["centre"]),
+              "corse": ("Corse", ["corse"]),
+              "grand-est": ("Grand Est", ["alsace", "champagne-ardenne", "lorraine"]),
+              "hauts-de-france": ("Hauts-de-France", ["nord-pas-de-calais", "picardie"]),
+              "ile-de-france": ("Île-de-France", ["ile-de-france"]),
+              "normandie": ("Normandie", ["basse-normandie", "haute-normandie"]),
+              "nouvelle-aquitaine": ("Nouvelle-Aquitaine",
+                                     ["aquitaine", "limousin", "poitou-charentes"]),
+              "occitanie": ("Occitanie", ["languedoc-roussillon", "midi-pyrenees"]),
+              "pays-de-la-loire": ("Pays de la Loire", ["pays-de-la-loire"]),
+              "provence-alpes-cote-d-azur": ("Provence-Alpes-Côte d'Azur",
+                                             ["provence-alpes-cote-d-azur"]),
+              "guadeloupe": ("Guadeloupe", ["guadeloupe"]),
+              "guyane": ("Guyane", ["guyane"]),
+              "martinique": ("Martinique", ["martinique"]),
+              "mayotte": ("Mayotte", ["mayotte"]),
+              "reunion": ("La Réunion", ["reunion"]),
           }
-          ENSEMBLES = {"grandes-regions": list(GROUPES)}
+
+          # Zones qui se chevauchent, pour les trajets d'une région à l'autre.
+          #
+          # Une grande région seule ne mène pas loin : Bordeaux → Toulouse en
+          # traverse deux. Ces zones se recouvrent donc largement, chacune
+          # taillée pour qu'un axe réellement parcouru y tienne en entier.
+          #
+          # Le plafond de 2 Gio d'une pièce jointe commande le dessin : la
+          # France fait 4,2 Go de tuiles, donc aucune zone n'en couvre plus de
+          # la moitié. Aller au-delà demanderait de découper une archive en
+          # morceaux et de la recoller sur l'appareil — un autre chantier.
+          ZONES = {
+              "zone-nord-ouest": ("Zone Nord-Ouest", [
+                  "bretagne", "pays-de-la-loire", "normandie",
+                  "centre-val-de-loire", "ile-de-france", "hauts-de-france"]),
+              "zone-nord-est": ("Zone Nord-Est", [
+                  "hauts-de-france", "ile-de-france", "grand-est",
+                  "bourgogne-franche-comte", "centre-val-de-loire"]),
+              "zone-sud": ("Zone Sud", [
+                  "nouvelle-aquitaine", "occitanie", "provence-alpes-cote-d-azur",
+                  "centre-val-de-loire", "ile-de-france"]),
+              "zone-sud-est": ("Zone Sud-Est", [
+                  "auvergne-rhone-alpes", "provence-alpes-cote-d-azur", "occitanie",
+                  "bourgogne-franche-comte", "corse"]),
+              "zone-paris-mediterranee": ("Zone Paris–Méditerranée", [
+                  "ile-de-france", "centre-val-de-loire", "bourgogne-franche-comte",
+                  "auvergne-rhone-alpes", "provence-alpes-cote-d-azur"]),
+              "zone-atlantique-rhone": ("Zone Atlantique–Rhône", [
+                  "nouvelle-aquitaine", "centre-val-de-loire", "occitanie",
+                  "auvergne-rhone-alpes"]),
+          }
+
+          GROUPES = {}
+          for cle, (nom, decoupes) in REGIONS.items():
+              GROUPES["france-" + cle] = ("France · " + nom, decoupes)
+          for cle, (nom, contenu) in ZONES.items():
+              decoupes = []
+              for r in contenu:
+                  for d in REGIONS[r][1]:
+                      if d not in decoupes:
+                          decoupes.append(d)
+              GROUPES["france-" + cle] = ("France · " + nom, decoupes)
+
+          ENSEMBLES = {
+              "grandes-regions": ["france-" + c for c in REGIONS],
+              "zones": ["france-" + c for c in ZONES],
+          }
 
           alias = {"toutes": "europe", "all": "europe", "": "europe",
                    "espagne": "spain", "allemagne": "germany", "italie": "italy",
