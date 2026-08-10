@@ -3455,15 +3455,21 @@ struct MapHomeView: View {
         routeInfo = nil
 
         var builds: [RouteBuild]
-        if horsLigne, travelMode == .car, let local = router.route(from: from, to: dest) {
-            // Hors ligne assumé : rien ne part sur le réseau. Un seul
-            // itinéraire — Valhalla n'en propose pas d'autres ici, et les
-            // variantes par points de passage demanderaient autant de calculs
-            // sur l'appareil.
-            builds = [
-                RouteBuild(coords: local.coordinates, steps: local.steps,
-                           km: local.km, minutes: local.minutes)
-            ]
+        // Hors ligne assumé : rien ne part sur le réseau. Valhalla sait
+        // proposer des variantes, on lui en demande cinq — le calcul est
+        // local, il coûte du temps de processeur et pas de la donnée.
+        //
+        // La liste vide laisse volontairement passer au réseau : aucune région
+        // installée ne couvre alors le trajet, et rendre la main sans rien
+        // proposer serait pire que de déroger au mode choisi.
+        let locaux = (horsLigne && travelMode == .car)
+            ? router.routes(from: from, to: dest, max: 5)
+            : []
+        if !locaux.isEmpty {
+            builds = locaux.map {
+                RouteBuild(coords: $0.coordinates, steps: $0.steps,
+                           km: $0.km, minutes: $0.minutes, hasTolls: $0.hasTolls)
+            }
         } else if travelMode == .bike {
             // Vélo : vrai routage cyclable (pistes) via BRouter, sans clé API.
             builds = await bikeRoutes(from: from, to: dest)
