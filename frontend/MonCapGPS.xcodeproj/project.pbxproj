@@ -96,9 +96,11 @@
 			};
 			buildConfigurationList = AA0000000000000000000007 /* Build configuration list for PBXProject "MonCapGPS" */;
 			compatibilityVersion = "Xcode 15.0";
-			developmentRegion = en;
+			developmentRegion = fr;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				fr,
+				es,
 				en,
 				Base,
 			);

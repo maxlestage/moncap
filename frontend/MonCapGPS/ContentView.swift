@@ -659,7 +659,7 @@ struct MapHomeView: View {
             }
         } message: {
             Text(
-                resumable.map { String(format: "Itinéraire de %.1f km en cours.", $0.km) }
+                resumable.map { String(format: NSLocalizedString("Itinéraire de %.1f km en cours.", comment: ""), $0.km) }
                     ?? "")
         }
         // Vote sur un signalement touché : toujours là / plus là.
@@ -1516,7 +1516,7 @@ struct MapHomeView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Text(kind.emoji)
-                            Text(kind.label).font(.caption.weight(.semibold))
+                            Text(LocalizedStringKey(kind.label)).font(.caption.weight(.semibold))
                             if isOn && !pois.isEmpty {
                                 Text("\(pois.count)")
                                     .font(.caption2.weight(.bold))
@@ -2011,7 +2011,7 @@ struct MapHomeView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(format: "%.0f min", nav.etaMinutes)).font(.title3.weight(.bold))
-                Text(String(format: "%.1f km restants", nav.remainingKm))
+                Text(String(format: NSLocalizedString("%.1f km restants", comment: ""), nav.remainingKm))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -2070,14 +2070,14 @@ struct MapHomeView: View {
 
     /// Infos principales d'un itinéraire : durée, distance, virages, arrivée.
     private func routeCoreText(_ o: RouteOption) -> String {
-        String(format: "%.0f min · %.1f km · %d virages · arr. %@",
+        String(format: NSLocalizedString("%.0f min · %.1f km · %d virages · arr. %@", comment: ""),
                o.minutes, o.km, o.turns, routeArrival(o.minutes))
     }
 
     /// Dénivelé (côte ↗ / descente ↘) si connu.
     private func routeElevationText(_ o: RouteOption) -> String? {
         guard let up = o.climb, let down = o.descent, up >= 5 || down >= 5 else { return nil }
-        return String(format: "↗ %.0f m de côte · ↘ %.0f m de descente", up, down)
+        return String(format: NSLocalizedString("↗ %.0f m de côte · ↘ %.0f m de descente", comment: ""), up, down)
     }
 
     /// Seuil au-delà duquel une côte / descente est jugée « grosse » (mètres).
@@ -2089,12 +2089,12 @@ struct MapHomeView: View {
         let bigDown = (o.descent ?? 0) >= bigElevation
         switch (bigUp, bigDown) {
         case (true, true):
-            return String(format: "⚠️ Forte côte (%.0f m) et forte descente (%.0f m)",
+            return String(format: NSLocalizedString("⚠️ Forte côte (%.0f m) et forte descente (%.0f m)", comment: ""),
                           o.climb ?? 0, o.descent ?? 0)
         case (true, false):
-            return String(format: "⚠️ Forte côte (%.0f m)", o.climb ?? 0)
+            return String(format: NSLocalizedString("⚠️ Forte côte (%.0f m)", comment: ""), o.climb ?? 0)
         case (false, true):
-            return String(format: "⚠️ Forte descente (%.0f m)", o.descent ?? 0)
+            return String(format: NSLocalizedString("⚠️ Forte descente (%.0f m)", comment: ""), o.descent ?? 0)
         default:
             return nil
         }
@@ -2125,10 +2125,10 @@ struct MapHomeView: View {
     private func routeCostText(_ o: RouteOption) -> String? {
         guard let c = routeCosts(o) else { return nil }
         if c.toll > 0 {
-            return String(format: "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €",
+            return String(format: NSLocalizedString("⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €", comment: ""),
                           c.fuel, c.toll, c.fuel + c.toll)
         }
-        return String(format: "⛽ ~%.2f € · sans péage", c.fuel)
+        return String(format: NSLocalizedString("⛽ ~%.2f € · sans péage", comment: ""), c.fuel)
     }
 
     /// Coût total compact (« ~19,70 € ») pour les bulles sur la carte.
@@ -2176,7 +2176,7 @@ struct MapHomeView: View {
             // Choix du mode : à pied / vélo / voiture (recalcule les itinéraires).
             Picker("Mode", selection: $travelMode) {
                 ForEach(TravelMode.allCases) { m in
-                    Label(m.label, systemImage: m.icon).tag(m)
+                    Label(LocalizedStringKey(m.label), systemImage: m.icon).tag(m)
                 }
             }
             .pickerStyle(.segmented)
@@ -2194,7 +2194,7 @@ struct MapHomeView: View {
                     Circle().fill(selected?.color ?? .green).frame(width: 12, height: 12)
                     if let o = selected {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(routeTags(o, fastestID: fastestID, shortestID: shortestID).first?.text ?? "Itinéraire")
+                            Text(LocalizedStringKey(routeTags(o, fastestID: fastestID, shortestID: shortestID).first?.text ?? "Itinéraire"))
                                 .font(.subheadline.weight(.semibold)).lineLimit(1)
                             routeDetails(o, compact: true)
                         }
@@ -2226,7 +2226,7 @@ struct MapHomeView: View {
                                         // Étiquettes (le plus simple / rapide / court).
                                         HStack(spacing: 4) {
                                             ForEach(routeTags(o, fastestID: fastestID, shortestID: shortestID)) { tag in
-                                                Text(tag.text)
+                                                Text(LocalizedStringKey(tag.text))
                                                     .font(.caption2.weight(.semibold))
                                                     .foregroundStyle(tag.color)
                                                     .padding(.vertical, 2).padding(.horizontal, 6)
@@ -2386,7 +2386,7 @@ struct MapHomeView: View {
             HStack(spacing: 6) {
                 Text(w.emoji).font(.subheadline)
                 Text("\(temp)°").font(.subheadline.weight(.bold))
-                Text(w.label).font(.caption2).foregroundStyle(.secondary)
+                Text(LocalizedStringKey(w.label)).font(.caption2).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -2457,7 +2457,7 @@ struct MapHomeView: View {
                 Section {
                     Picker("Mode", selection: $travelMode) {
                         ForEach(TravelMode.allCases) { m in
-                            Label(m.label, systemImage: m.icon).tag(m)
+                            Label(LocalizedStringKey(m.label), systemImage: m.icon).tag(m)
                         }
                     }
                     .pickerStyle(.segmented)

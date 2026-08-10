@@ -12,10 +12,11 @@
  *    maquettes sont plausibles mais inventées : c'est un dessin de l'écran,
  *    pas une capture.
  *
- * Les libellés qui apparaissent **dans** les maquettes restent en français
- * quelle que soit la langue de la page : ils dépeignent une application dont
- * l'interface est en français. Traduire un écran qui n'existe pas dans cette
- * langue serait une invention, et la légende le précise.
+ * Les libellés qui apparaissent **dans** les maquettes sont ceux de
+ * l'application, traduits comme elle : `src/appstrings.ts` est engendré par
+ * `frontend/traductions.py` à partir du tableau qui alimente le catalogue
+ * iOS. Un écran dessiné ici dit donc exactement ce que l'app affiche, et ne
+ * peut pas s'en écarter sans que la génération le montre.
  */
 
 export type Pile = {
@@ -40,46 +41,46 @@ export const ITINERAIRES_MAX = 15;
 // --- Comparateur d'itinéraires ------------------------------------------
 
 export type Itineraire = {
+  /** Clé d'étiquette, telle que l'application la construit. */
   readonly etiquette: string;
   readonly teinte: "verte" | "bleue" | "orange";
-  readonly duree: string;
-  readonly distance: string;
-  readonly virages: string;
-  readonly arrivee: string;
-  readonly denivele?: string;
-  readonly cout: string;
-  readonly avertissement?: string;
+  /** minutes, kilomètres, virages, heure d'arrivée. */
+  readonly trajet: readonly [number, number, number, string];
+  /** Côte puis descente, en mètres. */
+  readonly denivele?: readonly [number, number];
+  /** Carburant seul, ou carburant + péages + total. */
+  readonly cout: readonly [number] | readonly [number, number, number];
+  /** Mètres de côte, quand elle mérite un avertissement. */
+  readonly avertissement?: readonly [number];
 };
 
+/**
+ * Les valeurs d'exemple d'un itinéraire. Elles sont versées dans les formats
+ * de l'application (`appstrings.ts`) plutôt que recopiées en phrases toutes
+ * faites : la maquette suit ainsi la langue **et** la façon dont l'app écrit
+ * ses nombres — `String(format:)` sans locale met un point décimal, y compris
+ * en français.
+ */
 export const MAQUETTE_ITINERAIRES: readonly Itineraire[] = [
   {
     etiquette: "Le plus simple",
     teinte: "verte",
-    duree: "28 min",
-    distance: "24,3 km",
-    virages: "6 virages",
-    arrivee: "arr. 18:42",
-    cout: "⛽ ~2,60 € · sans péage",
+    trajet: [28, 24.3, 6, "18:42"],
+    cout: [2.6],
   },
   {
     etiquette: "Le plus rapide",
     teinte: "bleue",
-    duree: "22 min",
-    distance: "31,8 km",
-    virages: "11 virages",
-    arrivee: "arr. 18:36",
-    cout: "⛽ ~3,40 € · 🛣️ péages ~1,90 € · total ~5,30 €",
+    trajet: [22, 31.8, 11, "18:36"],
+    cout: [3.4, 1.9, 5.3],
   },
   {
     etiquette: "Le plus court",
     teinte: "orange",
-    duree: "34 min",
-    distance: "21,7 km",
-    virages: "19 virages",
-    arrivee: "arr. 18:48",
-    denivele: "↗ 180 m de côte · ↘ 165 m de descente",
-    cout: "⛽ ~2,30 € · sans péage",
-    avertissement: "⚠️ Forte côte (180 m)",
+    trajet: [34, 21.7, 19, "18:48"],
+    denivele: [180, 165],
+    cout: [2.3],
+    avertissement: [180],
   },
 ];
 

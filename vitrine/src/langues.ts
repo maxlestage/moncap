@@ -59,10 +59,19 @@ export type Contenu = {
     readonly guidage: string;
     readonly lieux: string;
     readonly regions: string;
-    /** Rappel que les écrans dépeints sont en français. */
-    readonly enFrancais?: string;
+
   };
   readonly reste: string;
+  /**
+   * Le peu de texte des maquettes qui ne vient pas du catalogue de l'app :
+   * les consignes de navigation sont produites par MapKit, que le système
+   * traduit lui-même, et « Installée » n'existe que sur ce dessin.
+   */
+  readonly maquette: {
+    readonly consigne: string;
+    readonly precision: string;
+    readonly installee: string;
+  };
   readonly signature: string;
   readonly credits: string;
   readonly codeSource: string;
@@ -190,7 +199,7 @@ const FR: Contenu = {
     "Les péages sont estimés d'après la part d'autoroute, au tarif moyen français classe 1 — pas le tarif exact du concessionnaire.",
     "Hors ligne, un seul itinéraire est proposé au lieu de quinze, et ni le trafic ni les signalements ne sont disponibles.",
     "Un trajet hors réseau doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
-    "L'interface de l'application est en français, quelle que soit la langue de cette page.",
+    "L'application suit la langue du téléphone parmi le français, l'espagnol et l'anglais ; ailleurs, elle reste en français.",
     "L'application est en test sur TestFlight, pas encore sur l'App Store.",
   ],
   legendes: {
@@ -204,6 +213,11 @@ const FR: Contenu = {
       "Noms et poids réels, lus sur les Releases publiées ; seul l'avancement est mis en scène.",
   },
   reste: "et 12 autres itinéraires",
+  maquette: {
+    consigne: "Tourner à droite sur la D912",
+    precision: "Sortie 12 — Saint-Émilion",
+    installee: "✓ Installée",
+  },
   signature: "Conçu et développé par",
   credits:
     "Cartes et données routières OpenStreetMap (ODbL), calcul d'itinéraire Valhalla, trafic TomTom, météo open-meteo, prix des carburants data.economie.gouv.fr, foyers NASA FIRMS, photos aériennes IGN.",
@@ -324,7 +338,7 @@ const ES: Contenu = {
     "Los peajes se estiman según el tramo de autopista, a la tarifa media francesa de clase 1 — no es la tarifa exacta de la concesionaria.",
     "Sin cobertura se propone una sola ruta en lugar de quince, y no hay ni tráfico ni avisos.",
     "Un trayecto sin cobertura debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan.",
-    "La interfaz de la aplicación está en francés, sea cual sea el idioma de esta página.",
+    "La aplicación sigue el idioma del teléfono entre francés, español e inglés; en cualquier otro, se queda en francés.",
     "La aplicación está en pruebas en TestFlight, todavía no en la App Store.",
   ],
   legendes: {
@@ -336,9 +350,13 @@ const ES: Contenu = {
       "Las 19 categorías, con los rótulos de la aplicación — mostradas aquí de una sola vez, mientras que en el teléfono la barra se desplaza.",
     regions:
       "Nombres y pesos reales, leídos en las Releases publicadas; solo el progreso está recreado.",
-    enFrancais: "Los rótulos de las pantallas están en francés, como la aplicación.",
   },
   reste: "y 12 rutas más",
+  maquette: {
+    consigne: "Gire a la derecha por la D912",
+    precision: "Salida 12 — Saint-Émilion",
+    installee: "✓ Instalada",
+  },
   signature: "Diseñado y desarrollado por",
   credits:
     "Mapas y datos viarios OpenStreetMap (ODbL), cálculo de rutas Valhalla, tráfico TomTom, meteorología open-meteo, precios de carburantes data.economie.gouv.fr, focos NASA FIRMS, fotos aéreas IGN.",
@@ -459,7 +477,7 @@ const EN: Contenu = {
     "Tolls are estimated from the motorway share, at the average French class-1 rate — not the operator's exact tariff.",
     "Offline, a single route is offered instead of fifteen, and neither traffic nor reports are available.",
     "An offline trip must fit entirely within one pack: that is what the overlapping zones are for.",
-    "The app's interface is in French, whatever the language of this page.",
+    "The app follows the phone's language among French, Spanish and English; anywhere else it stays in French.",
     "The app is in testing on TestFlight, not yet on the App Store.",
   ],
   legendes: {
@@ -471,9 +489,13 @@ const EN: Contenu = {
       "All 19 categories, with the app's own labels — shown here in one go, whereas the strip scrolls on the phone.",
     regions:
       "Real names and sizes, read from the published Releases; only the progress is staged.",
-    enFrancais: "The screen labels are in French, as the app is.",
   },
   reste: "and 12 more routes",
+  maquette: {
+    consigne: "Turn right onto the D912",
+    precision: "Exit 12 — Saint-Émilion",
+    installee: "✓ Installed",
+  },
   signature: "Designed and built by",
   credits:
     "Maps and road data OpenStreetMap (ODbL), routing Valhalla, traffic TomTom, weather open-meteo, fuel prices data.economie.gouv.fr, hotspots NASA FIRMS, aerial imagery IGN.",

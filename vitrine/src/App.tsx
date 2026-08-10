@@ -9,6 +9,7 @@ import {
 } from "./content";
 import type { Contenu } from "./langues";
 import { LANGUES } from "./langues";
+import { app, appFormat } from "./traduire";
 
 /**
  * Vitrine d'une page, pensée pour le pouce d'abord.
@@ -36,7 +37,7 @@ function MaquetteComparateur({ c }: { c: Contenu }) {
         <div className="modes" aria-hidden="true">
           {MODES.map((m, i) => (
             <span key={m} className={i === MODES.length - 1 ? "actif" : ""}>
-              {m}
+              {app(c.code, m)}
             </span>
           ))}
         </div>
@@ -46,14 +47,39 @@ function MaquetteComparateur({ c }: { c: Contenu }) {
             <li key={r.etiquette}>
               <span className={`pastille ${r.teinte}`} aria-hidden="true" />
               <div>
-                <p className={`etiquette ${r.teinte}`}>{r.etiquette}</p>
-                <p className="chiffres-route">
-                  <strong>{r.duree}</strong> · {r.distance} · {r.virages} ·{" "}
-                  {r.arrivee}
+                <p className={`etiquette ${r.teinte}`}>
+                  {app(c.code, r.etiquette)}
                 </p>
-                {r.denivele && <p className="detail">{r.denivele}</p>}
-                <p className="detail">{r.cout}</p>
-                {r.avertissement && <p className="alerte">{r.avertissement}</p>}
+                <p className="chiffres-route">
+                  {appFormat(
+                    c.code,
+                    "%.0f min · %.1f km · %d virages · arr. %@",
+                    r.trajet,
+                  )}
+                </p>
+                {r.denivele && (
+                  <p className="detail">
+                    {appFormat(
+                      c.code,
+                      "↗ %.0f m de côte · ↘ %.0f m de descente",
+                      r.denivele,
+                    )}
+                  </p>
+                )}
+                <p className="detail">
+                  {appFormat(
+                    c.code,
+                    r.cout.length === 1
+                      ? "⛽ ~%.2f € · sans péage"
+                      : "⛽ ~%.2f € · 🛣️ péages ~%.2f € · total ~%.2f €",
+                    r.cout,
+                  )}
+                </p>
+                {r.avertissement && (
+                  <p className="alerte">
+                    {appFormat(c.code, "⚠️ Forte côte (%.0f m)", r.avertissement)}
+                  </p>
+                )}
               </div>
             </li>
           ))}
@@ -65,10 +91,10 @@ function MaquetteComparateur({ c }: { c: Contenu }) {
           ⌄ {c.reste}
         </p>
         <p className="demarrer" aria-hidden="true">
-          Démarrer
+          {app(c.code, "Démarrer")}
         </p>
       </div>
-      <Legende c={c} texte={c.legendes.itineraires} />
+      <Legende texte={c.legendes.itineraires} />
     </figure>
   );
 }
@@ -82,13 +108,13 @@ function MaquetteGuidage({ c }: { c: Contenu }) {
           <span className="fleche">↱</span>
           <div>
             <p className="distance">300 m</p>
-            <p className="consigne">Tourner à droite sur la D912</p>
-            <p className="precision">Sortie 12 — Saint-Émilion</p>
+            <p className="consigne">{c.maquette.consigne}</p>
+            <p className="precision">{c.maquette.precision}</p>
           </div>
         </div>
 
         <div className="pastilles" aria-hidden="true">
-          <span className="meteo">🌤️ 21° Éclaircies</span>
+          <span className="meteo">🌤️ 21° {app(c.code, "Éclaircies")}</span>
           <span className="vitesse">
             <strong>78</strong>
             <small>km/h</small>
@@ -96,7 +122,7 @@ function MaquetteGuidage({ c }: { c: Contenu }) {
           </span>
         </div>
       </div>
-      <Legende c={c} texte={c.legendes.guidage} />
+      <Legende texte={c.legendes.guidage} />
     </figure>
   );
 }
@@ -109,12 +135,12 @@ function MaquetteLieux({ c }: { c: Contenu }) {
         <ul className="lieux">
           {LIEUX.map((l, i) => (
             <li key={l.nom} className={i === 0 ? "actif" : ""}>
-              <span aria-hidden="true">{l.emoji}</span> {l.nom}
+              <span aria-hidden="true">{l.emoji}</span> {app(c.code, l.nom)}
             </li>
           ))}
         </ul>
       </div>
-      <Legende c={c} texte={c.legendes.lieux} />
+      <Legende texte={c.legendes.lieux} />
     </figure>
   );
 }
@@ -133,7 +159,7 @@ function MaquetteRegions({ c }: { c: Contenu }) {
               </div>
               {r.avancement === undefined ? (
                 <p className="pret" aria-hidden="true">
-                  ✓ Installée
+                  {c.maquette.installee}
                 </p>
               ) : (
                 <>
@@ -147,27 +173,14 @@ function MaquetteRegions({ c }: { c: Contenu }) {
           ))}
         </ul>
       </div>
-      <Legende c={c} texte={c.legendes.regions} />
+      <Legende texte={c.legendes.regions} />
     </figure>
   );
 }
 
-/**
- * La légende d'une maquette, suivie — hors français — du rappel que les
- * écrans dépeints sont en français.
- */
-function Legende({ c, texte }: { c: Contenu; texte: string }) {
-  return (
-    <figcaption>
-      {texte}
-      {c.legendes.enFrancais && (
-        <>
-          {" "}
-          <span className="vf">{c.legendes.enFrancais}</span>
-        </>
-      )}
-    </figcaption>
-  );
+/** La légende d'une maquette. */
+function Legende({ texte }: { texte: string }) {
+  return <figcaption>{texte}</figcaption>;
 }
 
 /**
