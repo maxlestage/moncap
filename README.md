@@ -303,7 +303,8 @@ Fichiers utilisés :
 
 | Adresse | Contenu |
 | --- | --- |
-| `/` | la vitrine (`vitrine/dist`) |
+| `/` | la vitrine (`vitrine/dist/index.html`) |
+| `/vitrine/…` | ses fichiers, nommés d'après leur contenu |
 | `/app` | le front web, écran de connexion compris (`web/dist`) |
 | le reste | l'API |
 
