@@ -233,25 +233,30 @@ jobs:
       - name: Construit les tuiles
         run: |
           set -euo pipefail
+          # Le script part sur disque plutôt qu'en ligne. Passé entre
+          # apostrophes à `docker run`, la moindre apostrophe dans un
+          # commentaire — « d'un coup », « c'est » — referme la chaîne : la
+          # commande mutilée sortait alors en succès sans rien construire.
+          cat > data/construit.sh <<'SH'
+          set -euo pipefail
+          valhalla_build_config \
+            --mjolnir-tile-dir /data/tuiles \
+            --mjolnir-tile-extract /data/tuiles.tar \
+            --mjolnir-timezone /data/tuiles/timezones.sqlite \
+            --mjolnir-admin /data/tuiles/admins.sqlite > /data/valhalla.json
+          mkdir -p /data/tuiles
+          # Fuseaux et limites administratives : sans eux les consignes
+          # ignorent le pays traversé et le sens de circulation.
+          valhalla_build_timezones > /data/tuiles/timezones.sqlite
+          # Tous les extraits ensemble : voilà ce qui raccorde les routes
+          # d'une région à l'autre. Construits séparément puis réunis, les
+          # jeux de tuiles restent coupés au bord de chaque extrait.
+          valhalla_build_admins -c /data/valhalla.json /data/extrait-*.osm.pbf
+          valhalla_build_tiles -c /data/valhalla.json /data/extrait-*.osm.pbf
+          valhalla_build_extract -c /data/valhalla.json -v
+          SH
           docker run --rm -v "$PWD/data:/data" -w /data \
-            ghcr.io/valhalla/valhalla:latest bash -lc '
-              set -euo pipefail
-              valhalla_build_config \
-                --mjolnir-tile-dir /data/tuiles \
-                --mjolnir-tile-extract /data/tuiles.tar \
-                --mjolnir-timezone /data/tuiles/timezones.sqlite \
-                --mjolnir-admin /data/tuiles/admins.sqlite > /data/valhalla.json
-              mkdir -p /data/tuiles
-              # Fuseaux et limites administratives : sans eux les consignes
-              # ignorent le pays traversé et le sens de circulation.
-              valhalla_build_timezones > /data/tuiles/timezones.sqlite
-              # Tous les extraits d'un coup : c'est ce qui raccorde les routes
-              # d'une région à l'autre. Construits séparément puis réunis, les
-              # jeux de tuiles restent coupés au bord de chaque extrait.
-              valhalla_build_admins -c /data/valhalla.json /data/extrait-*.osm.pbf
-              valhalla_build_tiles -c /data/valhalla.json /data/extrait-*.osm.pbf
-              valhalla_build_extract -c /data/valhalla.json -v
-            '
+            ghcr.io/valhalla/valhalla:latest bash /data/construit.sh
           ls -lh data/tuiles.tar data/valhalla.json
           echo "TAILLE=$(du -h data/tuiles.tar | cut -f1)" >> "$GITHUB_ENV"
           # Une pièce jointe de Release plafonne à 2 Gio ; au-delà l'envoi
