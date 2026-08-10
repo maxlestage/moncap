@@ -286,9 +286,17 @@ final class NavigationManager: ObservableObject {
 
     /// Applique un itinéraire recalculé (sans annonce « Départ »).
     func applyReroute(route: MKRoute) {
-        load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
-             km: route.distance / 1000, min: route.expectedTravelTime / 60,
-             announceStart: false)
+        applyReroute(
+            steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
+            km: route.distance / 1000, minutes: route.expectedTravelTime / 60)
+    }
+
+    /// Même chose depuis un itinéraire calculé sur l'appareil, qui n'a pas de
+    /// `MKRoute` à fournir.
+    func applyReroute(
+        steps: [NavStep], coords: [CLLocationCoordinate2D], km: Double, minutes: Double
+    ) {
+        load(steps: steps, coords: coords, km: km, min: minutes, announceStart: false)
         rerouting = false
         rerouteFailures = 0
         toldOffline = false
