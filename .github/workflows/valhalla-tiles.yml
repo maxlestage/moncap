@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       regions:
-        description: "Régions séparées par des virgules (ex. aquitaine,corse) — ou « toutes »"
+        description: "Zones Geofabrik séparées par des virgules (ex. france,portugal) — ou « europe »"
         required: true
-        default: toutes
+        default: europe
 
 permissions:
   contents: write
@@ -35,40 +35,103 @@ jobs:
           DEMANDE: ${{ inputs.regions }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, os
+          import json, os, re, sys, urllib.request
+          from concurrent.futures import ThreadPoolExecutor
 
-          # Découpage Geofabrik de la France, outre-mer compris.
-          francaises = [
-              "alsace", "aquitaine", "auvergne", "basse-normandie", "bourgogne",
-              "bretagne", "centre", "champagne-ardenne", "corse", "franche-comte",
-              "guadeloupe", "guyane", "haute-normandie", "ile-de-france",
-              "languedoc-roussillon", "limousin", "lorraine", "martinique", "mayotte",
-              "midi-pyrenees", "nord-pas-de-calais", "pays-de-la-loire", "picardie",
-              "poitou-charentes", "provence-alpes-cote-d-azur", "reunion", "rhone-alpes",
-          ]
-          # L'Espagne est découpée par communauté autonome, et non prise d'un
-          # bloc : entière elle produit 2,1 Go de tuiles, au-dessus des 2 Gio
-          # qu'accepte une pièce jointe de Release — et un tel téléchargement
-          # serait de toute façon irréaliste sur un forfait mobile.
-          espagnoles = [
-              "andalucia", "aragon", "asturias", "cantabria", "castilla-la-mancha",
-              "castilla-y-leon", "cataluna", "ceuta", "extremadura", "galicia",
-              "islas-baleares", "la-rioja", "madrid", "melilla", "murcia", "navarra",
-              "pais-vasco", "valencia",
-          ]
-          toutes = [{"chemin": f"europe/france/{n}", "tag": f"tuiles-{n}"} for n in francaises]
-          toutes += [{"chemin": f"europe/spain/{n}", "tag": f"tuiles-es-{n}"} for n in espagnoles]
+          # Le découpage vient de Geofabrik, pas d'une liste tenue à la main :
+          # à trois cents zones, une liste recopiée serait fausse au premier
+          # changement de leur côté.
+          INDEX = "https://download.geofabrik.de/index-v1.json"
 
-          demande = os.environ["DEMANDE"].strip().lower()
-          if demande in ("toutes", "all", ""):
-              choisies = toutes
-          elif demande in ("espagne", "spain"):
-              choisies = [r for r in toutes if r["tag"].startswith("tuiles-es-")]
-          elif demande in ("france",):
-              choisies = [r for r in toutes if not r["tag"].startswith("tuiles-es-")]
-          else:
-              voulues = {m.strip() for m in demande.split(",") if m.strip()}
-              choisies = [r for r in toutes if r["tag"].removeprefix("tuiles-") in voulues]
+          # Au-delà, on descend d'un cran. Une pièce jointe de Release plafonne
+          # à 2 Gio, et les tuiles pèsent jusqu'à une fois et demie l'extrait —
+          # l'Espagne entière, 1,4 Go, en produisait 2,1. La marge sert aussi
+          # au disque du runner et au forfait mobile de qui télécharge.
+          SEUIL = 700_000_000
+
+          # Extraits composites de Geofabrik : ils recouvrent des pays déjà
+          # listés séparément, et n'ont pas de sous-régions où descendre —
+          # « dach » à lui seul fait 6,2 Go.
+          DOUBLONS = {"alps", "britain-and-ireland", "dach", "great-britain"}
+
+          with urllib.request.urlopen(INDEX, timeout=180) as r:
+              index = json.load(r)
+
+          noeuds, enfants = {}, {}
+          for f in index["features"]:
+              p = f["properties"]
+              pbf = p.get("urls", {}).get("pbf")
+              if not pbf or p["id"] in DOUBLONS:
+                  continue
+              noeuds[p["id"]] = {"nom": p["name"], "parent": p.get("parent"), "pbf": pbf}
+              enfants.setdefault(p.get("parent"), []).append(p["id"])
+
+          poids = {}
+
+          def taille(rid):
+              if rid not in poids:
+                  req = urllib.request.Request(noeuds[rid]["pbf"], method="HEAD")
+                  try:
+                      with urllib.request.urlopen(req, timeout=60) as r:
+                          poids[rid] = int(r.headers.get("Content-Length") or 0)
+                  except Exception as e:
+                      # Taille inconnue : on ne descend pas, et la garde de la
+                      # construction rattrapera une archive trop lourde.
+                      print(f"HEAD {rid} : {e}", file=sys.stderr)
+                      poids[rid] = 0
+              return poids[rid]
+
+          def descend(rid, acc):
+              fils = enfants.get(rid, [])
+              if fils:
+                  with ThreadPoolExecutor(8) as ex:
+                      list(ex.map(taille, fils))
+              if fils and taille(rid) > SEUIL:
+                  for f in fils:
+                      descend(f, acc)
+              elif rid not in acc:
+                  acc.append(rid)
+
+          def chemin(rid):
+              u = noeuds[rid]["pbf"].split("download.geofabrik.de/", 1)[1]
+              return u.rsplit("-latest.osm.pbf", 1)[0]
+
+          def libelle(rid):
+              # « France · Rhone-Alpes » : le pays d'abord, pour que l'app
+              # puisse regrouper. Geofabrik glisse du HTML dans quelques noms.
+              parts, cur = [], rid
+              while cur and cur != "europe":
+                  parts.append(noeuds[cur]["nom"])
+                  cur = noeuds[cur]["parent"]
+              propre = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", p)).strip() for p in parts]
+              return " · ".join(reversed(propre))
+
+          alias = {"toutes": "europe", "all": "europe", "": "europe",
+                   "espagne": "spain", "allemagne": "germany", "italie": "italy",
+                   "portugal": "portugal", "suisse": "switzerland", "belgique": "belgium"}
+          demandes = [m.strip().lower() for m in os.environ["DEMANDE"].split(",")]
+          demandes = [alias.get(m, m) for m in demandes if m or len(demandes) == 1]
+
+          acc = []
+          for d in demandes:
+              if d not in noeuds:
+                  print(f"::error::Zone Geofabrik inconnue : « {d} »")
+                  raise SystemExit(1)
+              descend(d, acc)
+
+          # Une matrice GitHub plafonne à 256 tâches ; au-delà le lancement
+          # échoue en bloc. Mieux vaut le dire, et laisser découper.
+          if len(acc) > 250:
+              print(f"::error::{len(acc)} zones demandées, au-dessus des 250 "
+                    "que porte une matrice. Lancer pays par pays.")
+              raise SystemExit(1)
+
+          choisies = [
+              {"chemin": chemin(r), "tag": "tuiles-eu-" + chemin(r)[len("europe/"):].replace("/", "-"),
+               "nom": libelle(r)}
+              for r in acc
+          ]
+          print(f"{len(choisies)} zones", file=sys.stderr)
           print("matrice=" + json.dumps({"region": choisies}))
           PY
 
@@ -81,8 +144,9 @@ jobs:
       # Une région qui échoue ne doit pas emporter les autres : chacune est
       # publiée indépendamment.
       fail-fast: false
-      # Assez pour aller vite, sans saturer la file du dépôt.
-      max-parallel: 6
+      # À deux cents zones, six de front demanderaient la nuit ; dix tiennent
+      # dans ce qu'un dépôt public a droit de lancer en parallèle.
+      max-parallel: 10
       matrix: ${{ fromJSON(needs.liste.outputs.matrice) }}
     steps:
       - name: Libère de la place
@@ -140,30 +204,40 @@ jobs:
       - name: Publie la Release
         env:
           GH_TOKEN: ${{ github.token }}
+          # Par l'environnement, et non par interpolation : un nom Geofabrik
+          # porte apostrophes et parenthèses, que le shell interpréterait.
+          TAG: ${{ matrix.region.tag }}
+          NOM: ${{ matrix.region.nom }}
+          CHEMIN: ${{ matrix.region.chemin }}
+          DEPOT: ${{ github.repository }}
         run: |
           set -euo pipefail
-          tag="${{ matrix.region.tag }}"
-          mv data/tuiles.tar "data/$tag.tar"
+          mv data/tuiles.tar "data/$TAG.tar"
           # La configuration engendrée accompagne les tuiles : elle porte les
           # dizaines de réglages qu'attend Valhalla, qu'il serait absurde de
           # réécrire à la main dans l'app. Seuls les chemins y seront corrigés,
           # l'appareil ne connaissant évidemment pas /data.
-          cp data/valhalla.json "data/$tag.json"
+          cp data/valhalla.json "data/$TAG.json"
+          notes="Tuiles Valhalla · $CHEMIN · $TAILLE · OpenStreetMap (ODbL)"
+          # Le titre porte le nom lisible : c'est lui que l'app affiche, elle
+          # tire toute sa liste de régions des Releases plutôt que d'une copie
+          # embarquée qui vieillirait à chaque construction.
           # `-R` : le dépôt est nommé explicitement, faute de clone local —
           # `gh` le déduit sinon du dossier courant, qui n'est pas un dépôt.
-          depot="${{ github.repository }}"
-          gh release create "$tag" -R "$depot" --title "$tag" \
-            --notes "Tuiles Valhalla · ${{ matrix.region.chemin }} · $TAILLE · OpenStreetMap (ODbL)" \
-            || echo "Release déjà présente"
+          gh release create "$TAG" -R "$DEPOT" --title "$NOM" --notes "$notes" \
+            || gh release edit "$TAG" -R "$DEPOT" --title "$NOM" --notes "$notes"
           # `--clobber` : reconstruire une région remplace ses tuiles au lieu
           # d'échouer, l'adresse de téléchargement reste donc la même.
-          gh release upload "$tag" "data/$tag.tar" "data/$tag.json" -R "$depot" --clobber
+          gh release upload "$TAG" "data/$TAG.tar" "data/$TAG.json" -R "$DEPOT" --clobber
 
       - name: Récapitulatif
+        env:
+          NOM: ${{ matrix.region.nom }}
+          CHEMIN: ${{ matrix.region.chemin }}
         run: |
           {
-            echo "### ${{ matrix.region.tag }}"
+            echo "### $NOM"
             echo ""
-            echo "- Région : \`${{ matrix.region.chemin }}\`"
+            echo "- Zone : \`$CHEMIN\`"
             echo "- Taille : **$TAILLE**"
           } >> "$GITHUB_STEP_SUMMARY"

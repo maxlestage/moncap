@@ -17,78 +17,50 @@ import Valhalla
 final class OfflineRouter: ObservableObject {
     static let shared = OfflineRouter()
 
-    /// Régions proposées, avec l'adresse de leurs tuiles.
+    /// Une région téléchargeable, telle que publiée par le workflow
+    /// « Tuiles Valhalla » : une Release par région, hébergement gratuit et
+    /// adresse stable.
     ///
-    /// Elles sont produites par le workflow « Tuiles Valhalla » et publiées en
-    /// pièces jointes de Release : hébergement gratuit, adresse stable.
+    /// La liste n'est pas écrite ici : l'Europe en compte plus de deux cents,
+    /// et une copie embarquée serait périmée dès la construction suivante.
+    /// Elle est lue sur les Releases, cf. `loadRegions()`.
     struct Region: Identifiable, Hashable {
+        /// Étiquette de la Release, qui sert aussi de nom de fichier.
         let id: String
+        /// « France · Corse », tel que nommé par Geofabrik.
         let nom: String
+        /// Poids de l'archive, mesuré sur la pièce jointe.
+        let octets: Int
+
         var archive: URL { URL(string: "\(Region.base)/\(id)/\(id).tar")! }
         var config: URL { URL(string: "\(Region.base)/\(id)/\(id).json")! }
 
-        static let base = "https://github.com/maxlestage/moncap/releases/download"
+        /// Premier segment du nom : de quoi regrouper deux cents régions.
+        var pays: String { nom.components(separatedBy: " · ").first ?? nom }
 
-        /// Découpage Geofabrik, celui qu'emploie le workflow de construction.
-        /// Les tailles ne figurent pas ici : elles seraient périmées au premier
-        /// rebuild, et sont lues sur les Releases.
-        static let toutes: [Region] = [
-            Region(id: "tuiles-alsace", nom: "Alsace"),
-            Region(id: "tuiles-aquitaine", nom: "Aquitaine"),
-            Region(id: "tuiles-auvergne", nom: "Auvergne"),
-            Region(id: "tuiles-basse-normandie", nom: "Basse-Normandie"),
-            Region(id: "tuiles-bourgogne", nom: "Bourgogne"),
-            Region(id: "tuiles-bretagne", nom: "Bretagne"),
-            Region(id: "tuiles-centre", nom: "Centre"),
-            Region(id: "tuiles-champagne-ardenne", nom: "Champagne-Ardenne"),
-            Region(id: "tuiles-corse", nom: "Corse"),
-            Region(id: "tuiles-franche-comte", nom: "Franche-Comté"),
-            Region(id: "tuiles-haute-normandie", nom: "Haute-Normandie"),
-            Region(id: "tuiles-ile-de-france", nom: "Île-de-France"),
-            Region(id: "tuiles-languedoc-roussillon", nom: "Languedoc-Roussillon"),
-            Region(id: "tuiles-limousin", nom: "Limousin"),
-            Region(id: "tuiles-lorraine", nom: "Lorraine"),
-            Region(id: "tuiles-midi-pyrenees", nom: "Midi-Pyrénées"),
-            Region(id: "tuiles-nord-pas-de-calais", nom: "Nord-Pas-de-Calais"),
-            Region(id: "tuiles-pays-de-la-loire", nom: "Pays de la Loire"),
-            Region(id: "tuiles-picardie", nom: "Picardie"),
-            Region(id: "tuiles-poitou-charentes", nom: "Poitou-Charentes"),
-            Region(id: "tuiles-provence-alpes-cote-d-azur", nom: "Provence-Alpes-Côte d'Azur"),
-            Region(id: "tuiles-rhone-alpes", nom: "Rhône-Alpes"),
-            Region(id: "tuiles-guadeloupe", nom: "Guadeloupe"),
-            Region(id: "tuiles-guyane", nom: "Guyane"),
-            Region(id: "tuiles-martinique", nom: "Martinique"),
-            Region(id: "tuiles-mayotte", nom: "Mayotte"),
-            Region(id: "tuiles-reunion", nom: "La Réunion"),
-            // L'Espagne par communauté autonome : entière elle dépasse ce
-            // qu'une pièce jointe de Release accepte, et ce qu'un forfait
-            // mobile encaisse.
-            Region(id: "tuiles-es-andalucia", nom: "Espagne · Andalousie"),
-            Region(id: "tuiles-es-aragon", nom: "Espagne · Aragon"),
-            Region(id: "tuiles-es-asturias", nom: "Espagne · Asturies"),
-            Region(id: "tuiles-es-cantabria", nom: "Espagne · Cantabrie"),
-            Region(id: "tuiles-es-castilla-la-mancha", nom: "Espagne · Castille-La Manche"),
-            Region(id: "tuiles-es-castilla-y-leon", nom: "Espagne · Castille-et-León"),
-            Region(id: "tuiles-es-cataluna", nom: "Espagne · Catalogne"),
-            Region(id: "tuiles-es-ceuta", nom: "Espagne · Ceuta"),
-            Region(id: "tuiles-es-extremadura", nom: "Espagne · Estrémadure"),
-            Region(id: "tuiles-es-galicia", nom: "Espagne · Galice"),
-            Region(id: "tuiles-es-islas-baleares", nom: "Espagne · Baléares"),
-            Region(id: "tuiles-es-la-rioja", nom: "Espagne · La Rioja"),
-            Region(id: "tuiles-es-madrid", nom: "Espagne · Madrid"),
-            Region(id: "tuiles-es-melilla", nom: "Espagne · Melilla"),
-            Region(id: "tuiles-es-murcia", nom: "Espagne · Murcie"),
-            Region(id: "tuiles-es-navarra", nom: "Espagne · Navarre"),
-            Region(id: "tuiles-es-pais-vasco", nom: "Espagne · Pays basque"),
-            Region(id: "tuiles-es-valencia", nom: "Espagne · Valence"),
-        ]
+        /// Ce qui reste une fois le pays retiré — vide pour un petit pays
+        /// livré d'un bloc, qui n'a pas de sous-région.
+        var detail: String {
+            let parts = nom.components(separatedBy: " · ")
+            return parts.count > 1 ? parts.dropFirst().joined(separator: " · ") : ""
+        }
+
+        var poids: String { String(format: "%.0f Mo", Double(octets) / 1_000_000) }
+
+        static let base = "https://github.com/maxlestage/moncap/releases/download"
+        /// Les Releases d'avant le découpage européen portent d'autres
+        /// étiquettes ; ce préfixe les écarte sans avoir à les supprimer.
+        static let prefixe = "tuiles-eu-"
     }
 
-    /// Poids de chaque région, lu sur les Releases : une valeur codée en dur
-    /// serait fausse dès la première reconstruction.
-    @Published private(set) var sizes: [String: Int] = [:]
+    /// Régions publiées, relevées sur les Releases.
+    @Published private(set) var regions: [Region] = []
     @Published private(set) var installed: String?
+    /// Nom lisible de la région installée, gardé de côté : hors réseau la
+    /// liste est vide, et l'écran n'aurait plus qu'une étiquette à afficher.
+    @Published private(set) var installedNom: String?
     @Published private(set) var downloading = false
+    @Published private(set) var chargement = false
     @Published private(set) var progress: Double = 0
     @Published private(set) var message: String?
 
@@ -98,14 +70,18 @@ final class OfflineRouter: ObservableObject {
 
     private init() {
         installed = UserDefaults.standard.string(forKey: Self.key)
+        installedNom = UserDefaults.standard.string(forKey: Self.keyNom)
         // Une région effacée à la main ne doit pas rester annoncée.
         if let installed, !FileManager.default.fileExists(atPath: Self.archivePath(installed).path) {
             self.installed = nil
+            self.installedNom = nil
             UserDefaults.standard.removeObject(forKey: Self.key)
+            UserDefaults.standard.removeObject(forKey: Self.keyNom)
         }
     }
 
     private static let key = "moncap.valhallaRegion"
+    private static let keyNom = "moncap.valhallaRegionNom"
 
     private static var dossier: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -125,33 +101,66 @@ final class OfflineRouter: ObservableObject {
     /// Un itinéraire peut-il être calculé sans réseau ?
     var ready: Bool { installed != nil }
 
-    /// Relève le poids des régions publiées.
-    ///
-    /// Une seule requête pour toutes : interroger chaque adresse séparément
-    /// ferait trente allers-retours à l'ouverture des réglages.
-    func loadSizes() async {
-        guard sizes.isEmpty else { return }
-        let url = URL(string: "https://api.github.com/repos/maxlestage/moncap/releases?per_page=100")!
-        guard
-            let (data, _) = try? await URLSession.shared.data(from: url),
-            let liste = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else { return }
-        var trouvees: [String: Int] = [:]
-        for release in liste {
-            guard let tag = release["tag_name"] as? String,
-                let assets = release["assets"] as? [[String: Any]]
-            else { continue }
-            for a in assets where (a["name"] as? String)?.hasSuffix(".tar") == true {
-                trouvees[tag] = (a["size"] as? Int) ?? 0
-            }
-        }
-        sizes = trouvees
+    /// Régions d'un même pays, pour l'affichage.
+    struct Groupe: Identifiable {
+        var id: String { pays }
+        let pays: String
+        let regions: [Region]
     }
 
-    /// « 259 Mo », ou nil si la région n'est pas encore publiée.
-    func sizeLabel(_ region: Region) -> String? {
-        guard let octets = sizes[region.id], octets > 0 else { return nil }
-        return String(format: "%.0f Mo", Double(octets) / 1_000_000)
+    /// Les régions rangées par pays : deux cent quinze entrées à plat ne se
+    /// parcourent pas.
+    var groupes: [Groupe] {
+        Dictionary(grouping: regions, by: \.pays)
+            .map { Groupe(pays: $0.key, regions: $0.value) }
+            .sorted { $0.pays.localizedStandardCompare($1.pays) == .orderedAscending }
+    }
+
+    /// Relève les régions publiées, avec leur nom et leur poids.
+    ///
+    /// La liste vit sur les Releases plutôt que dans le code : l'Europe en
+    /// compte plus de deux cents, et chaque reconstruction en change les
+    /// tailles. Une copie embarquée mentirait dès le lendemain.
+    func loadRegions() async {
+        guard regions.isEmpty, !chargement else { return }
+        chargement = true
+        defer { chargement = false }
+
+        var trouvees: [Region] = []
+        // Cent par page, et l'Europe en remplit trois.
+        for page in 1...5 {
+            let url = URL(
+                string:
+                    "https://api.github.com/repos/maxlestage/moncap/releases?per_page=100&page=\(page)"
+            )!
+            guard
+                let (data, _) = try? await URLSession.shared.data(from: url),
+                let liste = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                !liste.isEmpty
+            else { break }
+
+            for release in liste {
+                guard let tag = release["tag_name"] as? String, tag.hasPrefix(Region.prefixe),
+                    let assets = release["assets"] as? [[String: Any]],
+                    // Sans archive, rien à télécharger : une construction
+                    // interrompue laisse derrière elle la Release et sa
+                    // configuration seule.
+                    let tar = assets.first(where: {
+                        ($0["name"] as? String)?.hasSuffix(".tar") == true
+                    })
+                else { continue }
+                let titre = release["name"] as? String
+                trouvees.append(
+                    Region(
+                        id: tag,
+                        nom: (titre?.isEmpty == false ? titre! : tag),
+                        octets: (tar["size"] as? Int) ?? 0))
+            }
+            if liste.count < 100 { break }
+        }
+        regions = trouvees.sorted {
+            $0.nom.localizedStandardCompare($1.nom) == .orderedAscending
+        }
     }
 
     // MARK: - Installation
@@ -176,7 +185,9 @@ final class OfflineRouter: ObservableObject {
 
             engine = nil
             installed = region.id
+            installedNom = region.nom
             UserDefaults.standard.set(region.id, forKey: Self.key)
+            UserDefaults.standard.set(region.nom, forKey: Self.keyNom)
         } catch {
             message = "Téléchargement interrompu."
             try? FileManager.default.removeItem(at: Self.archivePath(region.id))
@@ -191,7 +202,9 @@ final class OfflineRouter: ObservableObject {
         }
         engine = nil
         installed = nil
+        installedNom = nil
         UserDefaults.standard.removeObject(forKey: Self.key)
+        UserDefaults.standard.removeObject(forKey: Self.keyNom)
     }
 
     /// Téléchargement suivi, pour que l'attente ne soit pas muette.
