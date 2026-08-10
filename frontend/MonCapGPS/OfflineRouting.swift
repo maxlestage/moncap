@@ -108,12 +108,23 @@ final class OfflineRouter: ObservableObject {
         let regions: [Region]
     }
 
-    /// Les régions rangées par pays : deux cent quinze entrées à plat ne se
+    /// Les régions rangées par pays : deux cents entrées à plat ne se
     /// parcourent pas.
     var groupes: [Groupe] {
         Dictionary(grouping: regions, by: \.pays)
             .map { Groupe(pays: $0.key, regions: $0.value) }
             .sorted { $0.pays.localizedStandardCompare($1.pays) == .orderedAscending }
+    }
+
+    /// Régions dont le nom contient le texte cherché.
+    ///
+    /// `localizedStandardContains` ignore casse et accents : « ile de france »
+    /// trouve « Île-de-France », ce qu'une comparaison brute manquerait — et
+    /// les noms viennent de Geofabrik, donc dans la langue du pays.
+    func recherche(_ texte: String) -> [Region] {
+        let cherche = texte.trimmingCharacters(in: .whitespaces)
+        guard !cherche.isEmpty else { return [] }
+        return regions.filter { $0.nom.localizedStandardContains(cherche) }
     }
 
     /// Relève les régions publiées, avec leur nom et leur poids.

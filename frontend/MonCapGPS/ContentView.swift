@@ -440,6 +440,9 @@ struct MapHomeView: View {
     private let api = APIClient()
 
     @State private var positions: [Position] = []
+    /// Filtre sur la liste des régions d'itinéraire : deux cents paquets dans
+    /// cinquante pays ne se parcourent pas au doigt.
+    @State private var rechercheRegion = ""
     @State private var stats: Stats?
     @State private var routeInfo: String?
     /// Cadrage de départ sur la France : tant qu'aucune position n'est
@@ -2535,21 +2538,55 @@ struct MapHomeView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
-                            // Un pays par rangée, ses régions dessous : à deux
-                            // cent quinze entrées, une liste à plat serait
-                            // impraticable. Un pays livré d'un bloc n'ouvre
-                            // rien et se télécharge directement.
-                            ForEach(router.groupes) { groupe in
-                                if groupe.regions.count == 1, let seule = groupe.regions.first {
-                                    RegionButton(region: seule, router: router)
-                                } else {
-                                    DisclosureGroup(
-                                        "\(groupe.pays) · \(groupe.regions.count)"
-                                    ) {
-                                        ForEach(groupe.regions) { region in
-                                            RegionButton(region: region, router: router)
+                            HStack {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                TextField("Chercher une région", text: $rechercheRegion)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                if !rechercheRegion.isEmpty {
+                                    Button {
+                                        rechercheRegion = ""
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+
+                            if rechercheRegion.isEmpty {
+                                // Un pays par rangée, ses régions dessous : à
+                                // deux cents entrées, une liste à plat serait
+                                // impraticable. Un pays livré d'un bloc
+                                // n'ouvre rien et se télécharge directement.
+                                ForEach(router.groupes) { groupe in
+                                    if groupe.regions.count == 1,
+                                        let seule = groupe.regions.first
+                                    {
+                                        RegionButton(region: seule, router: router)
+                                    } else {
+                                        DisclosureGroup(
+                                            "\(groupe.pays) · \(groupe.regions.count)"
+                                        ) {
+                                            ForEach(groupe.regions) { region in
+                                                RegionButton(region: region, router: router)
+                                            }
                                         }
                                     }
+                                }
+                            } else {
+                                // À plat pendant la recherche : déplier un pays
+                                // pour trouver ce qu'on a déjà nommé n'aurait
+                                // aucun sens. Le nom entier, donc, pays compris.
+                                let trouvees = router.recherche(rechercheRegion)
+                                if trouvees.isEmpty {
+                                    Text("Aucune région de ce nom.")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                ForEach(trouvees) { region in
+                                    RegionButton(region: region, router: router, complet: true)
                                 }
                             }
                         }
@@ -3750,16 +3787,22 @@ struct MapHomeView: View {
 private struct RegionButton: View {
     let region: OfflineRouter.Region
     @ObservedObject var router: OfflineRouter
+    /// Nom entier, pays compris : indispensable dans une liste de recherche,
+    /// où plus rien ne dit de quel pays vient la ligne.
+    var complet = false
 
     var body: some View {
         Button {
             Task { await router.install(region) }
         } label: {
-            Label(
-                // Le pays est déjà porté par la rangée qui déplie ; le
-                // répéter sur chaque ligne mangerait la largeur.
-                "\(region.detail.isEmpty ? region.pays : region.detail) · \(region.poids)",
-                systemImage: "arrow.down.circle")
+            Label("\(libelle) · \(region.poids)", systemImage: "arrow.down.circle")
         }
+    }
+
+    private var libelle: String {
+        // Sous un pays déplié, le répéter sur chaque ligne mangerait la
+        // largeur ; un pays livré d'un bloc n'a lui aucun détail à montrer.
+        if complet || region.detail.isEmpty { return region.nom }
+        return region.detail
     }
 }
