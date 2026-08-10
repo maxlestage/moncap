@@ -8,6 +8,32 @@ struct NavStep {
     let coord: CLLocationCoordinate2D
 }
 
+/// Raccourci de traduction : la clé **est** la chaîne française.
+///
+/// Les consignes de navigation ne viennent pas de MapKit telles quelles —
+/// l'application les ré-écrit en un mot, lisible d'un coup d'œil au volant.
+/// Elles doivent donc être traduites ici, contrairement à ce que laisserait
+/// croire le fait qu'un moteur d'itinéraire les fournisse déjà.
+private func tr(_ cle: String) -> String {
+    NSLocalizedString(cle, comment: "")
+}
+
+/// Idem, avec des valeurs à verser dans la phrase traduite.
+///
+/// Nom distinct plutôt qu'une surcharge : `tr("x")` pourrait sinon désigner
+/// l'une ou l'autre, la variadique acceptant zéro argument.
+private func trf(_ cle: String, _ valeurs: CVarArg...) -> String {
+    String(format: NSLocalizedString(cle, comment: ""), arguments: valeurs)
+}
+
+/// Rang d'une sortie, écrit comme la langue le veut : « 2e » en français,
+/// « 2.ª » en espagnol, « 2nd » en anglais. Une table plutôt qu'un
+/// `NumberFormatter` : celui-ci donne « 1er » là où une sortie demande
+/// « 1re », le mot étant féminin.
+private func rang(_ n: Int) -> String {
+    tr(n == 1 ? "1re" : "\(n)e")
+}
+
 /// Manœuvre à effectuer, déduite de l'instruction fournie par le moteur
 /// d'itinéraire. Elle porte la flèche affichée : celle-ci découle donc de la
 /// même analyse que la consigne et ne peut pas la contredire (l'icône du
@@ -53,8 +79,8 @@ struct NavInstruction {
     let spoken: String
 
     static let waiting = NavInstruction(
-        maneuver: .straight, display: "Calcul de l'itinéraire…", detail: nil,
-        spoken: "calcul de l'itinéraire")
+        maneuver: .straight, display: tr("Calcul de l'itinéraire…"), detail: nil,
+        spoken: tr("calcul de l'itinéraire"))
 }
 
 /// Analyse d'une instruction de moteur d'itinéraire.
@@ -88,24 +114,25 @@ extension NavInstruction {
         let sharp = s.contains("fortement") || s.contains("sharp")
 
         if s.contains("arriv") || s.contains("destination") {
-            self.init(maneuver: .arrive, display: "Arrivée", detail: nil,
-                      spoken: "vous êtes arrivé")
+            self.init(maneuver: .arrive, display: tr("Arrivée"), detail: nil,
+                      spoken: tr("vous êtes arrivé"))
         } else if s.contains("demi-tour") || s.contains("demi tour") || s.contains("u-turn") {
-            self.init(maneuver: .uTurn, display: "Demi-tour", detail: nil,
-                      spoken: "faites demi-tour")
+            self.init(maneuver: .uTurn, display: tr("Demi-tour"), detail: nil,
+                      spoken: tr("faites demi-tour"))
         } else if s.contains("rond-point") || s.contains("giratoire") || s.contains("roundabout") {
             // Au rond-point, le numéro de sortie prime sur le côté.
             let m: Maneuver = left ? .roundaboutLeft : .roundaboutRight
-            let side = left ? "à gauche" : "à droite"
+            let side = left ? tr("à gauche") : tr("à droite")
             if let exit {
-                let nth = exit == 1 ? "1re" : "\(exit)e"
+                let nth = rang(exit)
                 self.init(
-                    maneuver: m, display: "\(nth) sortie", detail: "rond-point",
-                    spoken: "au rond-point, prenez la \(nth) sortie")
+                    maneuver: m, display: trf("%@ sortie", nth), detail: tr("rond-point"),
+                    spoken: trf("au rond-point, prenez la %@ sortie", nth))
             } else {
                 self.init(
-                    maneuver: m, display: left ? "Gauche" : "Droite", detail: "rond-point",
-                    spoken: "au rond-point, \(side)")
+                    maneuver: m, display: left ? tr("Gauche") : tr("Droite"),
+                    detail: tr("rond-point"),
+                    spoken: trf("au rond-point, %@", side))
             }
         } else if left || right {
             let m: Maneuver
@@ -116,33 +143,37 @@ extension NavInstruction {
             } else {
                 m = left ? .left : .right
             }
-            let side = left ? "à gauche" : "à droite"
+            let side = left ? tr("à gauche") : tr("à droite")
             self.init(
                 maneuver: m,
-                display: left ? "Gauche" : "Droite",
-                detail: slight ? "serrez" : (sharp ? "virage serré" : nil),
-                spoken: slight ? "serrez \(side)" : (sharp ? "franchement \(side)" : side))
+                display: left ? tr("Gauche") : tr("Droite"),
+                detail: slight ? tr("serrez") : (sharp ? tr("virage serré") : nil),
+                spoken: slight
+                    ? trf("serrez %@", side)
+                    : (sharp ? trf("franchement %@", side) : side))
         } else if s.contains("sortie") || s.contains("exit") {
             // Sortie d'axe rapide sans côté précisé : par la droite en France.
             // Le numéro d'échangeur (« sortie 12 ») suit le mot, contrairement
             // au rang de sortie d'un rond-point (« 2e sortie ») qui le précède.
             if let number = Self.exitNumber(in: s) {
                 self.init(
-                    maneuver: .slightRight, display: "Sortie \(number)", detail: "sortie",
-                    spoken: "prenez la sortie \(number)")
+                    maneuver: .slightRight, display: trf("Sortie %@", number),
+                    detail: tr("sortie"),
+                    spoken: trf("prenez la sortie %@", number))
             } else if let exit {
-                let nth = exit == 1 ? "1re" : "\(exit)e"
+                let nth = rang(exit)
                 self.init(
-                    maneuver: .slightRight, display: "\(nth) sortie", detail: "sortie",
-                    spoken: "prenez la \(nth) sortie")
+                    maneuver: .slightRight, display: trf("%@ sortie", nth),
+                    detail: tr("sortie"),
+                    spoken: trf("prenez la %@ sortie", nth))
             } else {
                 self.init(
-                    maneuver: .slightRight, display: "Sortie", detail: nil,
-                    spoken: "prenez la sortie")
+                    maneuver: .slightRight, display: tr("Sortie"), detail: nil,
+                    spoken: tr("prenez la sortie"))
             }
         } else {
-            self.init(maneuver: .straight, display: "Tout droit", detail: nil,
-                      spoken: "tout droit")
+            self.init(maneuver: .straight, display: tr("Tout droit"), detail: nil,
+                      spoken: tr("tout droit"))
         }
     }
 
@@ -257,7 +288,7 @@ final class NavigationManager: ObservableObject {
         load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
              km: route.distance / 1000, min: route.expectedTravelTime / 60,
              announceStart: false)
-        speak("Itinéraire plus rapide trouvé : environ \(savedMinutes) minutes de gagnées.")
+        speak(trf("Itinéraire plus rapide trouvé : environ %d minutes de gagnées.", savedMinutes))
     }
 
     /// Applique un itinéraire de contournement quand on est bloqué dans un
@@ -271,7 +302,7 @@ final class NavigationManager: ObservableObject {
                 "Ça bouchonne devant. Itinéraire de contournement, environ \(savedMinutes) minutes gagnées."
             )
         } else {
-            speak("Ça bouchonne devant. Itinéraire de contournement.")
+            speak(tr("Ça bouchonne devant. Itinéraire de contournement."))
         }
     }
 
@@ -281,7 +312,7 @@ final class NavigationManager: ObservableObject {
         load(steps: Self.navSteps(from: route), coords: route.polyline.coordinates,
              km: route.distance / 1000, min: route.expectedTravelTime / 60,
              announceStart: false)
-        speak("Bouchon signalé devant. Itinéraire pour l'éviter.")
+        speak(tr("Bouchon signalé devant. Itinéraire pour l'éviter."))
     }
 
     /// Applique un itinéraire recalculé (sans annonce « Départ »).
@@ -300,7 +331,7 @@ final class NavigationManager: ObservableObject {
         rerouting = false
         rerouteFailures = 0
         toldOffline = false
-        speak("Nouvel itinéraire.")
+        speak(tr("Nouvel itinéraire."))
     }
 
     /// Convertit les étapes d'un MKRoute en NavStep.
@@ -361,14 +392,14 @@ final class NavigationManager: ObservableObject {
         // moment de tourner. (Il y en avait jusqu'à six, qui répétaient la
         // même consigne.)
         if d < 300, !spokenPrepare {
-            speak("Dans \(roundedMeters(d)) mètres, \(spokenInstruction)")
+            speak(trf("Dans %d mètres, %@", roundedMeters(d), spokenInstruction))
             spokenPrepare = true
         }
         if d < 25 {
             // Dernière consigne au moment de tourner (sauf à l'arrivée, qui a
             // sa propre annonce).
             if stepIndex < steps.count - 1 {
-                speak("Maintenant, \(spokenInstruction)")
+                speak(trf("Maintenant, %@", spokenInstruction))
             }
             advance()
         }
@@ -376,15 +407,17 @@ final class NavigationManager: ObservableObject {
         // Point d'étape régulier : heure d'arrivée annoncée toutes les 10 min.
         if Date().timeIntervalSince(lastEtaSpoken) > 600 {
             lastEtaSpoken = Date()
-            speak("Arrivée prévue vers \(Self.arrivalString(inMinutes: etaMinutes)).")
+            speak(trf("Arrivée prévue vers %@.", Self.arrivalString(inMinutes: etaMinutes)))
         }
     }
 
     /// Heure d'arrivée estimée (« 18:32 »).
     private static func arrivalString(inMinutes minutes: Double) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "fr_FR")
-        f.dateFormat = "HH:mm"
+        // L'heure suit la langue de l'app : « 6:42 PM » là où elle parle
+        // anglais, « 18:42 » ailleurs.
+        f.locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "fr")
+        f.setLocalizedDateFormatFromTemplate("Hm")
         return f.string(from: Date().addingTimeInterval(minutes * 60))
     }
 
@@ -395,12 +428,12 @@ final class NavigationManager: ObservableObject {
         lastReroute = Date()
         rerouting = true
         maneuver = .straight
-        instruction = "Recalcul de l'itinéraire…"
+        instruction = tr("Recalcul de l'itinéraire…")
         detail = nil
         // Annoncé à la première tentative seulement : hors réseau elles
         // s'enchaînent toutes les 30 s sans jamais aboutir, et l'annonce
         // répétée devenait un radotage.
-        if rerouteFailures == 0 { speak("Recalcul de l'itinéraire.") }
+        if rerouteFailures == 0 { speak(tr("Recalcul de l'itinéraire.")) }
         onReroute?()
     }
 
@@ -434,7 +467,7 @@ final class NavigationManager: ObservableObject {
         if stepIndex < steps.count { apply(steps[stepIndex]) }
         if !toldOffline {
             toldOffline = true
-            speak("Recalcul impossible. Je garde l'itinéraire.")
+            speak(tr("Recalcul impossible. Je garde l'itinéraire."))
         }
     }
 
@@ -453,7 +486,7 @@ final class NavigationManager: ObservableObject {
         lastEtaSpoken = Date()
         if stepIndex < steps.count {
             apply(steps[stepIndex])
-            if announceStart { speak("Départ, " + spokenInstruction) }
+            if announceStart { speak(trf("Départ, %@", spokenInstruction)) }
         }
         // Mémorise l'itinéraire : il ne pourrait pas être recalculé hors ligne.
         if let destination {
@@ -466,7 +499,7 @@ final class NavigationManager: ObservableObject {
         stepIndex += 1
         spokenPrepare = false
         if stepIndex >= steps.count {
-            speak("Vous êtes arrivé à destination.")
+            speak(tr("Vous êtes arrivé à destination."))
             active = false
             RouteStore.clear()
         }
@@ -564,7 +597,19 @@ final class NavigationManager: ObservableObject {
 
     private func speak(_ text: String) {
         let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "fr-FR")
+        u.voice = AVSpeechSynthesisVoice(language: Self.langueVoix)
         synth.speak(u)
     }
+
+    /// Voix accordée à la langue **de l'application**, pas à celle du système :
+    /// annoncer « turn left » sur un écran qui affiche « Gauche » serait pire
+    /// que de ne rien dire. `preferredLocalizations` donne la langue que le
+    /// paquet a réellement retenue.
+    private static let langueVoix: String = {
+        switch Bundle.main.preferredLocalizations.first {
+        case "es": return "es-ES"
+        case "en": return "en-US"
+        default: return "fr-FR"
+        }
+    }()
 }

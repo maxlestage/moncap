@@ -108,8 +108,12 @@ function MaquetteGuidage({ c }: { c: Contenu }) {
           <span className="fleche">↱</span>
           <div>
             <p className="distance">300 m</p>
-            <p className="consigne">{c.maquette.consigne}</p>
-            <p className="precision">{c.maquette.precision}</p>
+            {/* Le bandeau ne montre pas une phrase mais un mot, lisible d'un
+                coup d'œil au volant, et sa précision en dessous. */}
+            <p className="consigne">
+              {appFormat(c.code, "Sortie %@", ["12"])}
+            </p>
+            <p className="precision">{app(c.code, "sortie")}</p>
           </div>
         </div>
 

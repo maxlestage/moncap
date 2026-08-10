@@ -33,6 +33,22 @@
         }
       }
     },
+    "%@ sortie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ exit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ salida"
+          }
+        }
+      }
+    },
     "%lld bouchon(s) détecté(s) autour de toi (temps réel).": {
       "localizations": {
         "en": {
@@ -109,6 +125,150 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld viajes mostrados"
+          }
+        }
+      }
+    },
+    "1re": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1st"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.ª"
+          }
+        }
+      }
+    },
+    "2e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2nd"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2.ª"
+          }
+        }
+      }
+    },
+    "3e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3rd"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3.ª"
+          }
+        }
+      }
+    },
+    "4e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4th"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4.ª"
+          }
+        }
+      }
+    },
+    "5e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5th"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5.ª"
+          }
+        }
+      }
+    },
+    "6e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "6th"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "6.ª"
+          }
+        }
+      }
+    },
+    "7e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7th"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7.ª"
+          }
+        }
+      }
+    },
+    "8e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8th"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8.ª"
+          }
+        }
+      }
+    },
+    "9e": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9th"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "9.ª"
           }
         }
       }
@@ -221,6 +381,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancelar"
+          }
+        }
+      }
+    },
+    "Arrivée": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrival"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llegada"
+          }
+        }
+      }
+    },
+    "Arrivée prévue vers %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arriving around %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llegada prevista hacia las %@."
           }
         }
       }
@@ -353,6 +545,22 @@
         }
       }
     },
+    "Bouchon signalé devant. Itinéraire pour l'éviter.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jam reported ahead. Routing around it."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atasco avisado delante. Ruta para evitarlo."
+          }
+        }
+      }
+    },
     "Brouillard": {
       "localizations": {
         "en": {
@@ -381,6 +589,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Llovizna"
+          }
+        }
+      }
+    },
+    "Calcul de l'itinéraire…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computing the route…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calculando la ruta…"
           }
         }
       }
@@ -673,6 +897,38 @@
         }
       }
     },
+    "Dans %d mètres, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %d metres, %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En %d metros, %@"
+          }
+        }
+      }
+    },
+    "Demi-tour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "U-turn"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio de sentido"
+          }
+        }
+      }
+    },
     "Destinataire": {
       "localizations": {
         "en": {
@@ -737,6 +993,22 @@
         }
       }
     },
+    "Droite": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Derecha"
+          }
+        }
+      }
+    },
     "Déconnexion": {
       "localizations": {
         "en": {
@@ -781,6 +1053,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Empezar"
+          }
+        }
+      }
+    },
+    "Départ, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starting, %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salida, %@"
           }
         }
       }
@@ -945,6 +1233,22 @@
         }
       }
     },
+    "Gauche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Left"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Izquierda"
+          }
+        }
+      }
+    },
     "Gazole": {
       "localizations": {
         "en": {
@@ -1053,6 +1357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La ruta más sencilla"
+          }
+        }
+      }
+    },
+    "Itinéraire plus rapide trouvé : environ %d minutes de gagnées.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faster route found: about %d minutes saved."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruta más rápida encontrada: unos %d minutos ganados."
           }
         }
       }
@@ -1181,6 +1501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lista de regiones no disponible: hace falta cobertura una vez."
+          }
+        }
+      }
+    },
+    "Maintenant, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now, %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ahora, %@"
           }
         }
       }
@@ -1389,6 +1725,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nieve"
+          }
+        }
+      }
+    },
+    "Nouvel itinéraire.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New route."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nueva ruta."
           }
         }
       }
@@ -1649,6 +2001,54 @@
         }
       }
     },
+    "Recalcul de l'itinéraire.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recomputing the route."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recalculando la ruta."
+          }
+        }
+      }
+    },
+    "Recalcul de l'itinéraire…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recomputing the route…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recalculando la ruta…"
+          }
+        }
+      }
+    },
+    "Recalcul impossible. Je garde l'itinéraire.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cannot recompute. Keeping the route."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se puede recalcular. Mantengo la ruta."
+          }
+        }
+      }
+    },
     "Recharge": {
       "localizations": {
         "en": {
@@ -1821,6 +2221,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avisar"
+          }
+        }
+      }
+    },
+    "Sortie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salida"
+          }
+        }
+      }
+    },
+    "Sortie %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salida %@"
           }
         }
       }
@@ -2001,6 +2433,22 @@
         }
       }
     },
+    "Tout droit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Straight ahead"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recto"
+          }
+        }
+      }
+    },
     "Tout effacer": {
       "localizations": {
         "en": {
@@ -2129,6 +2577,22 @@
         }
       }
     },
+    "Vous êtes arrivé à destination.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have arrived at your destination."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Has llegado a tu destino."
+          }
+        }
+      }
+    },
     "Vélo": {
       "localizations": {
         "en": {
@@ -2161,6 +2625,54 @@
         }
       }
     },
+    "au rond-point, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "at the roundabout, %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en la rotonda, %@"
+          }
+        }
+      }
+    },
+    "au rond-point, prenez la %@ sortie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "at the roundabout, take the %@ exit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "en la rotonda, toma la %@ salida"
+          }
+        }
+      }
+    },
+    "calcul de l'itinéraire": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "computing the route"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "calculando la ruta"
+          }
+        }
+      }
+    },
     "e-mail": {
       "localizations": {
         "en": {
@@ -2173,6 +2685,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "correo electrónico"
+          }
+        }
+      }
+    },
+    "faites demi-tour": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "make a U-turn"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "haz un cambio de sentido"
+          }
+        }
+      }
+    },
+    "franchement %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sharp %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cerrado %@"
           }
         }
       }
@@ -2209,6 +2753,166 @@
         }
       }
     },
+    "prenez la %@ sortie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "take the %@ exit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toma la %@ salida"
+          }
+        }
+      }
+    },
+    "prenez la sortie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "take the exit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toma la salida"
+          }
+        }
+      }
+    },
+    "prenez la sortie %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "take exit %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toma la salida %@"
+          }
+        }
+      }
+    },
+    "rond-point": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "roundabout"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "rotonda"
+          }
+        }
+      }
+    },
+    "serrez": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "keep"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mantente"
+          }
+        }
+      }
+    },
+    "serrez %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "keep %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mantente %@"
+          }
+        }
+      }
+    },
+    "sortie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "exit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "salida"
+          }
+        }
+      }
+    },
+    "tout droit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "straight ahead"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "recto"
+          }
+        }
+      }
+    },
+    "virage serré": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sharp turn"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "giro cerrado"
+          }
+        }
+      }
+    },
+    "vous êtes arrivé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "you have arrived"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "has llegado"
+          }
+        }
+      }
+    },
     "À pied": {
       "localizations": {
         "en": {
@@ -2237,6 +2941,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Acerca de"
+          }
+        }
+      }
+    },
+    "Ça bouchonne devant. Itinéraire de contournement.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traffic ahead. Taking a way around."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hay atasco delante. Ruta alternativa."
           }
         }
       }
@@ -2285,6 +3005,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Evitar peajes"
+          }
+        }
+      }
+    },
+    "à droite": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "right"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a la derecha"
+          }
+        }
+      }
+    },
+    "à gauche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "left"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a la izquierda"
           }
         }
       }
