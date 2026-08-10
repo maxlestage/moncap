@@ -1,4 +1,4 @@
-import { ATOUTS, CHIFFRES, CONNEXION, DEPOT, FRANCHISE } from "./content";
+import { ATOUTS, AUTEUR, CHIFFRES, CONNEXION, DEPOT, FRANCHISE } from "./content";
 
 /**
  * Vitrine d'une page, pensée pour le pouce d'abord.
@@ -87,6 +87,9 @@ export function App() {
       </main>
 
       <footer>
+        <p className="signature">
+          Conçu et développé par <strong>{AUTEUR}</strong>.
+        </p>
         <p>
           Cartes et données routières <strong>OpenStreetMap</strong> (ODbL),
           calcul d'itinéraire <strong>Valhalla</strong>, photos aériennes{" "}

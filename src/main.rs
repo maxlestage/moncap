@@ -3770,6 +3770,12 @@ mod integration {
         // construction se remettait à horodater le nom, le lien casserait
         // sans que rien d'autre ne le signale.
         assert!(page.contains(r#"href="./styles.css""#));
+        // La signature de l'auteur : le genre de ligne qui disparaît sans
+        // bruit au premier remaniement du pied de page.
+        assert!(
+            page.contains("Maxime Nathan Lestage"),
+            "la vitrine doit porter la signature de son auteur"
+        );
 
         let (statut, feuille) = corps(&app, "/styles.css").await;
         assert_eq!(statut, StatusCode::OK, "la feuille doit être servie");

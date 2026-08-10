@@ -255,6 +255,20 @@ footer p {
   margin: 0 0 0.5rem;
 }
 
+/* La signature n'est pas une mention légale : elle se lit à la taille du
+   texte courant, au-dessus du gris des crédits. */
+.signature {
+  color: var(--texte);
+  font-size: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+/* Un nom ne se coupe pas au milieu : la ligne se casse avant lui plutôt
+   qu'entre son prénom et le reste. Il tient sur une ligne jusqu'à 320 px. */
+.signature strong {
+  white-space: nowrap;
+}
+
 /* --- Écrans plus larges -------------------------------------------------- */
 
 @media (min-width: 40rem) {
