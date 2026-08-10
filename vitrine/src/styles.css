@@ -92,6 +92,12 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* La toile prend le bleu du bandeau, et non le blanc du papier.
+     Sans fond sur `html`, celui de `body` se propage à la toile, et Safari
+     y peint la bande de la barre d'état : on voyait donc du blanc au-dessus
+     d'un bandeau bleu foncé. C'est aussi ce qui s'affiche quand on tire la
+     page au-delà de son début. */
+  background: var(--marine);
 }
 
 body {
