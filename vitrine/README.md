@@ -37,7 +37,7 @@ rendue **à la construction** (`renderToStaticMarkup` dans `build.tsx`), et
 | | poids livré |
 | --- | --- |
 | Paquet React classique | 397 Ko de JavaScript |
-| Rendu à la construction | **5,5 Ko de HTML + 3,7 Ko de CSS**, zéro JavaScript |
+| Rendu à la construction | **10,9 Ko de HTML + 6,6 Ko de CSS**, zéro JavaScript |
 
 React et TypeScript restent la façon d'écrire la page — typage du contenu,
 composition, relecture. Ils ne sont simplement pas du voyage. `src/index.tsx`
@@ -72,6 +72,18 @@ vrai ; qui veut la version la lit dans `Cargo.toml` ou `package.json`, où
 elle est tenue à jour par construction. `src/content.test.ts` fait échouer la
 construction si un chiffre réapparaît dans la liste — c'est une règle qu'on
 réintroduit sans y penser, « React 19 » se tape tout seul.
+
+## Les maquettes
+
+Les trois écrans montrés (comparateur, guidage, bandeau des lieux) sont du
+**HTML et du CSS**, pas des images : nets à toute résolution, ils suivent le
+thème sombre, se lisent au lecteur d'écran et ne coûtent pas un octet de plus
+à télécharger.
+
+Ce sont des **dessins**, et la légende le dit. La mise en page, les étiquettes
+et les lignes affichées reprennent celles de l'application — les valeurs
+chiffrées, elles, sont des exemples. Faire passer un exemple pour un relevé
+serait le premier mensonge d'une vitrine.
 
 ## Style
 
