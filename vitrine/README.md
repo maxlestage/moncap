@@ -1,7 +1,7 @@
 # Vitrine
 
-Page de présentation de MonCap GPS. Une seule page, pensée pour le
-téléphone d'abord.
+Page de présentation de MonCap GPS, en **français, espagnol et anglais**,
+pensée pour le téléphone d'abord.
 
 ```sh
 bun install
@@ -12,8 +12,15 @@ bun run build     # écrit dist/
 
 ## Où elle est servie
 
-Le backend Rust la sert à la **racine** (`/`), et le front web — écran de
-connexion compris — vit derrière `/app` ; le bouton « Se connecter » y mène.
+| Adresse | Contenu |
+| --- | --- |
+| `/` | la page en français |
+| `/es` | en espagnol |
+| `/en` | en anglais |
+| `/vitrine/…` | feuille de style, logo, icône |
+
+Le front web — écran de connexion compris — vit derrière `/app` ; le bouton
+« Se connecter » y mène.
 
 `dist/` est **versionné**, contrairement à l'usage. Le buildpack Heroku ne
 compile que la crate Rust : aucun Bun ne tourne sur le dyno, donc le résultat
@@ -63,7 +70,7 @@ rendue **à la construction** (`renderToStaticMarkup` dans `build.tsx`), et
 | | poids livré |
 | --- | --- |
 | Paquet React classique | 397 Ko de JavaScript |
-| Rendu à la construction | **12,7 Ko de HTML + 7,2 Ko de CSS**, zéro JavaScript |
+| Rendu à la construction | **13,6 Ko de HTML + 9,1 Ko de CSS + 14,3 Ko de logo**, zéro JavaScript |
 
 React et TypeScript restent la façon d'écrire la page — typage du contenu,
 composition, relecture. Ils ne sont simplement pas du voyage. `src/index.tsx`
@@ -105,6 +112,60 @@ que le bandeau garde l'étendue européenne. Elles portent sur ce que la page
 doit continuer d'expliquer, pas sur une formulation : reformuler est libre,
 supprimer ne l'est pas.
 
+## Les trois langues
+
+`src/langues.ts` porte les trois versions, dans un seul fichier plutôt que
+trois jumeaux qui divergeraient en silence. Le type `Contenu` est la
+garantie : oublier une phrase dans une langue ne produit pas une page à
+trou, mais **une erreur de compilation**. Un test complète ce que le type
+ne peut pas voir — une chaîne vide compile très bien.
+
+Ce qui n'est **pas** traduit : les libellés visibles dans les maquettes.
+Ils dépeignent une application dont l'interface est en français, et inventer
+une version espagnole ou anglaise de ces écrans reviendrait à montrer un
+produit qui n'existe pas. Hors français, chaque légende le dit, et la section
+« ce qu'elle ne fait pas » le répète.
+
+Les trois pages se lient mutuellement et se déclarent en `hreflang` : sans
+cela, une page est un cul-de-sac pour qui n'atterrit pas dans sa langue.
+
+## Les thèmes
+
+Quatre choix — Auto, Clair, Sombre, Marine — **sans une ligne de script** :
+des boutons radio en haut de page, et `:has()` pour les lire dans la feuille
+de style. « Auto » ne redéfinit rien et laisse `prefers-color-scheme`
+décider.
+
+Le choix ne survit pas à un changement de page : rien ne peut le mémoriser
+sans JavaScript. C'est le prix d'une page qui n'en expédie pas, et il vaut
+mieux l'écrire que de laisser croire le contraire.
+
+## Les couleurs et le logo
+
+Les couleurs de marque ne sont pas choisies dans la feuille de style, elles
+sont **relevées dans l'application** : `--marine` est le `LaunchBackground`
+du catalogue d'assets — rgb(0.055, 0.165, 0.369) — et `--bleu` le bas du
+dégradé de l'écran de garde, rgb(0.10, 0.34, 0.90). Le bandeau reprend ce
+dégradé, dans le même sens.
+
+Le logo est l'icône de l'application, redimensionnée une fois : l'original
+fait 1024 px et 907 Ko, ce qui n'a pas sa place sur une page de treize. Les
+dérivés de `assets/` ont été produits ainsi, et le dyno n'a rien à traiter :
+
+```sh
+python3 - <<'EOF'
+from PIL import Image
+src = Image.open('../frontend/MonCapGPS/Assets.xcassets/AppIcon.appiconset/AppIcon.png').convert('RGB')
+src.resize((256, 256), Image.LANCZOS).save('assets/logo.webp', 'WEBP', quality=88, method=6)
+src.resize((32, 32), Image.LANCZOS).convert('P', palette=Image.ADAPTIVE, colors=64).save('assets/favicon.png', 'PNG', optimize=True)
+EOF
+```
+
+WebP seul, sans repli PNG — 14,3 Ko contre 87 Ko. Le format est disponible
+partout depuis 2020, et les thèmes reposent de toute façon sur `:has()`,
+plus récent encore : un repli pour un navigateur d'avant 2020 protégerait
+une page qu'il ne saurait déjà pas afficher.
+
 ## Contenu
 
 Tout le texte chiffré est dans `src/content.ts`, séparé de la mise en forme.
@@ -113,7 +174,11 @@ Releases publiées, les 222,5 km de Bordeaux → Limoges d'un calcul réel sans
 réseau (voir `.github/workflows/valhalla-epreuve.yml`). Une vitrine qui
 arrondit ses chiffres finit par mentir.
 
-La pile technique (`TECHNIQUES`) est listée **sans numéro de version**. Une
+Le plafond de quinze itinéraires n'est pas une estimation : il vient de la
+ligne `options.prefix(15)` de `ContentView.swift`. `ITINERAIRES_MAX` est la
+seule source du chiffre affiché, dans les trois langues.
+
+La pile technique (`OUTILS`) est listée **sans numéro de version**. Une
 version affichée sur une page vieillit toute seule : elle est fausse dès la
 mise à jour suivante et personne ne revient la corriger. Le nom, lui, reste
 vrai ; qui veut la version la lit dans `Cargo.toml` ou `package.json`, où
@@ -121,11 +186,19 @@ elle est tenue à jour par construction. `src/content.test.ts` fait échouer la
 construction si un chiffre réapparaît dans la liste — c'est une règle qu'on
 réintroduit sans y penser, « React 19 » se tape tout seul.
 
+`src/styles.test.ts` relit la feuille de style à la recherche de couleurs
+mal tapées. J'ai écrit `#2b3burlywood`, `#142banchor` et `#1b3straw` dans la
+même journée : un nom de couleur CSS venu se coller à un code hexadécimal.
+Rien n'échoue — le navigateur ignore la déclaration et sert la page avec un
+trait manquant. Le test ne regarde que les déclarations, jamais les
+sélecteurs : `#th-auto` est un identifiant, pas une couleur.
+
 ## Les maquettes
 
-Les trois écrans montrés (comparateur, guidage, bandeau des lieux) sont du
+Les quatre écrans montrés (comparateur, guidage, bandeau des lieux, régions
+hors ligne) sont du
 **HTML et du CSS**, pas des images : nets à toute résolution, ils suivent le
-thème sombre, se lisent au lecteur d'écran et ne coûtent pas un octet de plus
+thème choisi, se lisent au lecteur d'écran et ne coûtent pas un octet de plus
 à télécharger.
 
 Ce sont des **dessins**, et la légende le dit. La mise en page, les étiquettes
@@ -135,7 +208,7 @@ serait le premier mensonge d'une vitrine.
 
 ## Style
 
-Pas de bibliothèque d'utilitaires : `src/styles.css` tient en trois cents
-lignes, avec des variables CSS pour le thème, `prefers-color-scheme` pour le
-mode sombre, `env(safe-area-inset-*)` pour l'encoche et des cibles tactiles
-d'au moins 44 px.
+Pas de bibliothèque d'utilitaires : `src/styles.css` tient en quelques
+centaines de lignes, avec des variables CSS pour les quatre thèmes,
+`prefers-color-scheme` pour le mode automatique, `env(safe-area-inset-*)`
+pour l'encoche et des cibles tactiles d'au moins 44 px.

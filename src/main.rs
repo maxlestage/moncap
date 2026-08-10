@@ -1474,15 +1474,17 @@ fn build_app(state: AppState) -> Router {
     let web = ServeDir::new("web/dist").fallback(ServeFile::new("web/dist/index.html"));
 
     // Vitrine (voir vitrine/) : la page de présentation occupe la racine
-    // exacte, l'application vit derrière `/app`. Deux fichiers seulement,
-    // servis par des routes nommées plutôt que par un répertoire — un
-    // `ServeDir` de plus à la racine entrerait en conflit avec le repli du
-    // front. `vitrine/dist` est versionné parce que le dyno Heroku ne
-    // compile que la crate Rust : aucun Bun ne tourne au déploiement.
-    // La page occupe la racine exacte et se revalide à chaque visite : son
-    // adresse ne peut pas porter d'empreinte.
+    // exacte, l'application vit derrière `/app`. `vitrine/dist` est versionné
+    // parce que le dyno Heroku ne compile que la crate Rust — aucun Bun ne
+    // tourne au déploiement.
+    //
+    // Trois langues, trois adresses ; le français à la racine, langue du
+    // projet. Ces trois-là se revalident à chaque visite : ce sont les seuls
+    // documents dont l'adresse ne peut pas porter d'empreinte.
     let vitrine: Router<AppState> = Router::new()
         .route_service("/", ServeFile::new("vitrine/dist/index.html"))
+        .route_service("/es", ServeFile::new("vitrine/dist/es/index.html"))
+        .route_service("/en", ServeFile::new("vitrine/dist/en/index.html"))
         .layer(middleware::from_fn(revalider));
 
     // Ses fichiers vivent sous `/vitrine`, nommés d'après leur contenu. Un
@@ -3844,6 +3846,18 @@ mod integration {
             page.contains("Maxime Nathan Lestage"),
             "la vitrine doit porter la signature de son auteur"
         );
+        // Le logo de l'application, suivi jusqu'au fichier comme la feuille.
+        let logo = page
+            .split(r#"<img class="logo" src=""#)
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("la vitrine doit afficher le logo");
+        let (statut_logo, cache_logo, _) = reponse(&app, logo).await;
+        assert_eq!(statut_logo, StatusCode::OK, "le logo doit être servi");
+        assert_eq!(
+            cache_logo.as_deref(),
+            Some("public, max-age=31536000, immutable")
+        );
 
         let (statut, cache, feuille) = reponse(&app, lien).await;
         assert_eq!(statut, StatusCode::OK, "la feuille liée doit être servie");
@@ -3881,5 +3895,45 @@ mod integration {
             front.contains("<title>MonCap GPS</title>"),
             "/app doit servir le front web"
         );
+    }
+
+    /// Les trois langues sont servies, chacune dans la sienne. Le risque
+    /// n'est pas qu'une adresse manque — cela se verrait — mais qu'elle
+    /// serve le contenu d'une autre : les trois pages se ressemblent, et
+    /// une erreur de chemin passerait inaperçue.
+    #[tokio::test]
+    async fn les_trois_langues_sont_servies() {
+        let Some(app) = test_app().await else { return };
+
+        // Chaque page, l'attribut de langue attendu, et une phrase qui
+        // n'existe que dans celle-là.
+        let attendus = [
+            ("/", "fr", "Comparez, puis roulez"),
+            ("/es", "es", "Compara y conduce"),
+            ("/en", "en", "Compare, then drive"),
+        ];
+
+        for (uri, code, phrase) in attendus {
+            let resp = app.clone().oneshot(get_req(uri, None)).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::OK, "{uri} doit répondre");
+            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let page = String::from_utf8_lossy(&bytes);
+
+            assert!(
+                page.contains(&format!(r#"<html lang="{code}">"#)),
+                "{uri} doit se déclarer en {code}"
+            );
+            assert!(page.contains(phrase), "{uri} doit servir le texte {code}");
+            // Les trois se lient mutuellement : sans cela, une page est un
+            // cul-de-sac pour qui ne lit pas la langue où il a atterri.
+            for (autre, _, _) in attendus {
+                assert!(
+                    page.contains(&format!(r#"href="{autre}""#)),
+                    "{uri} doit mener à {autre}"
+                );
+            }
+        }
     }
 }
