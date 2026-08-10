@@ -105,52 +105,99 @@ jobs:
           print("  %.1f km, %.0f min" % (resume["length"], resume["time"] / 60))
           PY
 
+          # Valhalla n'expose plus le calcul en ligne de commande : les
+          # versions récentes n'embarquent que `valhalla_service`, qui répond
+          # en HTTP. On l'interroge donc par la boucle locale.
+          cat > data/poste.py <<'PY'
+          import sys, urllib.error, urllib.request
+
+          corps = open(sys.argv[1], "rb").read()
+          demande = urllib.request.Request(
+              "http://127.0.0.1:8002/route", data=corps,
+              headers={"Content-Type": "application/json"})
+          try:
+              with urllib.request.urlopen(demande, timeout=300) as reponse:
+                  brut = reponse.read()
+          except urllib.error.HTTPError as erreur:
+              # Un refus de Valhalla arrive en 400 avec un corps explicite :
+              # c'est justement ce qu'on veut lire au contrôle négatif.
+              brut = erreur.read()
+          except Exception as erreur:
+              brut = ('{"erreur": "%s"}' % erreur).encode()
+          open(sys.argv[2], "wb").write(brut)
+          PY
+
+          cat > data/attend.py <<'PY'
+          import socket, sys, time
+
+          limite = time.monotonic() + 180
+          while time.monotonic() < limite:
+              prise = socket.socket()
+              prise.settimeout(2)
+              if prise.connect_ex(("127.0.0.1", 8002)) == 0:
+                  prise.close()
+                  raise SystemExit(0)
+              prise.close()
+              time.sleep(1)
+          raise SystemExit(1)
+          PY
+
           cat > data/epreuve.sh <<'SH'
           set -uo pipefail
 
-          echo "Binaires de calcul disponibles :"
-          ls /usr/local/bin /usr/bin 2>/dev/null | grep -E '^valhalla_(run_)?route$' || true
+          lance() {  # $1 configuration
+            valhalla_service "$1" 1 > /data/service.log 2>&1 &
+            SERVICE=$!
+            if ! python3 /data/attend.py; then
+              echo "  le service n a pas repondu"
+              tail -30 /data/service.log
+              return 1
+            fi
+          }
 
-          # Le nom a changé selon les versions ; on prend celui qui répond.
-          for candidat in valhalla_route valhalla_run_route; do
-            if command -v "$candidat" > /dev/null; then CALCUL="$candidat"; break; fi
-          done
-          if [ -z "${CALCUL:-}" ]; then
-            echo "ECHEC : aucun binaire de calcul d itineraire trouve"
-            ls /usr/local/bin | head -50
-            exit 1
-          fi
-          echo "Binaire retenu : $CALCUL"
+          arrete() {
+            kill "$SERVICE" 2> /dev/null || true
+            wait "$SERVICE" 2> /dev/null || true
+            # Le port doit être libre avant le service suivant.
+            sleep 2
+          }
 
-          trajet() {  # $1 configuration, $2 demande, $3 sortie
-            "$CALCUL" -c "$1" -j "$(cat "$2")" > "$3" 2> "$3.err" || true
+          trajet() {  # $1 demande, $2 sortie
+            python3 /data/poste.py "$1" "$2"
           }
 
           echo "== 1. Bordeaux -> Arcachon, Aquitaine seule (doit aboutir)"
-          trajet /data/seule.json /data/interne.json /data/r1.json
+          lance /data/seule.json || exit 1
+          trajet /data/interne.json /data/r1.json
           if ! python3 /data/resume.py /data/r1.json; then
             echo "ECHEC : la region seule ne route pas"
-            tail -20 /data/r1.json.err
+            tail -30 /data/service.log
+            arrete
             exit 1
           fi
 
           echo "== 2. Bordeaux -> Toulouse, Aquitaine seule (doit echouer)"
-          trajet /data/seule.json /data/traverse.json /data/r2.json
+          trajet /data/traverse.json /data/r2.json
           if python3 /data/resume.py /data/r2.json > /dev/null 2>&1; then
             echo "INATTENDU : la region seule a route jusqua Toulouse."
             echo "Le controle negatif tombe, l epreuve suivante ne prouverait rien."
             python3 /data/resume.py /data/r2.json
+            arrete
             exit 1
           fi
           echo "  refuse, comme attendu"
+          arrete
 
           echo "== 3. Bordeaux -> Toulouse, archives fusionnees (doit aboutir)"
-          trajet /data/fusion.json /data/traverse.json /data/r3.json
+          lance /data/fusion.json || exit 1
+          trajet /data/traverse.json /data/r3.json
           if ! python3 /data/resume.py /data/r3.json; then
             echo "ECHEC : la fusion ne route pas"
-            tail -20 /data/r3.json.err
+            tail -30 /data/service.log
+            arrete
             exit 1
           fi
+          arrete
           SH
 
       - name: Éprouve les trois trajets
