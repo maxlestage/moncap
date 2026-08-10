@@ -3757,7 +3757,7 @@ mod integration {
         let (statut, page) = corps(&app, "/").await;
         assert_eq!(statut, StatusCode::OK, "la racine doit répondre");
         assert!(
-            page.contains("La navigation qui marche"),
+            page.contains("Comparez, puis roulez"),
             "la racine doit servir la vitrine, pas le front"
         );
         // Le lien de connexion est la seule porte d'entrée vers l'app depuis
