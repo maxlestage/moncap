@@ -1,5 +1,40 @@
 import { expect, test } from "bun:test";
-import { ATOUTS, CHIFFRES, FRANCHISE, TECHNIQUES } from "./content";
+import {
+  ATOUTS,
+  CHIFFRES,
+  FRANCHISE,
+  LIEUX,
+  MAQUETTE_ITINERAIRES,
+  TECHNIQUES,
+} from "./content";
+
+/**
+ * Le bandeau annonce « 19 catégories » et la maquette les montre toutes :
+ * les deux viennent du même endroit, mais rien n'oblige le chiffre à suivre
+ * la liste. Ajouter une catégorie sans toucher au compteur donnerait une
+ * page qui se contredit d'un écran à l'autre.
+ */
+test("le chiffre annoncé suit la liste des lieux", () => {
+  const annonce = CHIFFRES.find((c) => c.legende.includes("catégories"));
+  expect(annonce?.valeur).toBe(String(LIEUX.length));
+});
+
+/** Une maquette d'un seul itinéraire ne montrerait pas de comparaison. */
+test("la maquette compare plusieurs itinéraires", () => {
+  expect(MAQUETTE_ITINERAIRES.length).toBeGreaterThanOrEqual(2);
+  const etiquettes = MAQUETTE_ITINERAIRES.map((r) => r.etiquette);
+  expect(new Set(etiquettes).size).toBe(etiquettes.length);
+  const teintes = MAQUETTE_ITINERAIRES.map((r) => r.teinte);
+  expect(new Set(teintes).size).toBe(teintes.length);
+});
+
+/** Les emoji et libellés servent de clés de rendu et d'identité visuelle. */
+test("aucun doublon parmi les lieux", () => {
+  const noms = LIEUX.map((l) => l.nom);
+  expect(new Set(noms).size).toBe(noms.length);
+  const emojis = LIEUX.map((l) => l.emoji);
+  expect(new Set(emojis).size).toBe(emojis.length);
+});
 
 /**
  * La pile est affichée sans numéro de version, à dessein : une version sur
