@@ -1,0 +1,138 @@
+name: Fusion de tuiles
+
+# Vérifie qu'on peut router à travers deux régions en fusionnant leurs
+# archives de tuiles.
+#
+# L'app ne garde aujourd'hui qu'une région : Bordeaux → Toulouse hors réseau
+# est hors de portée, l'Aquitaine ignorant les routes de Midi-Pyrénées. Avant
+# d'écrire ce mécanisme dans l'app — où il ne se teste qu'au bout d'un cycle
+# TestFlight — on l'éprouve ici, où Valhalla est installé.
+#
+# Trois épreuves, dans cet ordre :
+#   1. un trajet interne à l'Aquitaine, pour établir que l'archive publiée et
+#      la configuration corrigée suffisent à router ;
+#   2. le même Bordeaux → Toulouse avec la seule Aquitaine, qui doit échouer —
+#      sans quoi l'épreuve suivante ne prouverait rien ;
+#   3. Bordeaux → Toulouse sur les deux archives fusionnées, qui doit aboutir.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fusion:
+    name: Router d'une région à l'autre
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Récupère deux régions voisines
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          base=https://github.com/maxlestage/moncap/releases/download
+          for r in france-aquitaine france-midi-pyrenees; do
+            curl -fSL --retry 4 -o "data/$r.tar" "$base/tuiles-eu-$r/tuiles-eu-$r.tar"
+          done
+          curl -fSL --retry 4 -o data/brut.json \
+            "$base/tuiles-eu-france-aquitaine/tuiles-eu-france-aquitaine.json"
+          ls -lh data/
+
+      - name: Fusionne les archives
+        run: |
+          set -euo pipefail
+          # Une archive tar se prolonge : `-A` recopie les membres de la
+          # seconde à la suite de la première. Les tuiles Valhalla portent leur
+          # identifiant en guise de chemin, donc deux régions voisines ne se
+          # marchent pas dessus, hors tuiles frontalières.
+          cp data/france-aquitaine.tar data/fusion.tar
+          tar -Af data/fusion.tar data/france-midi-pyrenees.tar
+          ls -lh data/fusion.tar
+          echo "membres : $(tar -tf data/fusion.tar | wc -l)"
+          echo "dont uniques : $(tar -tf data/fusion.tar | sort -u | wc -l)"
+
+      - name: Prépare les configurations
+        run: |
+          set -euo pipefail
+          # Exactement la correction que fait l'app : seul le chemin de
+          # l'archive change, le reste des réglages est celui de Valhalla.
+          python3 - <<'PY'
+          import json
+
+          brut = json.load(open("data/brut.json"))
+
+          def config(archive, sortie):
+              racine = json.loads(json.dumps(brut))
+              m = racine["mjolnir"]
+              m["tile_extract"] = f"/data/{archive}"
+              for cle in ("tile_dir", "admin", "timezone"):
+                  m.pop(cle, None)
+              json.dump(racine, open(sortie, "w"))
+
+          config("france-aquitaine.tar", "data/seule.json")
+          config("fusion.tar", "data/fusion.json")
+          PY
+          ls -l data/seule.json data/fusion.json
+
+      - name: Éprouve les trois trajets
+        run: |
+          set -euo pipefail
+          # Bordeaux et Arcachon sont tous deux en Aquitaine ; Toulouse est en
+          # Midi-Pyrénées, à deux cent quarante kilomètres et de l'autre côté
+          # de la frontière régionale.
+          cat > data/interne.json <<'JSON'
+          {"locations":[{"lat":44.8378,"lon":-0.5792},{"lat":44.6580,"lon":-1.1680}],
+           "costing":"auto","directions_options":{"units":"kilometers"}}
+          JSON
+          cat > data/traverse.json <<'JSON'
+          {"locations":[{"lat":44.8378,"lon":-0.5792},{"lat":43.6047,"lon":1.4442}],
+           "costing":"auto","directions_options":{"units":"kilometers"}}
+          JSON
+
+          docker run --rm -v "$PWD/data:/data" -w /data \
+            ghcr.io/valhalla/valhalla:latest bash -lc '
+              set -uo pipefail
+              resume() {
+                python3 - "$1" <<PY
+          import json, sys
+          try:
+              d = json.load(open(sys.argv[1]))
+          except Exception as e:
+              print("  illisible :", e); raise SystemExit(1)
+          s = d.get("trip", {}).get("summary")
+          if not s:
+              print("  pas d itineraire :", json.dumps(d)[:200]); raise SystemExit(1)
+          print(f"  {s[\"length\"]:.1f} km, {s[\"time\"]/60:.0f} min")
+          PY
+              }
+
+              echo "== 1. Bordeaux -> Arcachon, Aquitaine seule (doit aboutir)"
+              valhalla_route -c /data/seule.json -j "$(cat /data/interne.json)" \
+                > /data/r1.json 2>/data/r1.err || true
+              resume /data/r1.json || { echo "ECHEC : la region seule ne route pas"; \
+                tail -5 /data/r1.err; exit 1; }
+
+              echo "== 2. Bordeaux -> Toulouse, Aquitaine seule (doit echouer)"
+              valhalla_route -c /data/seule.json -j "$(cat /data/traverse.json)" \
+                > /data/r2.json 2>/data/r2.err || true
+              if resume /data/r2.json 2>/dev/null; then
+                echo "INATTENDU : la region seule a route jusqua Toulouse."
+                echo "Lepreuve suivante ne prouverait rien. A tirer au clair."
+                exit 1
+              fi
+              echo "  refuse, comme attendu"
+
+              echo "== 3. Bordeaux -> Toulouse, archives fusionnees (doit aboutir)"
+              valhalla_route -c /data/fusion.json -j "$(cat /data/traverse.json)" \
+                > /data/r3.json 2>/data/r3.err || true
+              resume /data/r3.json || { echo "ECHEC : la fusion ne route pas"; \
+                tail -20 /data/r3.err; exit 1; }
+            '
+
+      - name: Récapitulatif
+        if: always()
+        run: |
+          {
+            echo "### Fusion de tuiles"
+            echo ""
+            echo "Aquitaine + Midi-Pyrénées, Bordeaux → Toulouse."
+            echo "Le détail des trois épreuves est dans le journal de l'étape précédente."
+          } >> "$GITHUB_STEP_SUMMARY"
