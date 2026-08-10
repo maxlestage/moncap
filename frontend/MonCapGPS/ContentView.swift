@@ -2512,7 +2512,7 @@ struct MapHomeView: View {
                     // car il repose sur d'autres données — un graphe routier,
                     // pas des tuiles d'affichage.
                     DisclosureGroup("Itinéraires sans réseau 🧭") {
-                        if let region = OfflineRouter.shared.installed {
+                        if let region = router.installed {
                             Label(
                                 OfflineRouter.Region.toutes
                                     .first { $0.id == region }?.nom ?? region,
@@ -2520,7 +2520,7 @@ struct MapHomeView: View {
                             )
                             .foregroundStyle(.green)
                             Button(role: .destructive) {
-                                OfflineRouter.shared.remove()
+                                router.remove()
                             } label: {
                                 Label("Effacer", systemImage: "trash")
                             }
@@ -2534,8 +2534,13 @@ struct MapHomeView: View {
                                 Button {
                                     Task { await router.install(region) }
                                 } label: {
+                                    // Le poids vient des Releases : tant qu'il
+                                    // n'est pas connu, le nom seul — mieux vaut
+                                    // pas de chiffre qu'un chiffre périmé.
                                     Label(
-                                        "\(region.nom) · \(region.taille)",
+                                        router.sizeLabel(region).map {
+                                            "\(region.nom) · \($0)"
+                                        } ?? region.nom,
                                         systemImage: "arrow.down.circle")
                                 }
                             }
@@ -2551,6 +2556,7 @@ struct MapHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     }
+                    .task { await router.loadSizes() }
 
                     DisclosureGroup("Serveur de cartes personnel") {
                         TextField("https://exemple.fr/style.json", text: $styleURL)

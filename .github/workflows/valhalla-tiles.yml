@@ -1,40 +1,80 @@
 name: Tuiles Valhalla
 
-# Produit les tuiles de calcul d'itinéraire pour une région, et les publie en
-# pièce jointe de Release — d'où l'app les téléchargera.
+# Produit les tuiles de calcul d'itinéraire et les publie en pièces jointes de
+# Release — d'où l'app les téléchargera.
 #
 # C'est la pièce manquante de la navigation hors ligne : Valhalla sait calculer
 # un itinéraire sur l'appareil, mais il lui faut ses propres tuiles routières,
 # que personne ne distribue gratuitement (le seul fournisseur prêt à l'emploi
 # demande plusieurs centaines de dollars par mois). Un runner GitHub suffit
-# pourtant à les construire pour une région, et les Releases à les héberger.
+# pourtant — l'Aquitaine se construit en trois minutes — et les Releases les
+# hébergent sans frais.
 #
 # Manuel uniquement : onglet Actions → Run workflow.
 
 on:
   workflow_dispatch:
     inputs:
-      region:
-        description: "Extrait Geofabrik (ex. europe/france/aquitaine, europe/andorra)"
+      regions:
+        description: "Régions séparées par des virgules (ex. aquitaine,corse) — ou « toutes »"
         required: true
-        default: europe/france/aquitaine
-      tag:
-        description: "Nom de la Release (ex. tuiles-aquitaine)"
-        required: true
-        default: tuiles-aquitaine
+        default: toutes
 
 permissions:
   contents: write
 
 jobs:
+  liste:
+    name: Choisir les régions
+    runs-on: ubuntu-latest
+    outputs:
+      matrice: ${{ steps.calcule.outputs.matrice }}
+    steps:
+      - id: calcule
+        env:
+          DEMANDE: ${{ inputs.regions }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+
+          # Découpage Geofabrik de la France, outre-mer compris, plus l'Espagne.
+          francaises = [
+              "alsace", "aquitaine", "auvergne", "basse-normandie", "bourgogne",
+              "bretagne", "centre", "champagne-ardenne", "corse", "franche-comte",
+              "guadeloupe", "guyane", "haute-normandie", "ile-de-france",
+              "languedoc-roussillon", "limousin", "lorraine", "martinique", "mayotte",
+              "midi-pyrenees", "nord-pas-de-calais", "pays-de-la-loire", "picardie",
+              "poitou-charentes", "provence-alpes-cote-d-azur", "reunion", "rhone-alpes",
+          ]
+          toutes = [{"chemin": f"europe/france/{n}", "tag": f"tuiles-{n}"} for n in francaises]
+          toutes.append({"chemin": "europe/spain", "tag": "tuiles-espagne"})
+
+          demande = os.environ["DEMANDE"].strip().lower()
+          if demande in ("toutes", "all", ""):
+              choisies = toutes
+          else:
+              voulues = {m.strip() for m in demande.split(",") if m.strip()}
+              choisies = [r for r in toutes if r["tag"].removeprefix("tuiles-") in voulues]
+          print("matrice=" + json.dumps({"region": choisies}))
+          PY
+
   tuiles:
-    name: Construire et publier
+    name: ${{ matrix.region.tag }}
+    needs: liste
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    strategy:
+      # Une région qui échoue ne doit pas emporter les autres : chacune est
+      # publiée indépendamment.
+      fail-fast: false
+      # Assez pour aller vite, sans saturer la file du dépôt.
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.liste.outputs.matrice) }}
     steps:
       - name: Libère de la place
         # Le disque du runner est en grande partie occupé par des outils dont
-        # on n'a aucun usage ici, et la construction écrit beaucoup.
+        # on n'a aucun usage ici, et la construction écrit beaucoup — l'Espagne
+        # part d'un extrait de 1,4 Go.
         run: |
           set -euo pipefail
           df -h / | tail -1
@@ -46,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p data
-          url="https://download.geofabrik.de/${{ inputs.region }}-latest.osm.pbf"
+          url="https://download.geofabrik.de/${{ matrix.region.chemin }}-latest.osm.pbf"
           echo "Extrait : $url"
           curl -fSL --retry 4 --retry-delay 5 -o data/extrait.osm.pbf "$url"
           ls -lh data/extrait.osm.pbf
@@ -78,30 +118,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mv data/tuiles.tar "data/${{ inputs.tag }}.tar"
+          tag="${{ matrix.region.tag }}"
+          mv data/tuiles.tar "data/$tag.tar"
           # La configuration engendrée accompagne les tuiles : elle porte les
           # dizaines de réglages qu'attend Valhalla, qu'il serait absurde de
           # réécrire à la main dans l'app. Seuls les chemins y seront corrigés,
           # l'appareil ne connaissant évidemment pas /data.
-          cp data/valhalla.json "data/${{ inputs.tag }}.json"
-          # `--clobber` : reconstruire une région remplace ses tuiles au lieu
-          # d'échouer, l'adresse de téléchargement reste donc la même.
+          cp data/valhalla.json "data/$tag.json"
           # `-R` : le dépôt est nommé explicitement, faute de clone local —
           # `gh` le déduit sinon du dossier courant, qui n'est pas un dépôt.
           depot="${{ github.repository }}"
-          gh release create "${{ inputs.tag }}" -R "$depot" --title "${{ inputs.tag }}" \
-            --notes "Tuiles Valhalla · ${{ inputs.region }} · $TAILLE · OpenStreetMap (ODbL)" \
+          gh release create "$tag" -R "$depot" --title "$tag" \
+            --notes "Tuiles Valhalla · ${{ matrix.region.chemin }} · $TAILLE · OpenStreetMap (ODbL)" \
             || echo "Release déjà présente"
-          gh release upload "${{ inputs.tag }}" \
-            "data/${{ inputs.tag }}.tar" "data/${{ inputs.tag }}.json" \
-            -R "$depot" --clobber
+          # `--clobber` : reconstruire une région remplace ses tuiles au lieu
+          # d'échouer, l'adresse de téléchargement reste donc la même.
+          gh release upload "$tag" "data/$tag.tar" "data/$tag.json" -R "$depot" --clobber
 
       - name: Récapitulatif
         run: |
           {
-            echo "### Tuiles Valhalla"
+            echo "### ${{ matrix.region.tag }}"
             echo ""
-            echo "- Région : \`${{ inputs.region }}\`"
+            echo "- Région : \`${{ matrix.region.chemin }}\`"
             echo "- Taille : **$TAILLE**"
-            echo "- Adresse : \`https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/${{ inputs.tag }}.tar\`"
           } >> "$GITHUB_STEP_SUMMARY"
