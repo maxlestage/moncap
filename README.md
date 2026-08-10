@@ -380,6 +380,11 @@ Relancer `python3 frontend/traductions.py` après toute modification. Le
 groupe de fichiers du projet Xcode est synchronisé : le catalogue déposé dans
 `MonCapGPS/` est intégré sans manipulation.
 
+`python3 frontend/traductions.py --verifie` réunit quatre contrôles, tenus par
+un job d'intégration continue. Aucun des défauts qu'ils attrapent ne fait
+échouer la compilation — une chaîne non traduite s'affiche simplement en
+français — et tous ont été trouvés à la main une première fois.
+
 Deux pièges rencontrés, à connaître avant d'ajouter du texte :
 
 - `Text("littéral")` se traduit tout seul (le littéral sert de clé), mais
@@ -404,8 +409,18 @@ Chacun porte :
 | Relief | dénivelé ↗ / ↘, avec avertissement au-delà de 150 m |
 | Coût | carburant (consommation du véhicule × prix local réel) + péages estimés |
 
-Hors ligne, Valhalla n'en renvoie qu'un seul : le comparateur suppose le
-réseau.
+**Hors ligne, cinq** : Valhalla sait produire des variantes — le paramètre
+`alternates` — et les renvoie à côté de l'itinéraire principal, chacune dans
+son propre objet `trip`. Le calcul reste local : demander des variantes coûte
+du processeur, pas de la donnée. Les péages viennent alors de
+`summary.has_toll`, si bien que l'estimation carburant + péages fonctionne
+aussi sans réseau. Ce qui manque hors ligne : le dénivelé (il vient d'une API)
+et le trafic.
+
+Le **recalcul** en cours de route est traité localement **avant** toute
+tentative réseau : attendre l'échec d'une requête ferait patienter le bandeau
+« Recalcul… » au pire moment, celui où l'on vient de rater une sortie. Trois
+relevés GPS à plus de 55 m de l'itinéraire le déclenchent.
 
 **Temps réel (WebSocket)** :
 

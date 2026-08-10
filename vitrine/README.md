@@ -70,7 +70,7 @@ rendue **à la construction** (`renderToStaticMarkup` dans `build.tsx`), et
 | | poids livré |
 | --- | --- |
 | Paquet React classique | 397 Ko de JavaScript |
-| Rendu à la construction | **13,6 Ko de HTML + 9,1 Ko de CSS + 14,3 Ko de logo**, zéro JavaScript |
+| Rendu à la construction | **13,9 Ko de HTML + 9,1 Ko de CSS + 14,3 Ko de logo**, zéro JavaScript |
 
 React et TypeScript restent la façon d'écrire la page — typage du contenu,
 composition, relecture. Ils ne sont simplement pas du voyage. `src/index.tsx`
@@ -124,7 +124,8 @@ Les libellés visibles **dans les maquettes** ne sont pas retapés : ils
 viennent de `src/appstrings.ts`, engendré par `frontend/traductions.py` à
 partir du tableau qui alimente aussi le catalogue iOS. Un écran dessiné ici
 dit donc exactement ce que l'application affiche, dans la même langue, et ne
-peut pas s'en écarter sans que la génération le montre.
+peut pas s'en écarter sans que la génération le montre. Un job d'intégration
+continue refuse d'ailleurs un module engendré qui aurait divergé du tableau.
 
 Les lignes chiffrées sont composées en versant des valeurs d'exemple dans les
 **formats de l'application** (`src/traduire.ts`), plutôt qu'en recopiant des

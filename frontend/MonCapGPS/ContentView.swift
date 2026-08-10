@@ -2487,7 +2487,7 @@ struct MapHomeView: View {
                 }
                 // Incendies (NASA FIRMS) : clé optionnelle saisie sur l'appareil
                 // (sinon le serveur fournit les feux si configuré).
-                Section("Incendies 🔥 (NASA FIRMS)") {
+                Section("Incendies 🔥 (NASA FIRMS)") {
                     TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -2505,15 +2505,15 @@ struct MapHomeView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
-                Section("Cartes hors ligne 🗺️") {
+                Section("Cartes hors ligne 🗺️") {
                     Button {
                         showPlaces = false
                         showOfflineMap = true
                     } label: {
-                        Label("Télécharger des zones", systemImage: "arrow.down.circle")
+                        Label("Télécharger les fonds de carte", systemImage: "arrow.down.circle")
                     }
                     Text(
-                        "Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription."
+                        "Les images de la carte, pour la voir sans réseau. Le calcul d'itinéraire est séparé : c'est « Itinéraires sans réseau » ci-dessous. Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -2524,7 +2524,7 @@ struct MapHomeView: View {
                     // Calcul d'itinéraire sans réseau : distinct des cartes,
                     // car il repose sur d'autres données — un graphe routier,
                     // pas des tuiles d'affichage.
-                    DisclosureGroup("Itinéraires sans réseau 🧭") {
+                    DisclosureGroup("Itinéraires sans réseau 🧭") {
                         Toggle("Naviguer hors ligne", isOn: $horsLigne)
                             .disabled(!router.ready)
                         if horsLigne && router.ready {
@@ -2666,7 +2666,7 @@ struct MapHomeView: View {
                 }
                 // Trafic temps réel TomTom : clé optionnelle saisie sur
                 // l'appareil (sinon le serveur fournit le trafic si configuré).
-                Section("Trafic 🚦 (TomTom)") {
+                Section("Trafic 🚦 (TomTom)") {
                     TextField("Clé API TomTom", text: $tomtomKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
