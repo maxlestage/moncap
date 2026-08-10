@@ -465,22 +465,6 @@
         }
       }
     },
-    "Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No key is needed: the maps come from OpenStreetMap via OpenFreeMap, free and without signing up."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No hace falta ninguna clave: los mapas vienen de OpenStreetMap a través de OpenFreeMap, libres y sin registro."
-          }
-        }
-      }
-    },
     "Aucune position — utilise « Enregistrer ma position ».": {
       "localizations": {
         "en": {
@@ -705,18 +689,18 @@
         }
       }
     },
-    "Cartes hors ligne 🗺️": {
+    "Cartes hors ligne 🗺️": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Offline maps 🗺️"
+            "value": "Offline maps 🗺️"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mapas sin conexión 🗺️"
+            "value": "Mapas sin conexión 🗺️"
           }
         }
       }
@@ -1345,18 +1329,18 @@
         }
       }
     },
-    "Incendies 🔥 (NASA FIRMS)": {
+    "Incendies 🔥 (NASA FIRMS)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wildfires 🔥 (NASA FIRMS)"
+            "value": "Wildfires 🔥 (NASA FIRMS)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Incendios 🔥 (NASA FIRMS)"
+            "value": "Incendios 🔥 (NASA FIRMS)"
           }
         }
       }
@@ -1441,18 +1425,18 @@
         }
       }
     },
-    "Itinéraires sans réseau 🧭": {
+    "Itinéraires sans réseau 🧭": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routes without signal 🧭"
+            "value": "Routes without signal 🧭"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rutas sin cobertura 🧭"
+            "value": "Rutas sin cobertura 🧭"
           }
         }
       }
@@ -1517,6 +1501,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La más sencilla"
+          }
+        }
+      }
+    },
+    "Les images de la carte, pour la voir sans réseau. Le calcul d'itinéraire est séparé : c'est « Itinéraires sans réseau » ci-dessous. Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The map imagery, so you can see it without signal. Routing is separate: that is “Routes without signal”, below. No key is needed: the maps come from OpenStreetMap via OpenFreeMap, free and without signing up."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las imágenes del mapa, para verlo sin cobertura. El cálculo de rutas va aparte: es «Rutas sin cobertura», aquí debajo. No hace falta ninguna clave: los mapas vienen de OpenStreetMap a través de OpenFreeMap, libres y sin registro."
           }
         }
       }
@@ -2593,18 +2593,18 @@
         }
       }
     },
-    "Trafic 🚦 (TomTom)": {
+    "Trafic 🚦 (TomTom)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Traffic 🚦 (TomTom)"
+            "value": "Traffic 🚦 (TomTom)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tráfico 🚦 (TomTom)"
+            "value": "Tráfico 🚦 (TomTom)"
           }
         }
       }
@@ -2657,18 +2657,18 @@
         }
       }
     },
-    "Télécharger des zones": {
+    "Télécharger les fonds de carte": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download areas"
+            "value": "Download the map backgrounds"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descargar zonas"
+            "value": "Descargar los fondos de mapa"
           }
         }
       }
