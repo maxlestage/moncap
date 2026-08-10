@@ -2331,8 +2331,15 @@ struct MapHomeView: View {
             }
             Spacer()
             VStack(spacing: 14) {
-                fireMapButton
-                offlineMapButton
+                // Au volant, l'écran se dégage. La carte des feux et le
+                // téléchargement des fonds se consultent à l'arrêt : les
+                // garder pendant le guidage, c'est deux cibles de plus entre
+                // le pouce et le bouton « recentrer », au moment où l'on
+                // regarde le moins l'écran.
+                if !nav.active {
+                    fireMapButton
+                    offlineMapButton
+                }
                 map3DButton
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
                 reportButton
