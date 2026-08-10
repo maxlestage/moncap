@@ -1,33 +1,35 @@
 import {
-  ATOUTS,
   AUTEUR,
-  CHIFFRES,
   CONNEXION,
   DEPOT,
-  FRANCHISE,
-  HORS_LIGNE,
   LIEUX,
   MAQUETTE_ITINERAIRES,
   MAQUETTE_REGIONS,
   MODES,
-  TECHNIQUES,
 } from "./content";
+import type { Contenu } from "./langues";
+import { LANGUES } from "./langues";
 
 /**
  * Vitrine d'une page, pensée pour le pouce d'abord.
  *
- * Rien d'interactif : une page qui ne fait que présenter n'a pas besoin
- * d'état, et le lecteur n'a pas à attendre du JavaScript pour lire. React
- * n'est ici que pour la structure et le typage du contenu.
+ * Rien de scripté : une page qui ne fait que présenter n'a pas besoin d'état,
+ * et le lecteur n'a pas à attendre du JavaScript pour lire. Même le choix du
+ * thème passe par des boutons radio et `:has()`, sans une ligne de script.
  *
  * Les maquettes sont du HTML et du CSS, pas des images : elles restent nettes
- * à toutes les résolutions, suivent le thème sombre, se lisent au lecteur
- * d'écran, et ne coûtent pas un octet de téléchargement supplémentaire. Ce
- * sont des dessins de l'interface, marqués comme tels.
+ * à toutes les résolutions, suivent le thème, se lisent au lecteur d'écran,
+ * et ne coûtent pas un octet de téléchargement supplémentaire. Ce sont des
+ * dessins de l'interface, marqués comme tels.
  */
 
+export type Ressources = { readonly logo: string };
+
+/** Les quatre thèmes, dans l'ordre des libellés fournis par la langue. */
+const THEMES = ["auto", "clair", "sombre", "marine"] as const;
+
 /** L'écran de comparaison : le cœur de l'app quand le réseau est là. */
-function MaquetteComparateur() {
+function MaquetteComparateur({ c }: { c: Contenu }) {
   return (
     <figure className="maquette">
       <div className="ecran">
@@ -51,28 +53,28 @@ function MaquetteComparateur() {
                 </p>
                 {r.denivele && <p className="detail">{r.denivele}</p>}
                 <p className="detail">{r.cout}</p>
-                {r.avertissement && (
-                  <p className="alerte">{r.avertissement}</p>
-                )}
+                {r.avertissement && <p className="alerte">{r.avertissement}</p>}
               </div>
             </li>
           ))}
         </ul>
 
+        {/* Le comparateur en propose jusqu'à quinze : trois lignes seules
+            laisseraient croire à trois. */}
+        <p className="reste" aria-hidden="true">
+          ⌄ {c.reste}
+        </p>
         <p className="demarrer" aria-hidden="true">
           Démarrer
         </p>
       </div>
-      <figcaption>
-        Dessin de l'écran de comparaison — mise en page et étiquettes réelles,
-        valeurs d'exemple.
-      </figcaption>
+      <Legende c={c} texte={c.legendes.itineraires} />
     </figure>
   );
 }
 
 /** Le bandeau de guidage, avec les pastilles vitesse et météo. */
-function MaquetteGuidage() {
+function MaquetteGuidage({ c }: { c: Contenu }) {
   return (
     <figure className="maquette">
       <div className="ecran">
@@ -94,16 +96,13 @@ function MaquetteGuidage() {
           </span>
         </div>
       </div>
-      <figcaption>
-        Le bandeau de manœuvre, la vitesse et la limite du moment, la météo —
-        dessin d'écran, valeurs d'exemple.
-      </figcaption>
+      <Legende c={c} texte={c.legendes.guidage} />
     </figure>
   );
 }
 
 /** Le bandeau des catégories de lieux. */
-function MaquetteLieux() {
+function MaquetteLieux({ c }: { c: Contenu }) {
   return (
     <figure className="maquette">
       <div className="ecran">
@@ -115,16 +114,13 @@ function MaquetteLieux() {
           ))}
         </ul>
       </div>
-      <figcaption>
-        Les 19 catégories, avec les libellés de l'application — montrées ici
-        d'un seul tenant, alors que le bandeau défile sur le téléphone.
-      </figcaption>
+      <Legende c={c} texte={c.legendes.lieux} />
     </figure>
   );
 }
 
 /** L'écran des régions installées, avec un téléchargement en cours. */
-function MaquetteRegions() {
+function MaquetteRegions({ c }: { c: Contenu }) {
   return (
     <figure className="maquette">
       <div className="ecran">
@@ -144,24 +140,85 @@ function MaquetteRegions() {
                   <div className="jauge" aria-hidden="true">
                     <span style={{ width: `${r.avancement}%` }} />
                   </div>
-                  <p className="encours">
-                    {r.avancement} % — le transfert continue en arrière-plan
-                  </p>
+                  <p className="encours">{r.avancement} %</p>
                 </>
               )}
             </li>
           ))}
         </ul>
       </div>
-      <figcaption>
-        Noms et poids réels, lus sur les Releases publiées ; seul l'avancement
-        est mis en scène.
-      </figcaption>
+      <Legende c={c} texte={c.legendes.regions} />
     </figure>
   );
 }
 
-export function App() {
+/**
+ * La légende d'une maquette, suivie — hors français — du rappel que les
+ * écrans dépeints sont en français.
+ */
+function Legende({ c, texte }: { c: Contenu; texte: string }) {
+  return (
+    <figcaption>
+      {texte}
+      {c.legendes.enFrancais && (
+        <>
+          {" "}
+          <span className="vf">{c.legendes.enFrancais}</span>
+        </>
+      )}
+    </figcaption>
+  );
+}
+
+/**
+ * Choix du thème, sans script : quatre boutons radio que la feuille de style
+ * lit avec `:has()`. Le choix ne survit pas à un changement de page — il n'y
+ * a rien pour le mémoriser sans JavaScript, et le dire vaut mieux que de
+ * laisser croire le contraire.
+ */
+function Themes({ c }: { c: Contenu }) {
+  return (
+    <fieldset className="reglages">
+      <legend>{c.theme.libelle}</legend>
+      {THEMES.map((t, i) => (
+        <span key={t}>
+          <input
+            type="radio"
+            name="theme"
+            id={`th-${t}`}
+            defaultChecked={t === "auto"}
+          />
+          <label htmlFor={`th-${t}`}>{c.theme.noms[i]}</label>
+        </span>
+      ))}
+    </fieldset>
+  );
+}
+
+/** Les trois langues, la courante marquée comme telle. */
+function Langues({ c }: { c: Contenu }) {
+  return (
+    <nav className="langues" aria-label={c.langueLibelle}>
+      {LANGUES.map((l) =>
+        l.code === c.code ? (
+          <span key={l.code} aria-current="true">
+            {l.nom}
+          </span>
+        ) : (
+          <a key={l.code} href={l.chemin} hrefLang={l.code} lang={l.code}>
+            {l.nom}
+          </a>
+        ),
+      )}
+    </nav>
+  );
+}
+
+export function App({ c, res }: { c: Contenu; res: Ressources }) {
+  // La mesure est mise en valeur au milieu de la phrase : le gabarit évite
+  // de couper le texte en trois morceaux traduits séparément.
+  const [avant, apres] = c.preuve.texte.split("{mesure}");
+
   return (
     <>
       <header className="hero">
@@ -169,84 +226,73 @@ export function App() {
             s'aligner sur celui du corps : d'où ce conteneur, de la même
             largeur que `main`. */}
         <div className="dedans">
-          <p className="marque">MonCap GPS</p>
+          <div className="barre">
+            <p className="marque">
+              <img
+                className="logo"
+                src={res.logo}
+                width="40"
+                height="40"
+                alt=""
+              />
+              MonCap GPS
+            </p>
+            <Langues c={c} />
+          </div>
+
           <h1>
-            Comparez, puis roulez
+            {c.h1[0]}
             <br />
-            <em>avec ou sans réseau</em>
+            <em>{c.h1[1]}</em>
           </h1>
-          <p className="chapeau">
-            Un GPS pour iPhone qui met les itinéraires côte à côte — durée,
-            virages, dénivelé, carburant, péages — puis vous guide. Téléchargez
-            votre région une fois, et il continue de calculer tout seul :
-            vallées, tunnels, étranger.
-          </p>
+          <p className="chapeau">{c.chapeau}</p>
 
           <div className="actions">
             <a className="bouton" href={CONNEXION}>
-              Se connecter
+              {c.seConnecter}
             </a>
             <a className="lien" href={DEPOT}>
-              Voir le projet
+              {c.voirProjet}
             </a>
           </div>
 
           <dl className="chiffres">
-            {CHIFFRES.map((c) => (
-              <div key={c.legende}>
-                <dt>{c.valeur}</dt>
-                <dd>{c.legende}</dd>
+            {c.chiffres.map((n) => (
+              <div key={n.legende}>
+                <dt>{n.valeur}</dt>
+                <dd>{n.legende}</dd>
               </div>
             ))}
           </dl>
+
+          <Themes c={c} />
         </div>
       </header>
 
       <main>
         <section aria-labelledby="comparateur-titre">
-          <h2 id="comparateur-titre">Le trajet vous est présenté, pas imposé</h2>
-          <p className="intro">
-            Plusieurs itinéraires côte à côte, chacun étiqueté <em>le plus
-            simple</em>, <em>le plus rapide</em> ou <em>le plus court</em>. Pour
-            chacun : la durée, la distance, le nombre de virages, l'heure
-            d'arrivée, le dénivelé — et ce que ça coûte.
-          </p>
-          <MaquetteComparateur />
-          <p className="intro">
-            Le carburant est calculé avec <strong>la consommation de votre
-            véhicule</strong> et le prix réel des stations autour de vous (open
-            data officiel), pas une moyenne nationale. Les péages s'ajoutent
-            quand l'itinéraire en emprunte. Une forte côte est signalée avant le
-            départ, pas découverte au milieu. À pied, à vélo ou en voiture, et
-            l'on peut demander d'éviter péages ou autoroutes.
-          </p>
+          <h2 id="comparateur-titre">{c.comparateur.titre}</h2>
+          <p className="intro">{c.comparateur.intro}</p>
+          <MaquetteComparateur c={c} />
+          <p className="intro">{c.comparateur.apres}</p>
         </section>
 
         <section aria-labelledby="guidage-titre">
-          <h2 id="guidage-titre">Puis il vous emmène</h2>
-          <p className="intro">
-            La flèche suit la manœuvre réelle, la distance au prochain virage se
-            met à jour, et le numéro de sortie s'affiche sous la consigne. La
-            vitesse du moment est comparée à la limite de la route, lue sur
-            OpenStreetMap : elle passe au rouge quand vous la dépassez.
-          </p>
-          <MaquetteGuidage />
+          <h2 id="guidage-titre">{c.guidage.titre}</h2>
+          <p className="intro">{c.guidage.intro}</p>
+          <MaquetteGuidage c={c} />
         </section>
 
         <section aria-labelledby="lieux-titre">
-          <h2 id="lieux-titre">Ce qu'il y a autour</h2>
-          <p className="intro">
-            Un bandeau de catégories au-dessus de la carte : une touche, et les
-            lieux apparaissent dans la zone visible. L'essence affiche le prix à
-            la pompe pour le carburant que vous avez choisi.
-          </p>
-          <MaquetteLieux />
+          <h2 id="lieux-titre">{c.lieux.titre}</h2>
+          <p className="intro">{c.lieux.intro}</p>
+          <MaquetteLieux c={c} />
         </section>
 
-        <section aria-labelledby="atouts">
-          <h2 id="atouts">Et aussi</h2>
+        <section aria-labelledby="atouts-titre">
+          <h2 id="atouts-titre">{c.atoutsTitre}</h2>
           <ul className="cartes">
-            {ATOUTS.map((a) => (
+            {c.atouts.map((a) => (
               <li key={a.titre}>
                 <span className="emoji" aria-hidden="true">
                   {a.emoji}
@@ -259,16 +305,11 @@ export function App() {
         </section>
 
         <section aria-labelledby="hors-ligne-titre">
-          <h2 id="hors-ligne-titre">Quand le réseau tombe</h2>
-          <p className="intro">
-            <strong>206 régions</strong> dans <strong>49 pays d'Europe</strong>,
-            téléchargeables une par une. Plusieurs peuvent cohabiter sur le
-            téléphone, et le transfert d'un paquet ne demande pas de rester
-            devant l'écran.
-          </p>
-          <MaquetteRegions />
+          <h2 id="hors-ligne-titre">{c.horsLigne.titre}</h2>
+          <p className="intro">{c.horsLigne.intro}</p>
+          <MaquetteRegions c={c} />
           <ul className="cartes">
-            {HORS_LIGNE.map((a) => (
+            {c.horsLigneCartes.map((a) => (
               <li key={a.titre}>
                 <span className="emoji" aria-hidden="true">
                   {a.emoji}
@@ -281,23 +322,19 @@ export function App() {
         </section>
 
         <section className="preuve" aria-labelledby="preuve-titre">
-          <h2 id="preuve-titre">Une mesure vaut mieux qu'une promesse</h2>
+          <h2 id="preuve-titre">{c.preuve.titre}</h2>
           <p>
-            Bordeaux → Limoges, <strong>222,5 km en 2 h 16</strong>, calculé
-            sans aucun réseau sur le paquet Nouvelle-Aquitaine. Ce trajet
-            traverse une ancienne frontière de découpage : les routes y sont
-            recousues à la construction, pas rafistolées sur le téléphone.
+            {avant}
+            <strong>{c.preuve.mesure}</strong>
+            {apres}
           </p>
-          <p className="note">
-            Cette vérification tourne chaque semaine, sur le paquet réellement
-            publié.
-          </p>
+          <p className="note">{c.preuve.note}</p>
         </section>
 
         <section aria-labelledby="pile-titre" className="pile">
-          <h2 id="pile-titre">Ce qu'il y a dessous</h2>
+          <h2 id="pile-titre">{c.pileTitre}</h2>
           <dl>
-            {TECHNIQUES.map((p) => (
+            {c.pile.map((p) => (
               <div key={p.domaine}>
                 <dt>{p.domaine}</dt>
                 <dd>
@@ -313,9 +350,9 @@ export function App() {
         </section>
 
         <section aria-labelledby="franchise-titre" className="franchise">
-          <h2 id="franchise-titre">Ce qu'elle ne fait pas</h2>
+          <h2 id="franchise-titre">{c.franchiseTitre}</h2>
           <ul>
-            {FRANCHISE.map((f) => (
+            {c.franchise.map((f) => (
               <li key={f}>{f}</li>
             ))}
           </ul>
@@ -324,17 +361,12 @@ export function App() {
 
       <footer>
         <p className="signature">
-          Conçu et développé par <strong>{AUTEUR}</strong>.
+          {c.signature} <strong>{AUTEUR}</strong>.
         </p>
+        <p>{c.credits}</p>
         <p>
-          Cartes et données routières <strong>OpenStreetMap</strong> (ODbL),
-          calcul d'itinéraire <strong>Valhalla</strong>, trafic{" "}
-          <strong>TomTom</strong>, météo <strong>open-meteo</strong>, prix des
-          carburants <strong>data.economie.gouv.fr</strong>, foyers{" "}
-          <strong>NASA FIRMS</strong>, photos aériennes <strong>IGN</strong>.
-        </p>
-        <p>
-          <a href={CONNEXION}>Se connecter</a> · <a href={DEPOT}>Code source</a>
+          <a href={CONNEXION}>{c.seConnecter}</a> ·{" "}
+          <a href={DEPOT}>{c.codeSource}</a>
         </p>
       </footer>
     </>

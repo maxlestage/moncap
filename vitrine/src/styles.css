@@ -7,28 +7,83 @@
  * besoin d'un moteur d'utilitaires, et le poids se voit sur un forfait.
  */
 
+/*
+ * Les couleurs de marque ne sont pas choisies ici : elles sont relevées dans
+ * l'application. `--marine` est le `LaunchBackground` du catalogue d'assets
+ * — rgb(0.055, 0.165, 0.369) — et `--bleu` le bas du dégradé de l'écran de
+ * garde, rgb(0.10, 0.34, 0.90). Le cyan et l'orange sont échantillonnés sur
+ * l'icône : les routes de la carte qu'elle dessine.
+ */
 :root {
-  --encre: #0b1220;
+  --marine: #0e2a5e;
+  --bleu: #1a57e6;
+  --cyan: #3898c8;
+  --orange: #f8a838;
+
+  --encre: var(--marine);
   --papier: #ffffff;
-  --texte: #1c2534;
-  --doux: #5b6577;
-  --trait: #e3e7ee;
-  --accent: #1f6feb;
-  --accent-doux: #eaf1fe;
+  --texte: #16213a;
+  --doux: #55617a;
+  --trait: #dfe5f0;
+  --accent: #1550cf;
+  --accent-doux: #e8effd;
+  /* Ce qui s'écrit SUR l'accent : le blanc ne tient pas sur un bleu pâle. */
+  --sur-accent: #ffffff;
   --rayon: 14px;
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
+/* --- Thèmes ---------------------------------------------------------------
+ * Quatre choix, sans une ligne de script : des boutons radio en haut de page
+ * et `:has()` pour les lire. Le choix ne survit pas à un changement de page —
+ * rien ne peut le mémoriser sans JavaScript, et la page le dit plutôt que de
+ * laisser croire le contraire.
+ *
+ * « Auto » ne redéfinit rien et laisse `prefers-color-scheme` décider ; les
+ * trois autres passent devant, la sélection explicite l'emportant toujours.
+ */
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    --encre: #060a12;
-    --papier: #0f1522;
-    --texte: #e8ecf3;
-    --doux: #9aa4b6;
-    --trait: #1e2637;
-    --accent: #6ea8ff;
-    --accent-doux: #16233a;
+  :root:has(#th-auto:checked) {
+    color-scheme: dark;
+    --papier: #0d1424;
+    --texte: #e7ecf6;
+    --doux: #97a3ba;
+    --trait: #1f2a41;
+    --accent: #6ea3ff;
+    --accent-doux: #152b45;
+    --sur-accent: #0a1730;
   }
+}
+
+:root:has(#th-clair:checked) {
+  color-scheme: light;
+}
+
+:root:has(#th-sombre:checked) {
+  color-scheme: dark;
+  --encre: #05080f;
+  --papier: #0d1424;
+  --texte: #e7ecf6;
+  --doux: #97a3ba;
+  --trait: #1f2a41;
+  --accent: #6ea3ff;
+  --accent-doux: #16233c;
+  --sur-accent: #0a1730;
+}
+
+/* Le thème de marque : le papier prend le bleu profond du lancement, comme
+   l'écran de garde de l'application. */
+:root:has(#th-marine:checked) {
+  color-scheme: dark;
+  --encre: #081a3c;
+  --papier: #0b2049;
+  --texte: #eaf1ff;
+  --doux: #9fb6da;
+  --trait: #1b3a66;
+  --accent: #7fb0ff;
+  --accent-doux: #10306a;
+  --sur-accent: #08203f;
 }
 
 * {
@@ -67,7 +122,8 @@ a {
 /* --- Bandeau d'entrée ---------------------------------------------------- */
 
 .hero {
-  background: var(--encre);
+  /* Le dégradé de l'écran de garde de l'application, dans le même sens. */
+  background: linear-gradient(180deg, var(--marine), var(--bleu));
   color: #f4f7fc;
   /* Le fond va d'un bord à l'autre : aucune marge latérale ici, elle est
      portée par `.dedans` pour que le texte tombe sur la même verticale que
@@ -82,13 +138,105 @@ a {
   padding-inline: 1.25rem;
 }
 
+.barre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 1.7rem;
+}
+
 .marque {
-  margin: 0 0 1.5rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  font-size: 0.8rem;
+  color: #cfe0fb;
+}
+
+/* L'icône de l'application, arrondie comme iOS le fait. */
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.35);
+}
+
+.langues {
+  display: flex;
+  gap: 0.15rem;
   font-size: 0.78rem;
-  color: #8fa3c4;
+  background: rgb(255 255 255 / 0.1);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.langues a,
+.langues span {
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: #cfe0fb;
+  font-weight: 600;
+}
+
+.langues [aria-current] {
+  background: #f4f7fc;
+  color: var(--marine);
+}
+
+/* Choix du thème : les boutons radio pilotent tout, mais ne se voient pas. */
+.reglages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 2.2rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.reglages legend {
+  padding: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9fb6da;
+}
+
+.reglages input {
+  /* Hors du flux visuel mais toujours focalisable au clavier : un
+     `display: none` retirerait la navigation au clavier avec la case. */
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.reglages label {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #cfe0fb;
+  cursor: pointer;
+}
+
+.reglages input:checked + label {
+  background: #f4f7fc;
+  border-color: #f4f7fc;
+  color: var(--marine);
+}
+
+.reglages input:focus-visible + label {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
 .hero h1 {
@@ -118,10 +266,14 @@ a {
   margin-top: 1.9rem;
 }
 
+/* Le bouton principal vit sur le dégradé de marque, pas sur le papier du
+   thème : ses couleurs sont donc fixes. Blanc sur bleu profond, c'est le
+   contraste le plus franc — un bouton bleu sur un fond bleu ne ressort
+   jamais, quelle que soit la nuance. */
 .bouton {
   display: inline-block;
-  background: var(--accent);
-  color: #fff;
+  background: #ffffff;
+  color: var(--marine);
   text-decoration: none;
   font-weight: 650;
   padding: 0.85rem 1.5rem;
@@ -142,9 +294,10 @@ a {
 
 .chiffres {
   display: grid;
-  /* Deux colonnes sur un téléphone : à quatre de front, « régions
-     téléchargeables » se briserait en trois lignes dans un couloir. */
-  grid-template-columns: repeat(2, 1fr);
+  /* `auto-fit` plutôt qu'un nombre de colonnes : deux de front sur un
+     téléphone, davantage ensuite, et ajouter un chiffre ne demande pas de
+     revenir toucher la feuille. */
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
   gap: 1.1rem 0.75rem;
   margin: 2.4rem 0 0;
   padding: 0;
@@ -220,6 +373,11 @@ h2 {
   margin-top: 0.6rem;
   font-size: 0.8rem;
   color: var(--doux);
+}
+
+/* Le rappel que les écrans dépeints sont en français, hors page française. */
+.vf {
+  font-style: italic;
 }
 
 /* Sélecteur à pied / vélo / voiture. */
@@ -323,6 +481,15 @@ h2 {
   font-size: 0.78rem;
   font-weight: 700;
   margin-top: 0.2rem;
+}
+
+/* « et 12 autres itinéraires » : trois lignes seules laisseraient croire
+   que le comparateur n'en propose que trois. */
+.reste {
+  margin: 0.55rem 0 0;
+  text-align: center;
+  color: #a9b7cd;
+  font-size: 0.78rem;
 }
 
 .demarrer {
@@ -652,9 +819,6 @@ footer p {
   main,
   footer {
     padding-inline: 2.5rem;
-  }
-  .chiffres {
-    grid-template-columns: repeat(4, 1fr);
   }
   .cartes {
     grid-template-columns: repeat(2, 1fr);

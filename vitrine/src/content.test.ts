@@ -1,40 +1,59 @@
 import { expect, test } from "bun:test";
 import {
-  ATOUTS,
-  CHIFFRES,
-  FRANCHISE,
-  HORS_LIGNE,
+  ITINERAIRES_MAX,
   LIEUX,
   MAQUETTE_ITINERAIRES,
   MAQUETTE_REGIONS,
-  TECHNIQUES,
+  OUTILS,
 } from "./content";
+import { LANGUES } from "./langues";
 
 /**
- * En ajoutant les fonctions en ligne, j'avais retiré des choses du hors
- * ligne : le chiffre des pays d'Europe et la carte du téléchargement région
- * par région. Une réécriture emporte ce genre de contenu sans que rien ne
- * proteste — la page reste valide, elle dit simplement moins.
- *
- * Ces assertions ne défendent pas une formulation mais une **matière** : ce
- * que la page doit continuer d'expliquer. Les reformuler est libre ; les
- * faire disparaître ne l'est pas.
+ * Ces tests ne défendent pas une formulation mais une **matière** : ce que la
+ * page doit continuer de dire, et ce qu'elle ne doit pas se mettre à dire.
+ * Reformuler reste libre ; supprimer, se contredire ou vieillir ne l'est pas.
  */
-test("le hors ligne garde ses trois piliers", () => {
-  const texte = HORS_LIGNE.map((a) => `${a.titre} ${a.texte}`)
-    .join(" ")
+
+/** Replie une chaîne pour comparer à travers les langues. */
+function sansAccents(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
-  // Calcul local, granularité du téléchargement, transfert en arrière-plan.
-  expect(texte).toContain("iphone");
-  expect(texte).toContain("monaco");
-  expect(texte).toContain("arrière-plan");
-  expect(HORS_LIGNE.length).toBeGreaterThanOrEqual(3);
+}
+
+// --- Ce que la page dit de factuel ---------------------------------------
+
+/**
+ * La pile est affichée sans numéro de version, à dessein : une version sur
+ * une page vieillit toute seule et personne ne revient la corriger. La règle
+ * est facile à réintroduire sans y penser — « React 19 » se tape tout seul —
+ * d'où ce test plutôt qu'un commentaire.
+ */
+test("aucune version dans les technologies", () => {
+  const avecChiffre = OUTILS.flat().filter((o) => /\d/.test(o));
+  expect(avecChiffre).toEqual([]);
 });
 
-test("le bandeau garde l'étendue européenne", () => {
-  const legendes = CHIFFRES.map((c) => c.legende).join(" ");
-  expect(legendes).toContain("pays d'Europe");
-  expect(legendes).toContain("régions");
+test("aucun doublon parmi les outils ni les lieux", () => {
+  const outils = OUTILS.flat();
+  expect(new Set(outils).size).toBe(outils.length);
+
+  const noms = LIEUX.map((l) => l.nom);
+  expect(new Set(noms).size).toBe(noms.length);
+  const emojis = LIEUX.map((l) => l.emoji);
+  expect(new Set(emojis).size).toBe(emojis.length);
+});
+
+/** Une maquette d'un seul itinéraire ne montrerait pas de comparaison. */
+test("la maquette compare plusieurs itinéraires", () => {
+  expect(MAQUETTE_ITINERAIRES.length).toBeGreaterThanOrEqual(2);
+  const etiquettes = MAQUETTE_ITINERAIRES.map((r) => r.etiquette);
+  expect(new Set(etiquettes).size).toBe(etiquettes.length);
+  const teintes = MAQUETTE_ITINERAIRES.map((r) => r.teinte);
+  expect(new Set(teintes).size).toBe(teintes.length);
+  // Elle ne peut pas montrer plus d'itinéraires que l'app n'en propose.
+  expect(MAQUETTE_ITINERAIRES.length).toBeLessThanOrEqual(ITINERAIRES_MAX);
 });
 
 /** Les poids affichés viennent des Releases : une unité doit y figurer. */
@@ -46,76 +65,99 @@ test("les régions de la maquette portent un poids lisible", () => {
   expect(MAQUETTE_REGIONS.some((r) => r.avancement !== undefined)).toBe(true);
 });
 
-/**
- * Le bandeau annonce « 19 catégories » et la maquette les montre toutes :
- * les deux viennent du même endroit, mais rien n'oblige le chiffre à suivre
- * la liste. Ajouter une catégorie sans toucher au compteur donnerait une
- * page qui se contredit d'un écran à l'autre.
- */
-test("le chiffre annoncé suit la liste des lieux", () => {
-  const annonce = CHIFFRES.find((c) => c.legende.includes("catégories"));
-  expect(annonce?.valeur).toBe(String(LIEUX.length));
-});
+// --- Les trois langues ---------------------------------------------------
 
-/** Une maquette d'un seul itinéraire ne montrerait pas de comparaison. */
-test("la maquette compare plusieurs itinéraires", () => {
-  expect(MAQUETTE_ITINERAIRES.length).toBeGreaterThanOrEqual(2);
-  const etiquettes = MAQUETTE_ITINERAIRES.map((r) => r.etiquette);
-  expect(new Set(etiquettes).size).toBe(etiquettes.length);
-  const teintes = MAQUETTE_ITINERAIRES.map((r) => r.teinte);
-  expect(new Set(teintes).size).toBe(teintes.length);
-});
-
-/** Les emoji et libellés servent de clés de rendu et d'identité visuelle. */
-test("aucun doublon parmi les lieux", () => {
-  const noms = LIEUX.map((l) => l.nom);
-  expect(new Set(noms).size).toBe(noms.length);
-  const emojis = LIEUX.map((l) => l.emoji);
-  expect(new Set(emojis).size).toBe(emojis.length);
+test("les trois langues sont présentes, à des adresses distinctes", () => {
+  expect(LANGUES.map((l) => l.code)).toEqual(["fr", "es", "en"]);
+  const chemins = LANGUES.map((l) => l.chemin);
+  expect(new Set(chemins).size).toBe(chemins.length);
+  // Le français occupe la racine : c'est la langue du projet.
+  expect(LANGUES[0]?.chemin).toBe("/");
 });
 
 /**
- * La pile est affichée sans numéro de version, à dessein : une version sur
- * une page vieillit toute seule et personne ne revient la corriger. La règle
- * est facile à réintroduire sans y penser — « React 19 » se tape tout seul —
- * d'où ce test plutôt qu'un commentaire.
+ * Une traduction bâclée se repère à ce qu'elle laisse tomber. Le type impose
+ * la présence des champs, pas leur contenu : une chaîne vide compilerait.
  */
-test("aucune version dans les technologies", () => {
-  const chiffres = TECHNIQUES.flatMap((p) => p.outils).filter((o) =>
-    /\d/.test(o),
-  );
-  expect(chiffres).toEqual([]);
-});
-
-test("aucun domaine ni outil en double", () => {
-  const domaines = TECHNIQUES.map((p) => p.domaine);
-  expect(new Set(domaines).size).toBe(domaines.length);
-
-  const outils = TECHNIQUES.flatMap((p) => p.outils);
-  expect(new Set(outils).size).toBe(outils.length);
-});
-
-/**
- * Les listes servent de clés de rendu (`key={a.titre}`, `key={f}`) : deux
- * entrées identiques passeraient la construction et casseraient le rendu en
- * silence.
- */
-test("aucun doublon dans les listes rendues", () => {
-  const titres = ATOUTS.map((a) => a.titre);
-  expect(new Set(titres).size).toBe(titres.length);
-
-  const legendes = CHIFFRES.map((c) => c.legende);
-  expect(new Set(legendes).size).toBe(legendes.length);
-
-  expect(new Set(FRANCHISE).size).toBe(FRANCHISE.length);
-});
-
-/** Aucune section vide : un titre suivi de rien se voit tout de suite. */
-test("aucune section vide", () => {
-  for (const p of TECHNIQUES) {
-    expect(p.outils.length).toBeGreaterThan(0);
+test("aucun texte vide dans aucune langue", () => {
+  for (const l of LANGUES) {
+    const textes = [
+      l.titre,
+      l.description,
+      ...l.h1,
+      l.chapeau,
+      l.seConnecter,
+      l.voirProjet,
+      l.comparateur.titre,
+      l.comparateur.intro,
+      l.comparateur.apres,
+      l.guidage.titre,
+      l.guidage.intro,
+      l.lieux.titre,
+      l.lieux.intro,
+      l.horsLigne.titre,
+      l.horsLigne.intro,
+      l.preuve.titre,
+      l.preuve.texte,
+      l.preuve.note,
+      l.franchiseTitre,
+      l.signature,
+      l.credits,
+      ...l.franchise,
+      ...l.theme.noms,
+      ...Object.values(l.legendes),
+    ];
+    for (const t of textes) {
+      expect(t.trim().length, `${l.code} : texte vide`).toBeGreaterThan(0);
+    }
   }
-  expect(ATOUTS.length).toBeGreaterThan(0);
-  expect(CHIFFRES.length).toBeGreaterThan(0);
-  expect(FRANCHISE.length).toBeGreaterThan(0);
+});
+
+test("chaque langue garde la même matière", () => {
+  for (const l of LANGUES) {
+    // Le gabarit de la preuve doit ménager la place de la mesure.
+    expect(l.preuve.texte, `${l.code}`).toContain("{mesure}");
+    expect(l.preuve.mesure).toMatch(/222[,.]5 km/);
+
+    // Le hors ligne garde ses trois piliers : calcul local, granularité du
+    // téléchargement, transfert en arrière-plan. C'est ce que la réécriture
+    // précédente avait emporté sans que rien ne proteste.
+    expect(l.horsLigneCartes.length).toBeGreaterThanOrEqual(3);
+    // Sans pli ni accents : « Mónaco » en espagnol est le même argument.
+    const hl = sansAccents(l.horsLigneCartes.map((a) => a.texte).join(" "));
+    expect(hl).toContain("iphone");
+    expect(hl).toContain("monaco");
+    // Le plus petit paquet et le plus gros : c'est la granularité qui parle.
+    // Le séparateur décimal suit la langue — « 1,1 Mo » mais « 1.1 MB ».
+    expect(hl, `${l.code}`).toMatch(/1[.,]1/);
+    expect(hl).toContain("320");
+
+    // Le bandeau garde l'étendue européenne et annonce le vrai plafond.
+    const valeurs = l.chiffres.map((n) => n.valeur);
+    expect(valeurs).toContain(String(ITINERAIRES_MAX));
+    expect(valeurs).toContain("206");
+    expect(valeurs).toContain("49");
+
+    // Le chiffre des catégories doit suivre la liste, pas la contredire.
+    const cat = l.chiffres.find((n) => /cat[ée]g/i.test(n.legende));
+    expect(cat?.valeur, `${l.code}`).toBe(String(LIEUX.length));
+
+    // Autant de domaines que de groupes d'outils, sinon une colonne se vide.
+    expect(l.pile.length).toBe(OUTILS.length);
+    for (const p of l.pile) expect(p.outils.length).toBeGreaterThan(0);
+
+    // Quatre thèmes proposés, quatre libellés.
+    expect(l.theme.noms.length).toBe(4);
+  }
+});
+
+/**
+ * Hors français, la page doit dire que les écrans dépeints sont en français.
+ * Sans ce rappel, les maquettes laissent croire à une application traduite.
+ */
+test("les langues étrangères signalent que l'app est en français", () => {
+  for (const l of LANGUES) {
+    if (l.code === "fr") continue;
+    expect(l.legendes.enFrancais, `${l.code}`).toBeTruthy();
+  }
 });
