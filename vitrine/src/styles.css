@@ -100,6 +100,24 @@ html {
   background: var(--marine);
 }
 
+/* Barre de sécurité en haut.
+ *
+ * `html` porte déjà le bleu de marque, mais selon la façon dont le navigateur
+ * peint la bande de la barre d'état — toile, fond du corps, ou sa propre
+ * interface — cela ne suffit pas toujours. Cette barre fixe couvre
+ * explicitement l'encoche du même bleu. Elle mesure zéro quand il n'y a pas
+ * de marge de sécurité : sur un écran sans encoche, elle n'existe pas.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--marine);
+  z-index: 99;
+  pointer-events: none;
+}
+
 body {
   margin: 0;
   background: var(--papier);
