@@ -2,6 +2,7 @@
   "name": "moncap-vitrine",
   "version": "0.1.0",
   "private": true,
+  "author": "Maxime Nathan Lestage",
   "type": "module",
   "scripts": {
     "dev": "bun --hot ./index.html",

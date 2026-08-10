@@ -79,6 +79,8 @@ export const FRANCHISE: readonly string[] = [
   "L'application est en test sur TestFlight, pas encore sur l'App Store.",
 ];
 
+export const AUTEUR = "Maxime Nathan Lestage";
+
 export const DEPOT = "https://github.com/maxlestage/moncap";
 
 /**
