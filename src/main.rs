@@ -1423,8 +1423,25 @@ async fn health(State(db): State<DatabaseConnection>) -> Response {
 fn build_app(state: AppState) -> Router {
     // Front web statique (React + Bun, voir web/). Servi en repli : toute
     // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
-    // avec index.html en repli (SPA).
-    let web = ServeDir::new("web/dist").not_found_service(ServeFile::new("web/dist/index.html"));
+    // avec index.html en repli (SPA). C'est aussi ce repli qui sert `/app`,
+    // l'adresse par laquelle on entre dans l'application : les chemins
+    // relatifs de son index.html se résolvent alors à la racine, où ses
+    // fichiers se trouvent effectivement.
+    // `fallback` et non `not_found_service` : ce dernier force le statut à 404
+    // (il enveloppe le service dans un `SetStatus`). Le SPA était donc bien
+    // renvoyé sur les liens profonds, mais annoncé introuvable — invisible
+    // dans un navigateur, faux pour tout le reste : caches, robots, clients
+    // qui lisent le statut.
+    let web = ServeDir::new("web/dist").fallback(ServeFile::new("web/dist/index.html"));
+
+    // Vitrine (voir vitrine/) : la page de présentation occupe la racine
+    // exacte, l'application vit derrière `/app`. Deux fichiers seulement,
+    // servis par des routes nommées plutôt que par un répertoire — un
+    // `ServeDir` de plus à la racine entrerait en conflit avec le repli du
+    // front. `vitrine/dist` est versionné parce que le dyno Heroku ne
+    // compile que la crate Rust : aucun Bun ne tourne au déploiement.
+    let vitrine_page = ServeFile::new("vitrine/dist/index.html");
+    let vitrine_style = ServeFile::new("vitrine/dist/styles.css");
 
     // Limiteurs : général (par IP), strict sur l'authentification
     // (anti brute-force), large sur les tuiles.
@@ -1455,6 +1472,8 @@ fn build_app(state: AppState) -> Router {
 
     // Routes volontairement minimales.
     Router::new()
+        .route_service("/", vitrine_page)
+        .route_service("/styles.css", vitrine_style)
         .route("/health", get(health))
         .route("/positions", get(list_positions).post(add_position))
         .route(
@@ -3716,5 +3735,51 @@ mod integration {
         assert_eq!(info["positions"].as_u64(), Some(2));
         assert_eq!(info["trips"].as_u64(), Some(0));
         assert_eq!(info["alerts"].as_u64(), Some(0));
+    }
+
+    /// Le partage racine / `/app` : la vitrine occupe `/`, l'application vit
+    /// derrière `/app`. Les deux sont servis par des mécanismes différents —
+    /// une route nommée d'un côté, le repli du front de l'autre — et rien
+    /// dans le typage ne dit qu'ils ne se marchent pas dessus. D'où ce test.
+    #[tokio::test]
+    async fn racine_sert_la_vitrine_et_app_le_front() {
+        let Some(app) = test_app().await else { return };
+
+        async fn corps(app: &Router, uri: &str) -> (StatusCode, String) {
+            let resp = app.clone().oneshot(get_req(uri, None)).await.unwrap();
+            let statut = resp.status();
+            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (statut, String::from_utf8_lossy(&bytes).into_owned())
+        }
+
+        let (statut, page) = corps(&app, "/").await;
+        assert_eq!(statut, StatusCode::OK, "la racine doit répondre");
+        assert!(
+            page.contains("La navigation qui marche"),
+            "la racine doit servir la vitrine, pas le front"
+        );
+        // Le lien de connexion est la seule porte d'entrée vers l'app depuis
+        // la vitrine : s'il disparaît du rendu, la page devient un cul-de-sac.
+        assert!(
+            page.contains(r#"href="/app""#),
+            "la vitrine doit offrir un lien de connexion"
+        );
+        // La feuille est servie par une route au nom fixe : si la
+        // construction se remettait à horodater le nom, le lien casserait
+        // sans que rien d'autre ne le signale.
+        assert!(page.contains(r#"href="./styles.css""#));
+
+        let (statut, feuille) = corps(&app, "/styles.css").await;
+        assert_eq!(statut, StatusCode::OK, "la feuille doit être servie");
+        assert!(feuille.contains("--encre"));
+
+        let (statut, front) = corps(&app, "/app").await;
+        assert_eq!(statut, StatusCode::OK);
+        assert!(
+            front.contains("<title>MonCap GPS</title>"),
+            "/app doit servir le front web"
+        );
     }
 }

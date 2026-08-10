@@ -10,6 +10,20 @@ bun run verifie   # tsc --noEmit
 bun run build     # écrit dist/
 ```
 
+## Où elle est servie
+
+Le backend Rust la sert à la **racine** (`/`), et le front web — écran de
+connexion compris — vit derrière `/app` ; le bouton « Se connecter » y mène.
+
+`dist/` est **versionné**, contrairement à l'usage. Le buildpack Heroku ne
+compile que la crate Rust : aucun Bun ne tourne sur le dyno, donc le résultat
+de la construction doit être dans le dépôt. Après une modification de `src/`,
+relancer `bun run build` et committer `dist/`.
+
+Pour la même raison, la feuille de style porte un nom **fixe** (`styles.css`)
+et non une empreinte : une route Rust ne peut pas suivre un nom qui change à
+chaque construction. La fraîcheur repose sur l'ETag calculé par `ServeFile`.
+
 ## React sans envoyer React
 
 La page n'a aucun état : rien n'y bouge après l'affichage. Elle est donc
@@ -30,6 +44,11 @@ n'existe que pour le mode développement.
 Captures à 320, 390 et 1280 px, en clair et en sombre : pas de débordement
 horizontal, et le texte du bandeau tombe sur la même verticale que celui du
 corps.
+
+Le partage des adresses est tenu par un test d'intégration côté Rust
+(`racine_sert_la_vitrine_et_app_le_front`) : `/` rend bien la vitrine et non
+le front, la feuille répond, le lien de connexion est présent dans le rendu,
+et `/app` sert l'application.
 
 ## Contenu
 

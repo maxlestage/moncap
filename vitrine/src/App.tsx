@@ -1,4 +1,4 @@
-import { ATOUTS, CHIFFRES, DEPOT, FRANCHISE } from "./content";
+import { ATOUTS, CHIFFRES, CONNEXION, DEPOT, FRANCHISE } from "./content";
 
 /**
  * Vitrine d'une page, pensée pour le pouce d'abord.
@@ -27,11 +27,11 @@ export function App() {
           </p>
 
           <div className="actions">
-            <a className="bouton" href={DEPOT}>
-              Voir le projet
+            <a className="bouton" href={CONNEXION}>
+              Se connecter
             </a>
-            <a className="lien" href="#regions">
-              Comment ça marche
+            <a className="lien" href={DEPOT}>
+              Voir le projet
             </a>
           </div>
 
@@ -62,7 +62,7 @@ export function App() {
           </ul>
         </section>
 
-        <section id="regions" className="preuve" aria-labelledby="preuve-titre">
+        <section className="preuve" aria-labelledby="preuve-titre">
           <h2 id="preuve-titre">Une mesure vaut mieux qu'une promesse</h2>
           <p>
             Bordeaux → Limoges, <strong>222,5 km en 2 h 16</strong>, calculé
@@ -93,7 +93,7 @@ export function App() {
           <strong>IGN</strong>.
         </p>
         <p>
-          <a href={DEPOT}>Code source</a>
+          <a href={CONNEXION}>Se connecter</a> · <a href={DEPOT}>Code source</a>
         </p>
       </footer>
     </>

@@ -17,11 +17,15 @@ const SORTIE = "dist";
 
 await Bun.$`rm -rf ${SORTIE}`;
 
+// Nom stable, sans empreinte : le backend Rust sert cette feuille par une
+// route fixe (`/styles.css`), et une route ne peut pas suivre un nom qui
+// change à chaque construction. La fraîcheur est assurée par l'ETag que
+// `ServeFile` calcule, pas par le nom.
 const css = await Bun.build({
   entrypoints: ["./src/styles.css"],
   outdir: SORTIE,
   minify: true,
-  naming: "[name]-[hash].[ext]",
+  naming: "[name].[ext]",
 });
 if (!css.success) {
   console.error(css.logs);
