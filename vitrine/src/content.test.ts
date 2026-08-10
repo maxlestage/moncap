@@ -3,10 +3,48 @@ import {
   ATOUTS,
   CHIFFRES,
   FRANCHISE,
+  HORS_LIGNE,
   LIEUX,
   MAQUETTE_ITINERAIRES,
+  MAQUETTE_REGIONS,
   TECHNIQUES,
 } from "./content";
+
+/**
+ * En ajoutant les fonctions en ligne, j'avais retiré des choses du hors
+ * ligne : le chiffre des pays d'Europe et la carte du téléchargement région
+ * par région. Une réécriture emporte ce genre de contenu sans que rien ne
+ * proteste — la page reste valide, elle dit simplement moins.
+ *
+ * Ces assertions ne défendent pas une formulation mais une **matière** : ce
+ * que la page doit continuer d'expliquer. Les reformuler est libre ; les
+ * faire disparaître ne l'est pas.
+ */
+test("le hors ligne garde ses trois piliers", () => {
+  const texte = HORS_LIGNE.map((a) => `${a.titre} ${a.texte}`)
+    .join(" ")
+    .toLowerCase();
+  // Calcul local, granularité du téléchargement, transfert en arrière-plan.
+  expect(texte).toContain("iphone");
+  expect(texte).toContain("monaco");
+  expect(texte).toContain("arrière-plan");
+  expect(HORS_LIGNE.length).toBeGreaterThanOrEqual(3);
+});
+
+test("le bandeau garde l'étendue européenne", () => {
+  const legendes = CHIFFRES.map((c) => c.legende).join(" ");
+  expect(legendes).toContain("pays d'Europe");
+  expect(legendes).toContain("régions");
+});
+
+/** Les poids affichés viennent des Releases : une unité doit y figurer. */
+test("les régions de la maquette portent un poids lisible", () => {
+  for (const r of MAQUETTE_REGIONS) {
+    expect(r.poids).toMatch(/^\d+(,\d+)? (Mo|Go)$/);
+  }
+  // Au moins un téléchargement en cours, sinon la jauge ne se voit jamais.
+  expect(MAQUETTE_REGIONS.some((r) => r.avancement !== undefined)).toBe(true);
+});
 
 /**
  * Le bandeau annonce « 19 catégories » et la maquette les montre toutes :

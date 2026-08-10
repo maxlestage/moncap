@@ -46,7 +46,7 @@ rendue **à la construction** (`renderToStaticMarkup` dans `build.tsx`), et
 | | poids livré |
 | --- | --- |
 | Paquet React classique | 397 Ko de JavaScript |
-| Rendu à la construction | **10,9 Ko de HTML + 6,6 Ko de CSS**, zéro JavaScript |
+| Rendu à la construction | **12,7 Ko de HTML + 7,2 Ko de CSS**, zéro JavaScript |
 
 React et TypeScript restent la façon d'écrire la page — typage du contenu,
 composition, relecture. Ils ne sont simplement pas du voyage. `src/index.tsx`
@@ -70,6 +70,15 @@ le visiteur déjà venu.
 
 `bun test` couvre le contenu lui-même : pas de version dans la pile, pas de
 doublon dans les listes qui servent de clés de rendu, pas de section vide.
+
+Il défend aussi la **matière** de la page. En ajoutant les fonctions en ligne,
+la réécriture avait emporté au passage le chiffre des pays d'Europe et la
+carte du téléchargement région par région — une page reste valide en disant
+moins, et rien ne proteste. Des assertions vérifient donc que le hors ligne
+garde ses trois piliers (calcul local, région par région, arrière-plan) et
+que le bandeau garde l'étendue européenne. Elles portent sur ce que la page
+doit continuer d'expliquer, pas sur une formulation : reformuler est libre,
+supprimer ne l'est pas.
 
 ## Contenu
 

@@ -142,8 +142,10 @@ a {
 
 .chiffres {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  /* Deux colonnes sur un téléphone : à quatre de front, « régions
+     téléchargeables » se briserait en trois lignes dans un couloir. */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.1rem 0.75rem;
   margin: 2.4rem 0 0;
   padding: 0;
 }
@@ -457,6 +459,67 @@ h2 {
   color: #fff;
 }
 
+/* Liste des régions installées, avec un téléchargement en cours. */
+.regions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.regions li {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 11px;
+  padding: 0.6rem 0.7rem;
+}
+
+.regions .ligne {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.regions .nom {
+  color: #eef2f8;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.regions .poids {
+  color: #a9b7cd;
+  font-size: 0.78rem;
+  flex: none;
+}
+
+.regions p {
+  margin: 0.3rem 0 0;
+  font-size: 0.76rem;
+}
+
+.regions .pret {
+  color: #6ee89a;
+}
+
+.regions .encours {
+  color: #a9b7cd;
+}
+
+.jauge {
+  margin-top: 0.45rem;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.jauge span {
+  display: block;
+  height: 100%;
+  background: #4a9bff;
+}
+
 .cartes {
   list-style: none;
   margin: 1.5rem 0 0;
@@ -589,6 +652,9 @@ footer p {
   main,
   footer {
     padding-inline: 2.5rem;
+  }
+  .chiffres {
+    grid-template-columns: repeat(4, 1fr);
   }
   .cartes {
     grid-template-columns: repeat(2, 1fr);
