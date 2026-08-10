@@ -24,16 +24,49 @@ final class OfflineRouter: ObservableObject {
     struct Region: Identifiable, Hashable {
         let id: String
         let nom: String
-        let taille: String
         var archive: URL { URL(string: "\(Region.base)/\(id)/\(id).tar")! }
         var config: URL { URL(string: "\(Region.base)/\(id)/\(id).json")! }
 
         static let base = "https://github.com/maxlestage/moncap/releases/download"
-        static let toutes = [
-            Region(id: "tuiles-aquitaine", nom: "Aquitaine", taille: "259 Mo")
+
+        /// Découpage Geofabrik, celui qu'emploie le workflow de construction.
+        /// Les tailles ne figurent pas ici : elles seraient périmées au premier
+        /// rebuild, et sont lues sur les Releases.
+        static let toutes: [Region] = [
+            Region(id: "tuiles-alsace", nom: "Alsace"),
+            Region(id: "tuiles-aquitaine", nom: "Aquitaine"),
+            Region(id: "tuiles-auvergne", nom: "Auvergne"),
+            Region(id: "tuiles-basse-normandie", nom: "Basse-Normandie"),
+            Region(id: "tuiles-bourgogne", nom: "Bourgogne"),
+            Region(id: "tuiles-bretagne", nom: "Bretagne"),
+            Region(id: "tuiles-centre", nom: "Centre"),
+            Region(id: "tuiles-champagne-ardenne", nom: "Champagne-Ardenne"),
+            Region(id: "tuiles-corse", nom: "Corse"),
+            Region(id: "tuiles-franche-comte", nom: "Franche-Comté"),
+            Region(id: "tuiles-haute-normandie", nom: "Haute-Normandie"),
+            Region(id: "tuiles-ile-de-france", nom: "Île-de-France"),
+            Region(id: "tuiles-languedoc-roussillon", nom: "Languedoc-Roussillon"),
+            Region(id: "tuiles-limousin", nom: "Limousin"),
+            Region(id: "tuiles-lorraine", nom: "Lorraine"),
+            Region(id: "tuiles-midi-pyrenees", nom: "Midi-Pyrénées"),
+            Region(id: "tuiles-nord-pas-de-calais", nom: "Nord-Pas-de-Calais"),
+            Region(id: "tuiles-pays-de-la-loire", nom: "Pays de la Loire"),
+            Region(id: "tuiles-picardie", nom: "Picardie"),
+            Region(id: "tuiles-poitou-charentes", nom: "Poitou-Charentes"),
+            Region(id: "tuiles-provence-alpes-cote-d-azur", nom: "Provence-Alpes-Côte d'Azur"),
+            Region(id: "tuiles-rhone-alpes", nom: "Rhône-Alpes"),
+            Region(id: "tuiles-guadeloupe", nom: "Guadeloupe"),
+            Region(id: "tuiles-guyane", nom: "Guyane"),
+            Region(id: "tuiles-martinique", nom: "Martinique"),
+            Region(id: "tuiles-mayotte", nom: "Mayotte"),
+            Region(id: "tuiles-reunion", nom: "La Réunion"),
+            Region(id: "tuiles-espagne", nom: "Espagne"),
         ]
     }
 
+    /// Poids de chaque région, lu sur les Releases : une valeur codée en dur
+    /// serait fausse dès la première reconstruction.
+    @Published private(set) var sizes: [String: Int] = [:]
     @Published private(set) var installed: String?
     @Published private(set) var downloading = false
     @Published private(set) var progress: Double = 0
@@ -71,6 +104,35 @@ final class OfflineRouter: ObservableObject {
 
     /// Un itinéraire peut-il être calculé sans réseau ?
     var ready: Bool { installed != nil }
+
+    /// Relève le poids des régions publiées.
+    ///
+    /// Une seule requête pour toutes : interroger chaque adresse séparément
+    /// ferait trente allers-retours à l'ouverture des réglages.
+    func loadSizes() async {
+        guard sizes.isEmpty else { return }
+        let url = URL(string: "https://api.github.com/repos/maxlestage/moncap/releases?per_page=100")!
+        guard
+            let (data, _) = try? await URLSession.shared.data(from: url),
+            let liste = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { return }
+        var trouvees: [String: Int] = [:]
+        for release in liste {
+            guard let tag = release["tag_name"] as? String,
+                let assets = release["assets"] as? [[String: Any]]
+            else { continue }
+            for a in assets where (a["name"] as? String)?.hasSuffix(".tar") == true {
+                trouvees[tag] = (a["size"] as? Int) ?? 0
+            }
+        }
+        sizes = trouvees
+    }
+
+    /// « 259 Mo », ou nil si la région n'est pas encore publiée.
+    func sizeLabel(_ region: Region) -> String? {
+        guard let octets = sizes[region.id], octets > 0 else { return nil }
+        return String(format: "%.0f Mo", Double(octets) / 1_000_000)
+    }
 
     // MARK: - Installation
 
