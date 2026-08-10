@@ -92,21 +92,18 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  /* La toile prend le bleu du bandeau, et non le blanc du papier.
-     Sans fond sur `html`, celui de `body` se propage à la toile, et Safari
-     y peint la bande de la barre d'état : on voyait donc du blanc au-dessus
-     d'un bandeau bleu foncé. C'est aussi ce qui s'affiche quand on tire la
-     page au-delà de son début. */
+  /* La toile prend le bleu du bandeau, et non le blanc du papier : c'est ce
+     qu'on découvre en tirant la page au-delà de son début ou de son terme. */
   background: var(--marine);
 }
 
 /* Barre de sécurité en haut.
  *
- * `html` porte déjà le bleu de marque, mais selon la façon dont le navigateur
- * peint la bande de la barre d'état — toile, fond du corps, ou sa propre
- * interface — cela ne suffit pas toujours. Cette barre fixe couvre
- * explicitement l'encoche du même bleu. Elle mesure zéro quand il n'y a pas
- * de marge de sécurité : sur un écran sans encoche, elle n'existe pas.
+ * Dans Safari en navigation normale, `env(safe-area-inset-top)` vaut zéro :
+ * le contenu ne passe pas sous la barre d'état, c'est le navigateur qui
+ * occupe cette bande. Cette barre ne sert donc que là où la marge existe
+ * vraiment — page ajoutée à l'écran d'accueil, plein écran, paysage. Elle
+ * mesure zéro ailleurs, et ne coûte rien.
  */
 body::before {
   content: "";
@@ -128,9 +125,21 @@ body::after {
   pointer-events: none;
 }
 
+/* Le corps porte le bleu de marque, et non le papier.
+ *
+ * C'est la correction de la bande blanche sous la barre d'état. Safari teinte
+ * sa propre barre à partir du fond du **corps** — pas de celui de `html`, pas
+ * du contenu qui se trouve en haut. Le bandeau avait beau être bleu foncé et
+ * la toile aussi, `body` était en papier : Safari lisait le blanc et peignait
+ * du blanc. Aucune barre fixe ne pouvait y remédier, la barre du navigateur
+ * étant au-dessus de la page et non dedans.
+ *
+ * Le papier est donc descendu sur `main`, seul endroit qui en a besoin : le
+ * bandeau et le pied ont leur propre dégradé, et le corps ne se voit jamais.
+ */
 body {
   margin: 0;
-  background: var(--papier);
+  background: var(--marine);
   /* Le pied atteint toujours le bas de l'écran, même si le contenu est plus
      court que la fenêtre : sans cela une bande de papier apparaîtrait
      dessous. */
@@ -362,12 +371,19 @@ a {
 
 /* --- Corps --------------------------------------------------------------- */
 
+/* Le papier vit ici, et non sur `body` — voir la règle du corps.
+ *
+ * Le fond va donc d'un bord à l'autre, et c'est `.dedans` qui tient la
+ * largeur du texte, exactement comme dans le bandeau et dans le pied. Sans
+ * cela, deux bandes bleues encadreraient le texte sur grand écran. */
 main {
-  padding: 2.75rem 1.25rem 0;
-  max-width: 64rem;
-  margin: 0 auto;
+  background: var(--papier);
   width: 100%;
   flex: 1;
+}
+
+main > .dedans {
+  padding-top: 2.75rem;
 }
 
 section + section {
@@ -900,8 +916,7 @@ footer .signature {
 /* --- Écrans plus larges -------------------------------------------------- */
 
 @media (min-width: 40rem) {
-  .dedans,
-  main {
+  .dedans {
     padding-inline: 2.5rem;
   }
   .cartes {
