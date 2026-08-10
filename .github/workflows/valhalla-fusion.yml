@@ -93,15 +93,15 @@ jobs:
           racine = os.environ["RACINE"]
 
           def config(sortie, archive=None, dossier=None):
-              racine = json.loads(json.dumps(brut))
-              m = racine["mjolnir"]
+              conf = json.loads(json.dumps(brut))
+              m = conf["mjolnir"]
               for cle in ("tile_extract", "tile_dir", "admin", "timezone"):
                   m.pop(cle, None)
               if archive:
                   m["tile_extract"] = f"/data/{archive}"
               if dossier:
                   m["tile_dir"] = f"/data/{dossier}"
-              json.dump(racine, open(sortie, "w"))
+              json.dump(conf, open(sortie, "w"))
 
           # Une région, telle que l'app la lit aujourd'hui.
           config("data/seule.json", archive="france-aquitaine.tar")
