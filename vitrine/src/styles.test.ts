@@ -51,6 +51,22 @@ test("le corps porte le bleu de marque, le papier est sur le contenu", () => {
 });
 
 /**
+ * Le corps étant bleu marine, toute marge extérieure entre le papier et le
+ * pied s'y voit : une bande sombre, plus foncée que le papier au-dessus comme
+ * que le dégradé en dessous. Le souffle avant le pied doit donc rester une
+ * marge intérieure.
+ */
+test("rien ne sépare le contenu du pied", () => {
+  const pied = FEUILLE.match(/\nfooter \{[^}]*\}/)?.[0] ?? "";
+  expect(pied).not.toContain("margin-top");
+  expect(pied).not.toContain("margin:");
+
+  // Le souffle existe quand même : il est simplement dans le contenu.
+  const contenu = FEUILLE.match(/\nmain > \.dedans \{[^}]*\}/)?.[0] ?? "";
+  expect(contenu).toContain("padding-bottom");
+});
+
+/**
  * Chaque thème doit redéfinir les jetons qui portent le texte et le fond.
  * Un thème qui n'en changerait qu'un donnerait un texte illisible plutôt
  * qu'un thème.
