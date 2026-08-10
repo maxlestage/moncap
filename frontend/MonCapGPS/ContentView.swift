@@ -664,7 +664,10 @@ struct MapHomeView: View {
         }
         // Vote sur un signalement touché : toujours là / plus là.
         .confirmationDialog(
-            alertToVote.map { "\(emoji(for: $0.category)) \($0.label.isEmpty ? $0.category : $0.label)" }
+            alertToVote.map {
+                let brut = $0.label.isEmpty ? $0.category : $0.label
+                return "\(emoji(for: $0.category)) \(NSLocalizedString(brut, comment: ""))"
+            }
                 ?? "Signalement",
             isPresented: Binding(
                 get: { alertToVote != nil },
@@ -1160,7 +1163,10 @@ struct MapHomeView: View {
                 .distance(from: CLLocation(latitude: a.lat, longitude: a.lon))
             guard d < 800 else { continue }
             announcedAlertIDs.insert(a.id)
-            let what = a.label.isEmpty ? a.category : a.label
+            // Le fil porte le libellé français : chaque appareil le traduit
+            // à l'affichage, sinon un signalement espagnol s'afficherait en
+            // espagnol chez un francophone.
+            let what = NSLocalizedString(a.label.isEmpty ? a.category : a.label, comment: "")
             let meters = max(50, Int((d / 50).rounded()) * 50)
             nav.announce("Attention : \(what) à \(meters) mètres.")
         }
@@ -1309,7 +1315,7 @@ struct MapHomeView: View {
                 MapPin(
                     id: "alert-\(a.id)",
                     coordinate: CLLocationCoordinate2D(latitude: a.lat, longitude: a.lon),
-                    title: a.label.isEmpty ? a.category : a.label,
+                    title: NSLocalizedString(a.label.isEmpty ? a.category : a.label, comment: ""),
                     look: .report(emoji(for: a.category), a.confirms ?? 0)))
         }
         return pins
@@ -3261,7 +3267,8 @@ struct MapHomeView: View {
                         } label: {
                             VStack(spacing: 8) {
                                 Text(t.emoji).font(.largeTitle)
-                                Text(t.label).font(.subheadline.weight(.semibold))
+                                Text(LocalizedStringKey(t.label))
+                                    .font(.subheadline.weight(.semibold))
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)

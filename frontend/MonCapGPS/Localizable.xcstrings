@@ -289,6 +289,22 @@
         }
       }
     },
+    "Accident": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crash"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accidente"
+          }
+        }
+      }
+    },
     "Adresse e-mail invalide.": {
       "localizations": {
         "en": {
@@ -541,6 +557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baño"
+          }
+        }
+      }
+    },
+    "Bouchon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jam"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atasco"
           }
         }
       }
@@ -893,6 +925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cubierto"
+          }
+        }
+      }
+    },
+    "Danger": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hazard"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peligro"
           }
         }
       }
@@ -1745,6 +1793,22 @@
         }
       }
     },
+    "Objet sur la route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Object on the road"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Objeto en la vía"
+          }
+        }
+      }
+    },
     "Obtenir une clé gratuite": {
       "localizations": {
         "en": {
@@ -1917,6 +1981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mirador"
+          }
+        }
+      }
+    },
+    "Police": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Police"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Policía"
           }
         }
       }
@@ -2177,6 +2257,22 @@
         }
       }
     },
+    "Rue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Street"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calle"
+          }
+        }
+      }
+    },
     "Récentes": {
       "localizations": {
         "en": {
@@ -2189,6 +2285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recientes"
+          }
+        }
+      }
+    },
+    "Région": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Region"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Región"
           }
         }
       }
@@ -2497,6 +2609,22 @@
         }
       }
     },
+    "Travaux": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Roadworks"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obras"
+          }
+        }
+      }
+    },
     "Télécharge d'abord une région, ci-dessous.": {
       "localizations": {
         "en": {
@@ -2561,6 +2689,22 @@
         }
       }
     },
+    "Ville": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "City"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciudad"
+          }
+        }
+      }
+    },
     "Voiture": {
       "localizations": {
         "en": {
@@ -2589,6 +2733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Has llegado a tu destino."
+          }
+        }
+      }
+    },
+    "Véhicule arrêté": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped vehicle"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehículo parado"
           }
         }
       }

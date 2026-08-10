@@ -55,7 +55,8 @@ final class NearbyAlertNotifier: NSObject, ObservableObject, UNUserNotificationC
     func reset() { notified.removeAll() }
 
     private func post(alert a: Alert, distance: Double, emoji: (String) -> String) {
-        let what = a.label.isEmpty ? a.category : a.label
+        // Comme ailleurs : le fil porte le français, l'affichage traduit.
+        let what = NSLocalizedString(a.label.isEmpty ? a.category : a.label, comment: "")
         let meters = max(50, Int((distance / 50).rounded()) * 50)
         let content = UNMutableNotificationContent()
         content.title = "\(emoji(a.category)) Alerte à proximité"
