@@ -53,35 +53,50 @@ final class OfflineRouter: ObservableObject {
         static let prefixe = "tuiles-eu-"
     }
 
+    /// Une région gardée sur l'appareil.
+    ///
+    /// Le nom est conservé avec elle : hors réseau la liste des Releases est
+    /// vide, et l'écran n'aurait plus qu'une étiquette technique à montrer.
+    struct Installee: Codable, Identifiable, Hashable {
+        let id: String
+        let nom: String
+        /// Poids de l'archive sur le disque, mesuré à l'installation.
+        var octets: Int = 0
+
+        var poids: String { String(format: "%.0f Mo", Double(octets) / 1_000_000) }
+    }
+
     /// Régions publiées, relevées sur les Releases.
     @Published private(set) var regions: [Region] = []
-    @Published private(set) var installed: String?
-    /// Nom lisible de la région installée, gardé de côté : hors réseau la
-    /// liste est vide, et l'écran n'aurait plus qu'une étiquette à afficher.
-    @Published private(set) var installedNom: String?
+    /// Régions gardées sur l'appareil, dans l'ordre d'installation.
+    @Published private(set) var installees: [Installee] = []
     @Published private(set) var downloading = false
     @Published private(set) var chargement = false
     @Published private(set) var progress: Double = 0
     @Published private(set) var message: String?
 
-    /// Moteur chargé, construit à la première demande : ouvrir l'archive coûte,
-    /// et la plupart des trajets se calculent en ligne.
-    private var engine: Valhalla?
+    /// Moteurs chargés, un par région, construits à la première demande :
+    /// ouvrir une archive coûte, et la plupart des trajets se calculent en
+    /// ligne. Gardés ensuite, un trajet en enchaînant souvent d'autres.
+    private var moteurs: [String: Valhalla] = [:]
 
     private init() {
-        installed = UserDefaults.standard.string(forKey: Self.key)
-        installedNom = UserDefaults.standard.string(forKey: Self.keyNom)
+        let brut = UserDefaults.standard.data(forKey: Self.key)
+        let lues = brut.flatMap { try? JSONDecoder().decode([Installee].self, from: $0) } ?? []
         // Une région effacée à la main ne doit pas rester annoncée.
-        if let installed, !FileManager.default.fileExists(atPath: Self.archivePath(installed).path) {
-            self.installed = nil
-            self.installedNom = nil
-            UserDefaults.standard.removeObject(forKey: Self.key)
-            UserDefaults.standard.removeObject(forKey: Self.keyNom)
+        installees = lues.filter {
+            FileManager.default.fileExists(atPath: Self.archivePath($0.id).path)
         }
+        if installees.count != lues.count { enregistre() }
     }
 
-    private static let key = "moncap.valhallaRegion"
-    private static let keyNom = "moncap.valhallaRegionNom"
+    private static let key = "moncap.valhallaRegions"
+
+    private func enregistre() {
+        if let data = try? JSONEncoder().encode(installees) {
+            UserDefaults.standard.set(data, forKey: Self.key)
+        }
+    }
 
     private static var dossier: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -99,7 +114,17 @@ final class OfflineRouter: ObservableObject {
     }
 
     /// Un itinéraire peut-il être calculé sans réseau ?
-    var ready: Bool { installed != nil }
+    var ready: Bool { !installees.isEmpty }
+
+    /// Place occupée par les régions gardées.
+    var poidsTotal: String {
+        let octets = installees.reduce(0) { $0 + $1.octets }
+        return String(format: "%.1f Go", Double(octets) / 1_000_000_000)
+    }
+
+    func estInstallee(_ region: Region) -> Bool {
+        installees.contains { $0.id == region.id }
+    }
 
     /// Régions d'un même pays, pour l'affichage.
     struct Groupe: Identifiable {
@@ -177,8 +202,13 @@ final class OfflineRouter: ObservableObject {
     // MARK: - Installation
 
     /// Télécharge les tuiles d'une région et sa configuration.
+    ///
+    /// Plusieurs régions peuvent coexister. Elles ne se fondent pas en un seul
+    /// graphe — cela ne se fait qu'à la construction — mais un trajet cherche
+    /// sa route dans chacune, si bien qu'en garder plusieurs couvre plus de
+    /// terrain sans rien retélécharger.
     func install(_ region: Region) async {
-        guard !downloading else { return }
+        guard !downloading, !estInstallee(region) else { return }
         downloading = true
         progress = 0
         message = nil
@@ -194,28 +224,34 @@ final class OfflineRouter: ObservableObject {
             let corrigee = try Self.corrige(config: configData, pour: region.id)
             try corrigee.write(to: Self.configPath(region.id))
 
-            engine = nil
-            installed = region.id
-            installedNom = region.nom
-            UserDefaults.standard.set(region.id, forKey: Self.key)
-            UserDefaults.standard.set(region.nom, forKey: Self.keyNom)
+            moteurs[region.id] = nil
+            installees.append(
+                Installee(id: region.id, nom: region.nom, octets: archive.count))
+            enregistre()
         } catch {
             message = "Téléchargement interrompu."
             try? FileManager.default.removeItem(at: Self.archivePath(region.id))
         }
     }
 
-    /// Efface la région installée.
-    func remove() {
-        if let installed {
-            try? FileManager.default.removeItem(at: Self.archivePath(installed))
-            try? FileManager.default.removeItem(at: Self.configPath(installed))
+    /// Efface une région gardée.
+    func remove(_ id: String) {
+        try? FileManager.default.removeItem(at: Self.archivePath(id))
+        try? FileManager.default.removeItem(at: Self.configPath(id))
+        moteurs[id] = nil
+        installees.removeAll { $0.id == id }
+        enregistre()
+    }
+
+    /// Efface toutes les régions gardées.
+    func removeAll() {
+        for r in installees {
+            try? FileManager.default.removeItem(at: Self.archivePath(r.id))
+            try? FileManager.default.removeItem(at: Self.configPath(r.id))
         }
-        engine = nil
-        installed = nil
-        installedNom = nil
-        UserDefaults.standard.removeObject(forKey: Self.key)
-        UserDefaults.standard.removeObject(forKey: Self.keyNom)
+        moteurs.removeAll()
+        installees.removeAll()
+        enregistre()
     }
 
     /// Téléchargement suivi, pour que l'attente ne soit pas muette.
@@ -262,32 +298,47 @@ final class OfflineRouter: ObservableObject {
 
     /// Itinéraire routier entre deux points, calculé sur l'appareil.
     ///
-    /// Renvoie `nil` si aucune région n'est installée ou si le calcul échoue :
-    /// l'appelant garde alors son itinéraire précédent.
+    /// Chaque région gardée est interrogée jusqu'à ce que l'une réponde. Un
+    /// paquet qui ne couvre qu'une des deux extrémités refuse la demande
+    /// (« No suitable edges near location »), si bien que la première réponse
+    /// vient forcément d'un paquet contenant le trajet entier.
+    ///
+    /// Ce qu'on ne peut pas faire, et qui n'a rien d'un oubli : router d'un
+    /// paquet à l'autre. Chaque extrait a coupé ses routes à sa frontière, et
+    /// seul un graphe bâti des deux ensemble les raccorde — d'où les zones.
+    ///
+    /// Renvoie `nil` si aucune région n'est gardée ou si aucune ne couvre le
+    /// trajet : l'appelant garde alors son itinéraire précédent.
     func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> OfflineRoute? {
-        guard let installed else { return nil }
-        do {
-            if engine == nil {
-                // Les fuseaux horaires que réclame Valhalla sont installés par
-                // le paquet lui-même : son utilitaire de fichiers n'est pas
-                // exposé, donc rien à faire ici.
-                engine = try Valhalla(configPath: Self.configPath(installed).path)
+        let demande: [String: Any] = [
+            "locations": [
+                ["lat": from.latitude, "lon": from.longitude],
+                ["lat": to.latitude, "lon": to.longitude],
+            ],
+            "costing": "auto",
+            "directions_options": ["units": "kilometers", "language": "fr-FR"],
+        ]
+        guard let json = try? JSONSerialization.data(withJSONObject: demande) else { return nil }
+        let texte = String(decoding: json, as: UTF8.self)
+
+        for region in installees {
+            guard let moteur = moteur(region.id) else { continue }
+            if let route = OfflineRoute(json: moteur.route(rawRequest: texte)) {
+                return route
             }
-            guard let engine else { return nil }
-            let demande: [String: Any] = [
-                "locations": [
-                    ["lat": from.latitude, "lon": from.longitude],
-                    ["lat": to.latitude, "lon": to.longitude],
-                ],
-                "costing": "auto",
-                "directions_options": ["units": "kilometers", "language": "fr-FR"],
-            ]
-            let json = try JSONSerialization.data(withJSONObject: demande)
-            let brut = engine.route(rawRequest: String(decoding: json, as: UTF8.self))
-            return OfflineRoute(json: brut)
-        } catch {
-            return nil
         }
+        return nil
+    }
+
+    /// Moteur d'une région, ouvert à la première demande et gardé ensuite.
+    private func moteur(_ id: String) -> Valhalla? {
+        if let deja = moteurs[id] { return deja }
+        // Les fuseaux horaires que réclame Valhalla sont installés par le
+        // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
+        // rien à faire ici.
+        guard let neuf = try? Valhalla(configPath: Self.configPath(id).path) else { return nil }
+        moteurs[id] = neuf
+        return neuf
     }
 }
 
