@@ -48,10 +48,23 @@ jobs:
           # les deux régions s'écrasent au lieu de se dupliquer.
           mkdir -p data/tuiles
           for r in france-aquitaine france-midi-pyrenees; do
-            tar -xf "data/$r.tar" -C data/tuiles
             echo "$r : $(tar -tf "data/$r.tar" | grep -c '\.gph$' || true) tuiles"
+            # Sous quel chemin ? L'essai précédent l'a supposé au lieu de le
+            # regarder, et c'est très probablement là qu'il a buté.
+            echo "  premiers membres : $(tar -tf "data/$r.tar" | head -3 | tr '\n' ' ')"
+            tar -xf "data/$r.tar" -C data/tuiles
           done
           echo "dossier : $(find data/tuiles -name '*.gph' | wc -l) tuiles"
+
+          # La racine des tuiles est le parent du dossier de niveau (0 à 3),
+          # où qu'il se trouve : l'archive peut porter un préfixe de chemin.
+          niveau=$(find data/tuiles -type d -regex '.*/[0-3]$' \
+            | awk -F/ '{print NF, $0}' | sort -n | head -1 | cut -d' ' -f2-)
+          racine=$(dirname "$niveau")
+          echo "racine des tuiles : $racine"
+          ls "$racine"
+          # Le dossier est monté sur /data dans le conteneur.
+          echo "RACINE=${racine#data/}" >> "$GITHUB_ENV"
           du -sh data/tuiles
 
       - name: Prépare les configurations
@@ -60,9 +73,10 @@ jobs:
           # Exactement la correction que fait l'app : seul le chemin de
           # l'archive change, le reste des réglages est celui de Valhalla.
           python3 - <<'PY'
-          import json
+          import json, os
 
           brut = json.load(open("data/brut.json"))
+          racine = os.environ["RACINE"]
 
           def config(sortie, archive=None, dossier=None):
               racine = json.loads(json.dumps(brut))
@@ -77,8 +91,8 @@ jobs:
 
           # Une région, telle que l'app la lit aujourd'hui.
           config("data/seule.json", archive="france-aquitaine.tar")
-          # Deux régions réunies dans un dossier.
-          config("data/dossier.json", dossier="tuiles")
+          # Deux régions réunies dans un dossier, à la racine relevée.
+          config("data/dossier.json", dossier=racine)
           PY
           ls -l data/seule.json data/dossier.json
 
