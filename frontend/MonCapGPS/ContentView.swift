@@ -2514,8 +2514,7 @@ struct MapHomeView: View {
                     DisclosureGroup("Itinéraires sans réseau 🧭") {
                         if let region = router.installed {
                             Label(
-                                OfflineRouter.Region.toutes
-                                    .first { $0.id == region }?.nom ?? region,
+                                router.installedNom ?? region,
                                 systemImage: "checkmark.circle.fill"
                             )
                             .foregroundStyle(.green)
@@ -2529,19 +2528,28 @@ struct MapHomeView: View {
                                 Text("Téléchargement · \(Int(router.progress * 100)) %")
                                     .font(.footnote)
                             }
+                        } else if router.chargement {
+                            ProgressView()
+                        } else if router.regions.isEmpty {
+                            Text("Liste des régions indisponible — il faut du réseau une fois.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         } else {
-                            ForEach(OfflineRouter.Region.toutes) { region in
-                                Button {
-                                    Task { await router.install(region) }
-                                } label: {
-                                    // Le poids vient des Releases : tant qu'il
-                                    // n'est pas connu, le nom seul — mieux vaut
-                                    // pas de chiffre qu'un chiffre périmé.
-                                    Label(
-                                        router.sizeLabel(region).map {
-                                            "\(region.nom) · \($0)"
-                                        } ?? region.nom,
-                                        systemImage: "arrow.down.circle")
+                            // Un pays par rangée, ses régions dessous : à deux
+                            // cent quinze entrées, une liste à plat serait
+                            // impraticable. Un pays livré d'un bloc n'ouvre
+                            // rien et se télécharge directement.
+                            ForEach(router.groupes) { groupe in
+                                if groupe.regions.count == 1, let seule = groupe.regions.first {
+                                    RegionButton(region: seule, router: router)
+                                } else {
+                                    DisclosureGroup(
+                                        "\(groupe.pays) · \(groupe.regions.count)"
+                                    ) {
+                                        ForEach(groupe.regions) { region in
+                                            RegionButton(region: region, router: router)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2551,12 +2559,13 @@ struct MapHomeView: View {
                         Text(
                             "Permet de recalculer un itinéraire sans réseau. "
                                 + "Sans cela, s'écarter de sa route hors couverture laisse "
-                                + "l'app sans rien à proposer."
+                                + "l'app sans rien à proposer. Une seule région à la fois : "
+                                + "en télécharger une remplace la précédente."
                         )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     }
-                    .task { await router.loadSizes() }
+                    .task { await router.loadRegions() }
 
                     DisclosureGroup("Serveur de cartes personnel") {
                         TextField("https://exemple.fr/style.json", text: $styleURL)
@@ -3730,6 +3739,27 @@ struct MapHomeView: View {
         showPlaces = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             Sharer.present([url])
+        }
+    }
+}
+
+/// Une région téléchargeable dans les réglages.
+///
+/// Extraite en vue à part : elle apparaît à deux endroits — un pays livré d'un
+/// bloc, et une région dans son pays déplié.
+private struct RegionButton: View {
+    let region: OfflineRouter.Region
+    @ObservedObject var router: OfflineRouter
+
+    var body: some View {
+        Button {
+            Task { await router.install(region) }
+        } label: {
+            Label(
+                // Le pays est déjà porté par la rangée qui déplie ; le
+                // répéter sur chaque ligne mangerait la largeur.
+                "\(region.detail.isEmpty ? region.pays : region.detail) · \(region.poids)",
+                systemImage: "arrow.down.circle")
         }
     }
 }
