@@ -81,10 +81,13 @@ jobs:
           mv data/tuiles.tar "data/${{ inputs.tag }}.tar"
           # `--clobber` : reconstruire une région remplace ses tuiles au lieu
           # d'échouer, l'adresse de téléchargement reste donc la même.
-          gh release create "${{ inputs.tag }}" --title "${{ inputs.tag }}" \
+          # `-R` : le dépôt est nommé explicitement, faute de clone local —
+          # `gh` le déduit sinon du dossier courant, qui n'est pas un dépôt.
+          depot="${{ github.repository }}"
+          gh release create "${{ inputs.tag }}" -R "$depot" --title "${{ inputs.tag }}" \
             --notes "Tuiles Valhalla · ${{ inputs.region }} · $TAILLE · OpenStreetMap (ODbL)" \
             || echo "Release déjà présente"
-          gh release upload "${{ inputs.tag }}" "data/${{ inputs.tag }}.tar" --clobber
+          gh release upload "${{ inputs.tag }}" "data/${{ inputs.tag }}.tar" -R "$depot" --clobber
 
       - name: Récapitulatif
         run: |
