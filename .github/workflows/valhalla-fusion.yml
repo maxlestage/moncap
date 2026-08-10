@@ -8,12 +8,26 @@ name: Fusion de tuiles
 # d'écrire ce mécanisme dans l'app — où il ne se teste qu'au bout d'un cycle
 # TestFlight — on l'éprouve ici, où Valhalla est installé.
 #
-# Trois épreuves, dans cet ordre :
+# Deux voies ont été essayées et écartées, mesures à l'appui :
+#   — prolonger une archive avec `tar -A` : les 254 membres étaient bien là,
+#     Valhalla n'en chargeait que 120, soit la première archive seule ;
+#   — réunir les tuiles dans un dossier et pointer `tile_dir` dessus : le
+#     service démarre mais ne trouve aucune arête, y compris à l'intérieur
+#     d'une seule région, racine des tuiles pourtant relevée et correcte.
+#
+# Reste la voie que Valhalla soutient vraiment : construire **un seul graphe**
+# à partir des deux extraits OpenStreetMap. C'est la seule qui garantisse la
+# continuité à la frontière — l'union de tuiles construites séparément ne
+# l'aurait de toute façon jamais assurée, chaque région ayant coupé ses routes
+# au bord.
+#
+# Quatre épreuves, dans cet ordre :
 #   1. un trajet interne à l'Aquitaine, pour établir que l'archive publiée et
 #      la configuration corrigée suffisent à router ;
 #   2. le même Bordeaux → Toulouse avec la seule Aquitaine, qui doit échouer —
-#      sans quoi l'épreuve suivante ne prouverait rien ;
-#   3. Bordeaux → Toulouse sur les deux archives fusionnées, qui doit aboutir.
+#      sans quoi les suivantes ne prouveraient rien ;
+#   3. le dossier réunissant les deux régions, gardé pour trace ;
+#   4. Bordeaux → Toulouse sur un graphe construit des deux extraits.
 
 on:
   workflow_dispatch:
@@ -96,6 +110,52 @@ jobs:
           PY
           ls -l data/seule.json data/dossier.json
 
+      - name: Construit un graphe commun aux deux régions
+        run: |
+          set -euo pipefail
+          # Les deux extraits OpenStreetMap, passés ensemble à la construction :
+          # `valhalla_build_tiles` accepte plusieurs fichiers et n'en fait qu'un
+          # graphe. C'est ce qui raccorde réellement les routes à la frontière,
+          # là où deux jeux de tuiles construits séparément les auraient
+          # coupées chacun de son côté.
+          for r in aquitaine midi-pyrenees; do
+            curl -fSL --retry 4 -o "data/$r.osm.pbf" \
+              "https://download.geofabrik.de/europe/france/$r-latest.osm.pbf"
+          done
+          ls -lh data/*.osm.pbf
+
+          docker run --rm -v "$PWD/data:/data" -w /data \
+            ghcr.io/valhalla/valhalla:latest bash -lc '
+              set -euo pipefail
+              valhalla_build_config \
+                --mjolnir-tile-dir /data/commun \
+                --mjolnir-tile-extract /data/commun.tar \
+                --mjolnir-timezone /data/commun/timezones.sqlite \
+                --mjolnir-admin /data/commun/admins.sqlite > /data/commun-brut.json
+              mkdir -p /data/commun
+              valhalla_build_timezones > /data/commun/timezones.sqlite
+              valhalla_build_admins -c /data/commun-brut.json \
+                /data/aquitaine.osm.pbf /data/midi-pyrenees.osm.pbf
+              valhalla_build_tiles -c /data/commun-brut.json \
+                /data/aquitaine.osm.pbf /data/midi-pyrenees.osm.pbf
+              valhalla_build_extract -c /data/commun-brut.json -v
+            '
+          ls -lh data/commun.tar
+          echo "tuiles du graphe commun : $(tar -tf data/commun.tar | grep -c '\.gph$' || true)"
+          echo "COMMUN=$(du -h data/commun.tar | cut -f1)" >> "$GITHUB_ENV"
+
+          # Même correction que l'app, sur la configuration engendrée ici.
+          python3 - <<'PY'
+          import json
+
+          racine = json.load(open("data/commun-brut.json"))
+          m = racine["mjolnir"]
+          for cle in ("tile_dir", "admin", "timezone"):
+              m.pop(cle, None)
+          m["tile_extract"] = "/data/commun.tar"
+          json.dump(racine, open("data/commun.json", "w"))
+          PY
+
       - name: Écrit les demandes et le script d'épreuve
         # Sur disque, et non en ligne : un script Python dans un heredoc dans
         # une commande docker entre apostrophes, c'est trois niveaux de
@@ -174,7 +234,7 @@ jobs:
             SERVICE=$!
             if ! python3 /data/attend.py; then
               echo "  le service n a pas repondu"
-              tail -30 /data/service.log
+              cat /data/service.log
               return 1
             fi
           }
@@ -195,7 +255,7 @@ jobs:
           trajet /data/interne.json /data/r1.json
           if ! python3 /data/resume.py /data/r1.json; then
             echo "ECHEC : la region seule ne route pas"
-            tail -30 /data/service.log
+            cat /data/service.log
             arrete
             exit 1
           fi
@@ -217,23 +277,37 @@ jobs:
           # Bordeaux d abord : si lui-meme ne repond plus, c est le dossier qui
           # est en cause, et non la couture entre les deux regions.
           trajet /data/interne.json /data/r3a.json
-          if ! python3 /data/resume.py /data/r3a.json; then
-            echo "ECHEC : le dossier ne route meme pas dans une seule region"
-            tail -30 /data/service.log
+          if python3 /data/resume.py /data/r3a.json; then
+            trajet /data/traverse.json /data/r3.json
+            python3 /data/resume.py /data/r3.json || echo "  ne traverse pas"
+          else
+            # Connu et mesuré : gardé pour trace, sans faire tomber l epreuve,
+            # la voie retenue est la construction commune.
+            echo "  le dossier ne route pas — journal complet du service :"
+            cat /data/service.log
+          fi
+          arrete
+
+          echo "== 4. Bordeaux -> Toulouse, graphe construit des deux extraits"
+          lance /data/commun.json || exit 1
+          trajet /data/interne.json /data/r4a.json
+          if ! python3 /data/resume.py /data/r4a.json; then
+            echo "ECHEC : le graphe commun ne route pas dans une seule region"
+            cat /data/service.log
             arrete
             exit 1
           fi
-          trajet /data/traverse.json /data/r3.json
-          if ! python3 /data/resume.py /data/r3.json; then
-            echo "ECHEC : le dossier ne traverse pas la frontiere"
-            tail -30 /data/service.log
+          trajet /data/traverse.json /data/r4.json
+          if ! python3 /data/resume.py /data/r4.json; then
+            echo "ECHEC : le graphe commun ne traverse pas la frontiere"
+            cat /data/service.log
             arrete
             exit 1
           fi
           arrete
           SH
 
-      - name: Éprouve les trois trajets
+      - name: Éprouve les quatre trajets
         run: |
           set -euo pipefail
           docker run --rm -v "$PWD/data:/data" -w /data \
