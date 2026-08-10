@@ -162,9 +162,9 @@ final class OfflineRouter: ObservableObject {
         guard let installed else { return nil }
         do {
             if engine == nil {
-                // Les fuseaux horaires sont attendus dans la bibliothèque :
-                // sans eux Valhalla refuse de démarrer.
-                try? ValhallaFileManager.injectTzdataIntoLibrary()
+                // Les fuseaux horaires que réclame Valhalla sont installés par
+                // le paquet lui-même : son utilitaire de fichiers n'est pas
+                // exposé, donc rien à faire ici.
                 engine = try Valhalla(configPath: Self.configPath(installed).path)
             }
             guard let engine else { return nil }
