@@ -36,18 +36,23 @@ jobs:
             "$base/tuiles-eu-france-aquitaine/tuiles-eu-france-aquitaine.json"
           ls -lh data/
 
-      - name: Fusionne les archives
+      - name: Réunit les régions dans un dossier de tuiles
         run: |
           set -euo pipefail
-          # Une archive tar se prolonge : `-A` recopie les membres de la
-          # seconde à la suite de la première. Les tuiles Valhalla portent leur
-          # identifiant en guise de chemin, donc deux régions voisines ne se
-          # marchent pas dessus, hors tuiles frontalières.
-          cp data/france-aquitaine.tar data/fusion.tar
-          tar -Af data/fusion.tar data/france-midi-pyrenees.tar
-          ls -lh data/fusion.tar
-          echo "membres : $(tar -tf data/fusion.tar | wc -l)"
-          echo "dont uniques : $(tar -tf data/fusion.tar | sort -u | wc -l)"
+          # Prolonger une archive avec `tar -A` a été essayé et ne marche pas :
+          # les 254 membres étaient bien là, mais Valhalla n'en chargeait que
+          # 120 — la première archive, et rien après son terminateur.
+          #
+          # Valhalla sait lire un dossier de tuiles aussi bien qu'une archive,
+          # et c'est la voie propre : les tuiles frontalières présentes dans
+          # les deux régions s'écrasent au lieu de se dupliquer.
+          mkdir -p data/tuiles
+          for r in france-aquitaine france-midi-pyrenees; do
+            tar -xf "data/$r.tar" -C data/tuiles
+            echo "$r : $(tar -tf "data/$r.tar" | grep -c '\.gph$' || true) tuiles"
+          done
+          echo "dossier : $(find data/tuiles -name '*.gph' | wc -l) tuiles"
+          du -sh data/tuiles
 
       - name: Prépare les configurations
         run: |
@@ -59,18 +64,23 @@ jobs:
 
           brut = json.load(open("data/brut.json"))
 
-          def config(archive, sortie):
+          def config(sortie, archive=None, dossier=None):
               racine = json.loads(json.dumps(brut))
               m = racine["mjolnir"]
-              m["tile_extract"] = f"/data/{archive}"
-              for cle in ("tile_dir", "admin", "timezone"):
+              for cle in ("tile_extract", "tile_dir", "admin", "timezone"):
                   m.pop(cle, None)
+              if archive:
+                  m["tile_extract"] = f"/data/{archive}"
+              if dossier:
+                  m["tile_dir"] = f"/data/{dossier}"
               json.dump(racine, open(sortie, "w"))
 
-          config("france-aquitaine.tar", "data/seule.json")
-          config("fusion.tar", "data/fusion.json")
+          # Une région, telle que l'app la lit aujourd'hui.
+          config("data/seule.json", archive="france-aquitaine.tar")
+          # Deux régions réunies dans un dossier.
+          config("data/dossier.json", dossier="tuiles")
           PY
-          ls -l data/seule.json data/fusion.json
+          ls -l data/seule.json data/dossier.json
 
       - name: Écrit les demandes et le script d'épreuve
         # Sur disque, et non en ligne : un script Python dans un heredoc dans
@@ -188,11 +198,20 @@ jobs:
           echo "  refuse, comme attendu"
           arrete
 
-          echo "== 3. Bordeaux -> Toulouse, archives fusionnees (doit aboutir)"
-          lance /data/fusion.json || exit 1
+          echo "== 3. Bordeaux -> Toulouse, dossier des deux regions (doit aboutir)"
+          lance /data/dossier.json || exit 1
+          # Bordeaux d abord : si lui-meme ne repond plus, c est le dossier qui
+          # est en cause, et non la couture entre les deux regions.
+          trajet /data/interne.json /data/r3a.json
+          if ! python3 /data/resume.py /data/r3a.json; then
+            echo "ECHEC : le dossier ne route meme pas dans une seule region"
+            tail -30 /data/service.log
+            arrete
+            exit 1
+          fi
           trajet /data/traverse.json /data/r3.json
           if ! python3 /data/resume.py /data/r3.json; then
-            echo "ECHEC : la fusion ne route pas"
+            echo "ECHEC : le dossier ne traverse pas la frontiere"
             tail -30 /data/service.log
             arrete
             exit 1
