@@ -287,93 +287,95 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
       </header>
 
       <main>
-        <section aria-labelledby="comparateur-titre">
-          <h2 id="comparateur-titre">{c.comparateur.titre}</h2>
-          <p className="intro">{c.comparateur.intro}</p>
-          <MaquetteComparateur c={c} />
-          <p className="intro">{c.comparateur.apres}</p>
-        </section>
+        <div className="dedans">
+          <section aria-labelledby="comparateur-titre">
+            <h2 id="comparateur-titre">{c.comparateur.titre}</h2>
+            <p className="intro">{c.comparateur.intro}</p>
+            <MaquetteComparateur c={c} />
+            <p className="intro">{c.comparateur.apres}</p>
+          </section>
 
-        <section aria-labelledby="guidage-titre">
-          <h2 id="guidage-titre">{c.guidage.titre}</h2>
-          <p className="intro">{c.guidage.intro}</p>
-          <MaquetteGuidage c={c} />
-        </section>
+          <section aria-labelledby="guidage-titre">
+            <h2 id="guidage-titre">{c.guidage.titre}</h2>
+            <p className="intro">{c.guidage.intro}</p>
+            <MaquetteGuidage c={c} />
+          </section>
 
-        <section aria-labelledby="lieux-titre">
-          <h2 id="lieux-titre">{c.lieux.titre}</h2>
-          <p className="intro">{c.lieux.intro}</p>
-          <MaquetteLieux c={c} />
-        </section>
+          <section aria-labelledby="lieux-titre">
+            <h2 id="lieux-titre">{c.lieux.titre}</h2>
+            <p className="intro">{c.lieux.intro}</p>
+            <MaquetteLieux c={c} />
+          </section>
 
-        <section aria-labelledby="atouts-titre">
-          <h2 id="atouts-titre">{c.atoutsTitre}</h2>
-          <ul className="cartes">
-            {c.atouts.map((a) => (
-              <li key={a.titre}>
-                <span className="emoji" aria-hidden="true">
-                  {a.emoji}
-                </span>
-                <h3>{a.titre}</h3>
-                <p>{a.texte}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
+          <section aria-labelledby="atouts-titre">
+            <h2 id="atouts-titre">{c.atoutsTitre}</h2>
+            <ul className="cartes">
+              {c.atouts.map((a) => (
+                <li key={a.titre}>
+                  <span className="emoji" aria-hidden="true">
+                    {a.emoji}
+                  </span>
+                  <h3>{a.titre}</h3>
+                  <p>{a.texte}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        <section aria-labelledby="hors-ligne-titre">
-          <h2 id="hors-ligne-titre">{c.horsLigne.titre}</h2>
-          <p className="intro">{c.horsLigne.intro}</p>
-          <MaquetteRegions c={c} />
-          <ul className="cartes">
-            {c.horsLigneCartes.map((a) => (
-              <li key={a.titre}>
-                <span className="emoji" aria-hidden="true">
-                  {a.emoji}
-                </span>
-                <h3>{a.titre}</h3>
-                <p>{a.texte}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
+          <section aria-labelledby="hors-ligne-titre">
+            <h2 id="hors-ligne-titre">{c.horsLigne.titre}</h2>
+            <p className="intro">{c.horsLigne.intro}</p>
+            <MaquetteRegions c={c} />
+            <ul className="cartes">
+              {c.horsLigneCartes.map((a) => (
+                <li key={a.titre}>
+                  <span className="emoji" aria-hidden="true">
+                    {a.emoji}
+                  </span>
+                  <h3>{a.titre}</h3>
+                  <p>{a.texte}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        <section className="preuve" aria-labelledby="preuve-titre">
-          <h2 id="preuve-titre">{c.preuve.titre}</h2>
-          <p>
-            {avant}
-            <strong>{c.preuve.mesure}</strong>
-            {apres}
-          </p>
-          <p className="note">{c.preuve.note}</p>
-        </section>
+          <section className="preuve" aria-labelledby="preuve-titre">
+            <h2 id="preuve-titre">{c.preuve.titre}</h2>
+            <p>
+              {avant}
+              <strong>{c.preuve.mesure}</strong>
+              {apres}
+            </p>
+            <p className="note">{c.preuve.note}</p>
+          </section>
 
-        <section aria-labelledby="pile-titre" className="pile">
-          <h2 id="pile-titre">{c.pileTitre}</h2>
-          <dl>
-            {c.pile.map((p) => (
-              <div key={p.domaine}>
-                <dt>{p.domaine}</dt>
-                <dd>
-                  <ul>
-                    {p.outils.map((o) => (
-                      <li key={o}>{o}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+          <section aria-labelledby="pile-titre" className="pile">
+            <h2 id="pile-titre">{c.pileTitre}</h2>
+            <dl>
+              {c.pile.map((p) => (
+                <div key={p.domaine}>
+                  <dt>{p.domaine}</dt>
+                  <dd>
+                    <ul>
+                      {p.outils.map((o) => (
+                        <li key={o}>{o}</li>
+                      ))}
+                    </ul>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
 
-        <section aria-labelledby="franchise-titre" className="franchise">
-          <h2 id="franchise-titre">{c.franchiseTitre}</h2>
-          <ul>
-            {c.franchise.map((f) => (
-              <li key={f}>{f}</li>
-            ))}
-          </ul>
-        </section>
+          <section aria-labelledby="franchise-titre" className="franchise">
+            <h2 id="franchise-titre">{c.franchiseTitre}</h2>
+            <ul>
+              {c.franchise.map((f) => (
+                <li key={f}>{f}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </main>
 
       {/* Le pied reprend le bleu du bandeau : la page se ferme comme elle

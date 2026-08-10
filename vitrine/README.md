@@ -214,6 +214,35 @@ et les lignes affichées reprennent celles de l'application — les valeurs
 chiffrées, elles, sont des exemples. Faire passer un exemple pour un relevé
 serait le premier mensonge d'une vitrine.
 
+## La bande blanche sous la barre d'état
+
+Sur iPhone, une bande claire séparait la barre de Safari du bandeau bleu. Ce
+n'était ni l'encoche ni un défaut de mise en page, et trois corrections
+plausibles n'y ont rien changé : `background` sur `html`, une barre fixe
+haute de `env(safe-area-inset-top)`, un `theme-color` au bleu de marque.
+
+La raison tient en deux faits.
+
+**En navigation normale, `env(safe-area-inset-top)` vaut zéro dans Safari.**
+Le contenu ne passe pas sous la barre d'état — c'est le navigateur qui occupe
+cette bande. Une barre fixe dimensionnée par cette variable mesure donc zéro
+et ne couvre rien. Elle reste utile ailleurs (écran d'accueil, plein écran,
+paysage), pas ici.
+
+**Safari teinte sa barre d'après le fond du corps.** Pas d'après `html`, pas
+d'après ce qui est peint en haut de la page. `body` portait `--papier` : le
+navigateur lisait du blanc et peignait du blanc, au-dessus d'un bandeau bleu
+foncé et d'une toile bleu foncé.
+
+Le corps porte donc le bleu de marque, et le papier est descendu sur `main`,
+qui va d'un bord à l'autre — `.dedans` tient la largeur du texte, comme dans
+le bandeau et le pied. Rien ne change à l'œil ; la barre du navigateur, elle,
+prend enfin la teinte.
+
+Remettre `--papier` sur `body` est le geste le plus naturel du monde, et
+aucune capture ne le rattraperait : la barre du navigateur ne se photographie
+pas. Un test de `src/styles.test.ts` s'en charge.
+
 ## Style
 
 Pas de bibliothèque d'utilitaires : `src/styles.css` tient en quelques
