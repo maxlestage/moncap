@@ -1,0 +1,97 @@
+name: Tuiles Valhalla
+
+# Produit les tuiles de calcul d'itinéraire pour une région, et les publie en
+# pièce jointe de Release — d'où l'app les téléchargera.
+#
+# C'est la pièce manquante de la navigation hors ligne : Valhalla sait calculer
+# un itinéraire sur l'appareil, mais il lui faut ses propres tuiles routières,
+# que personne ne distribue gratuitement (le seul fournisseur prêt à l'emploi
+# demande plusieurs centaines de dollars par mois). Un runner GitHub suffit
+# pourtant à les construire pour une région, et les Releases à les héberger.
+#
+# Manuel uniquement : onglet Actions → Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: "Extrait Geofabrik (ex. europe/france/aquitaine, europe/andorra)"
+        required: true
+        default: europe/france/aquitaine
+      tag:
+        description: "Nom de la Release (ex. tuiles-aquitaine)"
+        required: true
+        default: tuiles-aquitaine
+
+permissions:
+  contents: write
+
+jobs:
+  tuiles:
+    name: Construire et publier
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Libère de la place
+        # Le disque du runner est en grande partie occupé par des outils dont
+        # on n'a aucun usage ici, et la construction écrit beaucoup.
+        run: |
+          set -euo pipefail
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h / | tail -1
+
+      - name: Télécharge l'extrait OpenStreetMap
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          url="https://download.geofabrik.de/${{ inputs.region }}-latest.osm.pbf"
+          echo "Extrait : $url"
+          curl -fSL --retry 4 --retry-delay 5 -o data/extrait.osm.pbf "$url"
+          ls -lh data/extrait.osm.pbf
+
+      - name: Construit les tuiles
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/data:/data" -w /data \
+            ghcr.io/valhalla/valhalla:latest bash -lc '
+              set -euo pipefail
+              valhalla_build_config \
+                --mjolnir-tile-dir /data/tuiles \
+                --mjolnir-tile-extract /data/tuiles.tar \
+                --mjolnir-timezone /data/tuiles/timezones.sqlite \
+                --mjolnir-admin /data/tuiles/admins.sqlite > /data/valhalla.json
+              mkdir -p /data/tuiles
+              # Fuseaux et limites administratives : sans eux les consignes
+              # ignorent le pays traversé et le sens de circulation.
+              valhalla_build_timezones > /data/tuiles/timezones.sqlite
+              valhalla_build_admins -c /data/valhalla.json /data/extrait.osm.pbf
+              valhalla_build_tiles -c /data/valhalla.json /data/extrait.osm.pbf
+              valhalla_build_extract -c /data/valhalla.json -v
+            '
+          ls -lh data/tuiles.tar
+          echo "TAILLE=$(du -h data/tuiles.tar | cut -f1)" >> "$GITHUB_ENV"
+
+      - name: Publie la Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mv data/tuiles.tar "data/${{ inputs.tag }}.tar"
+          # `--clobber` : reconstruire une région remplace ses tuiles au lieu
+          # d'échouer, l'adresse de téléchargement reste donc la même.
+          gh release create "${{ inputs.tag }}" --title "${{ inputs.tag }}" \
+            --notes "Tuiles Valhalla · ${{ inputs.region }} · $TAILLE · OpenStreetMap (ODbL)" \
+            || echo "Release déjà présente"
+          gh release upload "${{ inputs.tag }}" "data/${{ inputs.tag }}.tar" --clobber
+
+      - name: Récapitulatif
+        run: |
+          {
+            echo "### Tuiles Valhalla"
+            echo ""
+            echo "- Région : \`${{ inputs.region }}\`"
+            echo "- Taille : **$TAILLE**"
+            echo "- Adresse : \`https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/${{ inputs.tag }}.tar\`"
+          } >> "$GITHUB_STEP_SUMMARY"
