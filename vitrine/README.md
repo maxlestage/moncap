@@ -26,7 +26,16 @@ reconstruire » y serait un piège, pas une consigne.
 
 Pour la même raison, la feuille de style porte un nom **fixe** (`styles.css`)
 et non une empreinte : une route Rust ne peut pas suivre un nom qui change à
-chaque construction. La fraîcheur repose sur l'ETag calculé par `ServeFile`.
+chaque construction.
+
+Un nom fixe a un prix, et il a été payé une fois : sans consigne, un
+navigateur qui a déjà vu `/styles.css` garde sa copie sans redemander.
+Safari a ainsi servi une page au HTML neuf et au style périmé — les maquettes
+s'affichaient en vrac. `ServeFile` n'émet **pas** d'`ETag`, seulement un
+`Last-Modified`, ce qui laisse le navigateur juge de la fraîcheur. Les deux
+routes de la vitrine envoient donc `Cache-Control: no-cache` : la copie reste
+en cache, mais elle est revalidée avant usage et la réponse est un 304 sans
+corps. Un aller-retour, pas un téléchargement.
 
 ## React sans envoyer React
 
@@ -53,6 +62,11 @@ Le partage des adresses est tenu par un test d'intégration côté Rust
 (`racine_sert_la_vitrine_et_app_le_front`) : `/` rend bien la vitrine et non
 le front, la feuille répond, le lien de connexion et la signature sont
 présents dans le rendu, et `/app` sert l'application.
+
+Le même test vérifie que les deux routes envoient `Cache-Control: no-cache`
+et que la feuille servie contient bien les règles des maquettes. Sans en-tête,
+la panne ne se voit ni dans les journaux ni dans un `curl` : seulement chez
+le visiteur déjà venu.
 
 `bun test` couvre le contenu lui-même : pas de version dans la pile, pas de
 doublon dans les listes qui servent de clés de rendu, pas de section vide.
