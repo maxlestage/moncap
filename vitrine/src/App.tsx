@@ -1,4 +1,12 @@
-import { ATOUTS, AUTEUR, CHIFFRES, CONNEXION, DEPOT, FRANCHISE } from "./content";
+import {
+  ATOUTS,
+  AUTEUR,
+  CHIFFRES,
+  CONNEXION,
+  DEPOT,
+  FRANCHISE,
+  TECHNIQUES,
+} from "./content";
 
 /**
  * Vitrine d'une page, pensée pour le pouce d'abord.
@@ -74,6 +82,24 @@ export function App() {
             Cette vérification tourne chaque semaine, sur le paquet réellement
             publié.
           </p>
+        </section>
+
+        <section aria-labelledby="pile-titre" className="pile">
+          <h2 id="pile-titre">Ce qu'il y a dessous</h2>
+          <dl>
+            {TECHNIQUES.map((p) => (
+              <div key={p.domaine}>
+                <dt>{p.domaine}</dt>
+                <dd>
+                  <ul>
+                    {p.outils.map((o) => (
+                      <li key={o}>{o}</li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
         <section aria-labelledby="franchise-titre" className="franchise">

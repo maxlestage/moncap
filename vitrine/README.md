@@ -6,7 +6,7 @@ téléphone d'abord.
 ```sh
 bun install
 bun run dev       # aperçu avec rechargement à chaud
-bun run verifie   # tsc --noEmit
+bun run verifie   # tsc --noEmit puis bun test
 bun run build     # écrit dist/
 ```
 
@@ -37,7 +37,7 @@ rendue **à la construction** (`renderToStaticMarkup` dans `build.tsx`), et
 | | poids livré |
 | --- | --- |
 | Paquet React classique | 397 Ko de JavaScript |
-| Rendu à la construction | **4,6 Ko de HTML + 3,3 Ko de CSS**, zéro JavaScript |
+| Rendu à la construction | **5,5 Ko de HTML + 3,7 Ko de CSS**, zéro JavaScript |
 
 React et TypeScript restent la façon d'écrire la page — typage du contenu,
 composition, relecture. Ils ne sont simplement pas du voyage. `src/index.tsx`
@@ -51,8 +51,11 @@ corps.
 
 Le partage des adresses est tenu par un test d'intégration côté Rust
 (`racine_sert_la_vitrine_et_app_le_front`) : `/` rend bien la vitrine et non
-le front, la feuille répond, le lien de connexion est présent dans le rendu,
-et `/app` sert l'application.
+le front, la feuille répond, le lien de connexion et la signature sont
+présents dans le rendu, et `/app` sert l'application.
+
+`bun test` couvre le contenu lui-même : pas de version dans la pile, pas de
+doublon dans les listes qui servent de clés de rendu, pas de section vide.
 
 ## Contenu
 
@@ -61,6 +64,14 @@ Les nombres qui y figurent sont **mesurés** : les tailles viennent des
 Releases publiées, les 222,5 km de Bordeaux → Limoges d'un calcul réel sans
 réseau (voir `.github/workflows/valhalla-epreuve.yml`). Une vitrine qui
 arrondit ses chiffres finit par mentir.
+
+La pile technique (`TECHNIQUES`) est listée **sans numéro de version**. Une
+version affichée sur une page vieillit toute seule : elle est fausse dès la
+mise à jour suivante et personne ne revient la corriger. Le nom, lui, reste
+vrai ; qui veut la version la lit dans `Cargo.toml` ou `package.json`, où
+elle est tenue à jour par construction. `src/content.test.ts` fait échouer la
+construction si un chiffre réapparaît dans la liste — c'est une règle qu'on
+réintroduit sans y penser, « React 19 » se tape tout seul.
 
 ## Style
 
