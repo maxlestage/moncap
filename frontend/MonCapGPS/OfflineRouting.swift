@@ -388,25 +388,58 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// Renvoie `nil` si aucune région n'est gardée ou si aucune ne couvre le
     /// trajet : l'appelant garde alors son itinéraire précédent.
     func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> OfflineRoute? {
-        let demande: [String: Any] = [
+        routes(from: from, to: to, max: 1).first
+    }
+
+    /// Plusieurs itinéraires entre deux points, calculés sur l'appareil.
+    ///
+    /// Valhalla sait proposer des variantes — le paramètre `alternates` — et
+    /// les renvoie à côté de l'itinéraire principal. Le croire incapable
+    /// revenait à n'offrir qu'un seul trajet hors réseau là où le mode
+    /// connecté en compare quinze.
+    ///
+    /// Le calcul reste local : demander des variantes coûte du temps de
+    /// processeur, pas de la donnée. Cinq par défaut, parce qu'au-delà les
+    /// tracés se ressemblent trop pour qu'un choix ait du sens, et que chacun
+    /// se paie en secondes d'attente sur un téléphone.
+    func routes(
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, max nombre: Int = 5
+    ) -> [OfflineRoute] {
+        var demande: [String: Any] = [
             "locations": [
                 ["lat": from.latitude, "lon": from.longitude],
                 ["lat": to.latitude, "lon": to.longitude],
             ],
             "costing": "auto",
-            "directions_options": ["units": "kilometers", "language": "fr-FR"],
+            "directions_options": [
+                "units": "kilometers",
+                // Les consignes suivent la langue de l'app : elles alimentent
+                // le bandeau et les annonces vocales.
+                "language": Self.langueValhalla,
+            ],
         ]
-        guard let json = try? JSONSerialization.data(withJSONObject: demande) else { return nil }
+        // `alternates` compte les variantes **en plus** du principal.
+        if nombre > 1 { demande["alternates"] = nombre - 1 }
+
+        guard let json = try? JSONSerialization.data(withJSONObject: demande) else { return [] }
         let texte = String(decoding: json, as: UTF8.self)
 
         for region in installees {
             guard let moteur = moteur(region.id) else { continue }
-            if let route = OfflineRoute(json: moteur.route(rawRequest: texte)) {
-                return route
-            }
+            let trouves = OfflineRoute.toutes(json: moteur.route(rawRequest: texte))
+            if !trouves.isEmpty { return trouves }
         }
-        return nil
+        return []
     }
+
+    /// Langue des consignes, accordée à celle que le paquet a retenue.
+    private static let langueValhalla: String = {
+        switch Bundle.main.preferredLocalizations.first {
+        case "es": return "es-ES"
+        case "en": return "en-US"
+        default: return "fr-FR"
+        }
+    }()
 
     /// Moteur d'une région, ouvert à la première demande et gardé ensuite.
     private func moteur(_ id: String) -> Valhalla? {
@@ -426,12 +459,39 @@ struct OfflineRoute {
     let steps: [NavStep]
     let km: Double
     let minutes: Double
+    /// L'itinéraire emprunte des sections à péage (`summary.has_toll`).
+    let hasTolls: Bool
+
+    /// Tous les itinéraires d'une réponse : le principal, puis les variantes.
+    ///
+    /// Valhalla place celles-ci dans `alternates`, chacune enveloppée dans son
+    /// propre objet `trip` — d'où la lecture en deux temps plutôt qu'une
+    /// simple boucle.
+    static func toutes(json: String) -> [OfflineRoute] {
+        guard
+            let data = json.data(using: .utf8),
+            let racine = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [] }
+
+        var trips: [[String: Any]] = []
+        if let principal = racine["trip"] as? [String: Any] { trips.append(principal) }
+        for variante in (racine["alternates"] as? [[String: Any]]) ?? [] {
+            if let trip = variante["trip"] as? [String: Any] { trips.append(trip) }
+        }
+        return trips.compactMap(OfflineRoute.init(trip:))
+    }
 
     init?(json: String) {
         guard
             let data = json.data(using: .utf8),
             let racine = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let trip = racine["trip"] as? [String: Any],
+            let trip = racine["trip"] as? [String: Any]
+        else { return nil }
+        self.init(trip: trip)
+    }
+
+    private init?(trip: [String: Any]) {
+        guard
             let legs = trip["legs"] as? [[String: Any]], !legs.isEmpty
         else { return nil }
 
@@ -458,6 +518,7 @@ struct OfflineRoute {
         steps = etapes
         km = (resume?["length"] as? Double) ?? 0
         minutes = ((resume?["time"] as? Double) ?? 0) / 60
+        hasTolls = (resume?["has_toll"] as? Bool) ?? false
     }
 
     /// Décodage de la polyligne Valhalla, précision six décimales.
