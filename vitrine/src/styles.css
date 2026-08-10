@@ -341,32 +341,42 @@ a {
   align-items: center;
 }
 
+/* Les chiffres sont des vignettes, et non des lignes séparées par un filet.
+ *
+ * `auto-fit` plutôt qu'un nombre de colonnes : ajouter un chiffre ne demande
+ * pas de revenir toucher la feuille. La largeur minimale est basse à dessein
+ * — deux de front doivent tenir même quand la page est agrandie, où la
+ * largeur utile tombe vers 220 px. Une colonne unique étirait le bandeau sur
+ * plus de trois cent cinquante pixels de haut pour cinq nombres. */
 .chiffres {
   display: grid;
-  /* `auto-fit` plutôt qu'un nombre de colonnes : deux de front sur un
-     téléphone, davantage ensuite, et ajouter un chiffre ne demande pas de
-     revenir toucher la feuille. */
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: 1.1rem 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(6.25rem, 1fr));
+  gap: 0.55rem;
   margin: 2.4rem 0 0;
   padding: 0;
 }
 
 .chiffres div {
-  border-left: 2px solid #2b3a55;
-  padding-left: 0.7rem;
+  background: rgb(255 255 255 / 0.09);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: var(--rayon);
+  padding: 0.75rem 0.8rem;
 }
 
 .chiffres dt {
-  font-size: clamp(1.4rem, 6vw, 1.9rem);
+  font-size: clamp(1.3rem, 5.5vw, 1.8rem);
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .chiffres dd {
-  margin: 0.15rem 0 0;
-  font-size: 0.8rem;
-  color: #8fa3c4;
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  /* Le gris-bleu d'avant tombait sous le seuil de lisibilité sur le dégradé ;
+     celui-ci est déjà celui de la marque en haut du bandeau. */
+  color: #cfe0fb;
 }
 
 /* --- Corps --------------------------------------------------------------- */
@@ -839,14 +849,37 @@ h2 {
   color: var(--doux);
 }
 
+/* Les limites de l'application sont la dernière chose qu'on lit avant le
+ * pied. En puces nues sur du blanc, elles ressemblaient à un texte qui
+ * s'arrête plutôt qu'à une section. Un cadre les rassemble, et une hairline
+ * sépare chaque aveu du suivant — la même sobriété qu'une liste de réglages
+ * iOS, sans en faire un encadré d'alerte. */
 .franchise ul {
   margin: 1.2rem 0 0;
-  padding-left: 1.15rem;
+  padding: 0;
+  list-style: none;
   color: var(--doux);
+  border: 1px solid var(--trait);
+  border-radius: var(--rayon);
+}
+
+.franchise li {
+  padding: 0.85rem 1rem 0.85rem 2.7rem;
+  position: relative;
 }
 
 .franchise li + li {
-  margin-top: 0.6rem;
+  border-top: 1px solid var(--trait);
+}
+
+/* Le tiret cadratin tient lieu de puce : il dit « en moins » là où un point
+   ne dit rien, et reste lisible au lecteur d'écran comme une simple liste. */
+.franchise li::before {
+  content: "—";
+  position: absolute;
+  left: 1rem;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* --- Pied de page --------------------------------------------------------

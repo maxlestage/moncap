@@ -51,6 +51,23 @@ test("le corps porte le bleu de marque, le papier est sur le contenu", () => {
 });
 
 /**
+ * Le bandeau chiffré doit tenir deux colonnes même sur une page agrandie, où
+ * la largeur utile tombe vers 220 px. En une seule colonne, cinq nombres
+ * étirent le bandeau sur plus de trois cent cinquante pixels de haut — c'est
+ * l'état que montrait une capture prise avec le zoom de Safari, et qu'une
+ * capture à 390 px ne révèle jamais.
+ */
+test("deux chiffres de front tiennent sur une page agrandie", () => {
+  const min = FEUILLE.match(/minmax\((\d+(?:\.\d+)?)rem, 1fr\)/)?.[1];
+  const gap = FEUILLE.match(/\.chiffres \{[^}]*gap: (\d+(?:\.\d+)?)rem/)?.[1];
+  expect(min, "largeur minimale de colonne introuvable").toBeDefined();
+  expect(gap, "gouttière introuvable").toBeDefined();
+
+  const px = (rem: string) => Number(rem) * 16;
+  expect(2 * px(min!) + px(gap!)).toBeLessThanOrEqual(220);
+});
+
+/**
  * Le corps étant bleu marine, toute marge extérieure entre le papier et le
  * pied s'y voit : une bande sombre, plus foncée que le papier au-dessus comme
  * que le dégradé en dessous. Le souffle avant le pied doit donc rester une
