@@ -193,17 +193,17 @@ struct OfflineMapScreen: View {
                     }
                     .disabled(!styleStatus.canDownload)
                 } else if route.count >= 2, let trajet = routeEstimate {
+                    // Un seul littéral : « "a" + "b" » produit une `String`,
+                    // et `Text(String)` ne consulte aucun catalogue.
                     Text(
-                        "Itinéraire trop long à ce niveau de détail "
-                            + "(\(Self.megabytes(trajet.bytes))). Choisis « Région »."
+                        "Itinéraire trop long à ce niveau de détail (\(Self.megabytes(trajet.bytes))). Choisis « Région »."
                     )
                     .font(.caption2).foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
                 }
                 if let devis, devis.toolarge {
                     Text(
-                        "Zone trop vaste : \(Self.megabytes(devis.bytes)) environ. "
-                            + "Rapproche-toi, ou choisis un niveau de détail moindre."
+                        "Zone trop vaste : \(Self.megabytes(devis.bytes)) environ. Rapproche-toi, ou choisis un niveau de détail moindre."
                     )
                     .font(.caption2).foregroundStyle(.orange)
                     .multilineTextAlignment(.center)

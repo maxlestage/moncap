@@ -2522,10 +2522,11 @@ struct MapHomeView: View {
                         Toggle("Naviguer hors ligne", isOn: $horsLigne)
                             .disabled(!router.ready)
                         if horsLigne && router.ready {
+                            // Un seul littéral, pas une concaténation : « "a" +
+                            // "b" » produit une `String`, et `Text(String)` est
+                            // verbatim — la phrase n'était donc jamais traduite.
                             Text(
-                                "Les itinéraires sont calculés sur l'appareil. "
-                                    + "Un seul trajet proposé au lieu de plusieurs, "
-                                    + "et pas de trafic en direct."
+                                "Les itinéraires sont calculés sur l'appareil. Cinq trajets proposés au lieu de quinze, et pas de trafic en direct."
                             )
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -2629,12 +2630,7 @@ struct MapHomeView: View {
                             Text(m).font(.caption2).foregroundStyle(.orange)
                         }
                         Text(
-                            "Permet de recalculer un itinéraire sans réseau. "
-                                + "Sans cela, s'écarter de sa route hors couverture laisse "
-                                + "l'app sans rien à proposer. Garde autant de régions que "
-                                + "tu veux : un trajet cherche sa route dans chacune. "
-                                + "En revanche il doit tenir entier dans l'une d'elles — "
-                                + "c'est à cela que servent les zones, qui se chevauchent."
+                            "Permet de recalculer un itinéraire sans réseau. Sans cela, s'écarter de sa route hors couverture laisse l'app sans rien à proposer. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent."
                         )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
