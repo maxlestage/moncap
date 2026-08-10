@@ -2520,8 +2520,8 @@ struct MapHomeView: View {
                     // pas des tuiles d'affichage.
                     DisclosureGroup("Itinéraires sans réseau 🧭") {
                         Toggle("Naviguer hors ligne", isOn: $horsLigne)
-                            .disabled(router.installed == nil)
-                        if horsLigne && router.installed != nil {
+                            .disabled(!router.ready)
+                        if horsLigne && router.ready {
                             Text(
                                 "Les itinéraires sont calculés sur l'appareil. "
                                     + "Un seul trajet proposé au lieu de plusieurs, "
@@ -2529,24 +2529,39 @@ struct MapHomeView: View {
                             )
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        } else if router.installed == nil {
+                        } else if !router.ready {
                             Text("Télécharge d'abord une région, ci-dessous.")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
 
-                        if let region = router.installed {
-                            Label(
-                                router.installedNom ?? region,
-                                systemImage: "checkmark.circle.fill"
-                            )
-                            .foregroundStyle(.green)
-                            Button(role: .destructive) {
-                                router.remove()
-                            } label: {
-                                Label("Effacer", systemImage: "trash")
+                        // Les régions gardées, chacune effaçable : en garder
+                        // plusieurs couvre plus de terrain, un trajet cherchant
+                        // sa route dans chacune.
+                        ForEach(router.installees) { gardee in
+                            HStack {
+                                Label(gardee.nom, systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Spacer()
+                                Text(gardee.poids)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Button(role: .destructive) {
+                                    router.remove(gardee.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.red)
                             }
-                        } else if router.downloading {
+                        }
+                        if router.installees.count > 1 {
+                            Text("\(router.installees.count) régions · \(router.poidsTotal)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if router.downloading {
                             ProgressView(value: router.progress) {
                                 Text("Téléchargement · \(Int(router.progress * 100)) %")
                                     .font(.footnote)
@@ -2616,8 +2631,10 @@ struct MapHomeView: View {
                         Text(
                             "Permet de recalculer un itinéraire sans réseau. "
                                 + "Sans cela, s'écarter de sa route hors couverture laisse "
-                                + "l'app sans rien à proposer. Une seule région à la fois : "
-                                + "en télécharger une remplace la précédente."
+                                + "l'app sans rien à proposer. Garde autant de régions que "
+                                + "tu veux : un trajet cherche sa route dans chacune. "
+                                + "En revanche il doit tenir entier dans l'une d'elles — "
+                                + "c'est à cela que servent les zones, qui se chevauchent."
                         )
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -3839,11 +3856,18 @@ private struct RegionButton: View {
     var complet = false
 
     var body: some View {
+        let deja = router.estInstallee(region)
         Button {
             Task { await router.install(region) }
         } label: {
-            Label("\(libelle) · \(region.poids)", systemImage: "arrow.down.circle")
+            Label(
+                "\(libelle) · \(region.poids)",
+                systemImage: deja ? "checkmark.circle.fill" : "arrow.down.circle"
+            )
+            .foregroundStyle(deja ? Color.green : Color.accentColor)
         }
+        // Retélécharger ce qu'on a déjà ne ferait que perdre le forfait.
+        .disabled(deja)
     }
 
     private var libelle: String {
