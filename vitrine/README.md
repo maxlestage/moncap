@@ -120,11 +120,18 @@ garantie : oublier une phrase dans une langue ne produit pas une page à
 trou, mais **une erreur de compilation**. Un test complète ce que le type
 ne peut pas voir — une chaîne vide compile très bien.
 
-Ce qui n'est **pas** traduit : les libellés visibles dans les maquettes.
-Ils dépeignent une application dont l'interface est en français, et inventer
-une version espagnole ou anglaise de ces écrans reviendrait à montrer un
-produit qui n'existe pas. Hors français, chaque légende le dit, et la section
-« ce qu'elle ne fait pas » le répète.
+Les libellés visibles **dans les maquettes** ne sont pas retapés : ils
+viennent de `src/appstrings.ts`, engendré par `frontend/traductions.py` à
+partir du tableau qui alimente aussi le catalogue iOS. Un écran dessiné ici
+dit donc exactement ce que l'application affiche, dans la même langue, et ne
+peut pas s'en écarter sans que la génération le montre.
+
+Les lignes chiffrées sont composées en versant des valeurs d'exemple dans les
+**formats de l'application** (`src/traduire.ts`), plutôt qu'en recopiant des
+phrases. La maquette suit ainsi la langue et la façon dont l'app écrit ses
+nombres : `String(format:)` sans locale met un point décimal, l'app affiche
+donc « 24.3 km » y compris en français — ce que la maquette écrivait à tort
+« 24,3 » avant d'être engendrée.
 
 Les trois pages se lient mutuellement et se déclarent en `hreflang` : sans
 cela, une page est un cul-de-sac pour qui n'atterrit pas dans sa langue.

@@ -361,6 +361,33 @@ avec annonces vocales** (depuis ta position vers la destination, carte qui
 suit le cap, **recalcul automatique si tu sors de la route**), export GPX,
 liste avec suppression.
 
+### Langues
+
+L'app suit la langue du téléphone parmi le **français, l'espagnol et
+l'anglais** ; ailleurs, elle reste en français. Le français est la langue
+source : chaque clé du catalogue **est** la chaîne française écrite dans le
+code Swift, si bien qu'une traduction manquante affiche du français plutôt
+qu'un trou.
+
+`frontend/traductions.py` porte le tableau et engendre deux fichiers :
+
+| Fichier | Rôle |
+| --- | --- |
+| `frontend/MonCapGPS/Localizable.xcstrings` | le catalogue lu par SwiftUI |
+| `vitrine/src/appstrings.ts` | les mêmes libellés pour les maquettes du site |
+
+Relancer `python3 frontend/traductions.py` après toute modification. Le
+groupe de fichiers du projet Xcode est synchronisé : le catalogue déposé dans
+`MonCapGPS/` est intégré sans manipulation.
+
+Deux pièges rencontrés, à connaître avant d'ajouter du texte :
+
+- `Text("littéral")` se traduit tout seul (le littéral sert de clé), mais
+  **`Text(uneVariable)` non** : cette surcharge est verbatim. Les libellés
+  venus d'énumérations passent donc par `Text(LocalizedStringKey(...))`.
+- `String(format:)` ne consulte aucun catalogue : ses formats sont enveloppés
+  dans `NSLocalizedString`.
+
 ### Comparateur d'itinéraires
 
 **Jusqu'à 15 itinéraires** sont proposés pour un même trajet — c'est un

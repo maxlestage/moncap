@@ -7,6 +7,8 @@ import {
   OUTILS,
 } from "./content";
 import { LANGUES } from "./langues";
+import { APP } from "./appstrings";
+import { MODES } from "./content";
 
 /**
  * Ces tests ne défendent pas une formulation mais une **matière** : ce que la
@@ -163,12 +165,20 @@ test("chaque langue garde la même matière", () => {
 });
 
 /**
- * Hors français, la page doit dire que les écrans dépeints sont en français.
- * Sans ce rappel, les maquettes laissent croire à une application traduite.
+ * Les maquettes reproduisent les libellés de l'application. Si une clé
+ * disparaissait du tableau engendré, la maquette retomberait en français au
+ * milieu d'une page espagnole — sans que rien n'échoue.
  */
-test("les langues étrangères signalent que l'app est en français", () => {
+test("les maquettes disposent des libellés de l'app dans chaque langue", () => {
   for (const l of LANGUES) {
-    if (l.code === "fr") continue;
-    expect(l.legendes.enFrancais, `${l.code}`).toBeTruthy();
+    for (const cle of [...MODES, "Démarrer", ...LIEUX.map((x) => x.nom)]) {
+      expect(APP[l.code][cle], `${l.code} / ${cle}`).toBeTruthy();
+    }
+    // Hors français, ils doivent réellement différer : une table qui
+    // recopierait le français donnerait une page bilingue par accident.
+    if (l.code !== "fr") {
+      const traduits = MODES.filter((m) => APP[l.code][m] !== APP.fr[m]);
+      expect(traduits.length, `${l.code}`).toBe(MODES.length);
+    }
   }
 });
