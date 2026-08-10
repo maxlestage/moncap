@@ -34,6 +34,23 @@ test("les quatre thèmes sont câblés", () => {
 });
 
 /**
+ * La bande blanche sous la barre d'état de Safari venait de là, et la
+ * correction est trop discrète pour survivre seule : Safari teinte sa barre
+ * d'après le fond du **corps**, pas d'après `html` ni d'après ce qui est
+ * peint en haut de la page. Remettre `--papier` sur `body` — le geste le plus
+ * naturel du monde — ramènerait la bande blanche sans qu'aucune capture ne
+ * le montre, puisque la barre du navigateur ne se photographie pas.
+ */
+test("le corps porte le bleu de marque, le papier est sur le contenu", () => {
+  const corps = FEUILLE.match(/\nbody \{[^}]*\}/)?.[0] ?? "";
+  expect(corps).toContain("background: var(--marine)");
+  expect(corps).not.toContain("--papier");
+
+  const contenu = FEUILLE.match(/\nmain \{[^}]*\}/)?.[0] ?? "";
+  expect(contenu).toContain("background: var(--papier)");
+});
+
+/**
  * Chaque thème doit redéfinir les jetons qui portent le texte et le fond.
  * Un thème qui n'en changerait qu'un donnerait un texte illisible plutôt
  * qu'un thème.
