@@ -63,13 +63,10 @@ export type Contenu = {
   };
   readonly reste: string;
   /**
-   * Le peu de texte des maquettes qui ne vient pas du catalogue de l'app :
-   * les consignes de navigation sont produites par MapKit, que le système
-   * traduit lui-même, et « Installée » n'existe que sur ce dessin.
+   * Le seul texte de maquette qui ne vienne pas du catalogue de l'app :
+   * « Installée » n'existe que sur ce dessin.
    */
   readonly maquette: {
-    readonly consigne: string;
-    readonly precision: string;
     readonly installee: string;
   };
   readonly signature: string;
@@ -214,8 +211,6 @@ const FR: Contenu = {
   },
   reste: "et 12 autres itinéraires",
   maquette: {
-    consigne: "Tourner à droite sur la D912",
-    precision: "Sortie 12 — Saint-Émilion",
     installee: "✓ Installée",
   },
   signature: "Conçu et développé par",
@@ -353,8 +348,6 @@ const ES: Contenu = {
   },
   reste: "y 12 rutas más",
   maquette: {
-    consigne: "Gire a la derecha por la D912",
-    precision: "Salida 12 — Saint-Émilion",
     installee: "✓ Instalada",
   },
   signature: "Diseñado y desarrollado por",
@@ -492,8 +485,6 @@ const EN: Contenu = {
   },
   reste: "and 12 more routes",
   maquette: {
-    consigne: "Turn right onto the D912",
-    precision: "Exit 12 — Saint-Émilion",
     installee: "✓ Installed",
   },
   signature: "Designed and built by",

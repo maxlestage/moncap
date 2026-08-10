@@ -226,6 +226,78 @@ T: dict[str, tuple[str, str]] = {
         "⛽ ~%.2f € · 🛣️ peajes ~%.2f € · total ~%.2f €",
         "⛽ ~%.2f € · 🛣️ tolls ~%.2f € · total ~%.2f €",
     ),
+    # --- Consignes de navigation ------------------------------------------
+    # L'application ne montre pas la consigne du moteur d'itinéraire : elle la
+    # ré-écrit en un mot, lisible d'un coup d'œil au volant. Ces textes sont
+    # donc les siens, et doivent être traduits comme le reste.
+    "Calcul de l'itinéraire…": ("Calculando la ruta…", "Computing the route…"),
+    "calcul de l'itinéraire": ("calculando la ruta", "computing the route"),
+    "Recalcul de l'itinéraire…": ("Recalculando la ruta…", "Recomputing the route…"),
+    "Recalcul de l'itinéraire.": ("Recalculando la ruta.", "Recomputing the route."),
+    "Arrivée": ("Llegada", "Arrival"),
+    "vous êtes arrivé": ("has llegado", "you have arrived"),
+    "Demi-tour": ("Cambio de sentido", "U-turn"),
+    "faites demi-tour": ("haz un cambio de sentido", "make a U-turn"),
+    "Gauche": ("Izquierda", "Left"),
+    "Droite": ("Derecha", "Right"),
+    "à gauche": ("a la izquierda", "left"),
+    "à droite": ("a la derecha", "right"),
+    "Tout droit": ("Recto", "Straight ahead"),
+    "tout droit": ("recto", "straight ahead"),
+    "rond-point": ("rotonda", "roundabout"),
+    "serrez": ("mantente", "keep"),
+    "virage serré": ("giro cerrado", "sharp turn"),
+    "serrez %@": ("mantente %@", "keep %@"),
+    "franchement %@": ("cerrado %@", "sharp %@"),
+    "sortie": ("salida", "exit"),
+    "Sortie": ("Salida", "Exit"),
+    "Sortie %@": ("Salida %@", "Exit %@"),
+    "%@ sortie": ("%@ salida", "%@ exit"),
+    "prenez la sortie": ("toma la salida", "take the exit"),
+    "prenez la sortie %@": ("toma la salida %@", "take exit %@"),
+    "prenez la %@ sortie": ("toma la %@ salida", "take the %@ exit"),
+    "au rond-point, %@": ("en la rotonda, %@", "at the roundabout, %@"),
+    "au rond-point, prenez la %@ sortie": (
+        "en la rotonda, toma la %@ salida",
+        "at the roundabout, take the %@ exit",
+    ),
+    # Rangs de sortie. Une table plutôt qu'un `NumberFormatter` : celui-ci
+    # donne « 1er » là où une sortie, mot féminin, demande « 1re ».
+    "1re": ("1.ª", "1st"),
+    "2e": ("2.ª", "2nd"),
+    "3e": ("3.ª", "3rd"),
+    "4e": ("4.ª", "4th"),
+    "5e": ("5.ª", "5th"),
+    "6e": ("6.ª", "6th"),
+    "7e": ("7.ª", "7th"),
+    "8e": ("8.ª", "8th"),
+    "9e": ("9.ª", "9th"),
+    # --- Annonces vocales ---------------------------------------------------
+    "Dans %d mètres, %@": ("En %d metros, %@", "In %d metres, %@"),
+    "Maintenant, %@": ("Ahora, %@", "Now, %@"),
+    "Départ, %@": ("Salida, %@", "Starting, %@"),
+    "Arrivée prévue vers %@.": ("Llegada prevista hacia las %@.", "Arriving around %@."),
+    "Vous êtes arrivé à destination.": (
+        "Has llegado a tu destino.",
+        "You have arrived at your destination.",
+    ),
+    "Nouvel itinéraire.": ("Nueva ruta.", "New route."),
+    "Itinéraire plus rapide trouvé : environ %d minutes de gagnées.": (
+        "Ruta más rápida encontrada: unos %d minutos ganados.",
+        "Faster route found: about %d minutes saved.",
+    ),
+    "Ça bouchonne devant. Itinéraire de contournement.": (
+        "Hay atasco delante. Ruta alternativa.",
+        "Traffic ahead. Taking a way around.",
+    ),
+    "Bouchon signalé devant. Itinéraire pour l'éviter.": (
+        "Atasco avisado delante. Ruta para evitarlo.",
+        "Jam reported ahead. Routing around it.",
+    ),
+    "Recalcul impossible. Je garde l'itinéraire.": (
+        "No se puede recalcular. Mantengo la ruta.",
+        "Cannot recompute. Keeping the route.",
+    ),
     # --- Catégories de lieux et modes de déplacement -----------------------
     # Ces libellés viennent d'énumérations, pas de littéraux : les sites
     # d'appel passent par `LocalizedStringKey` pour que la recherche ait lieu.
@@ -287,6 +359,8 @@ VITRINE = [
     "Pharmacie", "Distributeur", "Toilettes", "Eau potable", "Handicapé",
     "Baignade", "Surf", "Skatepark", "Camping", "Point de vue", "Fast-food",
     "Tourisme", "Sorties", "Éclaircies",
+    # Le bandeau de manœuvre : un mot et sa précision, pas une phrase.
+    "Sortie %@", "sortie",
     # Les formats de `String(format:)` : la vitrine les remplit avec des
     # valeurs d'exemple plutôt que de recopier des phrases toutes faites.
     "%.0f min · %.1f km · %d virages · arr. %@",
