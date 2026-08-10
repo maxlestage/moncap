@@ -382,8 +382,15 @@ main {
   flex: 1;
 }
 
+/* Le souffle avant le pied est une marge **intérieure**, et non la marge
+ * extérieure du pied. Une marge entre les deux laisserait voir le fond du
+ * corps — depuis que celui-ci est bleu marine, elle dessinait une bande
+ * sombre entre le papier et le dégradé du pied, plus foncée que l'un comme
+ * que l'autre. Ici, le papier descend jusqu'au pied, qui commence aussitôt.
+ */
 main > .dedans {
   padding-top: 2.75rem;
+  padding-bottom: 4rem;
 }
 
 section + section {
@@ -851,7 +858,6 @@ h2 {
  * c'est aussi ce qu'on découvre en tirant la page au-delà de son terme.
  */
 footer {
-  margin-top: 4rem;
   background: linear-gradient(180deg, var(--bleu), var(--marine));
   color: #c3cfe2;
   font-size: 0.87rem;
