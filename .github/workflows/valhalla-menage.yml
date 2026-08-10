@@ -1,0 +1,125 @@
+name: Ménage des tuiles
+
+# Supprime les Releases de tuiles rendues caduques, et rien d'autre.
+#
+# Deux générations se sont accumulées :
+#   — celle d'avant l'Europe, sans le préfixe « tuiles-eu- », que l'app ignore
+#     déjà mais qui encombre la page des Releases ;
+#   — les vingt-sept découpes Geofabrik de la France, remplacées par les
+#     treize grandes régions bâties d'un seul graphe. Dix d'entre elles
+#     portent le même nom que leur groupe et ont été écrasées sur place ; les
+#     dix-sept autres n'ont plus de raison d'être.
+#
+# La suppression est irréversible : rien n'est effacé tant que le remplaçant
+# n'est pas vérifié présent, archive comprise, et l'exécution est un simple
+# état des lieux tant que « confirmer » ne vaut pas « oui ».
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmer:
+        description: "« oui » pour supprimer ; toute autre valeur ne fait qu'énumérer"
+        required: true
+        default: "non"
+
+permissions:
+  contents: write
+
+jobs:
+  menage:
+    name: Effacer les Releases caduques
+    runs-on: ubuntu-latest
+    steps:
+      - name: Établit la liste, puis supprime
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPOT: ${{ github.repository }}
+          CONFIRMER: ${{ inputs.confirmer }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$DEPOT/releases" \
+            --jq '.[] | {tag: .tag_name, tar: ([.assets[].name] | map(select(endswith(".tar"))) | length)}' \
+            > releases.jsonl
+          echo "Releases existantes : $(wc -l < releases.jsonl)"
+
+          python3 - <<'PY' > plan.txt
+          import json
+
+          # Les treize grandes régions et l'outre-mer, telles que publiées.
+          GROUPES = {
+              "france-auvergne-rhone-alpes": ["auvergne", "rhone-alpes"],
+              "france-bourgogne-franche-comte": ["bourgogne", "franche-comte"],
+              "france-bretagne": ["bretagne"],
+              "france-centre-val-de-loire": ["centre"],
+              "france-corse": ["corse"],
+              "france-grand-est": ["alsace", "champagne-ardenne", "lorraine"],
+              "france-hauts-de-france": ["nord-pas-de-calais", "picardie"],
+              "france-ile-de-france": ["ile-de-france"],
+              "france-normandie": ["basse-normandie", "haute-normandie"],
+              "france-nouvelle-aquitaine": ["aquitaine", "limousin", "poitou-charentes"],
+              "france-occitanie": ["languedoc-roussillon", "midi-pyrenees"],
+              "france-pays-de-la-loire": ["pays-de-la-loire"],
+              "france-provence-alpes-cote-d-azur": ["provence-alpes-cote-d-azur"],
+              "france-guadeloupe": ["guadeloupe"],
+              "france-guyane": ["guyane"],
+              "france-martinique": ["martinique"],
+              "france-mayotte": ["mayotte"],
+              "france-reunion": ["reunion"],
+          }
+
+          avec_archive = set()
+          toutes = set()
+          for ligne in open("releases.jsonl"):
+              r = json.loads(ligne)
+              toutes.add(r["tag"])
+              if r["tar"]:
+                  avec_archive.add(r["tag"])
+
+          # Un groupe ne remplace ses régions qu'une fois publié, archive
+          # comprise : une construction interrompue laisse la Release et sa
+          # seule configuration, ce qui ne remplace rien.
+          manquants = [g for g in GROUPES if "tuiles-eu-" + g not in avec_archive]
+          if manquants:
+              raise SystemExit(
+                  "ARRET : ces groupes n'ont pas d'archive publiée, "
+                  "rien ne sera supprimé — " + ", ".join(sorted(manquants)))
+
+          caduques = set()
+          # Les régions absorbées par un groupe, sauf celles qui portent le
+          # même nom que lui : celles-là ont été écrasées sur place.
+          for groupe, zones in GROUPES.items():
+              for z in zones:
+                  tag = "tuiles-eu-france-" + z
+                  if tag != "tuiles-eu-" + groupe and tag in toutes:
+                      caduques.add(tag)
+          # La génération d'avant l'Europe, que le préfixe distingue.
+          for tag in toutes:
+              if tag.startswith("tuiles-") and not tag.startswith("tuiles-eu-"):
+                  caduques.add(tag)
+
+          for tag in sorted(caduques):
+              print(tag)
+          PY
+
+          echo "À supprimer : $(wc -l < plan.txt)"
+          cat plan.txt
+
+          if [ "$CONFIRMER" != "oui" ]; then
+            echo "::notice::État des lieux seulement. Relancer avec « oui » pour supprimer."
+            exit 0
+          fi
+
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            echo "suppression de $tag"
+            # `--cleanup-tag` : sans lui l'étiquette survit à la Release et
+            # continue d'apparaître dans la liste des tags.
+            gh release delete "$tag" -R "$DEPOT" --yes --cleanup-tag
+          done < plan.txt
+
+          {
+            echo "### Ménage des tuiles"
+            echo ""
+            echo "- Supprimées : **$(wc -l < plan.txt)**"
+            echo "- Restantes : **$(( $(wc -l < releases.jsonl) - $(wc -l < plan.txt) ))**"
+          } >> "$GITHUB_STEP_SUMMARY"
