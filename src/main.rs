@@ -1417,24 +1417,42 @@ async fn health(State(db): State<DatabaseConnection>) -> Response {
     }
 }
 
-/// Oblige le navigateur à redemander si la ressource a changé, au lieu de
+/// Oblige le navigateur à redemander si la page a changé, au lieu de
 /// réutiliser sa copie sans rien demander.
 ///
-/// La feuille de la vitrine porte un nom **fixe** — une route Rust ne peut
-/// pas suivre un nom horodaté. Sans en-tête, `ServeFile` n'envoie qu'un
-/// `Last-Modified` (il ne calcule pas d'`ETag`), et le navigateur est alors
-/// libre d'estimer lui-même la fraîcheur : Safari a servi l'ancienne feuille
-/// à un visiteur déjà venu, donnant une page au HTML neuf et au style
-/// périmé — les maquettes s'affichaient en vrac.
+/// La page, elle, garde une adresse fixe : c'est le seul document dont
+/// l'URL ne peut pas porter d'empreinte. Sans cet en-tête, `ServeFile`
+/// n'envoie qu'un `Last-Modified` (il ne calcule pas d'`ETag`) et le
+/// navigateur estime lui-même la fraîcheur — il peut donc servir une vieille
+/// copie sans rien demander.
 ///
 /// `no-cache` ne veut pas dire « ne garde rien » mais « revalide avant de
 /// réutiliser » : la copie reste en cache et la revalidation répond 304 sans
-/// corps, d'après le `Last-Modified`. Le coût est un aller-retour, pas un
-/// téléchargement.
+/// corps. Le coût est un aller-retour, pas un téléchargement.
 async fn revalider(req: Request, next: Next) -> Response {
     let mut resp = next.run(req).await;
     resp.headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    resp
+}
+
+/// Marque une ressource comme définitivement figée.
+///
+/// Les fichiers de `vitrine/dist` portent l'empreinte de leur contenu dans
+/// leur nom : à cette adresse-là, l'octet ne changera jamais. Le navigateur
+/// peut donc la garder un an sans jamais revalider — et une modification
+/// produit une **autre** adresse, qu'il n'a pas en cache.
+///
+/// C'est cette propriété qui a manqué. Une feuille au nom fixe, mise en
+/// cache une fois, restait servie de la mémoire du navigateur : aucun
+/// en-tête posé ensuite ne pouvait l'atteindre, puisqu'il ne redemandait
+/// rien. Seul un changement d'adresse débloque un cache déjà pris.
+async fn fige(req: Request, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=31536000, immutable"),
+    );
     resp
 }
 
@@ -1461,12 +1479,18 @@ fn build_app(state: AppState) -> Router {
     // `ServeDir` de plus à la racine entrerait en conflit avec le repli du
     // front. `vitrine/dist` est versionné parce que le dyno Heroku ne
     // compile que la crate Rust : aucun Bun ne tourne au déploiement.
-    // Les deux passent par `revalider` : le nom de la feuille étant fixe, un
-    // navigateur qui ne redemande pas garde l'ancienne indéfiniment.
+    // La page occupe la racine exacte et se revalide à chaque visite : son
+    // adresse ne peut pas porter d'empreinte.
     let vitrine: Router<AppState> = Router::new()
         .route_service("/", ServeFile::new("vitrine/dist/index.html"))
-        .route_service("/styles.css", ServeFile::new("vitrine/dist/styles.css"))
         .layer(middleware::from_fn(revalider));
+
+    // Ses fichiers vivent sous `/vitrine`, nommés d'après leur contenu. Un
+    // répertoire et non des routes nommées : le nom change à chaque
+    // construction, une route fixe ne pourrait pas le suivre.
+    let vitrine_fichiers: Router<AppState> = Router::new()
+        .nest_service("/vitrine", ServeDir::new("vitrine/dist"))
+        .layer(middleware::from_fn(fige));
 
     // Limiteurs : général (par IP), strict sur l'authentification
     // (anti brute-force), large sur les tuiles.
@@ -1498,6 +1522,7 @@ fn build_app(state: AppState) -> Router {
     // Routes volontairement minimales.
     Router::new()
         .merge(vitrine)
+        .merge(vitrine_fichiers)
         .route("/health", get(health))
         .route("/positions", get(list_positions).post(add_position))
         .route(
@@ -3800,10 +3825,19 @@ mod integration {
             page.contains(r#"href="/app""#),
             "la vitrine doit offrir un lien de connexion"
         );
-        // La feuille est servie par une route au nom fixe : si la
-        // construction se remettait à horodater le nom, le lien casserait
-        // sans que rien d'autre ne le signale.
-        assert!(page.contains(r#"href="./styles.css""#));
+        // Le lien de la feuille n'est pas deviné : il est extrait du rendu
+        // puis suivi. C'est la seule façon de prouver que l'adresse expédiée
+        // au navigateur mène quelque part — un nom écrit en dur dans le test
+        // resterait vert alors que la page ne se stylerait plus.
+        let lien = page
+            .split(r#"<link rel="stylesheet" href=""#)
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("la page doit lier une feuille de style");
+        assert!(
+            lien.starts_with("/vitrine/styles-"),
+            "la feuille doit porter une empreinte : {lien}"
+        );
         // La signature de l'auteur : le genre de ligne qui disparaît sans
         // bruit au premier remaniement du pied de page.
         assert!(
@@ -3811,8 +3845,8 @@ mod integration {
             "la vitrine doit porter la signature de son auteur"
         );
 
-        let (statut, cache, feuille) = reponse(&app, "/styles.css").await;
-        assert_eq!(statut, StatusCode::OK, "la feuille doit être servie");
+        let (statut, cache, feuille) = reponse(&app, lien).await;
+        assert_eq!(statut, StatusCode::OK, "la feuille liée doit être servie");
         assert!(feuille.contains("--encre"));
         // Les règles des maquettes : leur absence ne casse rien de visible
         // côté serveur, mais laisse la page en vrac dans le navigateur.
@@ -3821,18 +3855,25 @@ mod integration {
             "les maquettes doivent être stylées"
         );
 
-        // La feuille porte un nom fixe. Sans consigne de revalidation, un
-        // navigateur qui l'a déjà vue garde son ancienne copie : c'est ce qui
-        // a donné une page au HTML neuf et au style périmé, maquettes en
-        // vrac. `ServeFile` n'émet pas d'ETag — seul cet en-tête force le
-        // navigateur à redemander.
+        // Le nom porte l'empreinte du contenu : l'octet à cette adresse ne
+        // changera jamais, le navigateur peut la garder sans revalider. Une
+        // modification produira une autre adresse, qu'il n'a pas en cache —
+        // c'est ce qui manquait quand la feuille s'appelait « styles.css » et
+        // restait servie de la mémoire du navigateur.
         assert_eq!(
             cache.as_deref(),
-            Some("no-cache"),
-            "la feuille doit être revalidée à chaque visite"
+            Some("public, max-age=31536000, immutable"),
+            "un nom empreint doit être mis en cache définitivement"
         );
+
+        // La page, elle, garde une adresse fixe : elle doit se revalider,
+        // sans quoi le navigateur ne verrait jamais la nouvelle empreinte.
         let (_, cache_page, _) = reponse(&app, "/").await;
-        assert_eq!(cache_page.as_deref(), Some("no-cache"));
+        assert_eq!(
+            cache_page.as_deref(),
+            Some("no-cache"),
+            "la page doit être revalidée à chaque visite"
+        );
 
         let (statut, front) = corps(&app, "/app").await;
         assert_eq!(statut, StatusCode::OK);
