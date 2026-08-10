@@ -14,8 +14,17 @@ import Valhalla
 /// c'est le format documenté de Valhalla, stable, et cela évite de dépendre
 /// de modèles susceptibles de changer d'une version à l'autre.
 @MainActor
-final class OfflineRouter: ObservableObject {
+final class OfflineRouter: NSObject, ObservableObject {
     static let shared = OfflineRouter()
+
+    /// Rappel confié par le système quand il réveille l'app pour lui remettre
+    /// un transfert achevé. À rappeler une fois l'écran à jour, sinon iOS
+    /// considère l'app fautive et finit par lui refuser les réveils.
+    nonisolated(unsafe) static var rappelSysteme: (() -> Void)?
+
+    /// Identifiant de la session de fond. Stable : c'est par lui que le
+    /// système retrouve les transferts d'un lancement à l'autre.
+    private static let sessionID = "moncap.tuiles"
 
     /// Une région téléchargeable, telle que publiée par le workflow
     /// « Tuiles Valhalla » : une Release par région, hébergement gratuit et
@@ -80,9 +89,22 @@ final class OfflineRouter: ObservableObject {
     /// ligne. Gardés ensuite, un trajet en enchaînant souvent d'autres.
     private var moteurs: [String: Valhalla] = [:]
 
-    private init() {
+    /// Session de fond : le système poursuit le transfert app quittée, et la
+    /// relance à la fin. Construite paresseusement, mais une seule fois — deux
+    /// sessions de même identifiant sont une erreur fatale.
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.background(withIdentifier: Self.sessionID)
+        // Deux gigaoctets ne se téléchargent pas en itinérance sans prévenir.
+        config.allowsCellularAccess = true
+        config.isDiscretionary = false
+        config.sessionSendsLaunchEvents = true
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
+
+    private override init() {
         let brut = UserDefaults.standard.data(forKey: Self.key)
         let lues = brut.flatMap { try? JSONDecoder().decode([Installee].self, from: $0) } ?? []
+        super.init()
         // Une région effacée à la main ne doit pas rester annoncée.
         installees = lues.filter {
             FileManager.default.fileExists(atPath: Self.archivePath($0.id).path)
@@ -91,6 +113,7 @@ final class OfflineRouter: ObservableObject {
     }
 
     private static let key = "moncap.valhallaRegions"
+    private static let keyAttentes = "moncap.valhallaAttentes"
 
     private func enregistre() {
         if let data = try? JSONEncoder().encode(installees) {
@@ -98,18 +121,18 @@ final class OfflineRouter: ObservableObject {
         }
     }
 
-    private static var dossier: URL {
+    nonisolated private static var dossier: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent("itineraire", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
-    private static func archivePath(_ id: String) -> URL {
+    nonisolated private static func archivePath(_ id: String) -> URL {
         dossier.appendingPathComponent("\(id).tar")
     }
 
-    private static func configPath(_ id: String) -> URL {
+    nonisolated private static func configPath(_ id: String) -> URL {
         dossier.appendingPathComponent("\(id).json")
     }
 
@@ -207,31 +230,94 @@ final class OfflineRouter: ObservableObject {
     /// graphe — cela ne se fait qu'à la construction — mais un trajet cherche
     /// sa route dans chacune, si bien qu'en garder plusieurs couvre plus de
     /// terrain sans rien retélécharger.
+    /// Le transfert est confié au système : deux gigaoctets ne descendent pas
+    /// en gardant l'écran allumé sur l'app. iOS poursuit la session de fond
+    /// app quittée, et réveille celle-ci quand le fichier est là.
     func install(_ region: Region) async {
         guard !downloading, !estInstallee(region) else { return }
         downloading = true
         progress = 0
         message = nil
-        defer { downloading = false }
 
-        do {
-            // La configuration d'abord : légère, et si elle échoue inutile de
-            // faire descendre deux cent cinquante mégaoctets.
-            let (configData, _) = try await URLSession.shared.data(from: region.config)
-            let archive = try await telecharge(region.archive)
-
-            try archive.write(to: Self.archivePath(region.id))
-            let corrigee = try Self.corrige(config: configData, pour: region.id)
-            try corrigee.write(to: Self.configPath(region.id))
-
-            moteurs[region.id] = nil
-            installees.append(
-                Installee(id: region.id, nom: region.nom, octets: archive.count))
-            enregistre()
-        } catch {
-            message = "Téléchargement interrompu."
-            try? FileManager.default.removeItem(at: Self.archivePath(region.id))
+        // La configuration d'abord : quelques kilooctets, et elle doit être
+        // sur le disque avant que l'archive n'arrive — la fin du transfert
+        // peut survenir alors que l'app n'est plus lancée.
+        guard let (configData, _) = try? await URLSession.shared.data(from: region.config),
+            let corrigee = try? Self.corrige(config: configData, pour: region.id),
+            (try? corrigee.write(to: Self.configPath(region.id))) != nil
+        else {
+            downloading = false
+            message = "Région indisponible."
+            return
         }
+
+        attentes[region.id] = region.nom
+        let tache = session.downloadTask(with: region.archive)
+        // L'étiquette survit à la mort de l'app : c'est par elle qu'on
+        // retrouve de quelle région il s'agissait.
+        tache.taskDescription = region.id
+        tache.resume()
+    }
+
+    /// Régions dont l'archive est en cours de transfert, par identifiant.
+    private var attentes: [String: String] {
+        get {
+            UserDefaults.standard.dictionary(forKey: Self.keyAttentes) as? [String: String] ?? [:]
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Self.keyAttentes) }
+    }
+
+    /// Reprend la main sur une session de fond après un lancement à froid.
+    ///
+    /// Sans cela, une archive arrivée pendant que l'app était fermée resterait
+    /// sur le disque sans que personne ne l'inscrive.
+    func reprend() {
+        let attendues = Set(attentes.keys)
+        guard !attendues.isEmpty else { return }
+        // Seules des valeurs simples traversent la fermeture : y capturer
+        // l'objet entier reviendrait à le toucher hors du fil principal.
+        session.getAllTasks { taches in
+            let enCours = Set(taches.compactMap(\.taskDescription))
+            let actif = taches.contains { $0.state == .running }
+            // Une archive déjà déposée par le système, dont personne n'a vu
+            // la fin : plus aucune tâche ne la porte, on l'inscrit maintenant.
+            let finies = attendues.subtracting(enCours)
+            Task { @MainActor in
+                OfflineRouter.shared.downloading = actif
+                for id in finies { OfflineRouter.shared.termine(id) }
+            }
+        }
+    }
+
+    /// Inscrit une région dont l'archive est arrivée.
+    fileprivate func termine(_ id: String) {
+        let chemin = Self.archivePath(id)
+        let taille = (try? FileManager.default.attributesOfItem(atPath: chemin.path)[.size])
+        let octets = (taille as? NSNumber)?.intValue ?? 0
+        var restantes = attentes
+        let nom = restantes.removeValue(forKey: id) ?? id
+        attentes = restantes
+        downloading = !restantes.isEmpty
+
+        guard octets > 0 else {
+            message = "Téléchargement interrompu."
+            return
+        }
+        moteurs[id] = nil
+        if !installees.contains(where: { $0.id == id }) {
+            installees.append(Installee(id: id, nom: nom, octets: octets))
+            enregistre()
+        }
+        progress = 1
+    }
+
+    fileprivate func echoue(_ id: String) {
+        var restantes = attentes
+        restantes.removeValue(forKey: id)
+        attentes = restantes
+        downloading = !restantes.isEmpty
+        message = "Téléchargement interrompu."
+        try? FileManager.default.removeItem(at: Self.archivePath(id))
     }
 
     /// Efface une région gardée.
@@ -252,25 +338,6 @@ final class OfflineRouter: ObservableObject {
         moteurs.removeAll()
         installees.removeAll()
         enregistre()
-    }
-
-    /// Téléchargement suivi, pour que l'attente ne soit pas muette.
-    private func telecharge(_ url: URL) async throws -> Data {
-        let (flux, reponse) = try await URLSession.shared.bytes(from: url)
-        let attendu = max(1, reponse.expectedContentLength)
-        var recu = Data()
-        recu.reserveCapacity(Int(attendu))
-        var dernier = 0
-        for try await octet in flux {
-            recu.append(octet)
-            // Publier à chaque octet noierait le fil principal.
-            if recu.count - dernier > 1_000_000 {
-                dernier = recu.count
-                progress = Double(recu.count) / Double(attendu)
-            }
-        }
-        progress = 1
-        return recu
     }
 
     /// Réécrit les chemins de la configuration engendrée sur le runner.
@@ -415,5 +482,51 @@ struct OfflineRoute {
                     latitude: Double(lat) / 1e6, longitude: Double(lon) / 1e6))
         }
         return out
+    }
+}
+
+/// Réception des transferts de fond.
+///
+/// Le système appelle ces méthodes hors du fil principal, et jusque après un
+/// lancement à froid : rien ici ne peut supposer que l'écran existe encore.
+extension OfflineRouter: URLSessionDownloadDelegate {
+    nonisolated func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        // Le fichier temporaire disparaît au retour de cette méthode : il faut
+        // le déplacer ici même, sans attendre de repasser sur le fil principal.
+        guard let id = downloadTask.taskDescription else { return }
+        let destination = OfflineRouter.archivePath(id)
+        try? FileManager.default.removeItem(at: destination)
+        try? FileManager.default.moveItem(at: location, to: destination)
+        Task { @MainActor in OfflineRouter.shared.termine(id) }
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard totalBytesExpectedToWrite > 0 else { return }
+        let part = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        Task { @MainActor in OfflineRouter.shared.progress = part }
+    }
+
+    nonisolated func urlSession(
+        _ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?
+    ) {
+        // Sans erreur, c'est `didFinishDownloadingTo` qui a déjà tout fait.
+        guard error != nil, let id = task.taskDescription else { return }
+        Task { @MainActor in OfflineRouter.shared.echoue(id) }
+    }
+
+    /// Tous les transferts remis : l'app peut rendre la main au système.
+    nonisolated func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        Task { @MainActor in
+            let rappel = OfflineRouter.rappelSysteme
+            OfflineRouter.rappelSysteme = nil
+            rappel?()
+        }
     }
 }
