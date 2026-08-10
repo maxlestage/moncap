@@ -230,6 +230,21 @@ jobs:
           done
           ls -lh data/*.osm.pbf
 
+          # Les extraits Geofabrik se chevauchent aux frontières. Passés bruts
+          # et en nombre à la construction, les objets en double la font
+          # tomber — « Failed tile … vector::_M_range_check », puis abandon.
+          # `osmium merge` les réunit en dédupliquant par identifiant, ce que
+          # valhalla_build_tiles ne fait pas de lui-même.
+          if [ "$i" -gt 1 ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq osmium-tool
+            osmium merge data/extrait-*.osm.pbf -o data/fusionne.osm.pbf
+            rm -f data/extrait-*.osm.pbf
+          else
+            mv data/extrait-1.osm.pbf data/fusionne.osm.pbf
+          fi
+          ls -lh data/fusionne.osm.pbf
+
       - name: Construit les tuiles
         run: |
           set -euo pipefail
@@ -248,11 +263,11 @@ jobs:
           # Fuseaux et limites administratives : sans eux les consignes
           # ignorent le pays traversé et le sens de circulation.
           valhalla_build_timezones > /data/tuiles/timezones.sqlite
-          # Tous les extraits ensemble : voilà ce qui raccorde les routes
-          # d'une région à l'autre. Construits séparément puis réunis, les
-          # jeux de tuiles restent coupés au bord de chaque extrait.
-          valhalla_build_admins -c /data/valhalla.json /data/extrait-*.osm.pbf
-          valhalla_build_tiles -c /data/valhalla.json /data/extrait-*.osm.pbf
+          # Un seul extrait, fusion des régions du groupe : voilà ce qui
+          # raccorde les routes d'une région à l'autre. Construits séparément
+          # puis réunis, les jeux de tuiles restent coupés à chaque bord.
+          valhalla_build_admins -c /data/valhalla.json /data/fusionne.osm.pbf
+          valhalla_build_tiles -c /data/valhalla.json /data/fusionne.osm.pbf
           valhalla_build_extract -c /data/valhalla.json -v
           SH
           docker run --rm -v "$PWD/data:/data" -w /data \
