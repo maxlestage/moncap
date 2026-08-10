@@ -209,6 +209,71 @@ Ordres de grandeur : une région française jusqu'au zoom 13 représente
 quelques milliers de tuiles (quelques centaines de Mo) ; aller jusqu'au zoom
 16 multiplie ce volume par 15 environ.
 
+## Itinéraires hors ligne (tuiles Valhalla)
+
+À ne pas confondre avec ce qui précède : les cartes hors ligne servent à
+**voir**, celles-ci à **calculer**. Ce sont deux jeux de données distincts.
+`MKDirections` exige une connexion, si bien que rater une sortie hors
+couverture laissait l'app sans rien à proposer. **Valhalla**, embarqué,
+calcule l'itinéraire sur l'appareil — à condition de disposer de son propre
+graphe routier.
+
+Personne ne distribue ces tuiles gratuitement : le seul fournisseur prêt à
+l'emploi demande plusieurs centaines de dollars par mois. Un runner GitHub
+suffit pourtant, et les Releases les hébergent sans frais.
+
+- **Workflow** `.github/workflows/valhalla-tiles.yml`, manuel. L'entrée
+  `regions` accepte des zones Geofabrik (`france,portugal`), `europe`, ou
+  `grandes-regions`.
+- **Découpage** lu sur l'index Geofabrik, jamais recopié à la main : au-delà
+  de 700 Mo d'extrait on descend d'un cran, ce qui tient chaque archive sous
+  les 2 Gio d'une pièce jointe de Release. L'Europe fait ainsi 215 zones dans
+  49 pays ; en France, les 13 grandes régions d'aujourd'hui.
+- **L'app ne connaît pas la liste** : elle la lit sur les Releases, ne
+  retenant que les étiquettes préfixées `tuiles-eu-`. Le titre de la Release
+  porte le nom lisible, sa pièce jointe `.tar` le poids réel. Deux cents
+  entrées tenues à la main seraient fausses dès la construction suivante.
+- **Vérification** `.github/workflows/valhalla-epreuve.yml`, chaque lundi :
+  Bordeaux → Limoges sur le paquet publié, avec Toulouse en contrôle négatif.
+
+### Deux impasses, mesurées — ne pas les retenter
+
+L'envie naturelle est de télécharger plusieurs régions et de les réunir sur
+le téléphone. Les deux façons de le faire ont été essayées et échouent :
+
+| Méthode | Résultat mesuré |
+| --- | --- |
+| Prolonger l'archive (`tar -A`) | 254 membres présents, **120 chargés** — la première archive seule |
+| Dossier commun (`tile_dir`) | Le service démarre, **aucune arête trouvée**, même dans une seule région |
+
+Et surtout, le format n'était pas le vrai problème : **chaque extrait coupe
+ses routes au bord de sa région**, si bien qu'aucune réunion après coup ne
+les recollera. La couture serait restée trouée même si la fusion avait
+fonctionné mécaniquement.
+
+La seule voie qui raccorde vraiment est de bâtir **un seul graphe à partir
+de plusieurs extraits**, à la construction. Mesure : Aquitaine +
+Midi-Pyrénées ensemble donnent un paquet de 572 Mo qui route Bordeaux →
+Toulouse en 244,9 km, là où les deux paquets séparés — 558 Mo au total — ne
+traversaient pas.
+
+Deux détails qui coûtent cher si on les ignore :
+
+- les extraits Geofabrik se chevauchent aux frontières ; passés bruts et en
+  nombre à `valhalla_build_tiles`, les objets en double le font tomber
+  (`vector::_M_range_check`). **`osmium merge` d'abord**, toujours ;
+- une pièce jointe de Release plafonne à **2 Gio**, et l'envoi échoue sur un
+  `422` qui n'explique rien. La construction refuse désormais d'elle-même une
+  archive trop lourde, en nommant le découpage à faire.
+
+### Limite connue
+
+L'app ne garde **qu'une région à la fois**, et un trajet d'un paquet à
+l'autre ne se calcule pas hors réseau — Bordeaux → Toulouse traverse
+Nouvelle-Aquitaine et Occitanie. Y remédier suppose des paquets qui se
+chevauchent, ou la France entière découpée en morceaux recollés octet à
+octet sur l'appareil.
+
 ## Déploiement Heroku (buildpack — 100 % navigateur, sans CLI)
 
 L'app se déploie via un **buildpack Rust** : la crate est à la racine,
@@ -301,6 +366,8 @@ Fichiers Swift :
 - `Avatars.swift` + `Assets.xcassets/van*` — avatars « combi » (sélecteur + marqueur live)
 - `LocationManager.swift` — accès GPS + vitesse via CoreLocation
 - `RouteService.swift` — itinéraire routier MapKit (`MKDirections`)
+- `OfflineRouting.swift` — itinéraire calculé sur l'appareil (Valhalla), et
+  liste des régions lue sur les Releases
 - `NavigationManager.swift` — navigation turn-by-turn + voix (`AVSpeechSynthesizer`)
 - `RealtimeClient.swift` — connexion WebSocket (positions live, voitures, alertes)
 - `APIClient.swift` — appels HTTP au backend
