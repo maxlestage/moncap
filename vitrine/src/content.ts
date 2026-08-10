@@ -80,3 +80,10 @@ export const FRANCHISE: readonly string[] = [
 ];
 
 export const DEPOT = "https://github.com/maxlestage/moncap";
+
+/**
+ * Le front web, servi par le même backend que cette page. Chemin relatif et
+ * non absolu : la vitrine tourne aussi bien sur un dyno Heroku qu'en local,
+ * et coder le domaine ici la casserait ailleurs.
+ */
+export const CONNEXION = "/app";

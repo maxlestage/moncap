@@ -299,6 +299,23 @@ Fichiers utilisés :
 - `Procfile` — `web: ./target/release/moncap-gps`
 - `app.json` — déclare le buildpack Rust + l'addon Postgres
 
+### Ce que sert le dyno
+
+| Adresse | Contenu |
+| --- | --- |
+| `/` | la vitrine (`vitrine/dist`) |
+| `/app` | le front web, écran de connexion compris (`web/dist`) |
+| le reste | l'API |
+
+Le buildpack ne compile **que** la crate Rust : aucun Bun ne tourne sur le
+dyno. Les deux fronts sont donc versionnés construits (`web/dist`,
+`vitrine/dist`) — sans quoi le serveur n'aurait rien à servir. Après une
+modification de `vitrine/src`, relancer `bun run build` dans `vitrine/` et
+committer le résultat.
+
+Le front web vise la **même origine** par défaut : servi par le dyno, il
+parle à l'API sans configuration.
+
 ### Option 1 — Le plus simple : bouton « Deploy to Heroku »
 
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/maxlestage/moncap)
