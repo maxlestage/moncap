@@ -65,6 +65,30 @@ jobs:
       - name: Build (release)
         run: cargo build --release
 
+  traductions:
+    name: Traductions (iOS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Aucun de ces défauts ne fait échouer la compilation : une chaîne non
+      # traduite s'affiche simplement en français, et rien ne proteste. Ils
+      # ont tous été trouvés à la main une fois — ce job évite de recommencer.
+      - name: Vérifie le catalogue et les sites d'appel
+        run: python3 frontend/traductions.py --verifie
+
+      # Le catalogue et le module de la vitrine sont engendrés : s'ils ne
+      # correspondent plus au tableau, c'est qu'on a modifié l'un sans l'autre.
+      - name: Vérifie que les fichiers engendrés sont à jour
+        run: |
+          python3 frontend/traductions.py
+          if ! git diff --quiet; then
+            echo "::error::fichiers engendrés obsolètes — relancer frontend/traductions.py"
+            git diff --stat
+            exit 1
+          fi
+          echo "fichiers engendrés à jour"
+
   audit:
     name: Security audit (RustSec)
     runs-on: ubuntu-latest
@@ -78,10 +102,31 @@ jobs:
           tool: cargo-audit
 
       # Vérifie Cargo.lock contre la base d'avis de sécurité RustSec.
-      # RUSTSEC-2023-0071 (Marvin, crate `rsa`) : aucune version corrigée
-      # n'existe en amont. `rsa` est tirée transitivement par sqlx pour la
-      # poignée de main Postgres (côté client, vers une base de confiance) —
-      # pas une surface exposée à un attaquant ici. Ignoré tant qu'il n'y a pas
-      # de correctif ; le job échouera sur toute autre vulnérabilité corrigeable.
+      #
+      # Chaque exception est motivée et vérifiée, pas subie. Le job échoue sur
+      # tout autre avis, et sur ceux-ci dès qu'une version corrigée paraît —
+      # `cargo audit` ne se tait que pour les identifiants nommés ici.
+      #
+      # RUSTSEC-2023-0071 (Marvin, `rsa`) — aucune version corrigée en amont.
+      #   Tirée par sqlx pour la poignée de main Postgres, côté client vers une
+      #   base de confiance : pas une surface exposée à un attaquant ici.
+      #
+      # RUSTSEC-2026-0235 (`rkyv`, lecture hors bornes) — corrigée en 0.8.17,
+      #   mais `rust_decimal` la borne en 0.7.x. Sans effet malgré tout :
+      #   `cargo tree --target all` ne la trouve **pas** dans le graphe
+      #   compilé, c'est une dépendance optionnelle jamais activée. Et l'app
+      #   ne désarchive aucune donnée rkyv.
+      #
+      # RUSTSEC-2026-0173 (`proc-macro-error2`, non maintenue) — macro de
+      #   compilation tirée par sea-orm ; elle ne part pas dans le binaire.
+      #
+      # RUSTSEC-2025-0134 (`rustls-pemfile`, non maintenue) — tirée par redis.
+      #   Signalement d'abandon, pas de faille : rien à corriger tant qu'un
+      #   avis de vulnérabilité n'est pas publié.
       - name: Audit dependencies
-        run: cargo audit --ignore RUSTSEC-2023-0071
+        run: |
+          cargo audit \
+            --ignore RUSTSEC-2023-0071 \
+            --ignore RUSTSEC-2026-0235 \
+            --ignore RUSTSEC-2026-0173 \
+            --ignore RUSTSEC-2025-0134

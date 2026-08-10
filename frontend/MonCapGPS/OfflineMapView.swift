@@ -130,7 +130,7 @@ struct OfflineMapScreen: View {
     private var vectorPanel: some View {
         VStack(spacing: 12) {
             Picker("Détail", selection: $depth) {
-                ForEach(Depth.allCases) { d in Text(d.rawValue).tag(d) }
+                ForEach(Depth.allCases) { d in Text(LocalizedStringKey(d.rawValue)).tag(d) }
             }
             .pickerStyle(.segmented)
 
