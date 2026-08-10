@@ -54,9 +54,10 @@ jobs:
       - name: Installer
         run: bun install --frozen-lockfile
 
-      # Le typage d'abord : une page qui ne compile pas n'a rien à faire en
-      # production, et l'échec ici est bien plus lisible qu'un rendu vide.
-      - name: Vérifier le typage
+      # Typage puis tests du contenu, avant de construire : une page qui ne
+      # compile pas n'a rien à faire en production, et l'échec ici est bien
+      # plus lisible qu'un rendu vide.
+      - name: Vérifier
         run: bun run verifie
 
       - name: Construire

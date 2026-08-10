@@ -18,6 +18,45 @@ export type Chiffre = {
   readonly legende: string;
 };
 
+export type Pile = {
+  readonly domaine: string;
+  readonly outils: readonly string[];
+};
+
+/**
+ * Les technologies principales, sans numéro de version.
+ *
+ * Une version affichée sur une page vieillit toute seule : elle est fausse
+ * dès la mise à jour suivante, et personne ne pense à revenir la corriger.
+ * Le nom, lui, reste vrai. Qui veut la version la lit dans `Cargo.toml` ou
+ * `package.json`, où elle est tenue à jour par construction.
+ *
+ * Volontairement les principales, pas toutes : une liste exhaustive de
+ * dépendances n'apprend rien à qui lit une vitrine.
+ */
+export const TECHNIQUES: readonly Pile[] = [
+  {
+    domaine: "Application iOS",
+    outils: ["Swift", "SwiftUI", "MapLibre", "Core Location", "AVFoundation"],
+  },
+  {
+    domaine: "Serveur",
+    outils: ["Rust", "Axum", "Tokio", "SeaORM", "PostgreSQL", "Redis"],
+  },
+  {
+    domaine: "Cartes et itinéraires",
+    outils: ["Valhalla", "OpenStreetMap", "Osmium", "PMTiles", "IGN"],
+  },
+  {
+    domaine: "Web",
+    outils: ["React", "TypeScript", "Bun"],
+  },
+  {
+    domaine: "Déploiement",
+    outils: ["Heroku", "GitHub Actions", "Docker"],
+  },
+];
+
 export const CHIFFRES: readonly Chiffre[] = [
   { valeur: "206", legende: "régions téléchargeables" },
   { valeur: "49", legende: "pays d'Europe" },
