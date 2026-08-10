@@ -32,6 +32,7 @@ export type Pile = {
 export const CHIFFRES: readonly Chiffre[] = [
   { valeur: "19", legende: "catégories de lieux" },
   { valeur: "206", legende: "régions téléchargeables" },
+  { valeur: "49", legende: "pays d'Europe" },
   { valeur: "0 €", legende: "aucun abonnement" },
 ];
 
@@ -115,6 +116,27 @@ export const LIEUX: readonly Lieu[] = [
   { emoji: "🎉", nom: "Sorties" },
 ];
 
+// --- Régions hors ligne --------------------------------------------------
+
+export type Region = {
+  readonly nom: string;
+  readonly poids: string;
+  /** Pourcentage téléchargé, absent quand la région est déjà installée. */
+  readonly avancement?: number;
+};
+
+/**
+ * Dessin de l'écran des régions. Les noms et les poids sont **réels** : lus
+ * sur les Releases publiées le 10 août 2026. Seul l'avancement du
+ * téléchargement est mis en scène.
+ */
+export const MAQUETTE_REGIONS: readonly Region[] = [
+  { nom: "France · Nouvelle-Aquitaine", poids: "499 Mo" },
+  { nom: "France · Zone Paris–Méditerranée", poids: "1,7 Go" },
+  { nom: "Spain · Cataluña", poids: "320 Mo", avancement: 62 },
+  { nom: "Monaco", poids: "1,1 Mo" },
+];
+
 // --- Le reste ------------------------------------------------------------
 
 export const ATOUTS: readonly Atout[] = [
@@ -149,21 +171,33 @@ export const ATOUTS: readonly Atout[] = [
       "marche, le recalcul dès qu'on s'écarte. Une navigation interrompue " +
       "se reprend là où elle s'était arrêtée.",
   },
+];
+
+/** Le hors ligne, qui a sa propre section : ses cartes y sont détaillées. */
+export const HORS_LIGNE: readonly Atout[] = [
   {
     emoji: "🧭",
     titre: "Calculé sur l'appareil",
     texte:
-      "Sans réseau, l'itinéraire est calculé par votre iPhone. Rater une " +
-      "sortie au fond d'une vallée ne laisse plus l'écran figé sur " +
-      "« recalcul » : la route se refait sans une barre de réseau.",
+      "Les itinéraires sont calculés par votre iPhone, pas par un serveur. " +
+      "Rater une sortie au fond d'une vallée ne laisse plus l'écran figé sur " +
+      "« recalcul » : la route se refait immédiatement, sans une barre de réseau.",
+  },
+  {
+    emoji: "🗺️",
+    titre: "L'Europe, région par région",
+    texte:
+      "De Monaco (1,1 Mo) à la Catalogne (320 Mo), on ne télécharge que ce " +
+      "qu'on traverse. Des zones plus larges couvrent les longs trajets — " +
+      "Paris → Marseille tient dans un seul paquet.",
   },
   {
     emoji: "📥",
     titre: "Téléchargement en arrière-plan",
     texte:
-      "Un paquet de deux gigaoctets ne demande pas de garder l'écran " +
-      "allumé. Le transfert continue pendant que vous faites autre chose, " +
-      "et même après avoir quitté l'application.",
+      "Un paquet de deux gigaoctets ne demande pas de garder l'écran allumé. " +
+      "Le transfert continue pendant que vous faites autre chose, et même " +
+      "après avoir quitté l'application.",
   },
 ];
 
