@@ -808,18 +808,61 @@ h2 {
   margin-top: 0.6rem;
 }
 
+/* --- Pied de page --------------------------------------------------------
+ * Le même bleu que le bandeau, dans l'autre sens : la page se ferme comme
+ * elle s'ouvre. Une fin de page en texte gris sur blanc ne ressemble pas à
+ * une fin de page — elle ressemble à un texte qui s'arrête.
+ *
+ * Le fond va d'un bord à l'autre et couvre la marge de sécurité du bas :
+ * c'est aussi ce qu'on découvre en tirant la page au-delà de son terme.
+ */
 footer {
-  margin-top: 3.5rem;
-  border-top: 1px solid var(--trait);
-  padding: 1.6rem 1.25rem calc(2rem + env(safe-area-inset-bottom));
-  color: var(--doux);
+  margin-top: 4rem;
+  background: linear-gradient(180deg, var(--bleu), var(--marine));
+  color: #c3cfe2;
   font-size: 0.87rem;
-  max-width: 64rem;
-  margin-inline: auto;
+  padding: 2.2rem 0 calc(2.2rem + env(safe-area-inset-bottom));
+}
+
+footer .marque {
+  color: #eaf1ff;
+}
+
+.pied-haut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding-bottom: 1.4rem;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.16);
 }
 
 footer p {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.9rem;
+}
+
+footer .signature {
+  color: #eaf1ff;
+  font-size: 1rem;
+}
+
+.pied-liens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1.6rem;
+}
+
+/* Les sources en dernier, plus discrètes : elles sont dues, pas mises en
+   avant. */
+.credits {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #9fb6da;
+  max-width: 46rem;
 }
 
 /* La signature n'est pas une mention légale : elle se lit à la taille du
@@ -840,8 +883,7 @@ footer p {
 
 @media (min-width: 40rem) {
   .dedans,
-  main,
-  footer {
+  main {
     padding-inline: 2.5rem;
   }
   .cartes {

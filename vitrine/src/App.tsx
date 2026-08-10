@@ -376,15 +376,41 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
         </section>
       </main>
 
+      {/* Le pied reprend le bleu du bandeau : la page se ferme comme elle
+          s'ouvre, et le bas de l'écran cesse d'être une zone blanche sans
+          rien. Il porte aussi le choix de langue, qu'on ne peut pas
+          atteindre autrement après avoir lu jusqu'ici. */}
       <footer>
-        <p className="signature">
-          {c.signature} <strong>{AUTEUR}</strong>.
-        </p>
-        <p>{c.credits}</p>
-        <p>
-          <a href={CONNEXION}>{c.seConnecter}</a> ·{" "}
-          <a href={DEPOT}>{c.codeSource}</a>
-        </p>
+        <div className="dedans">
+          <div className="pied-haut">
+            <p className="marque">
+              <img
+                className="logo"
+                src={res.logo}
+                width="40"
+                height="40"
+                alt=""
+              />
+              MonCap GPS
+            </p>
+            <Langues c={c} />
+          </div>
+
+          <p className="signature">
+            {c.signature} <strong>{AUTEUR}</strong>.
+          </p>
+
+          <p className="pied-liens">
+            <a className="bouton" href={CONNEXION}>
+              {c.seConnecter}
+            </a>
+            <a className="lien" href={DEPOT}>
+              {c.codeSource}
+            </a>
+          </p>
+
+          <p className="credits">{c.credits}</p>
+        </div>
       </footer>
     </>
   );
