@@ -11,7 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{FromRef, Path, Query, Request, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -1417,6 +1417,27 @@ async fn health(State(db): State<DatabaseConnection>) -> Response {
     }
 }
 
+/// Oblige le navigateur à redemander si la ressource a changé, au lieu de
+/// réutiliser sa copie sans rien demander.
+///
+/// La feuille de la vitrine porte un nom **fixe** — une route Rust ne peut
+/// pas suivre un nom horodaté. Sans en-tête, `ServeFile` n'envoie qu'un
+/// `Last-Modified` (il ne calcule pas d'`ETag`), et le navigateur est alors
+/// libre d'estimer lui-même la fraîcheur : Safari a servi l'ancienne feuille
+/// à un visiteur déjà venu, donnant une page au HTML neuf et au style
+/// périmé — les maquettes s'affichaient en vrac.
+///
+/// `no-cache` ne veut pas dire « ne garde rien » mais « revalide avant de
+/// réutiliser » : la copie reste en cache et la revalidation répond 304 sans
+/// corps, d'après le `Last-Modified`. Le coût est un aller-retour, pas un
+/// téléchargement.
+async fn revalider(req: Request, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    resp
+}
+
 /// Construit le routeur complet de l'API (routes, limiteurs de débit, couches
 /// compression/CORS/trace). Extrait de `main` pour être réutilisable tel quel
 /// par les tests d'intégration.
@@ -1440,8 +1461,12 @@ fn build_app(state: AppState) -> Router {
     // `ServeDir` de plus à la racine entrerait en conflit avec le repli du
     // front. `vitrine/dist` est versionné parce que le dyno Heroku ne
     // compile que la crate Rust : aucun Bun ne tourne au déploiement.
-    let vitrine_page = ServeFile::new("vitrine/dist/index.html");
-    let vitrine_style = ServeFile::new("vitrine/dist/styles.css");
+    // Les deux passent par `revalider` : le nom de la feuille étant fixe, un
+    // navigateur qui ne redemande pas garde l'ancienne indéfiniment.
+    let vitrine: Router<AppState> = Router::new()
+        .route_service("/", ServeFile::new("vitrine/dist/index.html"))
+        .route_service("/styles.css", ServeFile::new("vitrine/dist/styles.css"))
+        .layer(middleware::from_fn(revalider));
 
     // Limiteurs : général (par IP), strict sur l'authentification
     // (anti brute-force), large sur les tuiles.
@@ -1472,8 +1497,7 @@ fn build_app(state: AppState) -> Router {
 
     // Routes volontairement minimales.
     Router::new()
-        .route_service("/", vitrine_page)
-        .route_service("/styles.css", vitrine_style)
+        .merge(vitrine)
         .route("/health", get(health))
         .route("/positions", get(list_positions).post(add_position))
         .route(
@@ -3745,13 +3769,23 @@ mod integration {
     async fn racine_sert_la_vitrine_et_app_le_front() {
         let Some(app) = test_app().await else { return };
 
-        async fn corps(app: &Router, uri: &str) -> (StatusCode, String) {
+        /// Renvoie statut, en-tête de cache et corps.
+        async fn reponse(app: &Router, uri: &str) -> (StatusCode, Option<String>, String) {
             let resp = app.clone().oneshot(get_req(uri, None)).await.unwrap();
             let statut = resp.status();
+            let cache = resp
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .map(|v| v.to_str().unwrap().to_owned());
             let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
                 .await
                 .unwrap();
-            (statut, String::from_utf8_lossy(&bytes).into_owned())
+            (statut, cache, String::from_utf8_lossy(&bytes).into_owned())
+        }
+
+        async fn corps(app: &Router, uri: &str) -> (StatusCode, String) {
+            let (statut, _, texte) = reponse(app, uri).await;
+            (statut, texte)
         }
 
         let (statut, page) = corps(&app, "/").await;
@@ -3777,9 +3811,28 @@ mod integration {
             "la vitrine doit porter la signature de son auteur"
         );
 
-        let (statut, feuille) = corps(&app, "/styles.css").await;
+        let (statut, cache, feuille) = reponse(&app, "/styles.css").await;
         assert_eq!(statut, StatusCode::OK, "la feuille doit être servie");
         assert!(feuille.contains("--encre"));
+        // Les règles des maquettes : leur absence ne casse rien de visible
+        // côté serveur, mais laisse la page en vrac dans le navigateur.
+        assert!(
+            feuille.contains(".ecran"),
+            "les maquettes doivent être stylées"
+        );
+
+        // La feuille porte un nom fixe. Sans consigne de revalidation, un
+        // navigateur qui l'a déjà vue garde son ancienne copie : c'est ce qui
+        // a donné une page au HTML neuf et au style périmé, maquettes en
+        // vrac. `ServeFile` n'émet pas d'ETag — seul cet en-tête force le
+        // navigateur à redemander.
+        assert_eq!(
+            cache.as_deref(),
+            Some("no-cache"),
+            "la feuille doit être revalidée à chaque visite"
+        );
+        let (_, cache_page, _) = reponse(&app, "/").await;
+        assert_eq!(cache_page.as_deref(), Some("no-cache"));
 
         let (statut, front) = corps(&app, "/app").await;
         assert_eq!(statut, StatusCode::OK);
