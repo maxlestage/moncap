@@ -5,8 +5,10 @@ import {
   CONNEXION,
   DEPOT,
   FRANCHISE,
+  HORS_LIGNE,
   LIEUX,
   MAQUETTE_ITINERAIRES,
+  MAQUETTE_REGIONS,
   MODES,
   TECHNIQUES,
 } from "./content";
@@ -121,6 +123,44 @@ function MaquetteLieux() {
   );
 }
 
+/** L'écran des régions installées, avec un téléchargement en cours. */
+function MaquetteRegions() {
+  return (
+    <figure className="maquette">
+      <div className="ecran">
+        <ul className="regions">
+          {MAQUETTE_REGIONS.map((r) => (
+            <li key={r.nom}>
+              <div className="ligne">
+                <span className="nom">{r.nom}</span>
+                <span className="poids">{r.poids}</span>
+              </div>
+              {r.avancement === undefined ? (
+                <p className="pret" aria-hidden="true">
+                  ✓ Installée
+                </p>
+              ) : (
+                <>
+                  <div className="jauge" aria-hidden="true">
+                    <span style={{ width: `${r.avancement}%` }} />
+                  </div>
+                  <p className="encours">
+                    {r.avancement} % — le transfert continue en arrière-plan
+                  </p>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <figcaption>
+        Noms et poids réels, lus sur les Releases publiées ; seul l'avancement
+        est mis en scène.
+      </figcaption>
+    </figure>
+  );
+}
+
 export function App() {
   return (
     <>
@@ -137,8 +177,9 @@ export function App() {
           </h1>
           <p className="chapeau">
             Un GPS pour iPhone qui met les itinéraires côte à côte — durée,
-            virages, dénivelé, carburant, péages — puis vous guide. Et quand le
-            réseau tombe, il continue de calculer tout seul.
+            virages, dénivelé, carburant, péages — puis vous guide. Téléchargez
+            votre région une fois, et il continue de calculer tout seul :
+            vallées, tunnels, étranger.
           </p>
 
           <div className="actions">
@@ -206,6 +247,28 @@ export function App() {
           <h2 id="atouts">Et aussi</h2>
           <ul className="cartes">
             {ATOUTS.map((a) => (
+              <li key={a.titre}>
+                <span className="emoji" aria-hidden="true">
+                  {a.emoji}
+                </span>
+                <h3>{a.titre}</h3>
+                <p>{a.texte}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby="hors-ligne-titre">
+          <h2 id="hors-ligne-titre">Quand le réseau tombe</h2>
+          <p className="intro">
+            <strong>206 régions</strong> dans <strong>49 pays d'Europe</strong>,
+            téléchargeables une par une. Plusieurs peuvent cohabiter sur le
+            téléphone, et le transfert d'un paquet ne demande pas de rester
+            devant l'écran.
+          </p>
+          <MaquetteRegions />
+          <ul className="cartes">
+            {HORS_LIGNE.map((a) => (
               <li key={a.titre}>
                 <span className="emoji" aria-hidden="true">
                   {a.emoji}
