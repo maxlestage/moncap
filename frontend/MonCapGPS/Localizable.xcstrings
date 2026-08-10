@@ -1377,18 +1377,18 @@
         }
       }
     },
-    "Itinéraire trop long à ce niveau de détail ": {
+    "Itinéraire trop long à ce niveau de détail (%@). Choisis « Région ».": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Route too long at this level of detail "
+            "value": "Route too long at this level of detail (%@). Choose “Region”."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ruta demasiado larga con este nivel de detalle "
+            "value": "Ruta demasiado larga con este nivel de detalle (%@). Elige «Región»."
           }
         }
       }
@@ -1473,18 +1473,18 @@
         }
       }
     },
-    "Les itinéraires sont calculés sur l'appareil. ": {
+    "Les itinéraires sont calculés sur l'appareil. Cinq trajets proposés au lieu de quinze, et pas de trafic en direct.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routes are computed on the device. "
+            "value": "Routes are computed on the device. Five trips offered instead of fifteen, and no live traffic."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Las rutas se calculan en el dispositivo. "
+            "value": "Las rutas se calculan en el dispositivo. Cinco trayectos propuestos en lugar de quince, y sin tráfico en directo."
           }
         }
       }
@@ -1857,18 +1857,18 @@
         }
       }
     },
-    "Permet de recalculer un itinéraire sans réseau. ": {
+    "Permet de recalculer un itinéraire sans réseau. Sans cela, s'écarter de sa route hors couverture laisse l'app sans rien à proposer. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lets a route be recomputed without signal. "
+            "value": "Lets a route be recomputed without signal. Without it, straying off route out of coverage leaves the app with nothing to offer. Keep as many regions as you like: a trip looks for its route in each. It must however fit entirely within one of them — that is what the overlapping zones are for."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permite recalcular una ruta sin cobertura. "
+            "value": "Permite recalcular una ruta sin cobertura. Sin eso, salirse de la ruta fuera de cobertura deja a la app sin nada que proponer. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. Eso sí, debe caber entero en una de ellas — para eso sirven las zonas, que se solapan."
           }
         }
       }
@@ -2621,6 +2621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ir"
+          }
+        }
+      }
+    },
+    "Zone trop vaste : %@ environ. Rapproche-toi, ou choisis un niveau de détail moindre.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Area too large: about %@. Move closer, or choose a lower level of detail."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zona demasiado amplia: %@ aproximadamente. Acércate o elige un nivel de detalle menor."
           }
         }
       }

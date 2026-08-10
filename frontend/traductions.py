@@ -133,17 +133,21 @@ T: dict[str, tuple[str, str]] = {
         "Descarga primero una región, aquí debajo.",
         "Download a region first, below.",
     ),
-    "Les itinéraires sont calculés sur l'appareil. ": (
-        "Las rutas se calculan en el dispositivo. ",
-        "Routes are computed on the device. ",
+    "Les itinéraires sont calculés sur l'appareil. Cinq trajets proposés au lieu de quinze, et pas de trafic en direct.": (
+        "Las rutas se calculan en el dispositivo. Cinco trayectos propuestos en lugar de quince, y sin tráfico en directo.",
+        "Routes are computed on the device. Five trips offered instead of fifteen, and no live traffic.",
     ),
-    "Permet de recalculer un itinéraire sans réseau. ": (
-        "Permite recalcular una ruta sin cobertura. ",
-        "Lets a route be recomputed without signal. ",
+    "Permet de recalculer un itinéraire sans réseau. Sans cela, s'écarter de sa route hors couverture laisse l'app sans rien à proposer. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": (
+        "Permite recalcular una ruta sin cobertura. Sin eso, salirse de la ruta fuera de cobertura deja a la app sin nada que proponer. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. Eso sí, debe caber entero en una de ellas — para eso sirven las zonas, que se solapan.",
+        "Lets a route be recomputed without signal. Without it, straying off route out of coverage leaves the app with nothing to offer. Keep as many regions as you like: a trip looks for its route in each. It must however fit entirely within one of them — that is what the overlapping zones are for.",
     ),
-    "Itinéraire trop long à ce niveau de détail ": (
-        "Ruta demasiado larga con este nivel de detalle ",
-        "Route too long at this level of detail ",
+    "Itinéraire trop long à ce niveau de détail (%@). Choisis « Région ».": (
+        "Ruta demasiado larga con este nivel de detalle (%@). Elige «Región».",
+        "Route too long at this level of detail (%@). Choose “Region”.",
+    ),
+    "Zone trop vaste : %@ environ. Rapproche-toi, ou choisis un niveau de détail moindre.": (
+        "Zona demasiado amplia: %@ aproximadamente. Acércate o elige un nivel de detalle menor.",
+        "Area too large: about %@. Move closer, or choose a lower level of detail.",
     ),
     "Cet appareil ne peut pas envoyer de SMS. Copie ton message et envoie-le autrement.": (
         "Este dispositivo no puede enviar SMS. Copia tu mensaje y envíalo de otro modo.",
