@@ -24,18 +24,35 @@ reconstruit et verse `dist/` à chaque changement de `src/`, poussé sur
 `master`. Ce dépôt se tient depuis un navigateur — un « n'oublie pas de
 reconstruire » y serait un piège, pas une consigne.
 
-Pour la même raison, la feuille de style porte un nom **fixe** (`styles.css`)
-et non une empreinte : une route Rust ne peut pas suivre un nom qui change à
-chaque construction.
+## Les adresses et le cache
 
-Un nom fixe a un prix, et il a été payé une fois : sans consigne, un
-navigateur qui a déjà vu `/styles.css` garde sa copie sans redemander.
-Safari a ainsi servi une page au HTML neuf et au style périmé — les maquettes
-s'affichaient en vrac. `ServeFile` n'émet **pas** d'`ETag`, seulement un
-`Last-Modified`, ce qui laisse le navigateur juge de la fraîcheur. Les deux
-routes de la vitrine envoient donc `Cache-Control: no-cache` : la copie reste
-en cache, mais elle est revalidée avant usage et la réponse est un 304 sans
-corps. Un aller-retour, pas un téléchargement.
+| Adresse | Contenu | `Cache-Control` |
+| --- | --- | --- |
+| `/` | la page | `no-cache` — revalidée à chaque visite |
+| `/vitrine/styles-<empreinte>.css` | la feuille | `public, max-age=31536000, immutable` |
+
+Cette répartition vient d'une panne, et mérite d'être comprise avant d'être
+touchée.
+
+La feuille a d'abord porté un nom **fixe** (`styles.css`), parce qu'une route
+Rust ne peut pas suivre un nom qui change à chaque construction. Elle était
+servie sans `Cache-Control` — et `ServeFile` n'émet **pas** d'`ETag`, seulement
+un `Last-Modified`. Le navigateur restait donc juge de la fraîcheur : Safari a
+gardé sa copie et affiché une page au HTML neuf sur un style périmé, maquettes
+en vrac.
+
+Poser `no-cache` sur la feuille ne suffisait pas, et c'est le point à retenir :
+**un en-tête ne s'applique qu'à une réponse que le navigateur demande**. Tant
+qu'il croit sa copie fraîche, il ne redemande rien et ne voit aucun en-tête
+nouveau. Un cache déjà pris ne se débloque que par un **changement
+d'adresse**.
+
+D'où l'empreinte dans le nom et le dossier monté sous `/vitrine` : chaque
+construction produit une adresse neuve, qu'aucun navigateur n'a en cache. À
+cette adresse l'octet ne changera jamais, elle peut donc être gardée un an
+sans revalidation. Seule la page garde une adresse fixe — c'est le seul
+document qui ne peut pas en changer — et se revalide à chaque visite, sans
+quoi le navigateur ne verrait jamais la nouvelle empreinte.
 
 ## React sans envoyer React
 
@@ -63,10 +80,18 @@ Le partage des adresses est tenu par un test d'intégration côté Rust
 le front, la feuille répond, le lien de connexion et la signature sont
 présents dans le rendu, et `/app` sert l'application.
 
-Le même test vérifie que les deux routes envoient `Cache-Control: no-cache`
-et que la feuille servie contient bien les règles des maquettes. Sans en-tête,
-la panne ne se voit ni dans les journaux ni dans un `curl` : seulement chez
-le visiteur déjà venu.
+Le même test **extrait le lien de la feuille du rendu puis le suit** — il ne
+devine aucun nom. C'est la seule façon de prouver que l'adresse expédiée au
+navigateur mène quelque part : un nom écrit en dur resterait vert alors que
+la page ne se stylerait plus. Il vérifie ensuite les deux consignes de cache
+et la présence des règles des maquettes dans la feuille servie.
+
+Cette panne-là ne se voyait ni dans les journaux, ni dans un `curl`, ni dans
+une capture prise sur un navigateur neuf : uniquement chez un visiteur déjà
+venu. Les captures de contrôle passent donc par un petit serveur local qui
+reproduit le routage (`/` et `/vitrine/…`), et vérifient qu'un fond est bien
+appliqué aux maquettes — une page sans style se photographie aussi bien
+qu'une autre.
 
 `bun test` couvre le contenu lui-même : pas de version dans la pile, pas de
 doublon dans les listes qui servent de clés de rendu, pas de section vide.

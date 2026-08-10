@@ -17,15 +17,18 @@ const SORTIE = "dist";
 
 await Bun.$`rm -rf ${SORTIE}`;
 
-// Nom stable, sans empreinte : le backend Rust sert cette feuille par une
-// route fixe (`/styles.css`), et une route ne peut pas suivre un nom qui
-// change à chaque construction. La fraîcheur est assurée par l'ETag que
-// `ServeFile` calcule, pas par le nom.
+// Le nom porte l'empreinte du contenu, et le dossier entier est servi sous
+// `/vitrine` — une route fixe n'aurait pas pu suivre un nom qui change.
+//
+// C'est l'unique façon de corriger un cache déjà empoisonné. Un en-tête ne
+// s'applique qu'à une réponse que le navigateur demande : tant qu'il croit
+// sa copie de `/styles.css` fraîche, il ne redemande rien et ne voit aucun
+// nouvel en-tête. Une adresse neuve, elle, n'a pas d'entrée en cache.
 const css = await Bun.build({
   entrypoints: ["./src/styles.css"],
   outdir: SORTIE,
   minify: true,
-  naming: "[name].[ext]",
+  naming: "[name]-[hash].[ext]",
 });
 if (!css.success) {
   console.error(css.logs);
@@ -42,7 +45,10 @@ const gabarit = await Bun.file("index.html").text();
 const page = gabarit
   .replace(
     "</head>",
-    `  <link rel="stylesheet" href="./${nomFeuille}" />\n  </head>`,
+    // Chemin absolu : la page est servie à la racine (`/`), un `./` y
+    // marcherait, mais `/vitrine/` dit où le dossier est réellement monté
+    // et reste juste si la page venait à être servie ailleurs.
+    `  <link rel="stylesheet" href="/vitrine/${nomFeuille}" />\n  </head>`,
   )
   .replace(
     '<div id="root"></div>',
