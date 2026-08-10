@@ -13,8 +13,11 @@ coup d'œil. Relancer après toute modification :
     python3 frontend/traductions.py
 """
 
+import glob
 import json
 import pathlib
+import re
+import sys
 
 # clé française -> (espagnol, anglais)
 # Ne sont listées que les chaînes qui changent : « GPX », « SP95 » ou
@@ -230,6 +233,21 @@ T: dict[str, tuple[str, str]] = {
         "⛽ ~%.2f € · 🛣️ peajes ~%.2f € · total ~%.2f €",
         "⛽ ~%.2f € · 🛣️ tolls ~%.2f € · total ~%.2f €",
     ),
+    # --- Signalements et niveaux de détail --------------------------------
+    # Les libellés de signalement circulent en français sur le réseau : chaque
+    # appareil les traduit à l'affichage. Sans cela, un signalement posté
+    # depuis un téléphone espagnol s'afficherait en espagnol chez tous.
+    "Police": ("Policía", "Police"),
+    "Accident": ("Accidente", "Crash"),
+    "Bouchon": ("Atasco", "Jam"),
+    "Danger": ("Peligro", "Hazard"),
+    "Véhicule arrêté": ("Vehículo parado", "Stopped vehicle"),
+    "Objet sur la route": ("Objeto en la vía", "Object on the road"),
+    "Travaux": ("Obras", "Roadworks"),
+    # Niveaux de détail du téléchargement de carte.
+    "Région": ("Región", "Region"),
+    "Ville": ("Ciudad", "City"),
+    "Rue": ("Calle", "Street"),
     # --- Consignes de navigation ------------------------------------------
     # L'application ne montre pas la consigne du moteur d'itinéraire : elle la
     # ré-écrit en un mot, lisible d'un coup d'œil au volant. Ces textes sont
@@ -404,7 +422,110 @@ def exporte_vitrine(chemin: pathlib.Path) -> None:
     print(f"{chemin.name} : {len(VITRINE)} libellés × 3 langues")
 
 
+# --- Contrôles ------------------------------------------------------------
+#
+# Chacun vient d'une panne réelle. Ils tournent en intégration continue parce
+# qu'aucune ne fait échouer la compilation : une chaîne non traduite s'affiche
+# simplement en français, et rien ne proteste.
+
+def sources() -> list[tuple[str, str]]:
+    dossier = pathlib.Path(__file__).parent / "MonCapGPS"
+    return [(str(f), f.read_text(encoding="utf-8")) for f in sorted(dossier.glob("*.swift"))]
+
+
+def concatenations(fichiers: list[tuple[str, str]]) -> list[str]:
+    """Repère `Text("a" + "b")`, qui ne se traduit jamais.
+
+    La concaténation produit une `String`, et cette surcharge est verbatim :
+    le catalogue n'est pas consulté. Quatre explications de réglages sont
+    restées ainsi en français alors que leurs clés existaient bel et bien.
+    """
+    motif = re.compile(r'(?:Text|Label|Button)\(\s*\n?\s*"(?:[^"\\]|\\.)*"\s*\n?\s*\+')
+    trouves = []
+    for nom, texte in fichiers:
+        for m in motif.finditer(texte):
+            trouves.append(f"{nom}:{texte[:m.start()].count(chr(10)) + 1}")
+    return trouves
+
+
+def verbatim(fichiers: list[tuple[str, str]]) -> list[str]:
+    """Repère `Text(uneVariable)` sans `LocalizedStringKey`.
+
+    Cette surcharge est verbatim elle aussi. Les libellés venus
+    d'énumérations — catégories de lieux, modes, météo — y passaient tous à
+    côté du catalogue.
+    """
+    # Une variable, pas un littéral : pas de guillemet après la parenthèse.
+    motif = re.compile(r'\bText\(\s*([a-z]\w*(?:\.\w+)+)\s*\)')
+    # Ce qui n'a rien à traduire : de la donnée d'utilisateur (noms de lieux,
+    # de trajets, de contributeurs), des emoji, des tailles déjà formatées, et
+    # les consignes que `NavigationManager` a déjà traduites à la source.
+    permis = {
+        "nav.instruction", "router.message", "packs.message",
+        "kind.emoji", "w.emoji", "t.emoji",
+        "gardee.poids", "r.label", "r.name", "r.subtitle",
+        "place.label", "p.label", "e.name", "t.label",
+    }
+    # Limite assumée : la liste est indexée par expression, non par site.
+    # « t.label » désigne ici le nom d'un trajet — donnée d'utilisateur — mais
+    # aussi, ailleurs dans le même fichier, un libellé de signalement qui, lui,
+    # se traduit. Un retour en arrière à cet endroit passerait donc au travers.
+    trouves = []
+    for nom, texte in fichiers:
+        for m in motif.finditer(texte):
+            expr = m.group(1)
+            if expr in permis:
+                continue
+            trouves.append(f"{nom}:{texte[:m.start()].count(chr(10)) + 1} → Text({expr})")
+    return trouves
+
+
+def cles_orphelines(fichiers: list[tuple[str, str]]) -> list[str]:
+    """Clés du catalogue qui ne correspondent plus à rien dans le code."""
+    tout = "\n".join(t for _, t in fichiers)
+    # Les clés à spécificateur viennent de l'interpolation SwiftUI ou d'un
+    # format : elles n'apparaissent pas telles quelles dans les sources.
+    rangs = {"1re"} | {f"{n}e" for n in range(2, 10)}
+    return [k for k in T if "%" not in k and k not in rangs and f'"{k}"' not in tout]
+
+
+def appels_sans_cle(fichiers: list[tuple[str, str]]) -> list[str]:
+    """Appels `tr`/`trf` dont la clé manque au tableau."""
+    trouves = []
+    for nom, texte in fichiers:
+        for i, ligne in enumerate(texte.splitlines(), 1):
+            if ligne.lstrip().startswith("//"):
+                continue
+            for cle in re.findall(r'\btrf?\("((?:[^"\\]|\\.)*)"', ligne):
+                if cle not in T:
+                    trouves.append(f"{nom}:{i} → « {cle} »")
+    return trouves
+
+
+def verifie() -> int:
+    fichiers = sources()
+    controles = [
+        ("concaténations qui neutralisent la traduction", concatenations(fichiers)),
+        ("Text(variable) sans LocalizedStringKey", verbatim(fichiers)),
+        ("clés du catalogue devenues orphelines", cles_orphelines(fichiers)),
+        ("appels tr/trf sans clé", appels_sans_cle(fichiers)),
+    ]
+    fautes = 0
+    for titre, trouves in controles:
+        if trouves:
+            fautes += len(trouves)
+            print(f"::error::{titre} ({len(trouves)}) :")
+            for t in trouves:
+                print(f"  {t}")
+        else:
+            print(f"{titre} : aucune ✅")
+    return 1 if fautes else 0
+
+
 def main() -> None:
+    if "--verifie" in sys.argv:
+        raise SystemExit(verifie())
+
     strings = {
         cle: {
             "localizations": {

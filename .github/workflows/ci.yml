@@ -65,6 +65,30 @@ jobs:
       - name: Build (release)
         run: cargo build --release
 
+  traductions:
+    name: Traductions (iOS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Aucun de ces défauts ne fait échouer la compilation : une chaîne non
+      # traduite s'affiche simplement en français, et rien ne proteste. Ils
+      # ont tous été trouvés à la main une fois — ce job évite de recommencer.
+      - name: Vérifie le catalogue et les sites d'appel
+        run: python3 frontend/traductions.py --verifie
+
+      # Le catalogue et le module de la vitrine sont engendrés : s'ils ne
+      # correspondent plus au tableau, c'est qu'on a modifié l'un sans l'autre.
+      - name: Vérifie que les fichiers engendrés sont à jour
+        run: |
+          python3 frontend/traductions.py
+          if ! git diff --quiet; then
+            echo "::error::fichiers engendrés obsolètes — relancer frontend/traductions.py"
+            git diff --stat
+            exit 1
+          fi
+          echo "fichiers engendrés à jour"
+
   audit:
     name: Security audit (RustSec)
     runs-on: ubuntu-latest
