@@ -1,0 +1,286 @@
+/*
+ * Mise en forme d'abord pour le téléphone : tout ce qui suit vaut pour un
+ * écran étroit, et seules quelques requêtes élargissent ensuite. L'inverse —
+ * dessiner large puis rétrécir — laisse toujours des débordements sur mobile.
+ *
+ * Pas de bibliothèque de style : une page qui ne fait que présenter n'a pas
+ * besoin d'un moteur d'utilitaires, et le poids se voit sur un forfait.
+ */
+
+:root {
+  --encre: #0b1220;
+  --papier: #ffffff;
+  --texte: #1c2534;
+  --doux: #5b6577;
+  --trait: #e3e7ee;
+  --accent: #1f6feb;
+  --accent-doux: #eaf1fe;
+  --rayon: 14px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --encre: #060a12;
+    --papier: #0f1522;
+    --texte: #e8ecf3;
+    --doux: #9aa4b6;
+    --trait: #1e2637;
+    --accent: #6ea8ff;
+    --accent-doux: #16233a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--papier);
+  color: var(--texte);
+  font-family:
+    ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  /* Une hauteur de ligne généreuse : la page se lit surtout en tenant le
+     téléphone d'une main, souvent en mouvement. */
+  line-height: 1.6;
+  font-size: 17px;
+  text-wrap: pretty;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.15;
+  text-wrap: balance;
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* --- Bandeau d'entrée ---------------------------------------------------- */
+
+.hero {
+  background: var(--encre);
+  color: #f4f7fc;
+  /* Le fond va d'un bord à l'autre : aucune marge latérale ici, elle est
+     portée par `.dedans` pour que le texte tombe sur la même verticale que
+     celui de `main`.
+     `env(safe-area-inset-top)` : sans cela le titre passe sous l'encoche. */
+  padding: calc(2.5rem + env(safe-area-inset-top)) 0 2.5rem;
+}
+
+.dedans {
+  max-width: 64rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.marque {
+  margin: 0 0 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: #8fa3c4;
+}
+
+.hero h1 {
+  /* La taille suit la largeur : lisible sur un petit écran, imposante sur un
+     grand, sans palier brutal entre les deux. */
+  font-size: clamp(2.1rem, 9vw, 3.6rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.hero h1 em {
+  font-style: normal;
+  color: #7fb0ff;
+}
+
+.chapeau {
+  margin: 1.1rem 0 0;
+  color: #c3cfe2;
+  max-width: 34rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 1.9rem;
+}
+
+.bouton {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 650;
+  padding: 0.85rem 1.5rem;
+  border-radius: 999px;
+  /* 44 px de haut au moins : c'est la cible qu'un pouce atteint sans viser. */
+  min-height: 44px;
+}
+
+.lien {
+  color: #c3cfe2;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  padding: 0.6rem 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chiffres {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin: 2.4rem 0 0;
+  padding: 0;
+}
+
+.chiffres div {
+  border-left: 2px solid #2b3a55;
+  padding-left: 0.7rem;
+}
+
+.chiffres dt {
+  font-size: clamp(1.4rem, 6vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.chiffres dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: #8fa3c4;
+}
+
+/* --- Corps --------------------------------------------------------------- */
+
+main {
+  padding: 2.75rem 1.25rem 0;
+  max-width: 64rem;
+  margin: 0 auto;
+}
+
+section + section {
+  margin-top: 3.25rem;
+}
+
+h2 {
+  font-size: clamp(1.45rem, 6vw, 2rem);
+  letter-spacing: -0.015em;
+}
+
+.cartes {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.cartes li {
+  border: 1px solid var(--trait);
+  border-radius: var(--rayon);
+  padding: 1.15rem;
+  background: var(--papier);
+}
+
+.emoji {
+  font-size: 1.6rem;
+  line-height: 1;
+  display: block;
+  margin-bottom: 0.6rem;
+}
+
+.cartes h3 {
+  font-size: 1.06rem;
+  margin-bottom: 0.35rem;
+}
+
+.cartes p {
+  margin: 0;
+  color: var(--doux);
+  font-size: 0.95rem;
+}
+
+.preuve {
+  background: var(--accent-doux);
+  border-radius: var(--rayon);
+  padding: 1.4rem;
+}
+
+.preuve p {
+  color: var(--texte);
+}
+
+.preuve .note {
+  color: var(--doux);
+  font-size: 0.87rem;
+  margin-bottom: 0;
+}
+
+.franchise ul {
+  margin: 1.2rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--doux);
+}
+
+.franchise li + li {
+  margin-top: 0.6rem;
+}
+
+footer {
+  margin-top: 3.5rem;
+  border-top: 1px solid var(--trait);
+  padding: 1.6rem 1.25rem calc(2rem + env(safe-area-inset-bottom));
+  color: var(--doux);
+  font-size: 0.87rem;
+  max-width: 64rem;
+  margin-inline: auto;
+}
+
+footer p {
+  margin: 0 0 0.5rem;
+}
+
+/* --- Écrans plus larges -------------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .dedans,
+  main,
+  footer {
+    padding-inline: 2.5rem;
+  }
+  .cartes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 64rem) {
+  .hero {
+    padding-block: 5rem;
+  }
+  .cartes {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Le mouvement n'apporte rien ici ; s'il en venait, il resterait facultatif. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

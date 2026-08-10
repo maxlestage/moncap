@@ -11,6 +11,7 @@ moncap/
 ├── Procfile        web: ./target/release/moncap-gps
 ├── app.json        buildpack Rust + addon Postgres (bouton « Deploy »)
 ├── web/            Front web React + Bun (voir web/README.md)
+├── vitrine/        Page de présentation, rendue à la construction (vitrine/README.md)
 └── frontend/       App iOS SwiftUI
     └── MonCapGPS/
 ```
@@ -266,13 +267,23 @@ Deux détails qui coûtent cher si on les ignore :
   `422` qui n'explique rien. La construction refuse désormais d'elle-même une
   archive trop lourde, en nommant le découpage à faire.
 
+### Ce que l'app en fait
+
+- **Plusieurs régions installées** en même temps ; au calcul, chaque moteur
+  est interrogé à son tour jusqu'à ce que l'un réponde.
+- **Téléchargement en arrière-plan** (`URLSessionConfiguration.background`),
+  qui survit au passage dans une autre application comme à la fermeture.
+- **Interrupteur hors ligne** dans les réglages : le calcul local n'est pas
+  imposé, il est choisi.
+
 ### Limite connue
 
-L'app ne garde **qu'une région à la fois**, et un trajet d'un paquet à
-l'autre ne se calcule pas hors réseau — Bordeaux → Toulouse traverse
-Nouvelle-Aquitaine et Occitanie. Y remédier suppose des paquets qui se
-chevauchent, ou la France entière découpée en morceaux recollés octet à
-octet sur l'appareil.
+Un trajet ne se calcule hors réseau que s'il tient **entier dans un même
+paquet** : interroger deux paquets à la suite ne recoud pas les routes à
+leur frontière, pour la raison mesurée plus haut. Bordeaux → Toulouse ne
+passe donc pas avec Nouvelle-Aquitaine et Occitanie côte à côte — il passe
+avec la **Zone Sud**, bâtie d'un seul graphe. C'est à cela que servent les
+six zones qui se chevauchent.
 
 ## Déploiement Heroku (buildpack — 100 % navigateur, sans CLI)
 
