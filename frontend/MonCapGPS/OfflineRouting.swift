@@ -60,7 +60,27 @@ final class OfflineRouter: ObservableObject {
             Region(id: "tuiles-martinique", nom: "Martinique"),
             Region(id: "tuiles-mayotte", nom: "Mayotte"),
             Region(id: "tuiles-reunion", nom: "La Réunion"),
-            Region(id: "tuiles-espagne", nom: "Espagne"),
+            // L'Espagne par communauté autonome : entière elle dépasse ce
+            // qu'une pièce jointe de Release accepte, et ce qu'un forfait
+            // mobile encaisse.
+            Region(id: "tuiles-es-andalucia", nom: "Espagne · Andalousie"),
+            Region(id: "tuiles-es-aragon", nom: "Espagne · Aragon"),
+            Region(id: "tuiles-es-asturias", nom: "Espagne · Asturies"),
+            Region(id: "tuiles-es-cantabria", nom: "Espagne · Cantabrie"),
+            Region(id: "tuiles-es-castilla-la-mancha", nom: "Espagne · Castille-La Manche"),
+            Region(id: "tuiles-es-castilla-y-leon", nom: "Espagne · Castille-et-León"),
+            Region(id: "tuiles-es-cataluna", nom: "Espagne · Catalogne"),
+            Region(id: "tuiles-es-ceuta", nom: "Espagne · Ceuta"),
+            Region(id: "tuiles-es-extremadura", nom: "Espagne · Estrémadure"),
+            Region(id: "tuiles-es-galicia", nom: "Espagne · Galice"),
+            Region(id: "tuiles-es-islas-baleares", nom: "Espagne · Baléares"),
+            Region(id: "tuiles-es-la-rioja", nom: "Espagne · La Rioja"),
+            Region(id: "tuiles-es-madrid", nom: "Espagne · Madrid"),
+            Region(id: "tuiles-es-melilla", nom: "Espagne · Melilla"),
+            Region(id: "tuiles-es-murcia", nom: "Espagne · Murcie"),
+            Region(id: "tuiles-es-navarra", nom: "Espagne · Navarre"),
+            Region(id: "tuiles-es-pais-vasco", nom: "Espagne · Pays basque"),
+            Region(id: "tuiles-es-valencia", nom: "Espagne · Valence"),
         ]
     }
 
