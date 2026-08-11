@@ -124,6 +124,8 @@ struct MainMapView: UIViewRepresentable {
     let onPlaceTap: (CLLocationCoordinate2D, String) -> Void
     /// La carte a été touchée ailleurs.
     let onMapTap: (CLLocationCoordinate2D) -> Void
+    /// Appui long : désigner une destination sans le moindre réseau.
+    var onMapLongPress: (CLLocationCoordinate2D) -> Void = { _ in }
     let onRegionChange: (MKCoordinateRegion) -> Void
     /// Geste manuel : sert à débrayer le suivi automatique.
     let onUserGesture: () -> Void
@@ -168,6 +170,20 @@ struct MainMapView: UIViewRepresentable {
         pinch.delegate = context.coordinator
         view.addGestureRecognizer(pinch)
 
+        // Appui long : désigner un point de la carte comme destination.
+        //
+        // C'est le seul chemin vers une destination qui ne demande **rien** au
+        // réseau. La recherche de lieux passe par MKLocalSearch, les positions
+        // enregistrées par l'API : en mode avion, ni l'une ni l'autre ne rend
+        // quoi que ce soit, et le paquet d'itinéraires installé restait sans
+        // emploi faute de pouvoir lui nommer un but. Une coordonnée suffit à
+        // Valhalla.
+        let appuiLong = UILongPressGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
+        appuiLong.minimumPressDuration = 0.45
+        appuiLong.delegate = context.coordinator
+        view.addGestureRecognizer(appuiLong)
+
         if let cam {
             context.coordinator.appliedCam = cam
             context.coordinator.apply(cam, to: view)
@@ -180,6 +196,7 @@ struct MainMapView: UIViewRepresentable {
         c.onPinTap = onPinTap
         c.onPlaceTap = onPlaceTap
         c.onMapTap = onMapTap
+        c.onMapLongPress = onMapLongPress
         c.onRegionChange = onRegionChange
         c.onUserGesture = onUserGesture
 
@@ -210,6 +227,7 @@ struct MainMapView: UIViewRepresentable {
         var onPinTap: (String) -> Void = { _ in }
         var onPlaceTap: (CLLocationCoordinate2D, String) -> Void = { _, _ in }
         var onMapTap: (CLLocationCoordinate2D) -> Void = { _ in }
+        var onMapLongPress: (CLLocationCoordinate2D) -> Void = { _ in }
         var onRegionChange: (MKCoordinateRegion) -> Void = { _ in }
         var onUserGesture: () -> Void = {}
 
@@ -423,6 +441,14 @@ struct MainMapView: UIViewRepresentable {
         }
 
         // MARK: Gestes
+
+        @objc func handleLongPress(_ g: UILongPressGestureRecognizer) {
+            // `.began` seulement : le geste continue d'émettre pendant que le
+            // doigt reste posé, et on ne veut qu'une destination par appui.
+            guard g.state == .began, let view = g.view as? MLNMapView else { return }
+            let point = g.location(in: view)
+            onMapLongPress(view.convert(point, toCoordinateFrom: view))
+        }
 
         @objc func handleTap(_ g: UITapGestureRecognizer) {
             guard let view = g.view as? MLNMapView else { return }
