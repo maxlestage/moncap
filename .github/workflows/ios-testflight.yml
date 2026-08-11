@@ -21,11 +21,7 @@ env:
 jobs:
   testflight:
     name: Build & upload TestFlight
-    # Image épinglée plutôt que `macos-latest`. Les courses ont cessé d'obtenir
-    # une machine — job mort en trois secondes, `runner_id: 0`, aucun journal —
-    # et l'étiquette flottante est la première suspecte : elle suit la dernière
-    # image publiée, dont la capacité est la plus disputée.
-    runs-on: macos-15
+    runs-on: macos-latest
     defaults:
       run:
         working-directory: frontend
