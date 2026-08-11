@@ -10,8 +10,6 @@ struct FirePerimeter: Identifiable {
     let center: CLLocationCoordinate2D
     /// Détection satellite la plus récente du foyer (pour « Mise à jour il y a X h »).
     let updatedAt: Date?
-    /// Première détection du foyer sur la fenêtre de 7 jours (« Créé il y a X j »).
-    let createdAt: Date?
 }
 
 /// Écran dédié « Carte des feux » à la manière de feuxdeforet.fr : fond
@@ -310,7 +308,6 @@ struct FireMapScreen: View {
         HStack(alignment: .top, spacing: 12) {
             FireUpdateBubble(
                 name: name(of: p),
-                createdAt: p.createdAt,
                 updatedAt: p.updatedAt ?? service.lastUpdate)
             Button {
                 withAnimation(.spring(duration: 0.25)) { selectedID = nil }
@@ -398,11 +395,14 @@ struct FireMapScreen: View {
 }
 
 /// Infobulle sombre sous le marqueur, identique à celle de feuxdeforet.fr :
-/// nom du feu (géocodé), « Contour satellite approximatif », puis « Créé il y
-/// a X j · Mise à jour il y a X h » en italique.
+/// nom du feu (géocodé), « Contour satellite approximatif », puis « Mise à
+/// jour il y a X h » en italique.
+///
+/// Plus d'âge du foyer : la carte ne montre que les feux actifs des
+/// dernières vingt-quatre heures, et une date de création n'aurait plus de
+/// fenêtre d'observation d'où la tirer.
 struct FireUpdateBubble: View {
     let name: String?
-    let createdAt: Date?
     let updatedAt: Date?
 
     var body: some View {
@@ -427,20 +427,13 @@ struct FireUpdateBubble: View {
         .fixedSize()
     }
 
-    /// « Créé il y a 6 j · Mise à jour il y a 3 h » (chaque moitié omise si
-    /// inconnue ; la création n'apparaît qu'à partir d'un jour).
+    /// « Mise à jour il y a 3 h », omis si la date est inconnue.
     private var agoText: String? {
-        var parts: [String] = []
-        if let createdAt {
-            let days = Int(Date().timeIntervalSince(createdAt) / 86_400)
-            if days >= 1 { parts.append("Créé il y a \(days) j") }
-        }
-        if let updatedAt {
-            let hours = Int(Date().timeIntervalSince(updatedAt) / 3600)
-            parts.append(
-                hours < 1 ? "Mise à jour il y a moins d'1 h" : "Mise à jour il y a \(hours) h")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        guard let updatedAt else { return nil }
+        let hours = Int(Date().timeIntervalSince(updatedAt) / 3600)
+        return hours < 1
+            ? String(localized: "Mise à jour il y a moins d'1 h")
+            : String(format: String(localized: "Mise à jour il y a %lld h"), hours)
     }
 }
 
@@ -512,8 +505,7 @@ enum FireGeometry {
                 out.append(
                     FirePerimeter(
                         id: out.count, polygon: ring, center: centers[i],
-                        updatedAt: own.compactMap { $0.detectedAt }.max(),
-                        createdAt: own.compactMap { $0.firstDetectedAt }.min()))
+                        updatedAt: own.compactMap { $0.detectedAt }.max()))
             }
         }
         return out
