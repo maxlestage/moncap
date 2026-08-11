@@ -89,7 +89,6 @@ test("aucun texte vide dans aucune langue", () => {
       ...l.h1,
       l.chapeau,
       l.seConnecter,
-      l.voirProjet,
       l.comparateur.titre,
       l.comparateur.intro,
       l.comparateur.apres,

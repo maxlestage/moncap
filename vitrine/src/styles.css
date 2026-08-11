@@ -316,29 +316,62 @@ a {
 }
 
 /* Le bouton principal vit sur le dégradé de marque, pas sur le papier du
-   thème : ses couleurs sont donc fixes. Blanc sur bleu profond, c'est le
-   contraste le plus franc — un bouton bleu sur un fond bleu ne ressort
-   jamais, quelle que soit la nuance. */
+ * thème : ses couleurs sont donc fixes. Blanc sur bleu profond, c'est le
+ * contraste le plus franc — un bouton bleu sur un fond bleu ne ressort
+ * jamais, quelle que soit la nuance.
+ *
+ * C'est désormais la **seule** action de la page : les deux liens vers le
+ * dépôt menaient à un dépôt privé, donc à un 404 pour tout visiteur. Une
+ * action unique peut se permettre d'occuper toute la largeur sur téléphone,
+ * et vaut mieux atteinte sans viser qu'élégante.
+ */
 .bouton {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   background: #ffffff;
   color: var(--marine);
   text-decoration: none;
-  font-weight: 650;
-  padding: 0.85rem 1.5rem;
+  font-weight: 700;
+  font-size: 1.02rem;
+  padding: 1rem 2rem;
   border-radius: 999px;
-  /* 44 px de haut au moins : c'est la cible qu'un pouce atteint sans viser. */
-  min-height: 44px;
+  /* Bien au-delà des 44 px réglementaires : c'est la cible qu'un pouce
+     atteint sans viser, y compris en roulant sur un trottoir. */
+  min-height: 52px;
+  box-shadow: 0 6px 18px rgb(3 16 45 / 0.28);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
-.lien {
-  color: #c3cfe2;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  padding: 0.6rem 0;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
+/* Dès qu'il y a de la place, le bouton reprend sa largeur naturelle : étiré
+   sur une tablette, il ressemblerait à une bannière. */
+@media (min-width: 30rem) {
+  .bouton {
+    width: auto;
+  }
+}
+
+/* L'enfoncement se voit : sans retour, un lien déguisé en bouton reste un
+   lien. `:active` couvre le doigt, `:hover` seulement les pointeurs — sur
+   tactile il resterait collé après le relâchement. */
+.bouton:active {
+  transform: translateY(1px);
+  box-shadow: 0 3px 10px rgb(3 16 45 / 0.3);
+}
+
+@media (hover: hover) {
+  .bouton:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgb(3 16 45 / 0.34);
+  }
+}
+
+.bouton:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
 }
 
 /* Les chiffres sont des vignettes, et non des lignes séparées par un filet.
