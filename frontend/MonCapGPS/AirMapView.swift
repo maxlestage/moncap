@@ -8,18 +8,23 @@ import SwiftUI
 /// serveur pour toute une grille en une requête : une carte se lit par taches,
 /// pas par relevés isolés.
 ///
-/// Deux indices coexistent, et ce n'est pas un doublon. L'indice **européen**
-/// n'est calculé que sur le domaine européen de CAMS ; l'**américain** l'est
-/// partout. Une carte mondiale doit donc savoir passer de l'un à l'autre — et
-/// le dire, car leurs échelles n'ont rien de comparable : 100 est déjà mauvais
-/// en Europe, encore acceptable aux États-Unis.
+/// Deux indices arrivent, et l'écran n'en montre qu'un. Contrairement à ce que
+/// j'avais supposé, Open-Meteo calcule l'indice **européen partout** — relevé
+/// au-dessus du Sahara, où il vaut 33. Il sert donc d'échelle unique, ce qui
+/// vaut mieux : une carte qui change de convention selon le continent ne se
+/// compare plus à elle-même.
+///
+/// L'**américain** reste dans la réponse, comme repli s'il venait à manquer, et
+/// parce qu'il dit autre chose : au-dessus du Sahara il monte à 1142 quand
+/// l'européen plafonne à 33 — les poussières n'y sont pas pondérées pareil. Les
+/// deux ne se superposent pas, d'où l'échelle nommée à l'écran.
 struct AirPoint: Identifiable, Decodable {
     var id: String { "\(lat),\(lon)" }
     let lat: Double
     let lon: Double
-    /// Indice européen, absent hors d'Europe.
+    /// Indice européen. Présent partout, en pratique.
     let eu: Double?
-    /// Indice américain, calculé partout.
+    /// Indice américain, conservé comme repli.
     let us: Double?
     /// Particules fines, µg/m³ — la seule grandeur physique du lot.
     let pm25: Double?
