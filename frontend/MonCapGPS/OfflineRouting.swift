@@ -179,6 +179,14 @@ final class OfflineRouter: NSObject, ObservableObject {
         dossier.appendingPathComponent("\(id).json")
     }
 
+    /// Plafond d'itinéraires proposés, réseau ou non.
+    ///
+    /// C'est un **maximum**, pas une promesse : Valhalla rend les variantes
+    /// qu'il trouve, et un trajet court en a rarement quinze. Le calcul étant
+    /// local, en demander davantage coûte du temps de processeur, pas de la
+    /// donnée — la limite est donc celle de l'écran, pas celle du forfait.
+    static let maxItineraires = 15
+
     /// Un itinéraire peut-il être calculé sans réseau ?
     var ready: Bool { !installees.isEmpty }
 
@@ -443,7 +451,8 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// tracés se ressemblent trop pour qu'un choix ait du sens, et que chacun
     /// se paie en secondes d'attente sur un téléphone.
     func routes(
-        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, max nombre: Int = 5
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+        max nombre: Int = OfflineRouter.maxItineraires
     ) -> [OfflineRoute] {
         var demande: [String: Any] = [
             "locations": [
