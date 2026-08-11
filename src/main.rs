@@ -543,12 +543,36 @@ static PAQUETS_CACHE: OnceLock<tokio::sync::Mutex<Option<PaquetsCache>>> = OnceL
 const PAQUETS_TTL: Duration = Duration::from_secs(3600);
 
 /// Jeton GitHub détenu **par le serveur** (`GITHUB_TOKEN`), jamais exposé.
+///
+/// Les guillemets sont retirés en plus des espaces : collé depuis un fichier
+/// `.env` ou une commande, un jeton arrive souvent entouré de `"` ou de `'`.
+/// Le tableau de bord Heroku les conserve tels quels, GitHub renvoie alors
+/// 401, et rien ne le laisse deviner — la valeur *paraît* juste.
 fn paquets_token() -> Option<String> {
     std::env::var("GITHUB_TOKEN")
         .or_else(|_| std::env::var("MONCAP_GITHUB_TOKEN"))
         .ok()
-        .map(|k| k.trim().to_string())
+        .map(|k| k.trim().trim_matches(['"', '\'']).trim().to_string())
         .filter(|k| !k.is_empty())
+}
+
+/// Décrit la **forme** d'un jeton, sans en révéler un seul caractère.
+///
+/// Un 401 ne dit pas lequel des deux : une valeur qui n'est pas un jeton, ou
+/// un jeton authentique devenu invalide. La différence change tout le geste à
+/// faire, et elle se lit dans le préfixe — que GitHub publie, et qui n'est
+/// donc pas un secret.
+fn forme_du_jeton(token: &str) -> String {
+    let genre = if token.starts_with("github_pat_") {
+        "à portée fine"
+    } else if token.starts_with("ghp_") {
+        "classique"
+    } else if token.starts_with("gho_") || token.starts_with("ghs_") {
+        "d'application, pas un jeton personnel"
+    } else {
+        "de format inconnu — ce n'est probablement pas un jeton"
+    };
+    format!("jeton {genre}, {} caractères", token.chars().count())
 }
 
 /// Dépôt qui porte les Releases (`MONCAP_DEPOT`, par défaut le nôtre).
@@ -631,7 +655,24 @@ async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
             .await
             .map_err(|e| e.to_string())?;
         if !resp.status().is_success() {
-            return Err(format!("HTTP {}", resp.status()));
+            // 401 : la valeur n'est pas reconnue. 403 ou 404 : elle l'est, mais
+            // ne porte pas les droits — ou ne voit pas le dépôt. Deux gestes
+            // différents, donc deux messages.
+            let indice = match resp.status().as_u16() {
+                401 => format!(
+                    " — {} refusé par GitHub. Vérifie qu'il est collé en entier \
+                     et qu'il n'a pas expiré.",
+                    forme_du_jeton(token)
+                ),
+                403 | 404 => format!(
+                    " — {} accepté, mais sans accès à {depot}. Vérifie que le \
+                     dépôt est dans « Repository access » et que « Contents » \
+                     est en lecture.",
+                    forme_du_jeton(token)
+                ),
+                _ => String::new(),
+            };
+            return Err(format!("HTTP {}{indice}", resp.status()));
         }
         let liste: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
         let recues = liste.len();
@@ -4069,6 +4110,42 @@ mod integration {
         assert!(!etiquette_valide("tuiles-eu-France"));
         assert!(!etiquette_valide("tuiles-eu-a?b=c"));
         assert!(!etiquette_valide(&format!("tuiles-eu-{}", "a".repeat(200))));
+    }
+
+    /// Un jeton collé depuis un `.env` arrive entouré de guillemets, que le
+    /// tableau de bord Heroku conserve tels quels. GitHub renvoie alors 401 et
+    /// rien ne le laisse deviner : à l'œil, la valeur paraît juste.
+    #[test]
+    fn le_jeton_survit_aux_guillemets_et_aux_espaces() {
+        // La fonction lit l'environnement : on éprouve ici le même nettoyage.
+        let propre = |brut: &str| brut.trim().trim_matches(['"', '\'']).trim().to_string();
+        for brut in [
+            "github_pat_abc",
+            " github_pat_abc ",
+            "\"github_pat_abc\"",
+            "'github_pat_abc'",
+            "\" github_pat_abc \"",
+            "\ngithub_pat_abc\n",
+        ] {
+            assert_eq!(propre(brut), "github_pat_abc", "{brut:?}");
+        }
+    }
+
+    /// La forme d'un jeton se décrit sans en révéler un caractère : c'est ce
+    /// qui distingue « ce n'est pas un jeton » de « ce jeton a expiré », et
+    /// les deux n'appellent pas le même geste.
+    #[test]
+    fn la_forme_du_jeton_ne_fuit_rien() {
+        let secret = "github_pat_11ABCDEFG0123456789";
+        let dit = forme_du_jeton(secret);
+        assert!(dit.contains("à portée fine"), "{dit}");
+        assert!(dit.contains(&secret.chars().count().to_string()), "{dit}");
+        // Aucun morceau du secret au-delà du préfixe public.
+        assert!(!dit.contains("ABCDEFG"), "{dit}");
+        assert!(!dit.contains("0123456789"), "{dit}");
+
+        assert!(forme_du_jeton("ghp_xyz").contains("classique"));
+        assert!(forme_du_jeton("moncap").contains("format inconnu"));
     }
 
     /// Sans jeton, le courtier doit le **dire**. La panne d'origine tenait à un
