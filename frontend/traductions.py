@@ -141,6 +141,19 @@ T: dict[str, tuple[str, str]] = {
         "La búsqueda de direcciones necesita cobertura. Mantén pulsado el mapa para elegir un punto: la ruta se calcula entonces en el dispositivo.",
         "Address search needs a network connection. Press and hold the map to pick a point: the route is then computed on the device.",
     ),
+    "Aucun itinéraire": ("Ninguna ruta", "No route"),
+    "Le calcul a échoué. Ce mode de déplacement a besoin du réseau.": (
+        "El cálculo ha fallado. Este modo de transporte necesita cobertura.",
+        "The computation failed. This travel mode needs a network connection.",
+    ),
+    "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.": (
+        "No hay ninguna región de rutas instalada. Descarga la que te interesa desde la pantalla sin conexión.",
+        "No routing region is installed. Download the one you need from the offline screen.",
+    ),
+    "Aucune région installée ne couvre ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.": (
+        "Ninguna región instalada cubre este trayecto. Debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan.",
+        "No installed region covers this trip. It must fit entirely within one package — that is what the overlapping areas are for.",
+    ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),
