@@ -156,8 +156,6 @@ export const OUTILS: readonly (readonly string[])[] = [
 
 export const AUTEUR = "Maxime Nathan Lestage";
 
-export const DEPOT = "https://github.com/maxlestage/moncap";
-
 /**
  * Le front web, servi par le même backend que cette page. Chemin relatif et
  * non absolu : la vitrine tourne aussi bien sur un dyno Heroku qu'en local,

@@ -33,7 +33,6 @@ export type Contenu = {
   readonly h1: readonly [string, string];
   readonly chapeau: string;
   readonly seConnecter: string;
-  readonly voirProjet: string;
   readonly theme: { readonly libelle: string; readonly noms: readonly string[] };
   readonly langueLibelle: string;
   readonly chiffres: readonly Chiffre[];
@@ -71,7 +70,6 @@ export type Contenu = {
   };
   readonly signature: string;
   readonly credits: string;
-  readonly codeSource: string;
 };
 
 /** Assemble la pile en associant les libellés de domaine aux outils. */
@@ -93,7 +91,6 @@ const FR: Contenu = {
   chapeau:
     "Un GPS pour iPhone qui met les itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — puis vous guide. Téléchargez votre région une fois, et il continue de calculer tout seul : vallées, tunnels, étranger.",
   seConnecter: "Se connecter",
-  voirProjet: "Voir le projet",
   theme: {
     libelle: "Thème",
     noms: ["Auto", "Clair", "Sombre", "Marine"],
@@ -222,7 +219,6 @@ const FR: Contenu = {
   signature: "Conçu et développé par",
   credits:
     "Cartes et données routières OpenStreetMap (ODbL), calcul d'itinéraire Valhalla, trafic TomTom, météo open-meteo, prix des carburants data.economie.gouv.fr, foyers NASA FIRMS, photos aériennes IGN.",
-  codeSource: "Code source",
 };
 
 const ES: Contenu = {
@@ -236,7 +232,6 @@ const ES: Contenu = {
   chapeau:
     "Un GPS para iPhone que pone las rutas una al lado de otra — duración, giros, desnivel, combustible, peajes — y luego te guía. Descarga tu región una vez y sigue calculando solo: valles, túneles, extranjero.",
   seConnecter: "Iniciar sesión",
-  voirProjet: "Ver el proyecto",
   theme: {
     libelle: "Tema",
     noms: ["Auto", "Claro", "Oscuro", "Marino"],
@@ -365,7 +360,6 @@ const ES: Contenu = {
   signature: "Diseñado y desarrollado por",
   credits:
     "Mapas y datos viarios OpenStreetMap (ODbL), cálculo de rutas Valhalla, tráfico TomTom, meteorología open-meteo, precios de carburantes data.economie.gouv.fr, focos NASA FIRMS, fotos aéreas IGN.",
-  codeSource: "Código fuente",
 };
 
 const EN: Contenu = {
@@ -379,7 +373,6 @@ const EN: Contenu = {
   chapeau:
     "An iPhone GPS that lays the routes side by side — time, turns, elevation, fuel, tolls — then guides you. Download your region once and it keeps computing on its own: valleys, tunnels, abroad.",
   seConnecter: "Sign in",
-  voirProjet: "See the project",
   theme: {
     libelle: "Theme",
     noms: ["Auto", "Light", "Dark", "Navy"],
@@ -508,7 +501,6 @@ const EN: Contenu = {
   signature: "Designed and built by",
   credits:
     "Maps and road data OpenStreetMap (ODbL), routing Valhalla, traffic TomTom, weather open-meteo, fuel prices data.economie.gouv.fr, hotspots NASA FIRMS, aerial imagery IGN.",
-  codeSource: "Source code",
 };
 
 export const LANGUES: readonly Contenu[] = [FR, ES, EN];
