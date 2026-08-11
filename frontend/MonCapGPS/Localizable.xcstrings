@@ -513,6 +513,22 @@
         }
       }
     },
+    "Aucune mesure ici. Rapproche-toi des terres.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No measurement here. Move closer to land."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna medición aquí. Acércate a tierra firme."
+          }
+        }
+      }
+    },
     "Aucune position — utilise « Enregistrer ma position ».": {
       "localizations": {
         "en": {
@@ -637,6 +653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baño"
+          }
+        }
+      }
+    },
+    "Bon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bueno"
           }
         }
       }
@@ -993,6 +1025,22 @@
         }
       }
     },
+    "Correct": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fair"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aceptable"
+          }
+        }
+      }
+    },
     "Couvert": {
       "localizations": {
         "en": {
@@ -1169,6 +1217,22 @@
         }
       }
     },
+    "Dégradé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moderate"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moderado"
+          }
+        }
+      }
+    },
     "Déjà installée": {
       "localizations": {
         "en": {
@@ -1329,6 +1393,22 @@
         }
       }
     },
+    "Extrêmement mauvais": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extremely poor"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extremadamente malo"
+          }
+        }
+      }
+    },
     "Fast-food": {
       "localizations": {
         "en": {
@@ -1485,6 +1565,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Incendios 🔥 (NASA FIRMS)"
+          }
+        }
+      }
+    },
+    "Indice américain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "US index"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Índice estadounidense"
+          }
+        }
+      }
+    },
+    "Indice européen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "European index"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Índice europeo"
           }
         }
       }
@@ -1761,6 +1873,22 @@
         }
       }
     },
+    "Mauvais": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poor"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Malo"
+          }
+        }
+      }
+    },
     "Mes trajets": {
       "localizations": {
         "en": {
@@ -1821,6 +1949,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mensajes no disponible"
+          }
+        }
+      }
+    },
+    "Mesures Open-Meteo (CAMS)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open-Meteo data (CAMS)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datos Open-Meteo (CAMS)"
+          }
+        }
+      }
+    },
+    "Mesures indisponibles — il faut du réseau.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measurements unavailable — a network connection is needed."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediciones no disponibles: hace falta cobertura."
+          }
+        }
+      }
+    },
+    "Mise à jour il y a %lld h": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated %lld h ago"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizado hace %lld h"
+          }
+        }
+      }
+    },
+    "Mise à jour il y a moins d'1 h": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updated less than 1 h ago"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizado hace menos de 1 h"
           }
         }
       }
@@ -2113,6 +2305,22 @@
         }
       }
     },
+    "Particules fines : %.0f µg/m³": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine particles: %.0f µg/m³"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partículas finas: %.0f µg/m³"
+          }
+        }
+      }
+    },
     "Permet de calculer et de recalculer un itinéraire sans réseau. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": {
       "localizations": {
         "en": {
@@ -2269,6 +2477,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avisar a un allegado"
+          }
+        }
+      }
+    },
+    "Qualité de l'air": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Air quality"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calidad del aire"
           }
         }
       }
@@ -2877,6 +3101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Obras"
+          }
+        }
+      }
+    },
+    "Très mauvais": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Very poor"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muy malo"
           }
         }
       }

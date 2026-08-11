@@ -11,13 +11,11 @@ struct Fire: Identifiable {
     let detectedAt: Date?
     /// Première détection à cet endroit sur la fenêtre d'historique (7 j) —
     /// sert à afficher « Créé il y a X j ».
-    let firstDetectedAt: Date?
 
-    init(coordinate: CLLocationCoordinate2D, detectedAt: Date? = nil, firstDetectedAt: Date? = nil)
+    init(coordinate: CLLocationCoordinate2D, detectedAt: Date? = nil)
     {
         self.coordinate = coordinate
         self.detectedAt = detectedAt
-        self.firstDetectedAt = firstDetectedAt
     }
 }
 
@@ -87,13 +85,12 @@ final class FireService: ObservableObject {
         }
     }
 
-    /// Réponse JSON du backend : `[{ "lat": .., "lon": .., "t": .., "t0": .. },
-    /// ...]` (`t` = dernière détection, `t0` = première, epoch UTC, optionnels).
+    /// Réponse JSON du backend : `[{ "lat": .., "lon": .., "t": .. }, ...]`
+    /// (`t` = détection la plus récente, epoch UTC, optionnelle).
     private struct Point: Decodable {
         let lat: Double
         let lon: Double
         let t: Double?
-        let t0: Double?
     }
 
     /// Interroge notre backend `GET /fires`. `nonisolated` : décodage hors du
@@ -108,8 +105,7 @@ final class FireService: ObservableObject {
         return points.map {
             Fire(
                 coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) },
-                firstDetectedAt: $0.t0.map { Date(timeIntervalSince1970: $0) })
+                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) })
         }
     }
 
@@ -205,7 +201,7 @@ final class FireService: ObservableObject {
             .map {
                 Fire(
                     coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                    detectedAt: $0.last, firstDetectedAt: $0.first)
+                    detectedAt: $0.last)
             }
     }
 

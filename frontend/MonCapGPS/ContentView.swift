@@ -563,6 +563,7 @@ struct MapHomeView: View {
     @State private var showArrive = false
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
+    @State private var showAirMap = false
     /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
     @AppStorage("moncap.firmsKey") private var firmsKey = ""
     /// Partage de position en direct.
@@ -641,6 +642,9 @@ struct MapHomeView: View {
         }
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(service: fires)
+        }
+        .fullScreenCover(isPresented: $showAirMap) {
+            AirMapScreen(center: location.coordinate)
         }
         .fullScreenCover(isPresented: $showOfflineMap) {
             OfflineMapScreen(center: location.coordinate)
@@ -2359,6 +2363,7 @@ struct MapHomeView: View {
                 // regarde le moins l'écran.
                 if !nav.active {
                     fireMapButton
+                    airMapButton
                     offlineMapButton
                 }
                 map3DButton
@@ -2366,6 +2371,21 @@ struct MapHomeView: View {
                 reportButton
             }
         }
+    }
+
+    /// Ouvre la carte dédiée à la qualité de l'air en plein écran.
+    private var airMapButton: some View {
+        Button {
+            showAirMap = true
+        } label: {
+            Image(systemName: "aqi.medium")
+                .font(.title3)
+                .foregroundStyle(.teal)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(.regularMaterial))
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+        .accessibilityLabel(Text("Qualité de l'air"))
     }
 
     /// Ouvre la carte dédiée aux incendies (contours sur satellite) en plein écran.
