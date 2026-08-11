@@ -446,7 +446,6 @@ struct MapHomeView: View {
     @State private var positions: [Position] = []
     /// Filtre sur la liste des régions d'itinéraire : deux cents paquets dans
     /// cinquante pays ne se parcourent pas au doigt.
-    @State private var rechercheRegion = ""
     @State private var stats: Stats?
     @State private var routeInfo: String?
     /// Cadrage de départ sur la France : tant qu'aucune position n'est
@@ -2512,143 +2511,29 @@ struct MapHomeView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 }
-                Section("Cartes hors ligne 🗺️") {
+                Section("Hors ligne 🗺️") {
                     Button {
                         showPlaces = false
                         showOfflineMap = true
                     } label: {
-                        Label("Télécharger les fonds de carte", systemImage: "arrow.down.circle")
+                        Label("Préparer une zone hors ligne", systemImage: "arrow.down.circle")
                     }
+                    // Un seul écran, un seul geste. Les deux téléchargements y
+                    // portent sur la même zone : les images pour voir la carte,
+                    // le graphe routier pour y calculer une route. Séparés, on
+                    // en prenait un et on découvrait l'autre en panne de
+                    // réseau.
                     Text(
-                        "Les images de la carte, pour la voir sans réseau. Le calcul d'itinéraire est séparé : c'est « Itinéraires sans réseau » ci-dessous. Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription."
+                        "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-
-                    // Repli manuel : n'a d'intérêt que pour qui héberge ses
-                    // propres cartes. Renseigné et joignable, il prend le pas
-                    // sur le fond par défaut ; sinon il est simplement ignoré.
-                    // Calcul d'itinéraire sans réseau : distinct des cartes,
-                    // car il repose sur d'autres données — un graphe routier,
-                    // pas des tuiles d'affichage.
-                    DisclosureGroup("Itinéraires sans réseau 🧭") {
+                    if router.ready {
                         Toggle("Naviguer hors ligne", isOn: $horsLigne)
-                            .disabled(!router.ready)
-                        if horsLigne && router.ready {
-                            // Un seul littéral, pas une concaténation : « "a" +
-                            // "b" » produit une `String`, et `Text(String)` est
-                            // verbatim — la phrase n'était donc jamais traduite.
-                            Text(
-                                "Les itinéraires sont calculés sur l'appareil. Cinq trajets proposés au lieu de quinze, et pas de trafic en direct."
-                            )
+                        Text("\(router.installees.count) région(s) · \(router.poidsTotal)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        } else if !router.ready {
-                            Text("Télécharge d'abord une région, ci-dessous.")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        // Les régions gardées, chacune effaçable : en garder
-                        // plusieurs couvre plus de terrain, un trajet cherchant
-                        // sa route dans chacune.
-                        ForEach(router.installees) { gardee in
-                            HStack {
-                                Label(gardee.nom, systemImage: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Spacer()
-                                Text(gardee.poids)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                Button(role: .destructive) {
-                                    router.remove(gardee.id)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.red)
-                            }
-                        }
-                        if router.installees.count > 1 {
-                            Text("\(router.installees.count) régions · \(router.poidsTotal)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if router.downloading {
-                            ProgressView(value: router.progress) {
-                                Text("Téléchargement · \(Int(router.progress * 100)) %")
-                                    .font(.footnote)
-                            }
-                        } else if router.chargement {
-                            ProgressView()
-                        } else if router.regions.isEmpty {
-                            Text("Liste des régions indisponible — il faut du réseau une fois.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            HStack {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundStyle(.secondary)
-                                TextField("Chercher une région", text: $rechercheRegion)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                if !rechercheRegion.isEmpty {
-                                    Button {
-                                        rechercheRegion = ""
-                                    } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-
-                            if rechercheRegion.isEmpty {
-                                // Un pays par rangée, ses régions dessous : à
-                                // deux cents entrées, une liste à plat serait
-                                // impraticable. Un pays livré d'un bloc
-                                // n'ouvre rien et se télécharge directement.
-                                ForEach(router.groupes) { groupe in
-                                    if groupe.regions.count == 1,
-                                        let seule = groupe.regions.first
-                                    {
-                                        RegionButton(region: seule, router: router)
-                                    } else {
-                                        DisclosureGroup(
-                                            "\(groupe.pays) · \(groupe.regions.count)"
-                                        ) {
-                                            ForEach(groupe.regions) { region in
-                                                RegionButton(region: region, router: router)
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                // À plat pendant la recherche : déplier un pays
-                                // pour trouver ce qu'on a déjà nommé n'aurait
-                                // aucun sens. Le nom entier, donc, pays compris.
-                                let trouvees = router.recherche(rechercheRegion)
-                                if trouvees.isEmpty {
-                                    Text("Aucune région de ce nom.")
-                                        .font(.footnote)
-                                        .foregroundStyle(.secondary)
-                                }
-                                ForEach(trouvees) { region in
-                                    RegionButton(region: region, router: router, complet: true)
-                                }
-                            }
-                        }
-                        if let m = router.message {
-                            Text(m).font(.caption2).foregroundStyle(.orange)
-                        }
-                        Text(
-                            "Permet de recalculer un itinéraire sans réseau. Sans cela, s'écarter de sa route hors couverture laisse l'app sans rien à proposer. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent."
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                     }
-                    .task { await router.loadRegions() }
 
                     DisclosureGroup("Serveur de cartes personnel") {
                         TextField("https://exemple.fr/style.json", text: $styleURL)
@@ -3857,39 +3742,5 @@ struct MapHomeView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             Sharer.present([url])
         }
-    }
-}
-
-/// Une région téléchargeable dans les réglages.
-///
-/// Extraite en vue à part : elle apparaît à deux endroits — un pays livré d'un
-/// bloc, et une région dans son pays déplié.
-private struct RegionButton: View {
-    let region: OfflineRouter.Region
-    @ObservedObject var router: OfflineRouter
-    /// Nom entier, pays compris : indispensable dans une liste de recherche,
-    /// où plus rien ne dit de quel pays vient la ligne.
-    var complet = false
-
-    var body: some View {
-        let deja = router.estInstallee(region)
-        Button {
-            Task { await router.install(region) }
-        } label: {
-            Label(
-                "\(libelle) · \(region.poids)",
-                systemImage: deja ? "checkmark.circle.fill" : "arrow.down.circle"
-            )
-            .foregroundStyle(deja ? Color.green : Color.accentColor)
-        }
-        // Retélécharger ce qu'on a déjà ne ferait que perdre le forfait.
-        .disabled(deja)
-    }
-
-    private var libelle: String {
-        // Sous un pays déplié, le répéter sur chaque ligne mangerait la
-        // largeur ; un pays livré d'un bloc n'a lui aucun détail à montrer.
-        if complet || region.detail.isEmpty { return region.nom }
-        return region.detail
     }
 }

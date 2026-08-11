@@ -44,10 +44,6 @@ T: dict[str, tuple[str, str]] = {
     "Arrêter le partage en direct": ("Dejar de compartir en directo", "Stop sharing live"),
     "Prévenir que je suis arrivé": ("Avisar de que he llegado", "Let them know I've arrived"),
     "Prévenir un proche": ("Avisar a un allegado", "Let someone know"),
-    "Télécharger les fonds de carte": (
-        "Descargar los fondos de mapa",
-        "Download the map backgrounds",
-    ),
     "Naviguer hors ligne": ("Navegar sin conexión", "Navigate offline"),
     "Revenir au fond par défaut": ("Volver al fondo por defecto", "Back to the default background"),
     "Obtenir une clé gratuite": ("Conseguir una clave gratuita", "Get a free key"),
@@ -82,8 +78,6 @@ T: dict[str, tuple[str, str]] = {
     "Prix carburant": ("Precio del combustible", "Fuel price"),
     "Carte hors ligne": ("Mapa sin conexión", "Offline map"),
     "Carte des feux de forêt": ("Mapa de incendios forestales", "Wildfire map"),
-    "Cartes hors ligne 🗺️": ("Mapas sin conexión 🗺️", "Offline maps 🗺️"),
-    "Itinéraires sans réseau 🧭": ("Rutas sin cobertura 🧭", "Routes without signal 🧭"),
     "Trafic 🚦 (TomTom)": ("Tráfico 🚦 (TomTom)", "Traffic 🚦 (TomTom)"),
     "Incendies 🔥 (NASA FIRMS)": ("Incendios 🔥 (NASA FIRMS)", "Wildfires 🔥 (NASA FIRMS)"),
     "Serveur de cartes personnel": ("Servidor de mapas propio", "Personal map server"),
@@ -97,6 +91,33 @@ T: dict[str, tuple[str, str]] = {
     "Chercher un lieu, une ville, un pays": (
         "Buscar un lugar, una ciudad, un país",
         "Search a place, a city, a country",
+    ),
+    "Hors ligne 🗺️": ("Sin conexión 🗺️", "Offline 🗺️"),
+    "Préparer une zone hors ligne": (
+        "Preparar una zona sin conexión",
+        "Prepare an offline area",
+    ),
+    "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription.": (
+        "Los fondos de mapa y el cálculo de rutas se descargan juntos, sobre la zona que estás mirando. No hace falta ninguna clave: todo viene de OpenStreetMap, libre y sin registro.",
+        "Map backgrounds and route computation download together, for the area you are looking at. No key is needed: everything comes from OpenStreetMap, free and without signing up.",
+    ),
+    "Itinéraires hors réseau": ("Rutas sin conexión", "Offline routes"),
+    "Toutes les régions": ("Todas las regiones", "All regions"),
+    "Sur cet appareil": ("En este dispositivo", "On this device"),
+    "Déjà installée": ("Ya instalada", "Already installed"),
+    "Calcul sur l'appareil · %@": (
+        "Cálculo en el dispositivo · %@",
+        "Computed on the device · %@",
+    ),
+    "Aucune région reconnue ici. Ouvre la liste complète.": (
+        "Ninguna región reconocida aquí. Abre la lista completa.",
+        "No region recognised here. Open the full list.",
+    ),
+    "Téléchargement · %lld %": ("Descarga · %lld %", "Download · %lld %"),
+    "%lld région(s) · %@": ("%lld región(es) · %@", "%lld region(s) · %@"),
+    "Permet de calculer et de recalculer un itinéraire sans réseau. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": (
+        "Permite calcular y recalcular una ruta sin conexión. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. En cambio debe caber entero en una de ellas: para eso sirven las zonas, que se solapan.",
+        "Lets you compute and recompute a route with no network. Keep as many regions as you like: a trip looks for its route in each one. It must however fit entirely within one of them — that is what the overlapping areas are for.",
     ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
@@ -135,18 +156,6 @@ T: dict[str, tuple[str, str]] = {
         "Lista de regiones no disponible: hace falta cobertura una vez.",
         "Region list unavailable — signal is needed once.",
     ),
-    "Télécharge d'abord une région, ci-dessous.": (
-        "Descarga primero una región, aquí debajo.",
-        "Download a region first, below.",
-    ),
-    "Les itinéraires sont calculés sur l'appareil. Cinq trajets proposés au lieu de quinze, et pas de trafic en direct.": (
-        "Las rutas se calculan en el dispositivo. Cinco trayectos propuestos en lugar de quince, y sin tráfico en directo.",
-        "Routes are computed on the device. Five trips offered instead of fifteen, and no live traffic.",
-    ),
-    "Permet de recalculer un itinéraire sans réseau. Sans cela, s'écarter de sa route hors couverture laisse l'app sans rien à proposer. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": (
-        "Permite recalcular una ruta sin cobertura. Sin eso, salirse de la ruta fuera de cobertura deja a la app sin nada que proponer. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. Eso sí, debe caber entero en una de ellas — para eso sirven las zonas, que se solapan.",
-        "Lets a route be recomputed without signal. Without it, straying off route out of coverage leaves the app with nothing to offer. Keep as many regions as you like: a trip looks for its route in each. It must however fit entirely within one of them — that is what the overlapping zones are for.",
-    ),
     "Itinéraire trop long à ce niveau de détail (%@). Choisis « Région ».": (
         "Ruta demasiado larga con este nivel de detalle (%@). Elige «Región».",
         "Route too long at this level of detail (%@). Choose “Region”.",
@@ -158,10 +167,6 @@ T: dict[str, tuple[str, str]] = {
     "Cet appareil ne peut pas envoyer de SMS. Copie ton message et envoie-le autrement.": (
         "Este dispositivo no puede enviar SMS. Copia tu mensaje y envíalo de otro modo.",
         "This device cannot send texts. Copy your message and send it another way.",
-    ),
-    "Les images de la carte, pour la voir sans réseau. Le calcul d'itinéraire est séparé : c'est « Itinéraires sans réseau » ci-dessous. Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription.": (
-        "Las imágenes del mapa, para verlo sin cobertura. El cálculo de rutas va aparte: es «Rutas sin cobertura», aquí debajo. No hace falta ninguna clave: los mapas vienen de OpenStreetMap a través de OpenFreeMap, libres y sin registro.",
-        "The map imagery, so you can see it without signal. Routing is separate: that is “Routes without signal”, below. No key is needed: the maps come from OpenStreetMap via OpenFreeMap, free and without signing up.",
     ),
     "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut.": (
         "Déjalo vacío si no alojas nada. Una dirección que no responde se ignora: el mapa sigue mostrándose con el fondo por defecto.",
@@ -466,7 +471,7 @@ def verbatim(fichiers: list[tuple[str, str]]) -> list[str]:
     permis = {
         "nav.instruction", "router.message", "packs.message",
         "kind.emoji", "w.emoji", "t.emoji",
-        "gardee.poids", "r.label", "r.name", "r.subtitle",
+        "gardee.poids", "region.nom", "r.label", "r.name", "r.subtitle",
         "place.label", "p.label", "e.name", "t.label",
     }
     # Limite assumée : la liste est indexée par expression, non par site.
