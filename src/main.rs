@@ -844,10 +844,15 @@ async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response
 struct AirPoint {
     lat: f64,
     lon: f64,
-    /// Indice européen (0-100+). Absent hors du domaine européen de CAMS.
+    /// Indice européen (EAQI, 0-100+). Mesuré : Open-Meteo le calcule
+    /// **partout**, y compris au-dessus du Sahara, et non sur le seul domaine
+    /// européen comme je l'avais supposé. Il sert donc d'échelle unique ;
+    /// l'américain reste un repli au cas où il viendrait à manquer.
     #[serde(skip_serializing_if = "Option::is_none")]
     eu: Option<f64>,
-    /// Indice américain (0-500), calculé partout dans le monde.
+    /// Indice américain (AQI). Autre convention, non comparable : au-dessus du
+    /// Sahara il monte à 1142 quand l'européen plafonne à 33, les poussières
+    /// n'étant pas pondérées de la même façon.
     #[serde(skip_serializing_if = "Option::is_none")]
     us: Option<f64>,
     /// Particules fines en µg/m³ : la seule grandeur physique du lot, la même
@@ -899,6 +904,9 @@ fn air_grille(zone: &str) -> Vec<(f64, f64)> {
 /// `?bbox=ouest,sud,est,nord`, mêmes bornes que pour les feux. Sans paramètre,
 /// le monde entier — la grille est alors très lâche, ce qui reste honnête :
 /// c'est un aperçu, pas une mesure de proximité.
+///
+/// Mesuré sur le dyno : 108 points rendus pour la France, l'indice européen
+/// allant de 21 à 49 et les particules fines de 2,9 à 14,2 µg/m³.
 async fn list_air(Query(q): Query<FiresQuery>) -> Response {
     let Some(zone) = fires_zone(q.bbox.as_deref()) else {
         return (StatusCode::BAD_REQUEST, "bbox attendue : ouest,sud,est,nord").into_response();
