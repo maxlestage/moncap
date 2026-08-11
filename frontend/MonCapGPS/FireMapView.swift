@@ -35,6 +35,16 @@ enum OrthoSource {
 struct FireMapLibreView: UIViewRepresentable {
     let styleURL: URL
     let perimeters: [FirePerimeter]
+    /// Les détections satellite telles quelles.
+    ///
+    /// Elles sont dessinées **en plus** des contours, et c'est ce qui rend la
+    /// carte fiable à toute échelle. Les contours naissent d'un regroupement
+    /// de proche en proche : à l'échelle du monde, des milliers de détections
+    /// se soudent en un seul groupe, la grille de calcul se dégrade jusqu'à
+    /// des cellules bien plus grandes que l'empreinte d'un feu, et plus aucun
+    /// contour ne peut se former. On voyait alors « 1467 feux en cours » sur
+    /// une carte vide. Un point par détection ne dépend, lui, de rien.
+    let fires: [Fire]
     /// Identifiant du foyer touché.
     let onSelect: (Int) -> Void
 
@@ -68,6 +78,7 @@ struct FireMapLibreView: UIViewRepresentable {
         if context.coordinator.appliedStyle != styleURL {
             context.coordinator.changeStyle(to: styleURL, on: view)
         }
+        context.coordinator.fires = fires
         context.coordinator.sync(perimeters, on: view)
     }
 
@@ -83,6 +94,8 @@ struct FireMapLibreView: UIViewRepresentable {
         private var fitted = false
         /// Derniers foyers reçus, rejoués dès que style ET mise en page sont là.
         private var last: [FirePerimeter] = []
+        /// Détections brutes, redessinées avec le reste.
+        var fires: [Fire] = []
         /// Style demandé à la vue ; fait foi pendant le chargement.
         var appliedStyle: URL?
 
@@ -139,15 +152,49 @@ struct FireMapLibreView: UIViewRepresentable {
                 "\(Int($0.center.latitude * 1e5)),\(Int($0.center.longitude * 1e5))"
                     + ",\($0.polygon.count),\(Int($0.updatedAt?.timeIntervalSince1970 ?? 0))"
             }
-            guard signature != drawn else { return }
-            drawn = signature
+            // Les détections comptent dans la signature : sans cela, une
+            // carte qui en reçoit de nouvelles sans changer de contours ne se
+            // redessinerait pas.
+            let empreinte = signature + ["pts:\(fires.count)"]
+            guard empreinte != drawn else { return }
+            drawn = empreinte
 
-            for name in ["feux-coeur", "feux-halo", "feux-liseré", "feux-contour"] {
+            for name in ["feux-points", "feux-coeur", "feux-halo", "feux-liseré", "feux-contour"] {
                 if let layer = style.layer(withIdentifier: name) { style.removeLayer(layer) }
             }
-            for name in ["feux-src", "feux-pts"] {
+            for name in ["feux-src", "feux-pts", "feux-detections"] {
                 if let source = style.source(withIdentifier: name) { style.removeSource(source) }
             }
+            // Les détections d'abord : elles s'affichent même quand aucun
+            // contour n'a pu être calculé, ce qui est le cas dès qu'on dézoome.
+            if !fires.isEmpty {
+                let pts = fires.map { f -> MLNPointFeature in
+                    let pt = MLNPointFeature()
+                    pt.coordinate = f.coordinate
+                    return pt
+                }
+                let src = MLNShapeSource(
+                    identifier: "feux-detections",
+                    shape: MLNShapeCollectionFeature(shapes: pts), options: nil)
+                style.addSource(src)
+
+                let points = MLNCircleStyleLayer(identifier: "feux-points", source: src)
+                // Le rayon suit le zoom : un point de 2 px à l'échelle du monde
+                // laisse voir les foyers sans noyer les continents de rouge ;
+                // de près, il s'efface derrière les contours, plus précis.
+                points.circleRadius = NSExpression(
+                    format: "mgl_interpolate:withCurveType:parameters:stops:"
+                        + "($zoomLevel, 'linear', nil, %@)",
+                    [2: 2.0, 5: 3.5, 8: 5.0, 11: 6.0])
+                points.circleColor = NSExpression(
+                    forConstantValue: UIColor(red: 0.95, green: 0.35, blue: 0.15, alpha: 1))
+                points.circleOpacity = NSExpression(forConstantValue: 0.9)
+                points.circleStrokeWidth = NSExpression(forConstantValue: 0.5)
+                points.circleStrokeColor = NSExpression(
+                    forConstantValue: UIColor.white.withAlphaComponent(0.6))
+                style.addLayer(points)
+            }
+
             guard !perimeters.isEmpty else { return }
 
             // Un seul jeu de formes pour tous les foyers : deux couches
@@ -273,7 +320,7 @@ struct FireMapScreen: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            FireMapLibreView(styleURL: style, perimeters: perimeters) { id in
+            FireMapLibreView(styleURL: style, perimeters: perimeters, fires: service.fires) { id in
                 withAnimation(.spring(duration: 0.25)) { selectedID = id }
                 if let p = perimeters.first(where: { $0.id == id }) { loadName(of: p) }
             }
@@ -481,6 +528,12 @@ enum FireGeometry {
         for group in cluster(fires, thresholdMeters: clusterMeters) {
             let latest = group.compactMap { $0.detectedAt }.max()
             if let latest, Date().timeIntervalSince(latest) > activeWindow { continue }
+            // Un groupe qui s'étend sur plus de cent cinquante kilomètres
+            // vient d'un enchaînement de proche en proche, pas d'un foyer : la
+            // grille se dégraderait jusqu'à des cellules plus grandes que
+            // l'empreinte d'un feu, et ne rendrait aucun contour. Les points
+            // de détection, eux, restent affichés.
+            guard etendueRaisonnable(group) else { continue }
             let shapes = rings(of: group)
             guard !shapes.isEmpty else { continue }
             let centers = shapes.map { centroid($0) }
@@ -509,6 +562,20 @@ enum FireGeometry {
             }
         }
         return out
+    }
+
+    /// Le groupe tient-il dans une boîte de cent cinquante kilomètres ?
+    private static func etendueRaisonnable(_ group: [Fire]) -> Bool {
+        guard let first = group.first?.coordinate else { return false }
+        let cosLat = cos(first.latitude * .pi / 180)
+        var minX = 0.0, maxX = 0.0, minY = 0.0, maxY = 0.0
+        for f in group {
+            let x = (f.coordinate.longitude - first.longitude) * metersPerDegree * cosLat
+            let y = (f.coordinate.latitude - first.latitude) * metersPerDegree
+            minX = min(minX, x); maxX = max(maxX, x)
+            minY = min(minY, y); maxY = max(maxY, y)
+        }
+        return (maxX - minX) <= 150_000 && (maxY - minY) <= 150_000
     }
 
     private static func squaredMeters(
