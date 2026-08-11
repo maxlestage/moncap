@@ -1229,6 +1229,15 @@ struct MapHomeView: View {
                 Task { await presentRouteOptions(to: coord) }
             },
             onMapTap: handleMapTap,
+            // Appui long : la seule façon de désigner une destination sans
+            // réseau. La recherche passe par MKLocalSearch et les positions
+            // enregistrées par l'API — en mode avion, ni l'une ni l'autre ne
+            // rend quoi que ce soit, et le paquet d'itinéraires installé
+            // restait sans emploi faute de but à lui nommer.
+            onMapLongPress: { coord in
+                guard !nav.active else { return }
+                Task { await presentRouteOptions(to: coord) }
+            },
             onRegionChange: { region in
                 visibleRegion = region
                 // Recharge les lieux seulement si la carte a vraiment bougé.
@@ -2588,6 +2597,20 @@ struct MapHomeView: View {
                     favoriteRow(icon: "briefcase.fill", title: "Travail", place: workPlace) {
                         workPlace = $0
                         Session.work = $0
+                    }
+                }
+                // Sans réseau, la recherche d'adresse ne rendra jamais rien :
+                // MKLocalSearch interroge les serveurs d'Apple. Le dire, et
+                // donner le geste qui marche — sinon on cherche en boucle dans
+                // un champ qui ne répondra pas.
+                if horsLigne, placeSearch.results.isEmpty {
+                    Section("Sans réseau") {
+                        Label(
+                            "La recherche d'adresse a besoin du réseau. Appuie longuement sur la carte pour choisir un point : l'itinéraire se calcule alors sur l'appareil.",
+                            systemImage: "hand.tap"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 }
                 // Résultats de la recherche en cours.

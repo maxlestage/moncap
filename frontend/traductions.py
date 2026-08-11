@@ -136,6 +136,11 @@ T: dict[str, tuple[str, str]] = {
         "Descarga interrumpida.",
         "Download interrupted.",
     ),
+    "Sans réseau": ("Sin cobertura", "No network"),
+    "La recherche d'adresse a besoin du réseau. Appuie longuement sur la carte pour choisir un point : l'itinéraire se calcule alors sur l'appareil.": (
+        "La búsqueda de direcciones necesita cobertura. Mantén pulsado el mapa para elegir un punto: la ruta se calcula entonces en el dispositivo.",
+        "Address search needs a network connection. Press and hold the map to pick a point: the route is then computed on the device.",
+    ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),
