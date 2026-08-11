@@ -21,7 +21,7 @@ struct Fire: Identifiable {
     }
 }
 
-/// Incendies actifs sur la France métropolitaine, servis par **notre backend**
+/// Incendies actifs **dans le monde**, servis par **notre backend**
 /// (`GET /fires`) — détections satellite VIIRS (375 m) des dernières 24 h via
 /// l'API NASA FIRMS.
 ///
@@ -62,10 +62,10 @@ final class FireService: ObservableObject {
         fetch = Task {
             var f: [Fire]?
             if !k.isEmpty {
-                // 7 jours d'historique (pour dater les foyers) ; la requête est
-                // lourde en pleine saison, d'où le repli sur 2 jours.
-                f = await Self.fetchNASA(key: k, days: 7)
-                if f == nil { f = await Self.fetchNASA(key: k, days: 2) }
+                // Un jour sur le monde entier pèse déjà ce que sept jours
+                // pesaient sur la France : la profondeur est le coût, pas
+                // l'étendue.
+                f = await Self.fetchNASA(key: k, days: 1)
                 // Clé refusée ou NASA injoignable : mieux vaut les données du
                 // backend qu'une carte vide.
                 if f == nil { f = await Self.fetchBackend(base: base) }
@@ -114,13 +114,17 @@ final class FireService: ObservableObject {
     }
 
     /// Interroge directement l'API NASA FIRMS (CSV) avec la clé de l'appareil :
-    /// France métropolitaine (Corse incluse), VIIRS S-NPP, `days` derniers
+    /// Monde entier, VIIRS S-NPP, `days` derniers
     /// jours, avec le même filtrage anti-faux positifs que le backend.
     ///
     /// Délai porté à 90 s comme côté serveur : le CSV multi-jours est
     /// volumineux en pleine saison des feux et dépassait le délai par défaut.
     nonisolated private static func fetchNASA(key: String, days: Int) async -> [Fire]? {
-        let area = "-5.5,41,10,51.5"  // ouest,sud,est,nord
+        // Le monde entier. La France seule laissait la carte des feux vide
+        // partout ailleurs, sans que rien ne dise que c'était voulu.
+        // FIRMS borne lui-même ce qu'il rend ; la profondeur d'historique est
+        // ce qui coûte, d'où un seul jour à cette échelle.
+        let area = "-180,-90,180,90"  // ouest,sud,est,nord
         guard
             let url = URL(
                 string:
