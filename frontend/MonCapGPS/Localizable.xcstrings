@@ -49,6 +49,22 @@
         }
       }
     },
+    "%@ · %.0f Mo sur %.0f Mo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %.0f MB of %.0f MB"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %.0f MB de %.0f MB"
+          }
+        }
+      }
+    },
     "%lld bouchon(s) détecté(s) autour de toi (temps réel).": {
       "localizations": {
         "en": {
@@ -1309,6 +1325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cerrar"
+          }
+        }
+      }
+    },
+    "Fonds de carte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map backgrounds"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondos de mapa"
           }
         }
       }
@@ -2753,18 +2785,18 @@
         }
       }
     },
-    "Téléchargement en cours…": {
+    "Téléchargement interrompu.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Downloading…"
+            "value": "Download interrupted."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descargando…"
+            "value": "Descarga interrumpida."
           }
         }
       }

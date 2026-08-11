@@ -210,11 +210,7 @@ struct OfflineMapScreen: View {
             .pickerStyle(.segmented)
 
             if packs.running {
-                VStack(spacing: 6) {
-                    ProgressView(value: packs.progress)
-                    Text("Téléchargement en cours…")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                BarreProgression(valeur: packs.progress, titre: "Fonds de carte")
             } else {
                 let devis = estimate
                 // Déjà enregistrée : réappuyer empilerait une copie de la même
@@ -323,10 +319,13 @@ struct OfflineMapScreen: View {
             }
 
             if router.downloading {
-                ProgressView(value: router.progress) {
-                    Text("Téléchargement · \(Int(router.progress * 100)) %")
-                        .font(.caption)
-                }
+                // Le nom de la région et son poids sous la barre : sur cinq
+                // cents mégaoctets, savoir ce qui descend et combien il en
+                // reste vaut mieux qu'un pourcentage seul.
+                BarreProgression(
+                    valeur: router.progress,
+                    titre: "Itinéraires hors réseau",
+                    detail: router.enCours)
             } else if let region = suggestion {
                 let deja = router.estInstallee(region)
                 Button {
