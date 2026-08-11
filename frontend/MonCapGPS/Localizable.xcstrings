@@ -81,6 +81,22 @@
         }
       }
     },
+    "%lld région(s) · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld region(s) · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld región(es) · %@"
+          }
+        }
+      }
+    },
     "%lld régions · %@": {
       "localizations": {
         "en": {
@@ -497,6 +513,22 @@
         }
       }
     },
+    "Aucune région reconnue ici. Ouvre la liste complète.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No region recognised here. Open the full list."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna región reconocida aquí. Abre la lista completa."
+          }
+        }
+      }
+    },
     "Avatar actuel": {
       "localizations": {
         "en": {
@@ -625,6 +657,22 @@
         }
       }
     },
+    "Calcul sur l'appareil · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Computed on the device · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cálculo en el dispositivo · %@"
+          }
+        }
+      }
+    },
     "Camping": {
       "localizations": {
         "en": {
@@ -685,22 +733,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mapa sin conexión"
-          }
-        }
-      }
-    },
-    "Cartes hors ligne 🗺️": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Offline maps 🗺️"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mapas sin conexión 🗺️"
           }
         }
       }
@@ -1073,6 +1105,22 @@
         }
       }
     },
+    "Déjà installée": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already installed"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya instalada"
+          }
+        }
+      }
+    },
     "Démarrer": {
       "localizations": {
         "en": {
@@ -1313,6 +1361,22 @@
         }
       }
     },
+    "Hors ligne 🗺️": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline 🗺️"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin conexión 🗺️"
+          }
+        }
+      }
+    },
     "Hôtels": {
       "localizations": {
         "en": {
@@ -1425,18 +1489,18 @@
         }
       }
     },
-    "Itinéraires sans réseau 🧭": {
+    "Itinéraires hors réseau": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routes without signal 🧭"
+            "value": "Offline routes"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rutas sin cobertura 🧭"
+            "value": "Rutas sin conexión"
           }
         }
       }
@@ -1505,34 +1569,50 @@
         }
       }
     },
-    "Les images de la carte, pour la voir sans réseau. Le calcul d'itinéraire est séparé : c'est « Itinéraires sans réseau » ci-dessous. Aucune clé n'est nécessaire : les cartes viennent d'OpenStreetMap via OpenFreeMap, libres et sans inscription.": {
+    "Le serveur a refusé la liste (HTTP %lld).": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The map imagery, so you can see it without signal. Routing is separate: that is “Routes without signal”, below. No key is needed: the maps come from OpenStreetMap via OpenFreeMap, free and without signing up."
+            "value": "The server refused the list (HTTP %lld)."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Las imágenes del mapa, para verlo sin cobertura. El cálculo de rutas va aparte: es «Rutas sin cobertura», aquí debajo. No hace falta ninguna clave: los mapas vienen de OpenStreetMap a través de OpenFreeMap, libres y sin registro."
+            "value": "El servidor rechazó la lista (HTTP %lld)."
           }
         }
       }
     },
-    "Les itinéraires sont calculés sur l'appareil. Cinq trajets proposés au lieu de quinze, et pas de trafic en direct.": {
+    "Le serveur ne connaît pas cette adresse — backend à mettre à jour.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Routes are computed on the device. Five trips offered instead of fifteen, and no live traffic."
+            "value": "The server does not know this address — the backend needs updating."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Las rutas se calculan en el dispositivo. Cinco trayectos propuestos en lugar de quince, y sin tráfico en directo."
+            "value": "El servidor no conoce esta dirección: hay que actualizar el backend."
+          }
+        }
+      }
+    },
+    "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map backgrounds and route computation download together, for the area you are looking at. No key is needed: everything comes from OpenStreetMap, free and without signing up."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los fondos de mapa y el cálculo de rutas se descargan juntos, sobre la zona que estás mirando. No hace falta ninguna clave: todo viene de OpenStreetMap, libre y sin registro."
           }
         }
       }
@@ -1921,18 +2001,18 @@
         }
       }
     },
-    "Permet de recalculer un itinéraire sans réseau. Sans cela, s'écarter de sa route hors couverture laisse l'app sans rien à proposer. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": {
+    "Permet de calculer et de recalculer un itinéraire sans réseau. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lets a route be recomputed without signal. Without it, straying off route out of coverage leaves the app with nothing to offer. Keep as many regions as you like: a trip looks for its route in each. It must however fit entirely within one of them — that is what the overlapping zones are for."
+            "value": "Lets you compute and recompute a route with no network. Keep as many regions as you like: a trip looks for its route in each one. It must however fit entirely within one of them — that is what the overlapping areas are for."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permite recalcular una ruta sin cobertura. Sin eso, salirse de la ruta fuera de cobertura deja a la app sin nada que proponer. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. Eso sí, debe caber entero en una de ellas — para eso sirven las zonas, que se solapan."
+            "value": "Permite calcular y recalcular una ruta sin conexión. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. En cambio debe caber entero en una de ellas: para eso sirven las zonas, que se solapan."
           }
         }
       }
@@ -2029,6 +2109,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Precio del combustible"
+          }
+        }
+      }
+    },
+    "Préparer une zone hors ligne": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare an offline area"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparar una zona sin conexión"
           }
         }
       }
@@ -2481,6 +2577,22 @@
         }
       }
     },
+    "Sur cet appareil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On this device"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En este dispositivo"
+          }
+        }
+      }
+    },
     "Tape une adresse ou un lieu, puis choisis une destination.": {
       "localizations": {
         "en": {
@@ -2593,6 +2705,22 @@
         }
       }
     },
+    "Toutes les régions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All regions"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todas las regiones"
+          }
+        }
+      }
+    },
     "Trafic 🚦 (TomTom)": {
       "localizations": {
         "en": {
@@ -2625,22 +2753,6 @@
         }
       }
     },
-    "Télécharge d'abord une région, ci-dessous.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Download a region first, below."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Descarga primero una región, aquí debajo."
-          }
-        }
-      }
-    },
     "Téléchargement en cours…": {
       "localizations": {
         "en": {
@@ -2657,18 +2769,18 @@
         }
       }
     },
-    "Télécharger les fonds de carte": {
+    "Téléchargement · %lld %": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download the map backgrounds"
+            "value": "Download · %lld %"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descargar los fondos de mapa"
+            "value": "Descarga · %lld %"
           }
         }
       }

@@ -13,6 +13,18 @@ import Valhalla
 /// L'échange se fait en JSON brut plutôt qu'avec les types Swift du paquet :
 /// c'est le format documenté de Valhalla, stable, et cela évite de dépendre
 /// de modèles susceptibles de changer d'une version à l'autre.
+/// Traduction d'un message affiché. Recopiée ici plutôt qu'importée : les
+/// helpers de `NavigationManager` sont privés à leur fichier, et les exposer
+/// pour deux appels coûterait plus que ces quatre lignes.
+private func tr(_ cle: String) -> String {
+    NSLocalizedString(cle, comment: "")
+}
+
+/// Idem, avec une valeur à verser dans la phrase traduite.
+private func trf(_ cle: String, _ valeurs: CVarArg...) -> String {
+    String(format: NSLocalizedString(cle, comment: ""), arguments: valeurs)
+}
+
 @MainActor
 final class OfflineRouter: NSObject, ObservableObject {
     static let shared = OfflineRouter()
@@ -33,7 +45,7 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// La liste n'est pas écrite ici : l'Europe en compte plus de deux cents,
     /// et une copie embarquée serait périmée dès la construction suivante.
     /// Elle est lue sur les Releases, cf. `loadRegions()`.
-    struct Region: Identifiable, Hashable {
+    struct Region: Identifiable, Hashable, Decodable {
         /// Étiquette de la Release, qui sert aussi de nom de fichier.
         let id: String
         /// « France · Corse », tel que nommé par Geofabrik.
@@ -41,8 +53,8 @@ final class OfflineRouter: NSObject, ObservableObject {
         /// Poids de l'archive, mesuré sur la pièce jointe.
         let octets: Int
 
-        var archive: URL { URL(string: "\(Region.base)/\(id)/\(id).tar")! }
-        var config: URL { URL(string: "\(Region.base)/\(id)/\(id).json")! }
+        var archive: URL { URL(string: "\(Region.base)/\(id)/archive")! }
+        var config: URL { URL(string: "\(Region.base)/\(id)/config")! }
 
         /// Premier segment du nom : de quoi regrouper deux cents régions.
         var pays: String { nom.components(separatedBy: " · ").first ?? nom }
@@ -56,10 +68,18 @@ final class OfflineRouter: NSObject, ObservableObject {
 
         var poids: String { String(format: "%.0f Mo", Double(octets) / 1_000_000) }
 
-        static let base = "https://github.com/maxlestage/moncap/releases/download"
-        /// Les Releases d'avant le découpage européen portent d'autres
-        /// étiquettes ; ce préfixe les écarte sans avoir à les supprimer.
-        static let prefixe = "tuiles-eu-"
+        /// Les paquets passent par **le backend**, pas par GitHub.
+        ///
+        /// L'app interrogeait l'API GitHub sans jeton. Le dépôt étant privé,
+        /// GitHub répondait 404 : la liste restait vide, aucune région n'était
+        /// proposée, et l'écran accusait le réseau. Un jeton ne peut pas
+        /// voyager dans un binaire — n'importe qui l'en extrait, et il ouvrirait
+        /// le dépôt entier. Le serveur le détient donc, publie la liste, et
+        /// pour un fichier transmet l'adresse signée que GitHub lui rend :
+        /// l'archive descend directement sur le téléphone, sans traverser le
+        /// dyno.
+        static let base = APIClient().baseURL.appendingPathComponent("offline/regions")
+            .absoluteString
     }
 
     /// Une région gardée sur l'appareil.
@@ -184,40 +204,34 @@ final class OfflineRouter: NSObject, ObservableObject {
         guard regions.isEmpty, !chargement else { return }
         chargement = true
         defer { chargement = false }
+        message = nil
 
-        var trouvees: [Region] = []
-        // Cent par page, et l'Europe en remplit trois.
-        for page in 1...5 {
-            let url = URL(
-                string:
-                    "https://api.github.com/repos/maxlestage/moncap/releases?per_page=100&page=\(page)"
-            )!
-            guard
-                let (data, _) = try? await URLSession.shared.data(from: url),
-                let liste = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                !liste.isEmpty
-            else { break }
-
-            for release in liste {
-                guard let tag = release["tag_name"] as? String, tag.hasPrefix(Region.prefixe),
-                    let assets = release["assets"] as? [[String: Any]],
-                    // Sans archive, rien à télécharger : une construction
-                    // interrompue laisse derrière elle la Release et sa
-                    // configuration seule.
-                    let tar = assets.first(where: {
-                        ($0["name"] as? String)?.hasSuffix(".tar") == true
-                    })
-                else { continue }
-                let titre = release["name"] as? String
-                trouvees.append(
-                    Region(
-                        id: tag,
-                        nom: (titre?.isEmpty == false ? titre! : tag),
-                        octets: (tar["size"] as? Int) ?? 0))
-            }
-            if liste.count < 100 { break }
+        let url = URL(string: Region.base)!
+        let data: Data
+        let reponse: URLResponse
+        do {
+            (data, reponse) = try await URLSession.shared.data(from: url)
+        } catch {
+            // Seul cas où le réseau est vraiment en cause.
+            message = tr("Liste des régions indisponible — il faut du réseau une fois.")
+            return
         }
-        regions = trouvees.sorted {
+
+        // Trois pannes distinctes, trois messages : le geste à faire n'est pas
+        // le même, et un message unique avait déjà envoyé chercher du côté du
+        // réseau alors qu'il allait très bien.
+        if let http = reponse as? HTTPURLResponse, http.statusCode != 200 {
+            message = trf("Le serveur a refusé la liste (HTTP %lld).", http.statusCode)
+            return
+        }
+        guard let recues = try? JSONDecoder().decode([Region].self, from: data) else {
+            // Un 200 qui n'est pas du JSON. Le repli du front sert sa page pour
+            // toute adresse qu'il ne connaît pas, et il la sert en 200 : un
+            // backend trop ancien répond donc du HTML, sans erreur apparente.
+            message = tr("Le serveur ne connaît pas cette adresse — backend à mettre à jour.")
+            return
+        }
+        regions = recues.sorted {
             $0.nom.localizedStandardCompare($1.nom) == .orderedAscending
         }
     }

@@ -1,9 +1,18 @@
+import CoreLocation
 import MapKit
 import MapLibre
 import SwiftUI
 
-/// Écran « Carte hors ligne » : consultation des tuiles enregistrées et
-/// téléchargement de la zone visible.
+/// Écran « Hors ligne » : tout ce qui se prépare avant de perdre le réseau,
+/// au même endroit.
+///
+/// Il y avait deux téléchargements à deux endroits — les fonds de carte ici,
+/// les paquets d'itinéraires dans les réglages — et rien ne disait qu'il
+/// fallait les deux. Ce sont bien deux jeux de données distincts : des images
+/// d'un côté, un graphe routier de l'autre. Mais celui qui prépare un voyage
+/// ne prépare pas une base de données : il regarde un endroit sur la carte et
+/// veut pouvoir s'y rendre sans réseau. Les deux se demandent donc ici, sur la
+/// zone qu'il a sous les yeux.
 struct OfflineMapScreen: View {
     @Environment(\.dismiss) private var dismiss
     /// Position d'ouverture de la carte.
@@ -12,11 +21,22 @@ struct OfflineMapScreen: View {
     /// Style vectoriel : renseigné, la carte est rendue par MapLibre plutôt
     /// que par des tuiles images.
     @AppStorage(TileSource.styleKey) private var styleURLString = ""
+    /// Le calcul d'itinéraire sur l'appareil, activable une fois une région
+    /// installée. Même clé que l'écran principal : c'est un seul réglage.
+    @AppStorage("moncap.horsLigne") private var horsLigne = false
     @StateObject private var packs = VectorPackDownloader()
+    @ObservedObject private var router = OfflineRouter.shared
     @State private var bounds: MLNCoordinateBounds?
     /// Le style est-il réellement servi ? Un serveur sans cartes rendrait une
     /// carte grise sans le moindre message.
     @State private var styleStatus = StyleStatus.checking
+
+    /// Région d'itinéraires couvrant le point regardé, si on a su la nommer.
+    @State private var suggestion: OfflineRouter.Region?
+    /// Liste complète : deux cents entrées ne tiennent pas dans un panneau
+    /// flottant, mais il faut pouvoir y aller quand la reconnaissance échoue.
+    @State private var showRegions = false
+    @State private var rechercheRegion = ""
 
     /// Fond réellement affiché : celui de l'utilisateur s'il répond, sinon le
     /// nôtre. Vérifié à l'ouverture, pour ne jamais rester devant un écran vide.
@@ -89,12 +109,67 @@ struct OfflineMapScreen: View {
             // cas qui mérite encore un message.
             styleStatus = await StyleProbe.check(style)
         }
+        // Reconnaissance relancée par case de 0,25° — environ vingt-cinq
+        // kilomètres — et non à chaque image : un glissement de carte en
+        // produit des dizaines par seconde, et le géocodeur du système est
+        // limité en cadence.
+        .task(id: caseRegardee) { await chercheRegion() }
+        .sheet(isPresented: $showRegions) { listeRegions }
         .onAppear {
             route = RouteStore.load()?.coordinates ?? []
             packs.refresh()
             search.center = center
             if let center { cam = MapCam(center: center, zoom: 11) }
         }
+    }
+
+    // MARK: - Itinéraires hors réseau
+
+    /// Centre de la zone visible.
+    private var centre: CLLocationCoordinate2D? {
+        guard let bounds else { return nil }
+        return CLLocationCoordinate2D(
+            latitude: (bounds.sw.latitude + bounds.ne.latitude) / 2,
+            longitude: (bounds.sw.longitude + bounds.ne.longitude) / 2)
+    }
+
+    /// Case de 0,25° contenant le centre, qui sert d'identité au géocodage.
+    private var caseRegardee: String? {
+        guard let c = centre else { return nil }
+        return "\((c.latitude * 4).rounded())|\((c.longitude * 4).rounded())"
+    }
+
+    /// Quelle région d'itinéraires couvre le point regardé ?
+    ///
+    /// Les paquets Valhalla n'ont pas de contour : ils portent un nom
+    /// Geofabrik — « France · Nouvelle-Aquitaine » — et leur poids, rien de
+    /// plus. On demande donc au système le nom administratif du point regardé,
+    /// et on le cherche dans la liste publiée.
+    ///
+    /// C'est une reconnaissance par le nom, pas une couverture géométrique :
+    /// elle échoue quand le découpage administratif ne suit pas celui de
+    /// Geofabrik, et elle demande du réseau une fois. D'où la liste complète,
+    /// toujours à côté — cette suggestion fait gagner du temps, elle n'est pas
+    /// le seul chemin.
+    /// `@MainActor` : `OfflineRouter` l'est, et l'état de la vue aussi.
+    @MainActor
+    private func chercheRegion() async {
+        guard let c = centre else { return }
+        await router.loadRegions()
+        guard
+            let lieu = try? await CLGeocoder().reverseGeocodeLocation(
+                CLLocation(latitude: c.latitude, longitude: c.longitude)
+            ).first
+        else { return }
+
+        let parRegion = lieu.administrativeArea.flatMap { router.recherche($0).first }
+        // À défaut, un pays livré d'un seul bloc — Monaco, Andorre — qui n'a
+        // pas de sous-région. Prendre la première région d'un grand pays
+        // désignerait un endroit au hasard.
+        let parPays = lieu.country.flatMap { nom in
+            router.recherche(nom).first { $0.detail.isEmpty }
+        }
+        suggestion = parRegion ?? parPays
     }
 
     private var header: some View {
@@ -213,6 +288,9 @@ struct OfflineMapScreen: View {
                 }
             }
 
+            Divider()
+            routage
+
             HStack {
                 Text("© OpenStreetMap contributors")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -226,6 +304,169 @@ struct OfflineMapScreen: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
         .padding()
+    }
+
+    /// Le calcul d'itinéraire sans réseau, demandé sur la zone regardée.
+    ///
+    /// Les tuiles au-dessus servent à *voir* la carte ; ce paquet-ci à *y
+    /// calculer une route*. Sans lui, une carte enregistrée s'affiche hors
+    /// couverture mais ne sait plus où aller — c'est exactement la déception
+    /// que deux téléchargements séparés produisaient.
+    private var routage: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Itinéraires hors réseau", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button("Toutes les régions") { showRegions = true }
+                    .font(.caption.weight(.semibold))
+            }
+
+            if router.downloading {
+                ProgressView(value: router.progress) {
+                    Text("Téléchargement · \(Int(router.progress * 100)) %")
+                        .font(.caption)
+                }
+            } else if let region = suggestion {
+                let deja = router.estInstallee(region)
+                Button {
+                    Task { await router.install(region) }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(
+                            systemName: deja
+                                ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                        VStack(alignment: .leading, spacing: 1) {
+                            // Un nom Geofabrik est un nom propre : `Text(String)`
+                            // est verbatim, et c'est voulu — « Nouvelle-Aquitaine »
+                            // ne se traduit pas.
+                            Text(region.nom)
+                                .font(.subheadline.weight(.semibold))
+                            Text(deja ? "Déjà installée" : "Calcul sur l'appareil · \(region.poids)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 12)
+                    .background(
+                        (deja ? Color.green : Color.indigo).opacity(0.18),
+                        in: RoundedRectangle(cornerRadius: 14))
+                }
+                .disabled(deja)
+            } else if router.chargement {
+                ProgressView()
+            } else {
+                Text("Aucune région reconnue ici. Ouvre la liste complète.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
+            // Le réglage vit là où on installe ce dont il dépend : proposé
+            // ailleurs, il restait grisé sans qu'on sache quoi faire.
+            if router.ready {
+                Toggle("Naviguer hors ligne", isOn: $horsLigne)
+                    .font(.subheadline)
+            }
+            if let m = router.message {
+                Text(m).font(.caption2).foregroundStyle(.orange)
+            }
+        }
+    }
+
+    /// Les deux cents régions publiées, en feuille séparée : elles ne tiennent
+    /// pas dans un panneau posé sur la carte.
+    private var listeRegions: some View {
+        NavigationStack {
+            List {
+                if !router.installees.isEmpty {
+                    Section("Sur cet appareil") {
+                        ForEach(router.installees) { gardee in
+                            HStack {
+                                Label(gardee.nom, systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Spacer()
+                                Text(gardee.poids)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Button(role: .destructive) {
+                                    router.remove(gardee.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.red)
+                            }
+                        }
+                        if router.installees.count > 1 {
+                            Text("\(router.installees.count) régions · \(router.poidsTotal)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section {
+                    if router.chargement {
+                        ProgressView()
+                    } else if router.regions.isEmpty {
+                        // Le routeur dit *pourquoi* quand il le sait : un
+                        // serveur qui refuse ne se répare pas en cherchant du
+                        // réseau. Deux branches et non un `??` : celui-ci
+                        // produirait une `String`, et `Text(String)` est
+                        // verbatim — le repli ne serait jamais traduit.
+                        if let m = router.message {
+                            Text(m).font(.footnote).foregroundStyle(.orange)
+                        } else {
+                            Text("Liste des régions indisponible — il faut du réseau une fois.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if rechercheRegion.isEmpty {
+                        // Un pays par rangée, ses régions dessous : à deux
+                        // cents entrées, une liste à plat serait impraticable.
+                        // Un pays livré d'un bloc n'ouvre rien.
+                        ForEach(router.groupes) { groupe in
+                            if groupe.regions.count == 1, let seule = groupe.regions.first {
+                                RegionButton(region: seule, router: router)
+                            } else {
+                                DisclosureGroup("\(groupe.pays) · \(groupe.regions.count)") {
+                                    ForEach(groupe.regions) { region in
+                                        RegionButton(region: region, router: router)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // À plat pendant la recherche : déplier un pays pour
+                        // trouver ce qu'on a déjà nommé n'aurait aucun sens.
+                        let trouvees = router.recherche(rechercheRegion)
+                        if trouvees.isEmpty {
+                            Text("Aucune région de ce nom.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(trouvees) { region in
+                            RegionButton(region: region, router: router, complet: true)
+                        }
+                    }
+                } footer: {
+                    Text(
+                        "Permet de calculer et de recalculer un itinéraire sans réseau. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent."
+                    )
+                }
+            }
+            .searchable(text: $rechercheRegion, prompt: Text("Chercher une région"))
+            .navigationTitle("Itinéraires hors réseau")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fermer") { showRegions = false }
+                }
+            }
+            .task { await router.loadRegions() }
+        }
     }
 
     /// Volume attendu pour un couloir suivant l'itinéraire mémorisé.
@@ -307,5 +548,39 @@ struct OfflineMapScreen: View {
         let mo = Double(bytes) / 1_000_000
         return mo < 10
             ? String(format: "%.1f Mo", mo) : String(format: "%.0f Mo", mo)
+    }
+}
+
+/// Une région d'itinéraires téléchargeable.
+///
+/// Extraite en vue à part : elle apparaît à deux endroits — un pays livré d'un
+/// bloc, et une région dans son pays déplié.
+struct RegionButton: View {
+    let region: OfflineRouter.Region
+    @ObservedObject var router: OfflineRouter
+    /// Nom entier, pays compris : indispensable dans une liste de recherche,
+    /// où plus rien ne dit de quel pays vient la ligne.
+    var complet = false
+
+    var body: some View {
+        let deja = router.estInstallee(region)
+        Button {
+            Task { await router.install(region) }
+        } label: {
+            Label(
+                "\(libelle) · \(region.poids)",
+                systemImage: deja ? "checkmark.circle.fill" : "arrow.down.circle"
+            )
+            .foregroundStyle(deja ? Color.green : Color.accentColor)
+        }
+        // Retélécharger ce qu'on a déjà ne ferait que perdre le forfait.
+        .disabled(deja)
+    }
+
+    private var libelle: String {
+        // Sous un pays déplié, le répéter sur chaque ligne mangerait la
+        // largeur ; un pays livré d'un bloc n'a lui aucun détail à montrer.
+        if complet || region.detail.isEmpty { return region.nom }
+        return region.detail
     }
 }

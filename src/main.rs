@@ -500,6 +500,263 @@ fn fires_key() -> Option<String> {
         .filter(|k| !k.is_empty())
 }
 
+// --- Paquets d'itinéraires hors ligne -------------------------------------
+//
+// L'app lisait la liste des régions directement sur l'API GitHub et tirait les
+// archives des Releases. Le dépôt étant privé, GitHub répondait 404 : la liste
+// restait vide, aucune région n'était proposée, et le message affiché parlait
+// de réseau alors que le réseau allait très bien.
+//
+// Un jeton ne peut pas voyager dans l'app — n'importe qui l'extrait du binaire,
+// et il ouvrirait le dépôt entier. C'est donc le serveur qui le détient. Il
+// publie la liste, et pour un fichier il demande à GitHub l'adresse signée puis
+// la transmet : l'archive descend d'Amazon directement sur le téléphone, sans
+// traverser le dyno — deux gigaoctets par région n'ont rien à faire ici.
+
+/// Étiquette des Releases publiées par le workflow des tuiles.
+///
+/// Ce préfixe n'est pas cosmétique : il **borne** ce que le courtier accepte de
+/// servir. Sans lui, l'endpoint deviendrait une porte ouverte sur toutes les
+/// pièces jointes d'un dépôt privé.
+const PAQUETS_PREFIXE: &str = "tuiles-eu-";
+
+/// Une région publiée, telle que l'app la reçoit.
+#[derive(Clone, Serialize, Deserialize)]
+struct RegionPubliee {
+    /// Étiquette de la Release, qui sert aussi d'identifiant de fichier.
+    id: String,
+    /// « France · Nouvelle-Aquitaine », tel que nommé par Geofabrik.
+    nom: String,
+    /// Poids de l'archive, mesuré sur la pièce jointe.
+    octets: u64,
+}
+
+struct PaquetsCache {
+    fetched_at: Instant,
+    data: Vec<RegionPubliee>,
+}
+
+static PAQUETS_CACHE: OnceLock<tokio::sync::Mutex<Option<PaquetsCache>>> = OnceLock::new();
+
+/// Deux cents Releases coûtent trois appels à l'API GitHub, et elles ne
+/// changent qu'à une reconstruction des tuiles.
+const PAQUETS_TTL: Duration = Duration::from_secs(3600);
+
+/// Jeton GitHub détenu **par le serveur** (`GITHUB_TOKEN`), jamais exposé.
+fn paquets_token() -> Option<String> {
+    std::env::var("GITHUB_TOKEN")
+        .or_else(|_| std::env::var("MONCAP_GITHUB_TOKEN"))
+        .ok()
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+}
+
+/// Dépôt qui porte les Releases (`MONCAP_DEPOT`, par défaut le nôtre).
+fn paquets_depot() -> String {
+    std::env::var("MONCAP_DEPOT")
+        .ok()
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| "maxlestage/moncap".to_string())
+}
+
+/// Une étiquette n'est qu'un identifiant de Release : minuscules, chiffres et
+/// tirets. Tout le reste est refusé avant de composer une URL — c'est ce qui
+/// empêche un `..` ou un `/` de sortir du dépôt visé.
+fn etiquette_valide(tag: &str) -> bool {
+    tag.starts_with(PAQUETS_PREFIXE)
+        && tag.len() <= 128
+        && tag
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// GET /offline/regions — les régions d'itinéraires téléchargeables.
+async fn list_paquets() -> Response {
+    let Some(token) = paquets_token() else {
+        // Dire lequel des deux manque : « indisponible » tout court a coûté
+        // une soirée de recherche du côté du réseau.
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "paquets non configurés : GITHUB_TOKEN absent",
+        )
+            .into_response();
+    };
+
+    let cache = PAQUETS_CACHE.get_or_init(|| tokio::sync::Mutex::new(None));
+    {
+        let lu = cache.lock().await;
+        if let Some(c) = lu.as_ref() {
+            if c.fetched_at.elapsed() < PAQUETS_TTL {
+                return Json(c.data.clone()).into_response();
+            }
+        }
+    }
+
+    match releases_publiees(&token).await {
+        Ok(regions) => {
+            *cache.lock().await = Some(PaquetsCache {
+                fetched_at: Instant::now(),
+                data: regions.clone(),
+            });
+            Json(regions).into_response()
+        }
+        Err(e) => {
+            // Un cache périmé vaut mieux qu'une liste vide : les noms et les
+            // poids ne bougent qu'à une reconstruction.
+            if let Some(c) = cache.lock().await.as_ref() {
+                return Json(c.data.clone()).into_response();
+            }
+            (StatusCode::BAD_GATEWAY, format!("GitHub : {e}")).into_response()
+        }
+    }
+}
+
+/// Relève les Releases du dépôt, page par page.
+async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
+    let depot = paquets_depot();
+    let client = reqwest::Client::new();
+    let mut trouvees: Vec<RegionPubliee> = Vec::new();
+
+    // Cent par page, et l'Europe en remplit trois.
+    for page in 1..=5 {
+        let url =
+            format!("https://api.github.com/repos/{depot}/releases?per_page=100&page={page}");
+        let resp = client
+            .get(&url)
+            .header(reqwest::header::USER_AGENT, "moncap")
+            .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let liste: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+        let recues = liste.len();
+
+        for release in liste {
+            let Some(tag) = release["tag_name"].as_str() else {
+                continue;
+            };
+            if !tag.starts_with(PAQUETS_PREFIXE) {
+                continue;
+            }
+            // Sans archive, rien à télécharger : une construction interrompue
+            // laisse derrière elle la Release et sa configuration seule.
+            let Some(tar) = release["assets"].as_array().and_then(|a| {
+                a.iter()
+                    .find(|x| x["name"].as_str().is_some_and(|n| n.ends_with(".tar")))
+            }) else {
+                continue;
+            };
+            let titre = release["name"].as_str().unwrap_or("").trim();
+            trouvees.push(RegionPubliee {
+                id: tag.to_string(),
+                nom: if titre.is_empty() {
+                    tag.to_string()
+                } else {
+                    titre.to_string()
+                },
+                octets: tar["size"].as_u64().unwrap_or(0),
+            });
+        }
+        if recues < 100 {
+            break;
+        }
+    }
+    Ok(trouvees)
+}
+
+/// GET /offline/regions/:tag/:nature — redirige vers l'adresse signée du
+/// fichier (`archive` pour les tuiles, `config` pour la configuration).
+///
+/// GitHub répond à une demande de pièce jointe authentifiée par une redirection
+/// vers une adresse signée, valable quelques minutes et qui ne demande aucune
+/// authentification. C'est cette adresse-là qu'on transmet : le téléphone la
+/// suit tout seul, et le dyno ne voit pas passer un octet du transfert.
+async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response {
+    let Some(token) = paquets_token() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "paquets non configurés : GITHUB_TOKEN absent",
+        )
+            .into_response();
+    };
+    if !etiquette_valide(&tag) {
+        return (StatusCode::NOT_FOUND, "étiquette inconnue").into_response();
+    }
+    let suffixe = match nature.as_str() {
+        "archive" => ".tar",
+        "config" => ".json",
+        _ => return (StatusCode::NOT_FOUND, "fichier inconnu").into_response(),
+    };
+
+    let depot = paquets_depot();
+    let client = reqwest::Client::new();
+    let release: serde_json::Value = match client
+        .get(format!(
+            "https://api.github.com/repos/{depot}/releases/tags/{tag}"
+        ))
+        .header(reqwest::header::USER_AGENT, "moncap")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .bearer_auth(&token)
+        .send()
+        .await
+    {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(v) => v,
+            Err(e) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {e}")).into_response(),
+        },
+        Ok(r) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {}", r.status())).into_response(),
+        Err(e) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {e}")).into_response(),
+    };
+
+    let Some(id) = release["assets"].as_array().and_then(|a| {
+        a.iter()
+            .find(|x| x["name"].as_str().is_some_and(|n| n.ends_with(suffixe)))
+            .and_then(|x| x["id"].as_u64())
+    }) else {
+        return (StatusCode::NOT_FOUND, "pièce jointe absente").into_response();
+    };
+
+    // Sans cette politique, reqwest suivrait la redirection et rapatrierait
+    // l'archive entière sur le dyno — deux gigaoctets pour rien.
+    let sans_suivi = match reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+    };
+    let resp = match sans_suivi
+        .get(format!(
+            "https://api.github.com/repos/{depot}/releases/assets/{id}"
+        ))
+        .header(reqwest::header::USER_AGENT, "moncap")
+        .header(reqwest::header::ACCEPT, "application/octet-stream")
+        .bearer_auth(&token)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {e}")).into_response(),
+    };
+
+    match resp.headers().get(reqwest::header::LOCATION) {
+        Some(adresse) => match adresse.to_str() {
+            Ok(url) => axum::response::Redirect::temporary(url).into_response(),
+            Err(_) => (StatusCode::BAD_GATEWAY, "adresse illisible").into_response(),
+        },
+        None => (
+            StatusCode::BAD_GATEWAY,
+            format!("GitHub n'a pas redirigé (HTTP {})", resp.status()),
+        )
+            .into_response(),
+    }
+}
+
 /// GET /fires — incendies actifs sur la France métropolitaine (NASA FIRMS).
 ///
 /// Répond **immédiatement** avec le dernier cache connu ; si celui-ci est
@@ -1549,6 +1806,11 @@ fn build_app(state: AppState) -> Router {
         .route("/account", get(account_info).delete(delete_account))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
+        // Le courtier des paquets d'itinéraires. Ouvert comme les tuiles : ce
+        // sont des données OpenStreetMap, redistribuables (ODbL). Le préfixe
+        // d'étiquette borne strictement ce qui peut sortir du dépôt privé.
+        .route("/offline/regions", get(list_paquets))
+        .route("/offline/regions/:tag/:nature", get(paquet_fichier))
         .route("/traffic", get(list_traffic))
         .route("/live", post(live_start))
         .route(
@@ -3786,6 +4048,85 @@ mod integration {
         assert_eq!(info["positions"].as_u64(), Some(2));
         assert_eq!(info["trips"].as_u64(), Some(0));
         assert_eq!(info["alerts"].as_u64(), Some(0));
+    }
+
+    /// Le préfixe d'étiquette n'est pas décoratif : c'est lui qui empêche le
+    /// courtier de servir n'importe quelle pièce jointe d'un dépôt privé. Un
+    /// `..` ou une barre oblique sortiraient du dépôt visé.
+    #[test]
+    fn seules_les_etiquettes_de_tuiles_passent() {
+        assert!(etiquette_valide("tuiles-eu-france-nouvelle-aquitaine"));
+        assert!(etiquette_valide("tuiles-eu-monaco"));
+
+        // Un autre préfixe : ce sont peut-être les binaires signés de l'app.
+        assert!(!etiquette_valide("v1.1.0"));
+        assert!(!etiquette_valide("secrets"));
+        // Une évasion de chemin, même sous le bon préfixe.
+        assert!(!etiquette_valide("tuiles-eu-../../secrets"));
+        assert!(!etiquette_valide("tuiles-eu-a/b"));
+        // Ni majuscules ni caractères de requête : l'étiquette entre dans une
+        // URL sans autre échappement.
+        assert!(!etiquette_valide("tuiles-eu-France"));
+        assert!(!etiquette_valide("tuiles-eu-a?b=c"));
+        assert!(!etiquette_valide(&format!("tuiles-eu-{}", "a".repeat(200))));
+    }
+
+    /// Sans jeton, le courtier doit le **dire**. La panne d'origine tenait à un
+    /// message qui parlait de réseau alors que le réseau allait bien : l'app
+    /// affichait « il faut du réseau une fois » en pleine 5G.
+    #[tokio::test]
+    async fn sans_jeton_le_courtier_l_annonce() {
+        // Le test ne vaut que sans jeton dans l'environnement — sinon le
+        // serveur appellerait GitHub pour de bon.
+        if paquets_token().is_some() {
+            return;
+        }
+        let app: Router = Router::new()
+            .route("/offline/regions", get(list_paquets))
+            .route("/offline/regions/:tag/:nature", get(paquet_fichier));
+
+        for chemin in [
+            "/offline/regions",
+            "/offline/regions/tuiles-eu-monaco/archive",
+        ] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(chemin)
+                        .body(axum::body::Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE, "{chemin}");
+            let corps = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let texte = String::from_utf8_lossy(&corps);
+            assert!(texte.contains("GITHUB_TOKEN"), "{texte}");
+        }
+    }
+
+    /// Une nature de fichier inconnue ne doit pas atteindre GitHub.
+    #[tokio::test]
+    async fn une_nature_inconnue_est_refusee() {
+        let app: Router = Router::new().route("/offline/regions/:tag/:nature", get(paquet_fichier));
+        let resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/offline/regions/tuiles-eu-monaco/README")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // Sans jeton la route s'arrête avant ; avec jeton, la nature est
+        // refusée. Dans les deux cas, rien n'est servi.
+        assert!(
+            resp.status() == StatusCode::NOT_FOUND
+                || resp.status() == StatusCode::SERVICE_UNAVAILABLE
+        );
     }
 
     /// Le partage racine / `/app` : la vitrine occupe `/`, l'application vit
