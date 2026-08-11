@@ -3398,7 +3398,9 @@ mod tests {
 
     #[test]
     fn public_name_masks_email() {
-        assert_eq!(public_name("maxlestage@icloud.com"), "maxle…");
+        // Adresses fictives : ce fichier est destiné à être lu par d'autres,
+        // et une vraie adresse dans un test finit indexée par les moissonneurs.
+        assert_eq!(public_name("marceline@exemple.fr"), "marce…");
         assert_eq!(public_name("bob@x.fr"), "bob");
         assert_eq!(public_name("sanschien"), "sansc…");
     }
