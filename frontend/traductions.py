@@ -123,6 +123,10 @@ T: dict[str, tuple[str, str]] = {
         "El servidor rechazó la lista (HTTP %lld).",
         "The server refused the list (HTTP %lld).",
     ),
+    "Le serveur ne connaît pas cette adresse — backend à mettre à jour.": (
+        "El servidor no conoce esta dirección: hay que actualizar el backend.",
+        "The server does not know this address — the backend needs updating.",
+    ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),

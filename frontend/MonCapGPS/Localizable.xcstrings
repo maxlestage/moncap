@@ -1585,6 +1585,22 @@
         }
       }
     },
+    "Le serveur ne connaît pas cette adresse — backend à mettre à jour.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server does not know this address — the backend needs updating."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor no conoce esta dirección: hay que actualizar el backend."
+          }
+        }
+      }
+    },
     "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription.": {
       "localizations": {
         "en": {

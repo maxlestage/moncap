@@ -207,22 +207,32 @@ final class OfflineRouter: NSObject, ObservableObject {
         message = nil
 
         let url = URL(string: Region.base)!
+        let data: Data
+        let reponse: URLResponse
         do {
-            let (data, reponse) = try await URLSession.shared.data(from: url)
-            if let http = reponse as? HTTPURLResponse, http.statusCode != 200 {
-                // Distinguer les deux pannes, parce qu'elles n'appellent pas
-                // le même geste : un serveur qui refuse ne se répare pas en
-                // cherchant du réseau. « Indisponible » tout court avait
-                // envoyé chercher du côté du réseau, en pleine 5G.
-                message = trf("Le serveur a refusé la liste (HTTP %lld).", http.statusCode)
-                return
-            }
-            let recues = try JSONDecoder().decode([Region].self, from: data)
-            regions = recues.sorted {
-                $0.nom.localizedStandardCompare($1.nom) == .orderedAscending
-            }
+            (data, reponse) = try await URLSession.shared.data(from: url)
         } catch {
+            // Seul cas où le réseau est vraiment en cause.
             message = tr("Liste des régions indisponible — il faut du réseau une fois.")
+            return
+        }
+
+        // Trois pannes distinctes, trois messages : le geste à faire n'est pas
+        // le même, et un message unique avait déjà envoyé chercher du côté du
+        // réseau alors qu'il allait très bien.
+        if let http = reponse as? HTTPURLResponse, http.statusCode != 200 {
+            message = trf("Le serveur a refusé la liste (HTTP %lld).", http.statusCode)
+            return
+        }
+        guard let recues = try? JSONDecoder().decode([Region].self, from: data) else {
+            // Un 200 qui n'est pas du JSON. Le repli du front sert sa page pour
+            // toute adresse qu'il ne connaît pas, et il la sert en 200 : un
+            // backend trop ancien répond donc du HTML, sans erreur apparente.
+            message = tr("Le serveur ne connaît pas cette adresse — backend à mettre à jour.")
+            return
+        }
+        regions = recues.sorted {
+            $0.nom.localizedStandardCompare($1.nom) == .orderedAscending
         }
     }
 
