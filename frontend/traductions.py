@@ -127,6 +127,15 @@ T: dict[str, tuple[str, str]] = {
         "El servidor no conoce esta dirección: hay que actualizar el backend.",
         "The server does not know this address — the backend needs updating.",
     ),
+    "Fonds de carte": ("Fondos de mapa", "Map backgrounds"),
+    "%@ · %.0f Mo sur %.0f Mo": (
+        "%@ · %.0f MB de %.0f MB",
+        "%@ · %.0f MB of %.0f MB",
+    ),
+    "Téléchargement interrompu.": (
+        "Descarga interrumpida.",
+        "Download interrupted.",
+    ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),
@@ -142,7 +151,6 @@ T: dict[str, tuple[str, str]] = {
     "Partage impossible": ("No se puede compartir", "Sharing failed"),
     "Messages indisponible": ("Mensajes no disponible", "Messages unavailable"),
     "Aucune région de ce nom.": ("Ninguna región con ese nombre.", "No region by that name."),
-    "Téléchargement en cours…": ("Descargando…", "Downloading…"),
     "Contour satellite approximatif": ("Contorno aproximado por satélite", "Approximate satellite outline"),
     "Aucune position — utilise « Enregistrer ma position ».": (
         "Ninguna posición — usa «Guardar mi posición».",

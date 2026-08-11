@@ -104,6 +104,29 @@ final class OfflineRouter: NSObject, ObservableObject {
     @Published private(set) var progress: Double = 0
     @Published private(set) var message: String?
 
+    /// Région en cours d'installation. Un pourcentage seul ne dit ni ce qui
+    /// descend ni combien il en reste — sur cinq cents mégaoctets, les deux
+    /// comptent.
+    struct EnCours: Equatable {
+        let nom: String
+        let octets: Int
+    }
+    @Published private(set) var enCoursRegion: EnCours?
+
+    /// « France · Nouvelle-Aquitaine · 128 Mo sur 522 Mo ».
+    ///
+    /// Vaut `nil` après un lancement à froid : la session de fond survit à la
+    /// mort de l'app, pas cette précision. La barre montre alors le seul
+    /// pourcentage, ce qui reste juste.
+    var enCours: String? {
+        guard let r = enCoursRegion else { return nil }
+        let part = min(max(progress, 0), 1)
+        return trf(
+            "%@ · %.0f Mo sur %.0f Mo", r.nom,
+            Double(r.octets) * part / 1_000_000,
+            Double(r.octets) / 1_000_000)
+    }
+
     /// Moteurs chargés, un par région, construits à la première demande :
     /// ouvrir une archive coûte, et la plupart des trajets se calculent en
     /// ligne. Gardés ensuite, un trajet en enchaînant souvent d'autres.
@@ -254,6 +277,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         message = nil
 
         attentes[region.id] = region.nom
+        enCoursRegion = EnCours(nom: region.nom, octets: region.octets)
         // Les deux fichiers passent par la session de fond, y compris la
         // configuration pourtant minuscule : une requête ordinaire serait
         // suspendue si l'on bascule vers une autre app dans la seconde qui
@@ -319,6 +343,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         let nom = restantes.removeValue(forKey: id) ?? id
         attentes = restantes
         downloading = !restantes.isEmpty
+        if restantes.isEmpty { enCoursRegion = nil }
 
         moteurs[id] = nil
         if !installees.contains(where: { $0.id == id }) {
@@ -338,7 +363,8 @@ final class OfflineRouter: NSObject, ObservableObject {
         restantes.removeValue(forKey: id)
         attentes = restantes
         downloading = !restantes.isEmpty
-        message = "Téléchargement interrompu."
+        if restantes.isEmpty { enCoursRegion = nil }
+        message = tr("Téléchargement interrompu.")
         // Les deux fichiers partent ensemble : en garder un seul laisserait
         // une région à moitié installée, que rien ne viendrait compléter.
         try? FileManager.default.removeItem(at: Self.archivePath(id))
