@@ -482,6 +482,9 @@ struct MapHomeView: View {
     /// Signalement touché sur la carte (pour voter 👍/👎).
     @State private var alertToVote: Alert?
     /// Favoris Domicile / Travail (stockés sur l'appareil).
+    /// Pourquoi aucun itinéraire n'a pu être proposé. Rendre la main sans
+    /// rien dire laissait croire à un bouton mort.
+    @State private var itineraireImpossible: String?
     @State private var homePlace = Session.home
     @State private var workPlace = Session.work
     /// Dernier avertissement de dépassement de vitesse (anti-spam).
@@ -618,6 +621,16 @@ struct MapHomeView: View {
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
+        .alert(
+            "Aucun itinéraire", isPresented: Binding(
+                get: { itineraireImpossible != nil },
+                set: { if !$0 { itineraireImpossible = nil } })
+        ) {
+            Button("OK", role: .cancel) { itineraireImpossible = nil }
+        } message: {
+            // Déjà traduit à la source.
+            Text(itineraireImpossible ?? "")
+        }
         .alert(
             "Partage impossible", isPresented: Binding(
                 get: { shareError != nil }, set: { if !$0 { shareError = nil } })
@@ -3357,11 +3370,46 @@ struct MapHomeView: View {
             withAnimation { camera = followCamera(from) }
             return
         }
-        guard let route = await drivingRoute(from: from, to: to) else { return }
+        guard let route = await drivingRoute(from: from, to: to) else {
+            // Le réseau n'a rien rendu : un paquet installé peut encore
+            // répondre, interrupteur ou non.
+            if let local = router.route(from: from, to: to) {
+                nav.start(steps: local.steps, coordinates: local.coordinates,
+                          distanceKm: local.km, etaMinutes: local.minutes, destination: to)
+                speedLimit.preload(along: local.coordinates)
+                showPlaces = false
+                withAnimation { camera = followCamera(from) }
+            } else {
+                itineraireImpossible = raisonSansItineraire()
+            }
+            return
+        }
         nav.start(route: route, destination: to)
         showPlaces = false
         // Vue « conduite » : la carte suit et tourne dans le sens de la marche.
         withAnimation { camera = followCamera(from) }
+    }
+
+    /// Pourquoi aucun itinéraire n'a pu être proposé.
+    ///
+    /// Trois causes, trois gestes : il n'y a pas de paquet, le paquet ne couvre
+    /// pas ce trajet-là, ou c'est le réseau qui manque. Un message unique
+    /// enverrait chercher au mauvais endroit — on l'a déjà vu avec la liste des
+    /// régions, qui accusait le réseau alors qu'il allait très bien.
+    private func raisonSansItineraire() -> String {
+        if travelMode != .car {
+            return NSLocalizedString(
+                "Le calcul a échoué. Ce mode de déplacement a besoin du réseau.",
+                comment: "")
+        }
+        if !router.ready {
+            return NSLocalizedString(
+                "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.",
+                comment: "")
+        }
+        return NSLocalizedString(
+            "Aucune région installée ne couvre ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
+            comment: "")
     }
 
     /// Calcule plusieurs itinéraires vers une destination et les propose :
@@ -3432,7 +3480,24 @@ struct MapHomeView: View {
                 }
             }
         }
-        guard !builds.isEmpty else { return }
+        // Filet de sécurité : le réseau n'a rien rendu — coupure, mode avion,
+        // serveur d'Apple injoignable. Si un paquet couvre le trajet, il répond
+        // ici même, que l'interrupteur « Naviguer hors ligne » soit mis ou non.
+        // Celui-ci veut dire « privilégie le calcul local », pas « c'est le seul
+        // moyen d'y avoir droit » : personne ne pense à l'activer au moment où
+        // le réseau tombe.
+        if builds.isEmpty, travelMode == .car {
+            builds = router.routes(from: from, to: dest,
+                                   max: OfflineRouter.maxItineraires)
+                .map {
+                    RouteBuild(coords: $0.coordinates, steps: $0.steps,
+                               km: $0.km, minutes: $0.minutes, hasTolls: $0.hasTolls)
+                }
+        }
+        guard !builds.isEmpty else {
+            itineraireImpossible = raisonSansItineraire()
+            return
+        }
 
         // Dédoublonne (distance + point médian arrondis).
         var seen = Set<String>()

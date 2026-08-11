@@ -481,6 +481,22 @@
         }
       }
     },
+    "Aucun itinéraire": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No route"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna ruta"
+          }
+        }
+      }
+    },
     "Aucun trajet enregistré pour l'instant. Lance une navigation : ton trajet sera sauvegardé automatiquement à l'arrivée.": {
       "localizations": {
         "en": {
@@ -513,6 +529,22 @@
         }
       }
     },
+    "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No routing region is installed. Download the one you need from the offline screen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay ninguna región de rutas instalada. Descarga la que te interesa desde la pantalla sin conexión."
+          }
+        }
+      }
+    },
     "Aucune région de ce nom.": {
       "localizations": {
         "en": {
@@ -525,6 +557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ninguna región con ese nombre."
+          }
+        }
+      }
+    },
+    "Aucune région installée ne couvre ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No installed region covers this trip. It must fit entirely within one package — that is what the overlapping areas are for."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna región instalada cubre este trayecto. Debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan."
           }
         }
       }
@@ -1565,6 +1613,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Déjalo vacío si no alojas nada. Una dirección que no responde se ignora: el mapa sigue mostrándose con el fondo por defecto."
+          }
+        }
+      }
+    },
+    "Le calcul a échoué. Ce mode de déplacement a besoin du réseau.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computation failed. This travel mode needs a network connection."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El cálculo ha fallado. Este modo de transporte necesita cobertura."
           }
         }
       }
