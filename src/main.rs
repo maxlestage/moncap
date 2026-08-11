@@ -472,10 +472,6 @@ struct FirePoint {
     /// la colonne CSV manque (compatibilité clients existants).
     #[serde(skip_serializing_if = "Option::is_none")]
     t: Option<i64>,
-    /// Première détection satellite à cet endroit (epoch secondes UTC) sur la
-    /// fenêtre d'historique — permet « Créé il y a X j ».
-    #[serde(skip_serializing_if = "Option::is_none")]
-    t0: Option<i64>,
 }
 
 /// Cache mémoire des feux : évite d'appeler la NASA à chaque requête client.
@@ -521,28 +517,6 @@ fn fires_zone(brut: Option<&str>) -> Option<String> {
     }
     let q = |v: f64| (v * 4.0).round() / 4.0;
     Some(format!("{},{},{},{}", q(o), q(su), q(e), q(no)))
-}
-
-/// Combien de jours d'historique demander pour une zone donnée.
-///
-/// Sept jours sur la France font quelques mégaoctets ; sur le monde entier,
-/// plusieurs centaines. Le budget suit donc la surface : on garde la
-/// profondeur là où on regarde de près, et on se contente du récent quand on
-/// embrasse un continent. Sans cela, la requête mondiale dépasse la mémoire du
-/// dyno avant même d'être analysée.
-fn fires_jours(zone: &str) -> [u8; 2] {
-    let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
-    let surface = match n[..] {
-        [o, su, e, no] => (e - o) * (no - su),
-        _ => f64::MAX,
-    };
-    if surface <= 400.0 {
-        [7, 2]
-    } else if surface <= 5_000.0 {
-        [3, 1]
-    } else {
-        [1, 1]
-    }
 }
 
 /// Durée de fraîcheur du cache des feux (les données FIRMS NRT ne sont mises à
@@ -857,6 +831,183 @@ async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response
     }
 }
 
+
+// --- Qualité de l'air ------------------------------------------------------
+//
+// Open-Meteo publie une API de qualité de l'air gratuite et **sans clé**, qui
+// accepte plusieurs coordonnées en une requête. On échantillonne donc la zone
+// regardée sur une grille plutôt que d'interroger point par point : une carte
+// se lit par taches, pas par relevés isolés.
+
+/// Un point de mesure de la grille.
+#[derive(Clone, Serialize, Deserialize)]
+struct AirPoint {
+    lat: f64,
+    lon: f64,
+    /// Indice européen (0-100+). Absent hors du domaine européen de CAMS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    eu: Option<f64>,
+    /// Indice américain (0-500), calculé partout dans le monde.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    us: Option<f64>,
+    /// Particules fines en µg/m³ : la seule grandeur physique du lot, la même
+    /// partout. Les deux indices, eux, sont des conventions régionales.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pm25: Option<f64>,
+}
+
+struct AirCache {
+    fetched_at: Instant,
+    data: Vec<AirPoint>,
+}
+
+static AIR_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, AirCache>>> = OnceLock::new();
+
+/// La qualité de l'air bouge à l'heure, pas à la minute.
+const AIR_TTL: Duration = Duration::from_secs(1800);
+/// Zones gardées, même raison que pour les feux.
+const AIR_MAX_ZONES: usize = 24;
+/// Côté de la grille : 12 × 9 = 108 points, ce qu'Open-Meteo accepte en une
+/// requête, et assez pour que la carte se lise sans trous béants.
+const AIR_GRILLE_X: usize = 12;
+const AIR_GRILLE_Y: usize = 9;
+
+/// Points d'échantillonnage d'une zone, répartis régulièrement.
+///
+/// Les points sont placés au **centre** des mailles et non sur les bords :
+/// posés sur les bords, deux zones voisines mesureraient deux fois la même
+/// ligne et laisseraient le milieu de chaque maille sans mesure.
+fn air_grille(zone: &str) -> Vec<(f64, f64)> {
+    let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
+    let [o, su, e, no] = n[..] else { return vec![] };
+    let pas_x = (e - o) / AIR_GRILLE_X as f64;
+    let pas_y = (no - su) / AIR_GRILLE_Y as f64;
+    let mut points = Vec::with_capacity(AIR_GRILLE_X * AIR_GRILLE_Y);
+    for iy in 0..AIR_GRILLE_Y {
+        for ix in 0..AIR_GRILLE_X {
+            points.push((
+                su + pas_y * (iy as f64 + 0.5),
+                o + pas_x * (ix as f64 + 0.5),
+            ));
+        }
+    }
+    points
+}
+
+/// GET /air — qualité de l'air sur la zone regardée.
+///
+/// `?bbox=ouest,sud,est,nord`, mêmes bornes que pour les feux. Sans paramètre,
+/// le monde entier — la grille est alors très lâche, ce qui reste honnête :
+/// c'est un aperçu, pas une mesure de proximité.
+async fn list_air(Query(q): Query<FiresQuery>) -> Response {
+    let Some(zone) = fires_zone(q.bbox.as_deref()) else {
+        return (StatusCode::BAD_REQUEST, "bbox attendue : ouest,sud,est,nord").into_response();
+    };
+
+    let cache = AIR_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    let (data, stale) = match cache.lock().await.get(&zone) {
+        Some(c) => (c.data.clone(), c.fetched_at.elapsed() >= AIR_TTL),
+        None => (Vec::new(), true),
+    };
+    if stale {
+        spawn_air_refresh(zone);
+    }
+    Json(data).into_response()
+}
+
+/// Rafraîchit la grille d'une zone en tâche de fond, une par une.
+fn spawn_air_refresh(zone: String) {
+    use std::sync::Mutex as StdMutex;
+    static EN_COURS: OnceLock<StdMutex<std::collections::HashSet<String>>> = OnceLock::new();
+    let en_cours = EN_COURS.get_or_init(|| StdMutex::new(std::collections::HashSet::new()));
+    {
+        let Ok(mut set) = en_cours.lock() else { return };
+        if !set.insert(zone.clone()) {
+            return;
+        }
+    }
+    tokio::spawn(async move {
+        match fetch_air(&zone).await {
+            Some(data) => {
+                tracing::info!("Air : {} points en cache pour {zone}", data.len());
+                let cache = AIR_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+                let mut table = cache.lock().await;
+                if table.len() >= AIR_MAX_ZONES && !table.contains_key(&zone) {
+                    if let Some(vieille) = table
+                        .iter()
+                        .min_by_key(|(_, c)| c.fetched_at)
+                        .map(|(k, _)| k.clone())
+                    {
+                        table.remove(&vieille);
+                    }
+                }
+                table.insert(zone.clone(), AirCache { fetched_at: Instant::now(), data });
+            }
+            None => tracing::warn!("Air : rafraîchissement impossible pour {zone}"),
+        }
+        if let Ok(mut set) = en_cours.lock() {
+            set.remove(&zone);
+        }
+    });
+}
+
+/// Interroge Open-Meteo pour toute la grille en une seule requête.
+async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
+    let points = air_grille(zone);
+    if points.is_empty() {
+        return None;
+    }
+    let lats = points
+        .iter()
+        .map(|(la, _)| format!("{la:.3}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let lons = points
+        .iter()
+        .map(|(_, lo)| format!("{lo:.3}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let url = format!(
+        "https://air-quality-api.open-meteo.com/v1/air-quality\
+         ?latitude={lats}&longitude={lons}&current=european_aqi,us_aqi,pm2_5"
+    );
+    let resp = http_client()
+        .get(&url)
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        tracing::warn!("Air : statut HTTP {}", resp.status());
+        return None;
+    }
+    let brut: serde_json::Value = resp.json().await.ok()?;
+    // Une seule coordonnée donne un objet, plusieurs donnent un tableau.
+    let entrees = match brut {
+        serde_json::Value::Array(v) => v,
+        autre => vec![autre],
+    };
+    Some(
+        entrees
+            .iter()
+            .filter_map(|e| {
+                let courant = e.get("current")?;
+                let nombre = |cle: &str| courant.get(cle).and_then(|v| v.as_f64());
+                Some(AirPoint {
+                    lat: e.get("latitude")?.as_f64()?,
+                    lon: e.get("longitude")?.as_f64()?,
+                    eu: nombre("european_aqi"),
+                    us: nombre("us_aqi"),
+                    pm25: nombre("pm2_5"),
+                })
+            })
+            // Un point sans aucune mesure ne dessine rien : autant ne pas
+            // l'expédier.
+            .filter(|p| p.eu.is_some() || p.us.is_some() || p.pm25.is_some())
+            .collect(),
+    )
+}
+
 /// GET /fires — incendies actifs (NASA FIRMS), dans le monde ou sur une zone.
 ///
 /// `?bbox=ouest,sud,est,nord` restreint la demande à ce qu'on regarde ; sans
@@ -911,13 +1062,10 @@ fn spawn_fires_refresh(key: String, zone: String) {
     }
 
     tokio::spawn(async move {
-        let [large, etroit] = fires_jours(&zone);
-        let mut data = fetch_fires_days(&key, large, &zone).await;
-        if data.is_none() && etroit != large {
-            tracing::warn!("FIRMS : échec sur {large} jours, repli sur {etroit}");
-            data = fetch_fires_days(&key, etroit, &zone).await;
-        }
-        match data {
+        // Un seul jour : la carte montre les feux **actifs**, pas leur
+        // histoire. C'est aussi ce qui rend la demande mondiale tenable — la
+        // profondeur était le seul vrai coût.
+        match fetch_fires_days(&key, 1, &zone).await {
             Some(data) => {
                 tracing::info!("FIRMS : {} cellules en cache pour {zone}", data.len());
                 let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
@@ -990,14 +1138,13 @@ const FIRES_MAX_POINTS: usize = 4000;
 /// Analyse le CSV FIRMS en filtrant les faux positifs (torchères, brûlages,
 /// détections douteuses) : on ne garde que les détections de confiance
 /// nominale ou haute avec une puissance radiative (FRP) ≥ 2 MW, puis on
-/// dédoublonne par cellule de grille en agrégeant première (`t0`) et dernière
-/// (`t`) détection.
+/// dédoublonne par cellule de grille en gardant la détection la plus récente.
 ///
 /// Colonnes VIIRS : latitude,longitude,bright_ti4,scan,track,acq_date,
 /// acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight.
 fn parse_firms_csv(text: &str) -> Vec<FirePoint> {
     use std::collections::HashMap;
-    // Cellule → (point le plus récent, t0 min, t max).
+    // Cellule → point le plus récent.
     let mut cells: HashMap<(i64, i64), FirePoint> = HashMap::new();
     for line in text.lines().skip(1) {
         let cols: Vec<&str> = line.split(',').collect();
@@ -1043,17 +1190,22 @@ fn parse_firms_csv(text: &str) -> Vec<FirePoint> {
                     p.lon = lon;
                     p.t = t;
                 }
-                if p.t0.is_none() || (t.is_some() && t < p.t0) {
-                    p.t0 = t;
-                }
             })
-            .or_insert(FirePoint { lat, lon, t, t0: t });
+            .or_insert(FirePoint { lat, lon, t });
     }
     let mut out: Vec<FirePoint> = cells.into_values().collect();
     // Cellules les plus récentes d'abord, pour que le garde-fou coupe les
     // vieilles détections et pas les foyers actifs.
     out.sort_by_key(|p| std::cmp::Reverse(p.t));
-    out.truncate(FIRES_MAX_POINTS);
+    if out.len() > FIRES_MAX_POINTS {
+        // Un plafond silencieux se lit comme « tout est là ». Sur le monde
+        // entier il coupe pour de bon, et il vaut mieux le savoir.
+        tracing::info!(
+            "FIRMS : {} cellules ramenées à {FIRES_MAX_POINTS} (les plus récentes)",
+            out.len()
+        );
+        out.truncate(FIRES_MAX_POINTS);
+    }
     out
 }
 
@@ -1942,6 +2094,7 @@ fn build_app(state: AppState) -> Router {
         .route("/account", get(account_info).delete(delete_account))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
+        .route("/air", get(list_air))
         // Le courtier des paquets d'itinéraires. Ouvert comme les tuiles : ce
         // sont des données OpenStreetMap, redistribuables (ODbL). Le préfixe
         // d'étiquette borne strictement ce qui peut sortir du dépôt privé.
@@ -3285,7 +3438,6 @@ mod tests {
             .iter()
             .find(|p| (p.lat - 44.5001).abs() < 1e-6)
             .expect("cellule fusionnée absente");
-        assert_eq!(merged.t0, acq_epoch("2026-07-26", "0342"));
         assert_eq!(merged.t, acq_epoch("2026-07-28", "0142"));
         assert!(pts.iter().any(|p| (p.lat - 46.0).abs() < 1e-6));
     }
@@ -4247,6 +4399,28 @@ mod integration {
         assert!(forme_du_jeton("moncap").contains("format inconnu"));
     }
 
+    /// La grille échantillonne la zone au **centre** des mailles. Posée sur
+    /// les bords, deux zones voisines mesureraient deux fois la même ligne et
+    /// laisseraient le milieu de chaque maille sans mesure.
+    #[test]
+    fn la_grille_de_l_air_couvre_la_zone_sans_toucher_les_bords() {
+        let points = air_grille("-5,41,10,51.5");
+        assert_eq!(points.len(), AIR_GRILLE_X * AIR_GRILLE_Y);
+
+        // Tous strictement à l'intérieur.
+        for (la, lo) in &points {
+            assert!(*lo > -5.0 && *lo < 10.0, "longitude {lo}");
+            assert!(*la > 41.0 && *la < 51.5, "latitude {la}");
+        }
+        // Et répartis : les extrêmes tombent à une demi-maille des bords.
+        let pas_x = 15.0 / AIR_GRILLE_X as f64;
+        let min_lon = points.iter().map(|(_, lo)| *lo).fold(f64::MAX, f64::min);
+        assert!((min_lon - (-5.0 + pas_x / 2.0)).abs() < 1e-9, "{min_lon}");
+
+        // Une zone illisible ne produit pas de grille.
+        assert!(air_grille("nawak").is_empty());
+    }
+
     /// La zone vient du client : elle entre dans une URL adressée à la NASA,
     /// et elle sert de clé de cache. Une boîte inversée, hors du globe ou mal
     /// formée doit être refusée avant l'un comme avant l'autre.
@@ -4274,19 +4448,6 @@ mod integration {
         ] {
             assert!(fires_zone(Some(mauvaise)).is_none(), "{mauvaise:?}");
         }
-    }
-
-    /// Sept jours sur la France font quelques mégaoctets ; sur le monde
-    /// entier, plusieurs centaines — de quoi épuiser la mémoire du dyno avant
-    /// même l'analyse. La profondeur d'historique suit donc la surface.
-    #[test]
-    fn le_budget_de_jours_suit_la_surface() {
-        // France métropolitaine : ~240 deg², la profondeur maximale.
-        assert_eq!(fires_jours("-5.5,41,10,51.5"), [7, 2]);
-        // Un continent.
-        assert_eq!(fires_jours("-20,30,60,72"), [3, 1]);
-        // Le monde.
-        assert_eq!(fires_jours(FIRES_MONDE), [1, 1]);
     }
 
     /// Sans jeton, le courtier doit le **dire**. La panne d'origine tenait à un
