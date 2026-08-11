@@ -1,7 +1,6 @@
 import {
   AUTEUR,
   CONNEXION,
-  DEPOT,
   LIEUX,
   MAQUETTE_ITINERAIRES,
   MAQUETTE_REGIONS,
@@ -268,9 +267,6 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             <a className="bouton" href={CONNEXION}>
               {c.seConnecter}
             </a>
-            <a className="lien" href={DEPOT}>
-              {c.voirProjet}
-            </a>
           </div>
 
           <dl className="chiffres">
@@ -405,9 +401,6 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
           <p className="pied-liens">
             <a className="bouton" href={CONNEXION}>
               {c.seConnecter}
-            </a>
-            <a className="lien" href={DEPOT}>
-              {c.codeSource}
             </a>
           </p>
 
