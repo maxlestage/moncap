@@ -484,7 +484,66 @@ struct FiresCache {
     data: Vec<FirePoint>,
 }
 
-static FIRES_CACHE: OnceLock<tokio::sync::Mutex<Option<FiresCache>>> = OnceLock::new();
+/// Un cache par zone demandée. La France tenait dans une seule entrée ;
+/// le monde se regarde par morceaux, et deux visiteurs qui consultent deux
+/// continents ne doivent pas se chasser mutuellement du cache.
+static FIRES_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, FiresCache>>> = OnceLock::new();
+
+/// Nombre de zones gardées. Au-delà, la plus ancienne cède la place — sans
+/// borne, une carte parcourue longuement finirait par tout garder en mémoire.
+const FIRES_MAX_ZONES: usize = 24;
+
+/// Zone du monde entier, au format attendu par FIRMS : ouest,sud,est,nord.
+const FIRES_MONDE: &str = "-180,-90,180,90";
+
+/// Zone demandée, validée et arrondie au quart de degré.
+///
+/// L'arrondi sert de clé de cache : deux cartes voisines partagent alors la
+/// même entrée, au lieu d'en créer une par pixel de déplacement.
+fn fires_zone(brut: Option<&str>) -> Option<String> {
+    let Some(brut) = brut else {
+        return Some(FIRES_MONDE.to_string());
+    };
+    let n: Vec<f64> = brut
+        .split(',')
+        .filter_map(|v| v.trim().parse::<f64>().ok())
+        .collect();
+    let [o, su, e, no] = n[..] else { return None };
+    // Une boîte inversée ou hors du globe ne vient pas d'un client honnête.
+    if !(-180.0..=180.0).contains(&o)
+        || !(-180.0..=180.0).contains(&e)
+        || !(-90.0..=90.0).contains(&su)
+        || !(-90.0..=90.0).contains(&no)
+        || o >= e
+        || su >= no
+    {
+        return None;
+    }
+    let q = |v: f64| (v * 4.0).round() / 4.0;
+    Some(format!("{},{},{},{}", q(o), q(su), q(e), q(no)))
+}
+
+/// Combien de jours d'historique demander pour une zone donnée.
+///
+/// Sept jours sur la France font quelques mégaoctets ; sur le monde entier,
+/// plusieurs centaines. Le budget suit donc la surface : on garde la
+/// profondeur là où on regarde de près, et on se contente du récent quand on
+/// embrasse un continent. Sans cela, la requête mondiale dépasse la mémoire du
+/// dyno avant même d'être analysée.
+fn fires_jours(zone: &str) -> [u8; 2] {
+    let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
+    let surface = match n[..] {
+        [o, su, e, no] => (e - o) * (no - su),
+        _ => f64::MAX,
+    };
+    if surface <= 400.0 {
+        [7, 2]
+    } else if surface <= 5_000.0 {
+        [3, 1]
+    } else {
+        [1, 1]
+    }
+}
 
 /// Durée de fraîcheur du cache des feux (les données FIRMS NRT ne sont mises à
 /// jour que quelques fois par jour).
@@ -798,67 +857,103 @@ async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response
     }
 }
 
-/// GET /fires — incendies actifs sur la France métropolitaine (NASA FIRMS).
+/// GET /fires — incendies actifs (NASA FIRMS), dans le monde ou sur une zone.
+///
+/// `?bbox=ouest,sud,est,nord` restreint la demande à ce qu'on regarde ; sans
+/// paramètre, c'est la planète entière. La profondeur d'historique suit la
+/// surface, la réponse est plafonnée, et chaque zone a son cache.
 ///
 /// Répond **immédiatement** avec le dernier cache connu ; si celui-ci est
 /// périmé, un rafraîchissement part en tâche de fond. La requête FIRMS
 /// (7 jours de détections) peut prendre bien plus que le timeout HTTP d'un
 /// client mobile : elle ne doit jamais bloquer la réponse.
-async fn list_fires() -> Json<Vec<FirePoint>> {
+async fn list_fires(Query(q): Query<FiresQuery>) -> Response {
+    let Some(zone) = fires_zone(q.bbox.as_deref()) else {
+        return (StatusCode::BAD_REQUEST, "bbox attendue : ouest,sud,est,nord").into_response();
+    };
     let Some(key) = fires_key() else {
-        return Json(vec![]);
+        return Json(Vec::<FirePoint>::new()).into_response();
     };
 
-    let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(None));
-    let (data, stale) = match cache.lock().await.as_ref() {
+    let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    let (data, stale) = match cache.lock().await.get(&zone) {
         Some(c) => (c.data.clone(), c.fetched_at.elapsed() >= FIRES_TTL),
         None => (Vec::new(), true),
     };
     if stale {
-        spawn_fires_refresh(key);
+        spawn_fires_refresh(key, zone);
     }
-    Json(data)
+    Json(data).into_response()
+}
+
+/// Zone regardée, en degrés : `?bbox=ouest,sud,est,nord`. Absente, c'est le
+/// monde entier — un visiteur qui ne demande rien de précis voit tout.
+#[derive(Deserialize)]
+struct FiresQuery {
+    bbox: Option<String>,
 }
 
 /// Lance (au plus un à la fois) un rafraîchissement du cache des feux en
 /// tâche de fond. Essaie d'abord 7 jours d'historique (pour « Créé il y a
 /// X j ») ; si la NASA ne répond pas à temps, repli sur 2 jours, bien plus
 /// léger, pour que la carte reste alimentée.
-fn spawn_fires_refresh(key: String) {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    static REFRESHING: AtomicBool = AtomicBool::new(false);
-    if REFRESHING.swap(true, Ordering::SeqCst) {
-        return;
+fn spawn_fires_refresh(key: String, zone: String) {
+    use std::sync::Mutex as StdMutex;
+    // Une zone à la fois, mais plusieurs zones en parallèle : un seul verrou
+    // global ferait attendre l'Australie derrière la Californie.
+    static EN_COURS: OnceLock<StdMutex<std::collections::HashSet<String>>> = OnceLock::new();
+    let en_cours = EN_COURS.get_or_init(|| StdMutex::new(std::collections::HashSet::new()));
+    {
+        let Ok(mut set) = en_cours.lock() else { return };
+        if !set.insert(zone.clone()) {
+            return;
+        }
     }
+
     tokio::spawn(async move {
-        let mut data = fetch_fires_days(&key, 7).await;
-        if data.is_none() {
-            tracing::warn!("FIRMS : échec sur 7 jours, repli sur 2 jours");
-            data = fetch_fires_days(&key, 2).await;
+        let [large, etroit] = fires_jours(&zone);
+        let mut data = fetch_fires_days(&key, large, &zone).await;
+        if data.is_none() && etroit != large {
+            tracing::warn!("FIRMS : échec sur {large} jours, repli sur {etroit}");
+            data = fetch_fires_days(&key, etroit, &zone).await;
         }
         match data {
             Some(data) => {
-                tracing::info!("FIRMS : {} cellules de feu en cache", data.len());
-                let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(None));
-                *cache.lock().await = Some(FiresCache {
-                    fetched_at: Instant::now(),
-                    data,
-                });
+                tracing::info!("FIRMS : {} cellules en cache pour {zone}", data.len());
+                let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+                let mut table = cache.lock().await;
+                // Place bornée : la plus ancienne entrée cède la sienne.
+                if table.len() >= FIRES_MAX_ZONES && !table.contains_key(&zone) {
+                    if let Some(vieille) = table
+                        .iter()
+                        .min_by_key(|(_, c)| c.fetched_at)
+                        .map(|(k, _)| k.clone())
+                    {
+                        table.remove(&vieille);
+                    }
+                }
+                table.insert(
+                    zone.clone(),
+                    FiresCache {
+                        fetched_at: Instant::now(),
+                        data,
+                    },
+                );
             }
             // Échec total : cache inchangé (re-tentative à la prochaine requête).
-            None => tracing::warn!("FIRMS : rafraîchissement impossible, cache conservé"),
+            None => tracing::warn!("FIRMS : rafraîchissement impossible pour {zone}"),
         }
-        REFRESHING.store(false, Ordering::SeqCst);
+        if let Ok(mut set) = en_cours.lock() {
+            set.remove(&zone);
+        }
     });
 }
 
-/// Interroge l'API FIRMS (CSV) : France métropolitaine (Corse incluse), VIIRS
-/// S-NPP, `days` derniers jours. `None` en cas d'échec. Timeout dédié large :
-/// le CSV multi-jours est volumineux en pleine saison des feux, et cet appel
-/// tourne en tâche de fond (jamais sur le chemin d'une réponse client).
-async fn fetch_fires_days(key: &str, days: u8) -> Option<Vec<FirePoint>> {
-    // Zone = ouest,sud,est,nord.
-    let area = "-5.5,41,10,51.5";
+/// Interroge l'API FIRMS (CSV) : zone demandée, VIIRS S-NPP, `days` derniers
+/// jours. `None` en cas d'échec. Timeout dédié large : le CSV multi-jours est
+/// volumineux en pleine saison des feux, et cet appel tourne en tâche de fond
+/// (jamais sur le chemin d'une réponse client).
+async fn fetch_fires_days(key: &str, days: u8, area: &str) -> Option<Vec<FirePoint>> {
     let url = format!(
         "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{area}/{days}"
     );
@@ -1927,7 +2022,9 @@ async fn main() {
     // chaque jour, et sans cela la carte des feux resterait vide jusqu'au
     // premier rafraîchissement déclenché par une requête.
     if let Some(key) = fires_key() {
-        spawn_fires_refresh(key);
+        // Le monde entier : c'est la zone qu'un client qui ne demande rien de
+        // précis reçoit, donc celle qui doit être chaude au réveil du dyno.
+        spawn_fires_refresh(key, FIRES_MONDE.to_string());
     }
 
     // Canal de diffusion temps réel (WebSocket).
@@ -4148,6 +4245,48 @@ mod integration {
 
         assert!(forme_du_jeton("ghp_xyz").contains("classique"));
         assert!(forme_du_jeton("moncap").contains("format inconnu"));
+    }
+
+    /// La zone vient du client : elle entre dans une URL adressée à la NASA,
+    /// et elle sert de clé de cache. Une boîte inversée, hors du globe ou mal
+    /// formée doit être refusée avant l'un comme avant l'autre.
+    #[test]
+    fn la_zone_des_feux_est_bornee() {
+        // Rien de demandé : le monde entier.
+        assert_eq!(fires_zone(None).as_deref(), Some(FIRES_MONDE));
+
+        // Arrondi au quart de degré : deux cartes voisines partagent une clé.
+        assert_eq!(
+            fires_zone(Some("-5.53,41.02,10.04,51.49")).as_deref(),
+            Some("-5.5,41,10,51.5")
+        );
+
+        // Boîte inversée, hors du globe, incomplète, ou pleine de texte.
+        for mauvaise in [
+            "10,41,-5,51",           // est avant ouest
+            "-5,51,10,41",           // nord avant sud
+            "-200,41,10,51",         // hors du globe
+            "-5,41,10,120",          // latitude impossible
+            "-5,41,10",              // incomplète
+            "",                      // vide
+            "a,b,c,d",               // pas des nombres
+            "-5,41,10,51,99",        // un champ de trop
+        ] {
+            assert!(fires_zone(Some(mauvaise)).is_none(), "{mauvaise:?}");
+        }
+    }
+
+    /// Sept jours sur la France font quelques mégaoctets ; sur le monde
+    /// entier, plusieurs centaines — de quoi épuiser la mémoire du dyno avant
+    /// même l'analyse. La profondeur d'historique suit donc la surface.
+    #[test]
+    fn le_budget_de_jours_suit_la_surface() {
+        // France métropolitaine : ~240 deg², la profondeur maximale.
+        assert_eq!(fires_jours("-5.5,41,10,51.5"), [7, 2]);
+        // Un continent.
+        assert_eq!(fires_jours("-20,30,60,72"), [3, 1]);
+        // Le monde.
+        assert_eq!(fires_jours(FIRES_MONDE), [1, 1]);
     }
 
     /// Sans jeton, le courtier doit le **dire**. La panne d'origine tenait à un
