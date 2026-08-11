@@ -3358,7 +3358,7 @@ struct MapHomeView: View {
         // installée ne couvre alors le trajet, et rendre la main sans rien
         // proposer serait pire que de déroger au mode choisi.
         let locaux = (horsLigne && travelMode == .car)
-            ? router.routes(from: from, to: dest, max: 5)
+            ? router.routes(from: from, to: dest, max: OfflineRouter.maxItineraires)
             : []
         if !locaux.isEmpty {
             builds = locaux.map {
@@ -3434,9 +3434,10 @@ struct MapHomeView: View {
         }) {
             options[best].isSimplest = true
         }
-        // Le plus simple d'abord, puis par durée ; on plafonne à 15.
+        // Le plus simple d'abord, puis par durée ; même plafond hors ligne
+        // qu'en ligne, la constante étant partagée.
         options.sort { ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes) }
-        options = Array(options.prefix(15))
+        options = Array(options.prefix(OfflineRouter.maxItineraires))
 
         // Couleur par itinéraire : vert pour le plus simple, palette pour les autres.
         let altColors: [Color] = [
