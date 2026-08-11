@@ -119,6 +119,10 @@ T: dict[str, tuple[str, str]] = {
         "Permite calcular y recalcular una ruta sin conexión. Guarda tantas regiones como quieras: un trayecto busca su ruta en cada una. En cambio debe caber entero en una de ellas: para eso sirven las zonas, que se solapan.",
         "Lets you compute and recompute a route with no network. Keep as many regions as you like: a trip looks for its route in each one. It must however fit entirely within one of them — that is what the overlapping areas are for.",
     ),
+    "Le serveur a refusé la liste (HTTP %lld).": (
+        "El servidor rechazó la lista (HTTP %lld).",
+        "The server refused the list (HTTP %lld).",
+    ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),

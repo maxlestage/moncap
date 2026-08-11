@@ -411,9 +411,18 @@ struct OfflineMapScreen: View {
                     if router.chargement {
                         ProgressView()
                     } else if router.regions.isEmpty {
-                        Text("Liste des régions indisponible — il faut du réseau une fois.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        // Le routeur dit *pourquoi* quand il le sait : un
+                        // serveur qui refuse ne se répare pas en cherchant du
+                        // réseau. Deux branches et non un `??` : celui-ci
+                        // produirait une `String`, et `Text(String)` est
+                        // verbatim — le repli ne serait jamais traduit.
+                        if let m = router.message {
+                            Text(m).font(.footnote).foregroundStyle(.orange)
+                        } else {
+                            Text("Liste des régions indisponible — il faut du réseau une fois.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     } else if rechercheRegion.isEmpty {
                         // Un pays par rangée, ses régions dessous : à deux
                         // cents entrées, une liste à plat serait impraticable.

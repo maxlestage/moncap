@@ -1569,6 +1569,22 @@
         }
       }
     },
+    "Le serveur a refusé la liste (HTTP %lld).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server refused the list (HTTP %lld)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor rechazó la lista (HTTP %lld)."
+          }
+        }
+      }
+    },
     "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription.": {
       "localizations": {
         "en": {

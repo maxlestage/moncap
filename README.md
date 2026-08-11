@@ -276,6 +276,47 @@ Deux détails qui coûtent cher si on les ignore :
 - **Interrupteur hors ligne** dans les réglages : le calcul local n'est pas
   imposé, il est choisi.
 
+### `GITHUB_TOKEN` — sans quoi rien ne se télécharge
+
+Les paquets sont publiés en **Releases** de ce dépôt, qui est **privé**.
+L'application les demandait directement à `api.github.com`, sans jeton :
+GitHub répondait 404, la liste des régions restait vide, aucune région
+n'était proposée — et l'écran affichait « il faut du réseau une fois » alors
+que le réseau allait très bien. Le message accusait le réseau parce que
+`loadRegions()` ne distinguait pas un refus d'une panne.
+
+Un jeton ne peut pas voyager dans l'application : n'importe qui l'extrait du
+binaire, et il ouvrirait le dépôt entier. C'est donc **le backend** qui le
+détient, et qui sert d'intermédiaire :
+
+| Adresse | Ce qu'elle fait |
+| --- | --- |
+| `GET /offline/regions` | la liste des régions publiées, en cache une heure |
+| `GET /offline/regions/:tag/archive` | redirige vers l'archive de tuiles |
+| `GET /offline/regions/:tag/config` | redirige vers la configuration |
+
+Les deux dernières **redirigent** plutôt qu'elles ne relaient : GitHub répond
+à une demande authentifiée par une adresse signée, valable quelques minutes
+et qui ne demande aucune authentification. Le téléphone la suit tout seul, et
+le dyno ne voit pas passer un octet du transfert — deux gigaoctets par région
+n'ont rien à faire là.
+
+Ce qu'il faut régler, une fois, dans **Heroku → Settings → Config Vars** :
+
+| Variable | Valeur |
+| --- | --- |
+| `GITHUB_TOKEN` | un jeton avec la portée `repo` en lecture sur ce dépôt |
+| `MONCAP_DEPOT` | facultatif, `maxlestage/moncap` par défaut |
+
+Sans jeton, les deux routes répondent **503 avec le motif écrit en toutes
+lettres** (`GITHUB_TOKEN absent`), que l'application affiche. C'est délibéré :
+la panne d'origine a coûté une soirée de recherche du mauvais côté.
+
+Le préfixe d'étiquette `tuiles-eu-` n'est pas décoratif : il **borne** ce que
+l'intermédiaire accepte de servir. Sans lui, la route deviendrait une porte
+ouverte sur toutes les pièces jointes d'un dépôt privé. Un test le vérifie,
+`..` et `/` compris.
+
 ### Limite connue
 
 Un trajet ne se calcule hors réseau que s'il tient **entier dans un même
