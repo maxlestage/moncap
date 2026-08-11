@@ -1537,6 +1537,22 @@
         }
       }
     },
+    "La recherche d'adresse a besoin du réseau. Appuie longuement sur la carte pour choisir un point : l'itinéraire se calcule alors sur l'appareil.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address search needs a network connection. Press and hold the map to pick a point: the route is then computed on the device."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La búsqueda de direcciones necesita cobertura. Mantén pulsado el mapa para elegir un punto: la ruta se calcula entonces en el dispositivo."
+          }
+        }
+      }
+    },
     "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut.": {
       "localizations": {
         "en": {
@@ -2429,6 +2445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Región"
+          }
+        }
+      }
+    },
+    "Sans réseau": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No network"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin cobertura"
           }
         }
       }
