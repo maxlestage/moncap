@@ -169,7 +169,7 @@ const FR: Contenu = {
       emoji: "🔀",
       titre: "Comparer sans réseau",
       texte:
-        "Cinq itinéraires sont calculés sur l'appareil, avec leurs durées, leurs virages et leurs péages. Et si vous ratez une sortie, le recalcul repart de votre position — sans une barre de réseau.",
+        "Les itinéraires sont calculés sur l'appareil, jusqu'à quinze comme en ligne, avec leurs durées, leurs virages et leurs péages. Et si vous ratez une sortie, le recalcul repart de votre position — sans une barre de réseau.",
     },
     {
       emoji: "📥",
@@ -197,7 +197,7 @@ const FR: Contenu = {
   franchiseTitre: "Ce qu'elle ne fait pas",
   franchise: [
     "Les péages sont estimés d'après la part d'autoroute, au tarif moyen français classe 1 — pas le tarif exact du concessionnaire.",
-    "Hors ligne, cinq itinéraires sont proposés au lieu de quinze, et ni le trafic ni les signalements ne sont disponibles.",
+    "Hors ligne, le calcul propose les variantes qu'il trouve : sur un trajet court elles sont moins nombreuses qu'en ligne. Ni le trafic en direct ni les signalements ne sont disponibles.",
     "Un trajet hors réseau doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
     "L'application suit la langue du téléphone parmi le français, l'espagnol et l'anglais ; ailleurs, elle reste en français.",
     "L'application est en test sur TestFlight, pas encore sur l'App Store.",
@@ -310,7 +310,7 @@ const ES: Contenu = {
       emoji: "🔀",
       titre: "Comparar sin cobertura",
       texte:
-        "Se calculan cinco rutas en el dispositivo, con sus duraciones, sus giros y sus peajes. Y si te pasas una salida, el recálculo parte de tu posición, sin una sola barra de cobertura.",
+        "Las rutas se calculan en el dispositivo, hasta quince como en línea, con sus duraciones, sus giros y sus peajes. Y si te pasas una salida, el recálculo parte de tu posición, sin una sola barra de cobertura.",
     },
     {
       emoji: "📥",
@@ -338,7 +338,7 @@ const ES: Contenu = {
   franchiseTitre: "Lo que no hace",
   franchise: [
     "Los peajes se estiman según el tramo de autopista, a la tarifa media francesa de clase 1 — no es la tarifa exacta de la concesionaria.",
-    "Sin cobertura se proponen cinco rutas en lugar de quince, y no hay ni tráfico ni avisos.",
+    "Sin cobertura el cálculo propone las variantes que encuentra: en un trayecto corto son menos que en línea. No hay ni tráfico en directo ni avisos.",
     "Un trayecto sin cobertura debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan.",
     "La aplicación sigue el idioma del teléfono entre francés, español e inglés; en cualquier otro, se queda en francés.",
     "La aplicación está en pruebas en TestFlight, todavía no en la App Store.",
@@ -451,7 +451,7 @@ const EN: Contenu = {
       emoji: "🔀",
       titre: "Compare without signal",
       texte:
-        "Five routes are computed on the device, with their times, their turns and their tolls. And if you miss an exit, the recomputation starts from where you are — without a single bar of signal.",
+        "Routes are computed on the device, up to fifteen just as online, with their times, their turns and their tolls. And if you miss an exit, the recomputation starts from where you are — without a single bar of signal.",
     },
     {
       emoji: "📥",
@@ -479,7 +479,7 @@ const EN: Contenu = {
   franchiseTitre: "What it doesn't do",
   franchise: [
     "Tolls are estimated from the motorway share, at the average French class-1 rate — not the operator's exact tariff.",
-    "Offline, five routes are offered instead of fifteen, and neither traffic nor reports are available.",
+    "Offline, the computation offers the variants it finds: on a short trip there are fewer than online. Neither live traffic nor reports are available.",
     "An offline trip must fit entirely within one pack: that is what the overlapping zones are for.",
     "The app follows the phone's language among French, Spanish and English; anywhere else it stays in French.",
     "The app is in testing on TestFlight, not yet on the App Store.",
