@@ -975,9 +975,17 @@ async fn list_air(Query(q): Query<FiresQuery>) -> Response {
                 range_air(&zone, data.clone()).await;
                 Json(data).into_response()
             }
+            // Pas de liste vide ici : une liste vide veut dire « rien à
+            // mesurer », et l'app l'annonçait en accusant la mer. Or à ce
+            // point on ne sait rien — l'amont a refusé, ou n'a pas répondu
+            // à temps. Un 503 le dit, et l'app en tire la bonne phrase.
             None => {
                 spawn_air_refresh(zone);
-                Json(Vec::<AirPoint>::new()).into_response()
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "mesures d'air indisponibles pour l'instant",
+                )
+                    .into_response()
             }
         },
     }
