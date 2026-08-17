@@ -8,6 +8,12 @@ import SwiftUI
 /// serveur pour toute une grille en une requête : une carte se lit par taches,
 /// pas par relevés isolés.
 ///
+/// L'écran peint une **surface continue** et non des pastilles. Une pastille
+/// pose la mesure en un point et laisse croire qu'ailleurs on ne sait rien,
+/// alors que le modèle donne une valeur partout ; et à l'échelle d'une ville
+/// elle se réduisait à un rond vert unique au milieu du vide. Chaque mesure
+/// couvre donc sa maille, et les mailles pavent l'écran.
+///
 /// Deux indices arrivent, et l'écran n'en montre qu'un. Contrairement à ce que
 /// j'avais supposé, Open-Meteo calcule l'indice **européen partout** — relevé
 /// au-dessus du Sahara, où il vaut 33. Il sert donc d'échelle unique, ce qui
@@ -28,9 +34,25 @@ struct AirPoint: Identifiable, Decodable {
     let us: Double?
     /// Particules fines, µg/m³ — la seule grandeur physique du lot.
     let pm25: Double?
+    /// Hauteur et largeur de la maille couverte par la mesure, en degrés.
+    ///
+    /// Facultatives : un serveur d'avant cette version n'en envoie pas, et
+    /// l'app ne doit pas s'en trouver vide. Sans elles, la maille par défaut
+    /// vaut celle du modèle CAMS, un cinquième de degré.
+    let dlat: Double?
+    let dlon: Double?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+
+    /// Le rectangle couvert par la mesure.
+    var maille: (dlat: Double, dlon: Double) { (dlat ?? 0.2, dlon ?? 0.2) }
+
+    /// Vrai si le point tombe dans la maille.
+    func contient(_ c: CLLocationCoordinate2D) -> Bool {
+        let (dla, dlo) = maille
+        return abs(c.latitude - lat) <= dla / 2 && abs(c.longitude - lon) <= dlo / 2
     }
 
     /// Échelle retenue pour ce point : l'européenne si elle existe.
@@ -155,8 +177,8 @@ final class AirService: ObservableObject {
     }
 }
 
-/// Écran dédié « Qualité de l'air » : des pastilles colorées sur le fond de
-/// carte habituel, et une légende qui nomme l'échelle employée.
+/// Écran dédié « Qualité de l'air » : une nappe colorée sur le fond de carte
+/// habituel, et une légende qui nomme l'échelle employée.
 struct AirMapScreen: View {
     @Environment(\.dismiss) private var dismiss
     /// Position d'ouverture : on regarde d'abord là où on est.
@@ -313,11 +335,11 @@ struct AirMapScreen: View {
     }
 }
 
-/// La carte elle-même : une source GeoJSON et une couche de pastilles.
+/// La carte elle-même : une source GeoJSON et une couche de mailles pleines.
 ///
-/// Une couche de style plutôt que des annotations : cent points en annotations
-/// coûtent cent vues UIKit, et la couleur se pilote ici par une expression, du
-/// côté du moteur de rendu.
+/// Une couche de style plutôt que des annotations : quatre cents mailles en
+/// annotations coûteraient quatre cents vues UIKit, et la couleur se pilote ici
+/// par une expression, du côté du moteur de rendu.
 struct AirMapLibreView: UIViewRepresentable {
     let styleURL: URL
     let points: [AirPoint]
@@ -369,7 +391,7 @@ struct AirMapLibreView: UIViewRepresentable {
         private var dessine: String = ""
 
         private static let source = "air-src"
-        private static let couche = "air-pastilles"
+        private static let couche = "air-mailles"
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             styleReady = true
@@ -395,9 +417,19 @@ struct AirMapLibreView: UIViewRepresentable {
             }
             guard !points.isEmpty else { return }
 
-            let formes: [MLNPointFeature] = points.map { p in
-                let f = MLNPointFeature()
-                f.coordinate = p.coordinate
+            // Une maille par mesure, et les mailles se touchent : mises bout à
+            // bout elles pavent l'écran, sans ruban de fond nu entre elles.
+            let formes: [MLNPolygonFeature] = points.map { p in
+                let (dla, dlo) = p.maille
+                let su = p.lat - dla / 2, no = p.lat + dla / 2
+                let o = p.lon - dlo / 2, e = p.lon + dlo / 2
+                var coins = [
+                    CLLocationCoordinate2D(latitude: su, longitude: o),
+                    CLLocationCoordinate2D(latitude: su, longitude: e),
+                    CLLocationCoordinate2D(latitude: no, longitude: e),
+                    CLLocationCoordinate2D(latitude: no, longitude: o),
+                ]
+                let f = MLNPolygonFeature(coordinates: &coins, count: UInt(coins.count))
                 f.attributes = ["niveau": p.niveau]
                 return f
             }
@@ -406,26 +438,44 @@ struct AirMapLibreView: UIViewRepresentable {
                 shape: MLNShapeCollectionFeature(shapes: formes), options: nil)
             style.addSource(src)
 
-            let couche = MLNCircleStyleLayer(identifier: Self.couche, source: src)
+            let couche = MLNFillStyleLayer(identifier: Self.couche, source: src)
             // Couleur pilotée par l'attribut, côté moteur de rendu.
-            couche.circleColor = NSExpression(
+            let teinte = NSExpression(
                 format: "TERNARY(niveau = 0, %@, TERNARY(niveau = 1, %@, "
                     + "TERNARY(niveau = 2, %@, TERNARY(niveau = 3, %@, "
                     + "TERNARY(niveau = 4, %@, %@)))))",
                 AirCouleurs.niveaux[0], AirCouleurs.niveaux[1], AirCouleurs.niveaux[2],
                 AirCouleurs.niveaux[3], AirCouleurs.niveaux[4], AirCouleurs.niveaux[5])
-            couche.circleRadius = NSExpression(forConstantValue: 14)
-            couche.circleOpacity = NSExpression(forConstantValue: 0.62)
-            couche.circleStrokeWidth = NSExpression(forConstantValue: 1)
-            couche.circleStrokeColor = NSExpression(
-                forConstantValue: UIColor.white.withAlphaComponent(0.7))
-            style.addLayer(couche)
+            couche.fillColor = teinte
+            // Le contour de la même couleur que le fond : sans lui, deux mailles
+            // voisines laissent parfois passer un cheveu de fond entre elles,
+            // artefact de tramage qui hachurerait toute la surface.
+            couche.fillOutlineColor = teinte
+            // Assez opaque pour se lire d'un coup d'œil, assez transparent pour
+            // qu'on reconnaisse encore le pays sous la couleur.
+            couche.fillOpacity = NSExpression(forConstantValue: 0.45)
+
+            // Glissée **sous** les libellés : une nappe posée par-dessus noierait
+            // les noms de villes, et une carte de l'air dont on ne lit plus les
+            // villes ne dit plus où l'on respire mal.
+            if let premierTexte = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
+                style.insertLayer(couche, below: premierTexte)
+            } else {
+                style.addLayer(couche)
+            }
         }
 
         @objc func handleTap(_ g: UITapGestureRecognizer) {
             guard let view = g.view as? MLNMapView else { return }
             let touche = view.convert(g.location(in: view), toCoordinateFrom: view)
-            // Le point le plus proche du doigt, s'il est assez près.
+            // La maille sous le doigt d'abord : elle couvre une surface, il n'y
+            // a donc pas à chercher le plus proche voisin.
+            if let dedans = points.first(where: { $0.contient(touche) }) {
+                onSelect(dedans)
+                return
+            }
+            // Hors de la grille — un bord d'écran —, le plus proche s'il est
+            // assez près.
             let plus = points.min {
                 Self.ecart($0.coordinate, touche) < Self.ecart($1.coordinate, touche)
             }
