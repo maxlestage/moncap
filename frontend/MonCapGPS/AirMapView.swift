@@ -228,10 +228,31 @@ enum AirNappe {
         let hauteur = g.ny * grandissement
         guard largeur > 0, hauteur > 0 else { return nil }
 
-        let palette: [(UInt8, UInt8, UInt8)] = AirCouleurs.niveaux.map { c in
+        let palette: [(Double, Double, Double)] = AirCouleurs.niveaux.map { c in
             var r: CGFloat = 0, v: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
             c.getRed(&r, green: &v, blue: &b, alpha: &a)
-            return (UInt8(r * 255), UInt8(v * 255), UInt8(b * 255))
+            return (Double(r) * 255, Double(v) * 255, Double(b) * 255)
+        }
+
+        /// La couleur d'un niveau continu, prise **entre** deux paliers.
+        ///
+        /// Colorer par palier entier gâchait la mesure : relevée sur l'Europe,
+        /// elle va de 16 à 78, mais le seul palier « 20 à 40 » avalait la
+        /// moitié du continent et la nappe s'étalait d'un vert unique. Le
+        /// dégradé rend cette variation, et c'est aussi ce qu'annonce la
+        /// légende — un ruban continu, non six pastilles. Le palier nommé, lui,
+        /// reste donné au doigt, avec son chiffre.
+        func teinte(_ n: Double) -> (UInt8, UInt8, UInt8) {
+            let borne = min(max(n, 0), Double(palette.count - 1))
+            let bas = min(Int(borne), palette.count - 2)
+            let f = borne - Double(bas)
+            let (r0, v0, b0) = palette[bas]
+            let (r1, v1, b1) = palette[bas + 1]
+            return (
+                UInt8((r0 + (r1 - r0) * f).rounded()),
+                UInt8((v0 + (v1 - v0) * f).rounded()),
+                UInt8((b0 + (b1 - b0) * f).rounded())
+            )
         }
 
         var pixels = [UInt8](repeating: 0, count: largeur * hauteur * 4)
@@ -266,8 +287,7 @@ enum AirNappe {
                 }
                 guard poids > 0.0001 else { continue }
 
-                let niveau = min(max(Int(somme / poids), 0), palette.count - 1)
-                let (r, v, b) = palette[niveau]
+                let (r, v, b) = teinte(somme / poids)
                 let o = (py * largeur + px) * 4
                 pixels[o] = r
                 pixels[o + 1] = v
