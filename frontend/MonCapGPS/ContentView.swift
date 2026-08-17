@@ -2280,7 +2280,9 @@ struct MapHomeView: View {
                         }
                     }
                 }
-                .frame(maxHeight: 260)
+                // Assez pour cinq itinéraires d'un coup d'œil. Au-delà on
+                // masquerait la carte, où les tracés se comparent vraiment.
+                .frame(maxHeight: 360)
             }
 
             HStack(spacing: 10) {
@@ -2349,10 +2351,19 @@ struct MapHomeView: View {
     }
 
     private var bottomBar: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
-                weatherPill
-                speedPill
+        // Comparer des itinéraires, c'est regarder des tracés colorés sur la
+        // carte et une liste en bas. Tout le reste — météo, vitesse à l'arrêt,
+        // cartes thématiques, 3D, signalement — masquait précisément ce qu'on
+        // cherche à voir, et n'a aucun usage à cet instant. Même raison qu'au
+        // volant, autre moment. Seul « recentrer » reste : on veut souvent
+        // reprendre le cadrage pendant qu'on choisit.
+        let compare = !routeOptions.isEmpty || !multiRoutes.isEmpty
+        return HStack(alignment: .bottom) {
+            if !compare {
+                VStack(alignment: .leading, spacing: 8) {
+                    weatherPill
+                    speedPill
+                }
             }
             Spacer()
             VStack(spacing: 14) {
@@ -2361,14 +2372,14 @@ struct MapHomeView: View {
                 // garder pendant le guidage, c'est deux cibles de plus entre
                 // le pouce et le bouton « recentrer », au moment où l'on
                 // regarde le moins l'écran.
-                if !nav.active {
+                if !nav.active, !compare {
                     fireMapButton
                     airMapButton
                     offlineMapButton
                 }
-                map3DButton
+                if !compare { map3DButton }
                 circleButton(system: "location.fill", tint: .blue) { recenter() }
-                reportButton
+                if !compare { reportButton }
             }
         }
     }
