@@ -407,13 +407,18 @@ struct ContentView: View {
             }
             if showSplash {
                 SplashView()
-                    .transition(.opacity)
+                    // L'écran de garde s'efface en s'élargissant un peu : on
+                    // le traverse plutôt qu'il ne s'éteint, et la carte qui
+                    // apparaît dessous paraît avoir été là tout du long.
+                    .transition(.opacity.combined(with: .scale(scale: 1.06)))
                     .zIndex(1)
             }
         }
         .task {
             // Laisse l'écran de garde s'afficher un court instant, puis fond
-            // vers l'application.
+            // vers l'application. Le délai laisse à l'aiguille le temps de se
+            // poser : elle atteint le nord vers 1,25 s, et partir avant
+            // reviendrait à couper le geste au milieu.
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             withAnimation(.easeInOut(duration: 0.5)) { showSplash = false }
         }
