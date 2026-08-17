@@ -39,6 +39,10 @@ final class FireService: ObservableObject {
     private var lastFetch = Date.distantPast
     private var lastKey = ""
     private var lastBbox: String?
+    /// Zone déjà reprise une fois. Un simple drapeau ne suffirait pas : la
+    /// reprise rend elle aussi une liste vide au-dessus d'un océan, et en
+    /// relancerait une autre — une boucle de quatre secondes, indéfiniment.
+    private var zoneReprise: String?
     /// Récupération en cours. Chaque frappe dans le champ « clé FIRMS » relance
     /// un rafraîchissement : sans annuler le précédent, plusieurs requêtes
     /// lourdes couraient de front et la dernière arrivée — pas la dernière
@@ -83,11 +87,32 @@ final class FireService: ObservableObject {
                 // on l'applique, sinon la carte garderait des foyers éteints.
                 fires = f
                 lastUpdate = Date()
+                // Vide sur une zone neuve, c'est le plus souvent le serveur qui
+                // a rendu la main avant d'avoir sa donnée : il la cherche encore
+                // en fond. Une seule reprise suffit à la cueillir, et évite une
+                // carte qui reste déserte jusqu'à ce qu'on la déplace.
+                if f.isEmpty { reprend(key: k, bbox: bbox) }
             } else {
                 // Échec réel : on rembobine l'étranglement pour retenter au
                 // prochain passage, au lieu de rester 15 min sur une carte vide.
                 lastFetch = .distantPast
             }
+        }
+    }
+
+    /// Redemande une fois, peu après, sans passer par l'étranglement.
+    ///
+    /// Une seule : si le serveur n'a toujours rien, insister ne le fera pas
+    /// aller plus vite, et une boucle sur une zone réellement vide tournerait
+    /// pour rien.
+    private func reprend(key: String, bbox: String?) {
+        let zone = bbox ?? "monde"
+        guard zoneReprise != zone else { return }
+        zoneReprise = zone
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            lastFetch = .distantPast
+            refresh(key: key, bbox: bbox)
         }
     }
 

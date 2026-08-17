@@ -103,6 +103,10 @@ final class AirService: ObservableObject {
     @Published private(set) var message: String?
 
     private var tache: Task<Void, Never>?
+    /// Zone déjà reprise une fois. Un simple drapeau ne suffirait pas : la
+    /// reprise rend elle aussi une grille vide au-dessus d'un océan, et en
+    /// relancerait une autre — une boucle de quatre secondes, indéfiniment.
+    private var zoneReprise: String?
     private let base = APIClient().baseURL
 
     /// Demande la grille d'une zone. Une nouvelle demande annule la précédente :
@@ -117,8 +121,17 @@ final class AirService: ObservableObject {
             chargement = false
             if let recus {
                 points = recus
-                // Une grille vide n'est pas une erreur : au-dessus d'un océan,
-                // Open-Meteo n'a simplement rien à dire.
+                // Vide sur une zone neuve, c'est le plus souvent le serveur
+                // qui a rendu la main avant d'avoir sa donnée. Une seule
+                // reprise la cueille, et le message d'océan n'apparaît qu'après
+                // elle — sinon il accuserait la mer d'une simple attente.
+                if recus.isEmpty, zoneReprise != bbox {
+                    zoneReprise = bbox
+                    message = nil
+                    try? await Task.sleep(for: .seconds(4))
+                    charge(bbox: bbox)
+                    return
+                }
                 message = recus.isEmpty
                     ? String(localized: "Aucune mesure ici. Rapproche-toi des terres.")
                     : nil
