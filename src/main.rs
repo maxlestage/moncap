@@ -512,6 +512,10 @@ fn fires_zone(brut: Option<&str>) -> Option<String> {
     // annonce des longitudes bien au-delà de ±180 — jusqu'à ±246 mesuré sur
     // l'app — parce que le monde s'y répète. Refuser ces boîtes rendait un 400,
     // et la carte restait vide précisément quand on regardait le plus large.
+    // Quatre-vingt-cinq degrés et non quatre-vingt-dix : au-delà, le Mercator
+    // sphérique des cartes part à l'infini, et la nappe de l'air — tendue sur
+    // ce quadrillage-là — n'aurait plus de bord haut. Rien n'est perdu : aucune
+    // carte du monde ne montre les pôles, et rien n'y brûle.
     let borne = |v: f64, max: f64| v.clamp(-max, max);
     // Arrondi **vers l'extérieur**, et non au plus proche. Au plus proche, une
     // carte serrée sur une ville s'écrasait : Bordeaux vue de près donne une
@@ -525,9 +529,9 @@ fn fires_zone(brut: Option<&str>) -> Option<String> {
     Some(format!(
         "{},{},{},{}",
         bas(borne(o, 180.0)),
-        bas(borne(su, 90.0)),
+        bas(borne(su, 85.0)),
         haut(borne(e, 180.0)),
-        haut(borne(no, 90.0))
+        haut(borne(no, 85.0))
     ))
 }
 
@@ -4713,11 +4717,11 @@ mod integration {
         // un 400, et la carte restait vide quand on regardait le plus large.
         assert_eq!(
             fires_zone(Some("-246.5,-85.05,246.5,85.05")).as_deref(),
-            Some("-180,-85.25,180,85.25")
+            Some("-180,-85,180,85")
         );
         assert_eq!(
             fires_zone(Some("-5,41,10,120")).as_deref(),
-            Some("-5,41,10,90")
+            Some("-5,41,10,85")
         );
 
         // Reste refusé ce qui ne peut pas venir d'une carte.

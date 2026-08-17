@@ -168,6 +168,12 @@ T: dict[str, tuple[str, str]] = {
         "Fine particles: %.0f µg/m³",
     ),
     "Mesures Open-Meteo (CAMS)": ("Datos Open-Meteo (CAMS)", "Open-Meteo data (CAMS)"),
+    "Autour de toi": ("A tu alrededor", "Around you"),
+    "Point touché": ("Punto seleccionado", "Selected point"),
+    "Recentrer sur ma position": (
+        "Centrar en mi posición",
+        "Recenter on my location",
+    ),
     "Aucune mesure ici. Rapproche-toi des terres.": (
         "Ninguna medición aquí. Acércate a tierra firme.",
         "No measurement here. Move closer to land.",

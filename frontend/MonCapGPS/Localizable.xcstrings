@@ -641,6 +641,22 @@
         }
       }
     },
+    "Autour de toi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Around you"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A tu alrededor"
+          }
+        }
+      }
+    },
     "Avatar actuel": {
       "localizations": {
         "en": {
@@ -2417,6 +2433,22 @@
         }
       }
     },
+    "Point touché": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected point"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Punto seleccionado"
+          }
+        }
+      }
+    },
     "Police": {
       "localizations": {
         "en": {
@@ -2589,6 +2621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "No se puede recalcular. Mantengo la ruta."
+          }
+        }
+      }
+    },
+    "Recentrer sur ma position": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recenter on my location"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centrar en mi posición"
           }
         }
       }

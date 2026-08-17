@@ -180,6 +180,20 @@ enum AirNappe {
     /// lirait plus les paliers ; plus fin, on paierait des pixels pour rien.
     static let grandissement = 16
 
+    /// Limite du Mercator sphérique : au-delà, la projection part à l'infini.
+    static let latitudeMax = 85.0
+
+    /// Ordonnée Mercator d'une latitude, en radians.
+    static func mercator(_ lat: Double) -> Double {
+        let l = min(max(lat, -latitudeMax), latitudeMax) * .pi / 180
+        return log(tan(.pi / 4 + l / 2))
+    }
+
+    /// La latitude qui correspond à une ordonnée Mercator, en degrés.
+    static func latitude(_ y: Double) -> Double {
+        (2 * atan(exp(y)) - .pi / 2) * 180 / .pi
+    }
+
     /// Reconstruit le treillis. `nil` si la réponse n'en permet pas un.
     static func grille(_ points: [AirPoint]) -> Grille? {
         guard let premier = points.first else { return nil }
@@ -258,9 +272,22 @@ enum AirNappe {
         var pixels = [UInt8](repeating: 0, count: largeur * hauteur * 4)
         let pas = Double(grandissement)
 
+        // L'image est tendue sur le quadrilatère en **Mercator**, pas en
+        // latitudes régulières : c'est ainsi que le moteur la plaque. Peinte
+        // en latitudes régulières, elle glisserait vers le sud à mesure qu'on
+        // monte — sur une zone de 40 à 54°, son milieu tomberait à 47,0° au
+        // lieu de 47,5°, cinquante et un kilomètres d'écart, deux fois la
+        // maille du modèle ; et l'écart croît avec la hauteur de la zone.
+        // Chaque ligne de l'image est donc ramenée à sa vraie latitude avant
+        // d'aller chercher ses mesures.
+        let yHaut = Self.mercator(g.no)
+        let yBas = Self.mercator(g.su)
+
         for py in 0..<hauteur {
             // L'image se lit du nord au sud, le treillis du sud au nord.
-            let gy = (Double(hauteur - 1 - py) + 0.5) / pas - 0.5
+            let y = yHaut + (Double(py) + 0.5) / Double(hauteur) * (yBas - yHaut)
+            let lat = Self.latitude(y)
+            let gy = (lat - g.su) / g.dlat - 0.5
             let j0 = Int(floor(gy))
             let fy = gy - floor(gy)
 
@@ -385,7 +412,7 @@ struct AirMapScreen: View {
         center: CLLocationCoordinate2D(latitude: 46.6, longitude: 2.4), zoom: 4.6)
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack {
             AirMapLibreView(
                 styleURL: style,
                 points: service.points,
@@ -397,6 +424,16 @@ struct AirMapScreen: View {
 
             VStack(spacing: 10) {
                 entete
+
+                // La légende à gauche, les commandes à droite : le milieu de
+                // l'écran reste à la carte, qui est ce qu'on est venu voir.
+                HStack(alignment: .top) {
+                    legende
+                    Spacer(minLength: 12)
+                    commandes
+                }
+                .padding(.horizontal)
+
                 if let m = service.message {
                     Text(m)
                         .font(.caption)
@@ -406,12 +443,16 @@ struct AirMapScreen: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                         .padding(.horizontal)
                 }
-            }
 
-            VStack {
                 Spacer()
-                if let p = selection { fiche(p) }
-                legende
+
+                // Une valeur est lisible sans rien toucher : celle d'ici. Une
+                // carte qui n'annonce un chiffre qu'après un appui oblige à
+                // deviner qu'on peut appuyer.
+                if let p = selection ?? chezMoi {
+                    fiche(p, chezMoi: selection == nil)
+                }
+                source
             }
         }
         .task(id: styleURLString) {
@@ -423,8 +464,17 @@ struct AirMapScreen: View {
             if let b = bounds { service.charge(bbox: Self.bbox(b)) }
         }
         .onAppear {
-            if let center { cam = MapCam(center: center, zoom: 7) }
+            // Une vue régionale, et non le quartier : la qualité de l'air se
+            // lit sur des centaines de kilomètres, et de trop près la nappe
+            // n'est plus qu'un aplat uni.
+            if let center { cam = MapCam(center: center, zoom: 6) }
         }
+    }
+
+    /// La mesure qui porte sur là où l'on se trouve.
+    private var chezMoi: AirPoint? {
+        guard let c = center else { return nil }
+        return service.points.first { $0.contient(c) }
     }
 
     /// Case de 0,25° du centre : identité de la zone regardée.
@@ -450,80 +500,130 @@ struct AirMapScreen: View {
                     .frame(width: 40, height: 40)
                     .background(.regularMaterial, in: Circle())
             }
+            // Une ligne, pas deux : l'échelle employée est nommée par la
+            // légende, juste dessous. La répéter ici grossissait le bandeau
+            // pour rien, et il mangeait la carte.
             HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Qualité de l'air").font(.headline)
-                    Text(service.points.first?.echelle.nom ?? "Indice européen")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Qualité de l'air").font(.subheadline.weight(.semibold))
                 if service.chargement { ProgressView().controlSize(.small) }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .background(.regularMaterial, in: Capsule())
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.top, 6)
     }
 
-    /// Fiche d'un point touché : la valeur, son niveau, et les particules —
-    /// la seule grandeur que l'on peut comparer d'un continent à l'autre.
-    private func fiche(_ p: AirPoint) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Circle()
-                    .fill(Color(AirCouleurs.couleur(p.niveau)))
-                    .frame(width: 14, height: 14)
+    /// Les commandes de droite : revenir sur soi.
+    private var commandes: some View {
+        Button {
+            if let c = center { cam = MapCam(center: c, zoom: 6) }
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.headline)
+                .foregroundStyle(.tint)
+                .frame(width: 40, height: 40)
+                .background(.regularMaterial, in: Circle())
+        }
+        .accessibilityLabel(Text("Recentrer sur ma position"))
+        .opacity(center == nil ? 0 : 1)
+        .disabled(center == nil)
+    }
+
+    /// Fiche d'une mesure : le chiffre dans sa couleur, son palier, et les
+    /// particules — la seule grandeur que l'on peut comparer d'un continent à
+    /// l'autre.
+    ///
+    /// Le chiffre est **dans** la pastille plutôt qu'à côté : la couleur seule
+    /// ne se lit qu'à la légende, le chiffre seul ne se situe pas sur une
+    /// échelle ; ensemble ils se passent l'un de l'autre.
+    private func fiche(_ p: AirPoint, chezMoi: Bool) -> some View {
+        HStack(spacing: 13) {
+            ZStack {
+                Circle().fill(Color(AirCouleurs.couleur(p.niveau)))
+                if let v = p.valeur {
+                    Text(verbatim: "\(Int(v))")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                        .padding(4)
+                }
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(chezMoi ? "Autour de toi" : "Point touché")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Text(AirCouleurs.libelles[min(p.niveau, AirCouleurs.libelles.count - 1)])
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
+                    .font(.headline)
+                if let pm = p.pm25 {
+                    Text(String(format: String(localized: "Particules fines : %.0f µg/m³"), pm))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if !chezMoi {
                 Button { selection = nil } label: {
-                    Image(systemName: "xmark").font(.footnote.weight(.bold))
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-            if let v = p.valeur {
-                Text(verbatim: "\(p.echelle == .europeenne ? "EAQI" : "US AQI") \(Int(v))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            if let pm = p.pm25 {
-                Text(String(format: String(localized: "Particules fines : %.0f µg/m³"), pm))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
             }
         }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .padding(13)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal)
     }
 
     /// Légende : sans elle, six couleurs ne disent rien.
+    ///
+    /// Les paliers sont **nommés**, et non résumés par « bon » à un bout et
+    /// « extrêmement mauvais » à l'autre : entre les deux, un ruban dégradé
+    /// laissait deviner. Du pire en haut au meilleur en bas, l'ordre qu'ont
+    /// les cartes de l'air — l'œil descend vers ce qu'on espère.
     private var legende: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 0) {
-                ForEach(Array(AirCouleurs.niveaux.enumerated()), id: \.offset) { _, c in
-                    Rectangle().fill(Color(c)).frame(height: 8)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(service.points.first?.echelle.nom ?? "Indice européen")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 2)
+
+            ForEach((0..<AirCouleurs.libelles.count).reversed(), id: \.self) { i in
+                HStack(spacing: 7) {
+                    Capsule()
+                        .fill(Color(AirCouleurs.niveaux[i]))
+                        .frame(width: 4, height: 13)
+                    Text(AirCouleurs.libelles[i])
+                        .font(.caption2)
+                        .lineLimit(1)
                 }
             }
-            .clipShape(Capsule())
-            HStack {
-                Text("Bon").font(.caption2)
-                Spacer()
-                Text("Extrêmement mauvais").font(.caption2)
-            }
-            .foregroundStyle(.secondary)
-            Text("Mesures Open-Meteo (CAMS)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding()
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
+    /// D'où vient la mesure. Une carte qui ne dit pas sa source demande à être
+    /// crue sur parole.
+    private var source: some View {
+        Text("Mesures Open-Meteo (CAMS)")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.bottom, 6)
     }
 }
 
