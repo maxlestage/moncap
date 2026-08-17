@@ -474,6 +474,42 @@ relevés GPS à plus de 55 m de l'itinéraire le déclenchent.
 (`https://moncap-c41a5aaf07e8.herokuapp.com`) → l'app marche sans backend
 local ; mets `http://localhost:3000` pour développer en local.
 
+### `Package.resolved` est versionné, et il le faut
+
+Xcode Cloud construit avec la **résolution automatique des dépendances
+désactivée**. Sans fichier de résolution versionné, l'archive échoue avant de
+compiler la moindre ligne :
+
+```
+Could not resolve package dependencies: a resolved file is required when
+automatic dependency resolution is disabled and should be placed at
+…/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+```
+
+Le fichier épingle **sept** paquets, alors que le projet n'en déclare que deux.
+Les cinq autres sont des dépendances de `valhalla-mobile`, et elles doivent y
+figurer aussi : un graphe partiel échoue exactement comme un graphe absent.
+
+| Paquet | Version | Déclaré par |
+| --- | --- | --- |
+| `maplibre-gl-native-distribution` | 6.28.0 | le projet |
+| `valhalla-mobile` | 0.5.1 | le projet |
+| `valhalla-openapi-models-swift` | 0.2.2 | valhalla-mobile |
+| `light-swift-untar` | 1.0.4 | valhalla-mobile |
+| `swift-docc-plugin` | 1.5.0 | valhalla-mobile |
+| `swift-docc-symbolkit` | 1.0.0 | swift-docc-plugin |
+| `anycodable` | 0.6.7 | valhalla-openapi-models-swift |
+
+Deux détails qui font échouer la résolution s'ils sont approximés. L'`identity`
+est le dernier segment de l'URL en minuscules, sans `.git`. Le `location` doit
+reprendre l'URL **telle que l'écrit le manifeste qui déclare la dépendance** —
+`swift-docc-symbolkit` vient de `swiftlang`, pas d'`apple`, bien que le paquet
+qui l'appelle soit d'Apple.
+
+Après toute mise à jour d'un paquet dans Xcode, ce fichier change : il doit
+être commité avec le reste, sans quoi la construction suivante repart sur les
+anciennes versions ou échoue.
+
 ### Ouvrir et lancer (projet Xcode prêt à l'emploi)
 
 Un vrai projet Xcode est fourni : **`frontend/MonCapGPS.xcodeproj`**.
