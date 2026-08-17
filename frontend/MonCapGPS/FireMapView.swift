@@ -52,6 +52,8 @@ struct FireMapLibreView: UIViewRepresentable {
     ///
     /// Un point par détection ne dépend, lui, d'aucune projection.
     let fires: [Fire]
+    /// Zone visible, pour ne demander que ce qu'on regarde.
+    var onRegionChange: (MLNCoordinateBounds) -> Void = { _ in }
     /// Identifiant du foyer touché.
     let onSelect: (Int) -> Void
 
@@ -86,6 +88,7 @@ struct FireMapLibreView: UIViewRepresentable {
             context.coordinator.changeStyle(to: styleURL, on: view)
         }
         context.coordinator.fires = fires
+        context.coordinator.onRegionChange = onRegionChange
         context.coordinator.sync(perimeters, on: view)
     }
 
@@ -93,6 +96,7 @@ struct FireMapLibreView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
         var onSelect: (Int) -> Void = { _ in }
+        var onRegionChange: (MLNCoordinateBounds) -> Void = { _ in }
         private var styleReady = false
         private var laidOut = false
         private var drawn: [String] = []
@@ -114,6 +118,10 @@ struct FireMapLibreView: UIViewRepresentable {
             // il ne reste rien à retirer à la main.
             drawn = []
             view.styleURL = url
+        }
+
+        func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
+            onRegionChange(mapView.visibleCoordinateBounds)
         }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
@@ -320,14 +328,38 @@ struct FireMapScreen: View {
     /// Noms des foyers (« Feu de Saumos ») par position arrondie, géocodés à la
     /// demande au tap ; "" = géocodage en cours (évite les requêtes doublons).
     @State private var names: [String: String] = [:]
+    /// Zone regardée : le plafond du serveur s'applique à ce qu'on demande.
+    /// Sur le monde entier, quatre mille détections doivent couvrir la planète
+    /// — un continent en reçoit alors une poignée. Demander la zone visible
+    /// donne le même plafond pour cent fois moins de surface.
+    @State private var bounds: MLNCoordinateBounds?
+    /// Clé FIRMS de l'appareil, s'il en a une.
+    @AppStorage("moncap.firmsKey") private var firmsKey = ""
 
     private var selected: FirePerimeter? {
         selectedID.flatMap { id in perimeters.first { $0.id == id } }
     }
 
+    /// Case de 0,25° du centre : identité de la zone regardée.
+    private var caseRegardee: String? {
+        guard let b = bounds else { return nil }
+        let la = (b.sw.latitude + b.ne.latitude) / 2
+        let lo = (b.sw.longitude + b.ne.longitude) / 2
+        return "\((la * 4).rounded())|\((lo * 4).rounded())"
+    }
+
+    private static func bbox(_ b: MLNCoordinateBounds) -> String {
+        String(
+            format: "%.3f,%.3f,%.3f,%.3f",
+            b.sw.longitude, b.sw.latitude, b.ne.longitude, b.ne.latitude)
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
-            FireMapLibreView(styleURL: style, perimeters: perimeters, fires: service.fires) { id in
+            FireMapLibreView(
+                styleURL: style, perimeters: perimeters, fires: service.fires,
+                onRegionChange: { bounds = $0 }
+            ) { id in
                 withAnimation(.spring(duration: 0.25)) { selectedID = id }
                 if let p = perimeters.first(where: { $0.id == id }) { loadName(of: p) }
             }
@@ -344,6 +376,12 @@ struct FireMapScreen: View {
         }
         .task(id: styleURLString) {
             style = await TileSource.resolvedStyle(custom: styleURLString)
+        }
+        // Par case de 0,25° — environ vingt-cinq kilomètres — et non à chaque
+        // image : un glissement de carte en produit des dizaines par seconde.
+        .task(id: caseRegardee) {
+            guard let b = bounds else { return }
+            service.refresh(key: firmsKey, bbox: Self.bbox(b))
         }
         // Recalcule les contours à chaque rafraîchissement réussi — daté par
         // `lastUpdate`, car le simple compte de points peut rester identique
