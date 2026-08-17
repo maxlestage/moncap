@@ -169,6 +169,10 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Mesures Open-Meteo (CAMS)": ("Datos Open-Meteo (CAMS)", "Open-Meteo data (CAMS)"),
     "Autour de toi": ("A tu alrededor", "Around you"),
+    "Mesures momentanément indisponibles.": (
+        "Mediciones no disponibles por ahora.",
+        "Measurements unavailable right now.",
+    ),
     "Point touché": ("Punto seleccionado", "Selected point"),
     "Recentrer sur ma position": (
         "Centrar en mi posición",

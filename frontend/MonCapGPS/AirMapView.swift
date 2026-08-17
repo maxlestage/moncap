@@ -350,6 +350,17 @@ final class AirService: ObservableObject {
     private var zoneReprise: String?
     private let base = APIClient().baseURL
 
+    /// Ce que le serveur a répondu. Les trois cas ne se disent pas pareil : la
+    /// mer, la panne d'amont et l'absence de réseau ont chacune leur phrase.
+    private enum Reponse {
+        case mesures([AirPoint])
+        /// Le serveur a répondu, mais n'a pas la donnée — amont en panne ou
+        /// qui nous refuse.
+        case indisponible
+        /// On n'a pas pu lui parler.
+        case reseau
+    }
+
     /// Demande la grille d'une zone. Une nouvelle demande annule la précédente :
     /// en faisant glisser la carte, seule la dernière compte.
     func charge(bbox: String) {
@@ -357,42 +368,58 @@ final class AirService: ObservableObject {
         chargement = true
         let base = self.base
         tache = Task {
-            let recus = await Self.fetch(base: base, bbox: bbox)
+            let reponse = await Self.fetch(base: base, bbox: bbox)
             if Task.isCancelled { return }
             chargement = false
-            if let recus {
+
+            switch reponse {
+            case .mesures(let recus) where !recus.isEmpty:
                 points = recus
+                message = nil
+
+            case .mesures:
                 // Vide sur une zone neuve, c'est le plus souvent le serveur
                 // qui a rendu la main avant d'avoir sa donnée. Une seule
-                // reprise la cueille, et le message d'océan n'apparaît qu'après
-                // elle — sinon il accuserait la mer d'une simple attente.
-                if recus.isEmpty, zoneReprise != bbox {
+                // reprise la cueille, et le message d'océan n'attend qu'elle —
+                // sinon il accuserait la mer d'une simple attente.
+                if zoneReprise != bbox {
                     zoneReprise = bbox
                     message = nil
                     try? await Task.sleep(for: .seconds(4))
                     charge(bbox: bbox)
                     return
                 }
-                message = recus.isEmpty
-                    ? String(localized: "Aucune mesure ici. Rapproche-toi des terres.")
-                    : nil
-            } else {
-                message = String(localized: "Mesures indisponibles — il faut du réseau.")
+                message = manquant(String(localized: "Aucune mesure ici. Rapproche-toi des terres."))
+
+            case .indisponible:
+                message = manquant(String(localized: "Mesures momentanément indisponibles."))
+
+            case .reseau:
+                message = manquant(String(localized: "Mesures indisponibles — il faut du réseau."))
             }
         }
     }
 
-    nonisolated private static func fetch(base: URL, bbox: String) async -> [AirPoint]? {
+    /// Le message n'a lieu d'être que si l'écran n'a rien à montrer.
+    ///
+    /// La nappe déjà peinte n'est **pas** effacée par une réponse vide : elle
+    /// reste à sa place, qui est géographique, et l'écran cesse de clignoter
+    /// entre une carte peinte et une carte nue à chaque déplacement.
+    private func manquant(_ texte: String) -> String? {
+        points.isEmpty ? texte : nil
+    }
+
+    nonisolated private static func fetch(base: URL, bbox: String) async -> Reponse {
         var comps = URLComponents(
             url: base.appendingPathComponent("air"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "bbox", value: bbox)]
-        guard
-            let url = comps.url,
-            let (data, resp) = try? await URLSession.shared.data(from: url),
-            (resp as? HTTPURLResponse)?.statusCode == 200,
+        guard let url = comps.url,
+            let (data, resp) = try? await URLSession.shared.data(from: url)
+        else { return .reseau }
+        guard (resp as? HTTPURLResponse)?.statusCode == 200,
             let points = try? JSONDecoder().decode([AirPoint].self, from: data)
-        else { return nil }
-        return points
+        else { return .indisponible }
+        return .mesures(points)
     }
 }
 
@@ -477,12 +504,23 @@ struct AirMapScreen: View {
         return service.points.first { $0.contient(c) }
     }
 
-    /// Case de 0,25° du centre : identité de la zone regardée.
+    /// Identité de la zone regardée : le centre, découpé à la mesure de ce
+    /// qu'on voit.
+    ///
+    /// Un pas fixe d'un quart de degré convenait de près et devenait absurde
+    /// de loin : vue du globe, la carte couvre cent soixante-dix degrés de
+    /// haut, et le moindre frémissement du doigt changeait de case, donc
+    /// relançait une grille de trois cent quatre-vingt-quatre mesures. Le pas
+    /// suit maintenant la hauteur vue — un huitième — si bien qu'il faut
+    /// déplacer la carte d'un huitième de son propre écran pour redemander,
+    /// à toutes les échelles.
     private var caseRegardee: String? {
         guard let b = bounds else { return nil }
+        let hauteur = abs(b.ne.latitude - b.sw.latitude)
+        let pas = max(hauteur / 8, 0.25)
         let la = (b.sw.latitude + b.ne.latitude) / 2
         let lo = (b.sw.longitude + b.ne.longitude) / 2
-        return "\((la * 4).rounded())|\((lo * 4).rounded())"
+        return "\((la / pas).rounded())|\((lo / pas).rounded())|\(Int(pas * 100))"
     }
 
     private static func bbox(_ b: MLNCoordinateBounds) -> String {
@@ -642,6 +680,16 @@ struct AirMapLibreView: UIViewRepresentable {
     func makeUIView(context: Context) -> SizedMapView {
         let view = SizedMapView(frame: .zero, styleURL: styleURL)
         context.coordinator.appliedStyle = styleURL
+        // Filet de sécurité, le même que sur la carte principale : la toute
+        // première caméra arrive avant que la carte n'ait sa place à l'écran,
+        // et à l'arrêt rien ne la réémet. Faute de ce fil, l'écran s'ouvrait
+        // sur le globe entier au lieu de la région où l'on se trouve — et de
+        // si loin, le moindre glissement change de zone, ce qui relançait une
+        // demande à chaque fois.
+        view.onLayout = { [weak view, weak coordinator = context.coordinator] in
+            guard let view, let coordinator else { return }
+            coordinator.poseCameraEnAttente(sur: view)
+        }
         view.delegate = context.coordinator
         view.showsUserLocation = true
         view.attributionButtonPosition = .bottomRight
@@ -664,7 +712,8 @@ struct AirMapLibreView: UIViewRepresentable {
         }
         if let cam, cam != c.appliedCam {
             c.appliedCam = cam
-            view.setCenter(cam.center, zoomLevel: cam.zoom, animated: false)
+            c.camEnAttente = cam
+            c.poseCameraEnAttente(sur: view)
         }
         c.sync(on: view)
     }
@@ -677,6 +726,8 @@ struct AirMapLibreView: UIViewRepresentable {
         var points: [AirPoint] = []
         var appliedStyle: URL?
         var appliedCam: MapCam?
+        /// Caméra reçue mais pas encore posée, faute de taille à l'écran.
+        var camEnAttente: MapCam?
         var styleReady = false
         /// Signature de ce qui est dessiné : sans elle, la couche serait
         /// refaite à chaque réévaluation de la vue.
@@ -693,6 +744,18 @@ struct AirMapLibreView: UIViewRepresentable {
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             onRegionChange(mapView.visibleCoordinateBounds)
+        }
+
+        /// Pose la caméra en attente, si la carte a de quoi la recevoir.
+        ///
+        /// Une carte de largeur nulle avale l'ordre sans rien faire : il faut
+        /// donc garder la caméra sous le coude et la reposer au premier
+        /// agencement qui lui donne une taille.
+        func poseCameraEnAttente(sur view: MLNMapView) {
+            guard let cam = camEnAttente else { return }
+            guard view.bounds.width > 1, view.bounds.height > 1 else { return }
+            camEnAttente = nil
+            view.setCenter(cam.center, zoomLevel: cam.zoom, animated: false)
         }
 
         func sync(on view: MLNMapView) {
