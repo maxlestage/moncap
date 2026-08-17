@@ -8,6 +8,13 @@ import SwiftUI
 /// serveur pour toute une grille en une requête : une carte se lit par taches,
 /// pas par relevés isolés.
 ///
+/// L'écran peint une **nappe continue** et non des pastilles. Une pastille pose
+/// la mesure en un point et laisse croire qu'ailleurs on ne sait rien, alors
+/// que le modèle donne une valeur partout ; et à l'échelle d'une ville elle se
+/// réduisait à un rond vert unique au milieu du vide. La grille est donc versée
+/// dans une image géoréférencée, dégradée d'une mesure à sa voisine, qui couvre
+/// tout ce qu'on regarde.
+///
 /// Deux indices arrivent, et l'écran n'en montre qu'un. Contrairement à ce que
 /// j'avais supposé, Open-Meteo calcule l'indice **européen partout** — relevé
 /// au-dessus du Sahara, où il vaut 33. Il sert donc d'échelle unique, ce qui
@@ -28,9 +35,31 @@ struct AirPoint: Identifiable, Decodable {
     let us: Double?
     /// Particules fines, µg/m³ — la seule grandeur physique du lot.
     let pm25: Double?
+    /// Hauteur et largeur de la maille couverte par la mesure, en degrés.
+    ///
+    /// Facultatives : un serveur d'avant cette version n'en envoie pas, et
+    /// l'app ne doit pas s'en trouver vide. Sans elles, la maille par défaut
+    /// vaut celle du modèle CAMS, un cinquième de degré.
+    let dlat: Double?
+    let dlon: Double?
+    /// Place dans le treillis : colonne, ligne, et ses dimensions. Facultatives
+    /// pour la même raison ; à défaut, le treillis est déduit des coordonnées.
+    let ix: Int?
+    let iy: Int?
+    let nx: Int?
+    let ny: Int?
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+
+    /// Le rectangle couvert par la mesure.
+    var maille: (dlat: Double, dlon: Double) { (dlat ?? 0.2, dlon ?? 0.2) }
+
+    /// Vrai si le point tombe dans la maille.
+    func contient(_ c: CLLocationCoordinate2D) -> Bool {
+        let (dla, dlo) = maille
+        return abs(c.latitude - lat) <= dla / 2 && abs(c.longitude - lon) <= dlo / 2
     }
 
     /// Échelle retenue pour ce point : l'européenne si elle existe.
@@ -45,6 +74,24 @@ struct AirPoint: Identifiable, Decodable {
         guard let v = valeur else { return 0 }
         let paliers = echelle.paliers
         return paliers.firstIndex(where: { v <= $0 }) ?? paliers.count
+    }
+
+    /// Le même niveau, mais **continu** : 1,5 pour une valeur au milieu du
+    /// deuxième palier.
+    ///
+    /// C'est ce nombre-là que la nappe dégrade d'une mesure à sa voisine, et
+    /// non la valeur brute : les deux échelles n'ont ni les mêmes bornes ni le
+    /// même pas, et interpoler entre un indice européen et un américain
+    /// donnerait une couleur qui ne veut rien dire. Ramenés au niveau, ils se
+    /// mêlent sans se confondre.
+    var niveauContinu: Double? {
+        guard let v = valeur else { return nil }
+        let paliers = echelle.paliers
+        if v <= paliers[0] { return max(v, 0) / paliers[0] }
+        for i in 1..<paliers.count where v <= paliers[i] {
+            return Double(i) + (v - paliers[i - 1]) / (paliers[i] - paliers[i - 1])
+        }
+        return Double(paliers.count)
     }
 }
 
@@ -93,6 +140,200 @@ enum AirCouleurs {
     static let libelles: [LocalizedStringKey] = [
         "Bon", "Correct", "Dégradé", "Mauvais", "Très mauvais", "Extrêmement mauvais",
     ]
+}
+
+/// Fabrique la nappe : une image géoréférencée, dégradée d'une mesure à sa
+/// voisine.
+///
+/// Des rectangles pleins couvriraient bien l'écran, mais en damier — or l'air
+/// ne change pas de qualité au franchissement d'une frontière invisible. Une
+/// image posée sur la zone laisse le moteur de rendu adoucir les bords, et
+/// coûte un objet au lieu de quatre cents. C'est ainsi que procèdent les cartes
+/// de l'air qu'on connaît.
+///
+/// Interpoler n'ajoute aucune information — la mesure reste au cinquième de
+/// degré — mais le champ mesuré, lui, est continu : le dégradé le représente
+/// plus fidèlement que des marches d'escalier.
+enum AirNappe {
+    /// Le treillis des mesures, reconstruit depuis la réponse.
+    struct Grille {
+        let nx: Int
+        let ny: Int
+        /// Coin sud-ouest de la nappe, bords des mailles compris.
+        let o: Double
+        let su: Double
+        let dlat: Double
+        let dlon: Double
+        /// Niveaux continus, du sud au nord puis d'ouest en est. `nil` là où la
+        /// mesure manque.
+        let niveaux: [Double?]
+
+        var e: Double { o + dlon * Double(nx) }
+        var no: Double { su + dlat * Double(ny) }
+    }
+
+    /// Grandissement de l'image par rapport au treillis.
+    ///
+    /// Seize : l'intérieur d'une maille reste d'une couleur franche, et seule
+    /// la frontière entre deux niveaux s'adoucit, sur quelques pixels. Plus
+    /// grossier, le moteur ferait un dégradé de bout en bout et l'on ne
+    /// lirait plus les paliers ; plus fin, on paierait des pixels pour rien.
+    static let grandissement = 16
+
+    /// Limite du Mercator sphérique : au-delà, la projection part à l'infini.
+    static let latitudeMax = 85.0
+
+    /// Ordonnée Mercator d'une latitude, en radians.
+    static func mercator(_ lat: Double) -> Double {
+        let l = min(max(lat, -latitudeMax), latitudeMax) * .pi / 180
+        return log(tan(.pi / 4 + l / 2))
+    }
+
+    /// La latitude qui correspond à une ordonnée Mercator, en degrés.
+    static func latitude(_ y: Double) -> Double {
+        (2 * atan(exp(y)) - .pi / 2) * 180 / .pi
+    }
+
+    /// Reconstruit le treillis. `nil` si la réponse n'en permet pas un.
+    static func grille(_ points: [AirPoint]) -> Grille? {
+        guard let premier = points.first else { return nil }
+        let (dlat, dlon) = premier.maille
+        guard dlat > 0, dlon > 0 else { return nil }
+
+        // Le cas normal : le serveur dit la place de chaque mesure.
+        if let nx = premier.nx, let ny = premier.ny, nx > 0, ny > 0,
+            points.allSatisfy({ $0.ix != nil && $0.iy != nil })
+        {
+            var niveaux = [Double?](repeating: nil, count: nx * ny)
+            for p in points {
+                guard let ix = p.ix, let iy = p.iy, ix < nx, iy < ny else { continue }
+                niveaux[iy * nx + ix] = p.niveauContinu
+            }
+            return Grille(
+                nx: nx, ny: ny,
+                o: premier.lon - dlon * (Double(premier.ix ?? 0) + 0.5),
+                su: premier.lat - dlat * (Double(premier.iy ?? 0) + 0.5),
+                dlat: dlat, dlon: dlon, niveaux: niveaux)
+        }
+
+        // Repli, face à un serveur d'avant cette version : le treillis est
+        // déduit des coordonnées distinctes. Une colonne entièrement dépourvue
+        // de mesure décalerait le reste — c'est pourquoi ce n'est qu'un repli.
+        let lons = Array(Set(points.map(\.lon))).sorted()
+        let lats = Array(Set(points.map(\.lat))).sorted()
+        guard let o = lons.first, let su = lats.first else { return nil }
+        let colonne = Dictionary(uniqueKeysWithValues: lons.enumerated().map { ($1, $0) })
+        let ligne = Dictionary(uniqueKeysWithValues: lats.enumerated().map { ($1, $0) })
+        var niveaux = [Double?](repeating: nil, count: lons.count * lats.count)
+        for p in points {
+            guard let ix = colonne[p.lon], let iy = ligne[p.lat] else { continue }
+            niveaux[iy * lons.count + ix] = p.niveauContinu
+        }
+        return Grille(
+            nx: lons.count, ny: lats.count,
+            o: o - dlon / 2, su: su - dlat / 2,
+            dlat: dlat, dlon: dlon, niveaux: niveaux)
+    }
+
+    /// Peint le treillis : un pixel par point du dégradé, transparent là où
+    /// aucune mesure ne porte.
+    static func image(_ g: Grille) -> UIImage? {
+        let largeur = g.nx * grandissement
+        let hauteur = g.ny * grandissement
+        guard largeur > 0, hauteur > 0 else { return nil }
+
+        let palette: [(Double, Double, Double)] = AirCouleurs.niveaux.map { c in
+            var r: CGFloat = 0, v: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            c.getRed(&r, green: &v, blue: &b, alpha: &a)
+            return (Double(r) * 255, Double(v) * 255, Double(b) * 255)
+        }
+
+        /// La couleur d'un niveau continu, prise **entre** deux paliers.
+        ///
+        /// Colorer par palier entier gâchait la mesure : relevée sur l'Europe,
+        /// elle va de 16 à 78, mais le seul palier « 20 à 40 » avalait la
+        /// moitié du continent et la nappe s'étalait d'un vert unique. Le
+        /// dégradé rend cette variation, et c'est aussi ce qu'annonce la
+        /// légende — un ruban continu, non six pastilles. Le palier nommé, lui,
+        /// reste donné au doigt, avec son chiffre.
+        func teinte(_ n: Double) -> (UInt8, UInt8, UInt8) {
+            let borne = min(max(n, 0), Double(palette.count - 1))
+            let bas = min(Int(borne), palette.count - 2)
+            let f = borne - Double(bas)
+            let (r0, v0, b0) = palette[bas]
+            let (r1, v1, b1) = palette[bas + 1]
+            return (
+                UInt8((r0 + (r1 - r0) * f).rounded()),
+                UInt8((v0 + (v1 - v0) * f).rounded()),
+                UInt8((b0 + (b1 - b0) * f).rounded())
+            )
+        }
+
+        var pixels = [UInt8](repeating: 0, count: largeur * hauteur * 4)
+        let pas = Double(grandissement)
+
+        // L'image est tendue sur le quadrilatère en **Mercator**, pas en
+        // latitudes régulières : c'est ainsi que le moteur la plaque. Peinte
+        // en latitudes régulières, elle glisserait vers le sud à mesure qu'on
+        // monte — sur une zone de 40 à 54°, son milieu tomberait à 47,0° au
+        // lieu de 47,5°, cinquante et un kilomètres d'écart, deux fois la
+        // maille du modèle ; et l'écart croît avec la hauteur de la zone.
+        // Chaque ligne de l'image est donc ramenée à sa vraie latitude avant
+        // d'aller chercher ses mesures.
+        let yHaut = Self.mercator(g.no)
+        let yBas = Self.mercator(g.su)
+
+        for py in 0..<hauteur {
+            // L'image se lit du nord au sud, le treillis du sud au nord.
+            let y = yHaut + (Double(py) + 0.5) / Double(hauteur) * (yBas - yHaut)
+            let lat = Self.latitude(y)
+            let gy = (lat - g.su) / g.dlat - 0.5
+            let j0 = Int(floor(gy))
+            let fy = gy - floor(gy)
+
+            for px in 0..<largeur {
+                let gx = (Double(px) + 0.5) / pas - 0.5
+                let i0 = Int(floor(gx))
+                let fx = gx - floor(gx)
+
+                // Moyenne pondérée des quatre mesures voisines. Celles qui
+                // manquent sont simplement retirées du calcul, et leur poids
+                // avec : un trou isolé se comble au lieu de trouer la nappe.
+                var somme = 0.0
+                var poids = 0.0
+                for dj in 0...1 {
+                    let j = min(max(j0 + dj, 0), g.ny - 1)
+                    let py2 = dj == 0 ? 1 - fy : fy
+                    for di in 0...1 {
+                        let i = min(max(i0 + di, 0), g.nx - 1)
+                        let px2 = di == 0 ? 1 - fx : fx
+                        guard let n = g.niveaux[j * g.nx + i] else { continue }
+                        somme += n * py2 * px2
+                        poids += py2 * px2
+                    }
+                }
+                guard poids > 0.0001 else { continue }
+
+                let (r, v, b) = teinte(somme / poids)
+                let o = (py * largeur + px) * 4
+                pixels[o] = r
+                pixels[o + 1] = v
+                pixels[o + 2] = b
+                pixels[o + 3] = 255
+            }
+        }
+
+        guard let fournisseur = CGDataProvider(data: Data(pixels) as CFData),
+            let cg = CGImage(
+                width: largeur, height: hauteur,
+                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: largeur * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: fournisseur, decode: nil, shouldInterpolate: true,
+                intent: .defaultIntent)
+        else { return nil }
+        return UIImage(cgImage: cg)
+    }
 }
 
 /// Va chercher la grille pour la zone regardée.
@@ -155,8 +396,8 @@ final class AirService: ObservableObject {
     }
 }
 
-/// Écran dédié « Qualité de l'air » : des pastilles colorées sur le fond de
-/// carte habituel, et une légende qui nomme l'échelle employée.
+/// Écran dédié « Qualité de l'air » : une nappe colorée sur le fond de carte
+/// habituel, et une légende qui nomme l'échelle employée.
 struct AirMapScreen: View {
     @Environment(\.dismiss) private var dismiss
     /// Position d'ouverture : on regarde d'abord là où on est.
@@ -171,7 +412,7 @@ struct AirMapScreen: View {
         center: CLLocationCoordinate2D(latitude: 46.6, longitude: 2.4), zoom: 4.6)
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack {
             AirMapLibreView(
                 styleURL: style,
                 points: service.points,
@@ -183,6 +424,16 @@ struct AirMapScreen: View {
 
             VStack(spacing: 10) {
                 entete
+
+                // La légende à gauche, les commandes à droite : le milieu de
+                // l'écran reste à la carte, qui est ce qu'on est venu voir.
+                HStack(alignment: .top) {
+                    legende
+                    Spacer(minLength: 12)
+                    commandes
+                }
+                .padding(.horizontal)
+
                 if let m = service.message {
                     Text(m)
                         .font(.caption)
@@ -192,12 +443,16 @@ struct AirMapScreen: View {
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                         .padding(.horizontal)
                 }
-            }
 
-            VStack {
                 Spacer()
-                if let p = selection { fiche(p) }
-                legende
+
+                // Une valeur est lisible sans rien toucher : celle d'ici. Une
+                // carte qui n'annonce un chiffre qu'après un appui oblige à
+                // deviner qu'on peut appuyer.
+                if let p = selection ?? chezMoi {
+                    fiche(p, chezMoi: selection == nil)
+                }
+                source
             }
         }
         .task(id: styleURLString) {
@@ -209,8 +464,17 @@ struct AirMapScreen: View {
             if let b = bounds { service.charge(bbox: Self.bbox(b)) }
         }
         .onAppear {
-            if let center { cam = MapCam(center: center, zoom: 7) }
+            // Une vue régionale, et non le quartier : la qualité de l'air se
+            // lit sur des centaines de kilomètres, et de trop près la nappe
+            // n'est plus qu'un aplat uni.
+            if let center { cam = MapCam(center: center, zoom: 6) }
         }
+    }
+
+    /// La mesure qui porte sur là où l'on se trouve.
+    private var chezMoi: AirPoint? {
+        guard let c = center else { return nil }
+        return service.points.first { $0.contient(c) }
     }
 
     /// Case de 0,25° du centre : identité de la zone regardée.
@@ -236,88 +500,138 @@ struct AirMapScreen: View {
                     .frame(width: 40, height: 40)
                     .background(.regularMaterial, in: Circle())
             }
+            // Une ligne, pas deux : l'échelle employée est nommée par la
+            // légende, juste dessous. La répéter ici grossissait le bandeau
+            // pour rien, et il mangeait la carte.
             HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Qualité de l'air").font(.headline)
-                    Text(service.points.first?.echelle.nom ?? "Indice européen")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Qualité de l'air").font(.subheadline.weight(.semibold))
                 if service.chargement { ProgressView().controlSize(.small) }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .background(.regularMaterial, in: Capsule())
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.top, 6)
     }
 
-    /// Fiche d'un point touché : la valeur, son niveau, et les particules —
-    /// la seule grandeur que l'on peut comparer d'un continent à l'autre.
-    private func fiche(_ p: AirPoint) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Circle()
-                    .fill(Color(AirCouleurs.couleur(p.niveau)))
-                    .frame(width: 14, height: 14)
+    /// Les commandes de droite : revenir sur soi.
+    private var commandes: some View {
+        Button {
+            if let c = center { cam = MapCam(center: c, zoom: 6) }
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.headline)
+                .foregroundStyle(.tint)
+                .frame(width: 40, height: 40)
+                .background(.regularMaterial, in: Circle())
+        }
+        .accessibilityLabel(Text("Recentrer sur ma position"))
+        .opacity(center == nil ? 0 : 1)
+        .disabled(center == nil)
+    }
+
+    /// Fiche d'une mesure : le chiffre dans sa couleur, son palier, et les
+    /// particules — la seule grandeur que l'on peut comparer d'un continent à
+    /// l'autre.
+    ///
+    /// Le chiffre est **dans** la pastille plutôt qu'à côté : la couleur seule
+    /// ne se lit qu'à la légende, le chiffre seul ne se situe pas sur une
+    /// échelle ; ensemble ils se passent l'un de l'autre.
+    private func fiche(_ p: AirPoint, chezMoi: Bool) -> some View {
+        HStack(spacing: 13) {
+            ZStack {
+                Circle().fill(Color(AirCouleurs.couleur(p.niveau)))
+                if let v = p.valeur {
+                    Text(verbatim: "\(Int(v))")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.6)
+                        .padding(4)
+                }
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(chezMoi ? "Autour de toi" : "Point touché")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Text(AirCouleurs.libelles[min(p.niveau, AirCouleurs.libelles.count - 1)])
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
+                    .font(.headline)
+                if let pm = p.pm25 {
+                    Text(String(format: String(localized: "Particules fines : %.0f µg/m³"), pm))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            if !chezMoi {
                 Button { selection = nil } label: {
-                    Image(systemName: "xmark").font(.footnote.weight(.bold))
+                    Image(systemName: "xmark")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-            if let v = p.valeur {
-                Text(verbatim: "\(p.echelle == .europeenne ? "EAQI" : "US AQI") \(Int(v))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            if let pm = p.pm25 {
-                Text(String(format: String(localized: "Particules fines : %.0f µg/m³"), pm))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
             }
         }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .padding(13)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal)
     }
 
     /// Légende : sans elle, six couleurs ne disent rien.
+    ///
+    /// Les paliers sont **nommés**, et non résumés par « bon » à un bout et
+    /// « extrêmement mauvais » à l'autre : entre les deux, un ruban dégradé
+    /// laissait deviner. Du pire en haut au meilleur en bas, l'ordre qu'ont
+    /// les cartes de l'air — l'œil descend vers ce qu'on espère.
     private var legende: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 0) {
-                ForEach(Array(AirCouleurs.niveaux.enumerated()), id: \.offset) { _, c in
-                    Rectangle().fill(Color(c)).frame(height: 8)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(service.points.first?.echelle.nom ?? "Indice européen")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 2)
+
+            ForEach((0..<AirCouleurs.libelles.count).reversed(), id: \.self) { i in
+                HStack(spacing: 7) {
+                    Capsule()
+                        .fill(Color(AirCouleurs.niveaux[i]))
+                        .frame(width: 4, height: 13)
+                    Text(AirCouleurs.libelles[i])
+                        .font(.caption2)
+                        .lineLimit(1)
                 }
             }
-            .clipShape(Capsule())
-            HStack {
-                Text("Bon").font(.caption2)
-                Spacer()
-                Text("Extrêmement mauvais").font(.caption2)
-            }
-            .foregroundStyle(.secondary)
-            Text("Mesures Open-Meteo (CAMS)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding()
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .contain)
+    }
+
+    /// D'où vient la mesure. Une carte qui ne dit pas sa source demande à être
+    /// crue sur parole.
+    private var source: some View {
+        Text("Mesures Open-Meteo (CAMS)")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .padding(.bottom, 6)
     }
 }
 
-/// La carte elle-même : une source GeoJSON et une couche de pastilles.
+/// La carte elle-même : une image géoréférencée posée sur la zone regardée.
 ///
-/// Une couche de style plutôt que des annotations : cent points en annotations
-/// coûtent cent vues UIKit, et la couleur se pilote ici par une expression, du
-/// côté du moteur de rendu.
+/// Une source d'image plutôt que quatre cents polygones : un seul objet à
+/// construire, et c'est le moteur de rendu qui adoucit les frontières entre
+/// niveaux, au pixel près, sans que rien ne remonte jusqu'ici.
 struct AirMapLibreView: UIViewRepresentable {
     let styleURL: URL
     let points: [AirPoint]
@@ -369,7 +683,7 @@ struct AirMapLibreView: UIViewRepresentable {
         private var dessine: String = ""
 
         private static let source = "air-src"
-        private static let couche = "air-pastilles"
+        private static let couche = "air-nappe"
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             styleReady = true
@@ -393,39 +707,54 @@ struct AirMapLibreView: UIViewRepresentable {
             if let vieille = style.source(withIdentifier: Self.source) {
                 style.removeSource(vieille)
             }
-            guard !points.isEmpty else { return }
+            guard !points.isEmpty,
+                let g = AirNappe.grille(points),
+                let image = AirNappe.image(g)
+            else { return }
 
-            let formes: [MLNPointFeature] = points.map { p in
-                let f = MLNPointFeature()
-                f.coordinate = p.coordinate
-                f.attributes = ["niveau": p.niveau]
-                return f
-            }
-            let src = MLNShapeSource(
-                identifier: Self.source,
-                shape: MLNShapeCollectionFeature(shapes: formes), options: nil)
+            let quad = MLNCoordinateQuadMake(
+                CLLocationCoordinate2D(latitude: g.no, longitude: g.o),
+                CLLocationCoordinate2D(latitude: g.su, longitude: g.o),
+                CLLocationCoordinate2D(latitude: g.su, longitude: g.e),
+                CLLocationCoordinate2D(latitude: g.no, longitude: g.e))
+            let src = MLNImageSource(
+                identifier: Self.source, coordinateQuad: quad, image: image)
             style.addSource(src)
 
-            let couche = MLNCircleStyleLayer(identifier: Self.couche, source: src)
-            // Couleur pilotée par l'attribut, côté moteur de rendu.
-            couche.circleColor = NSExpression(
-                format: "TERNARY(niveau = 0, %@, TERNARY(niveau = 1, %@, "
-                    + "TERNARY(niveau = 2, %@, TERNARY(niveau = 3, %@, "
-                    + "TERNARY(niveau = 4, %@, %@)))))",
-                AirCouleurs.niveaux[0], AirCouleurs.niveaux[1], AirCouleurs.niveaux[2],
-                AirCouleurs.niveaux[3], AirCouleurs.niveaux[4], AirCouleurs.niveaux[5])
-            couche.circleRadius = NSExpression(forConstantValue: 14)
-            couche.circleOpacity = NSExpression(forConstantValue: 0.62)
-            couche.circleStrokeWidth = NSExpression(forConstantValue: 1)
-            couche.circleStrokeColor = NSExpression(
-                forConstantValue: UIColor.white.withAlphaComponent(0.7))
-            style.addLayer(couche)
+            let couche = MLNRasterStyleLayer(identifier: Self.couche, source: src)
+            // Assez opaque pour se lire d'un coup d'œil, assez transparent pour
+            // qu'on reconnaisse encore le pays sous la couleur.
+            couche.rasterOpacity = NSExpression(forConstantValue: 0.55)
+            // Filtrage linéaire : l'image est déjà seize fois plus fine que le
+            // treillis, si bien que seule la frontière entre deux niveaux
+            // s'adoucit. C'est ce qu'annonce la légende, un ruban dégradé et
+            // non six pastilles.
+            // La valeur littérale plutôt que la catégorie `NSValue` : l'en-tête
+            // documente les deux, et celle-ci ne dépend pas du nom que
+            // l'importateur Swift donne à un constructeur d'énumération ObjC.
+            couche.rasterResamplingMode = NSExpression(forConstantValue: "linear")
+
+            // Glissée **sous** les libellés : une nappe posée par-dessus noierait
+            // les noms de villes, et une carte de l'air dont on ne lit plus les
+            // villes ne dit plus où l'on respire mal.
+            if let premierTexte = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
+                style.insertLayer(couche, below: premierTexte)
+            } else {
+                style.addLayer(couche)
+            }
         }
 
         @objc func handleTap(_ g: UITapGestureRecognizer) {
             guard let view = g.view as? MLNMapView else { return }
             let touche = view.convert(g.location(in: view), toCoordinateFrom: view)
-            // Le point le plus proche du doigt, s'il est assez près.
+            // La maille sous le doigt d'abord : elle couvre une surface, il n'y
+            // a donc pas à chercher le plus proche voisin.
+            if let dedans = points.first(where: { $0.contient(touche) }) {
+                onSelect(dedans)
+                return
+            }
+            // Hors de la grille — un bord d'écran —, le plus proche s'il est
+            // assez près.
             let plus = points.min {
                 Self.ecart($0.coordinate, touche) < Self.ecart($1.coordinate, touche)
             }

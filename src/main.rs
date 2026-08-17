@@ -512,14 +512,26 @@ fn fires_zone(brut: Option<&str>) -> Option<String> {
     // annonce des longitudes bien au-delà de ±180 — jusqu'à ±246 mesuré sur
     // l'app — parce que le monde s'y répète. Refuser ces boîtes rendait un 400,
     // et la carte restait vide précisément quand on regardait le plus large.
+    // Quatre-vingt-cinq degrés et non quatre-vingt-dix : au-delà, le Mercator
+    // sphérique des cartes part à l'infini, et la nappe de l'air — tendue sur
+    // ce quadrillage-là — n'aurait plus de bord haut. Rien n'est perdu : aucune
+    // carte du monde ne montre les pôles, et rien n'y brûle.
     let borne = |v: f64, max: f64| v.clamp(-max, max);
-    let q = |v: f64| (v * 4.0).round() / 4.0;
+    // Arrondi **vers l'extérieur**, et non au plus proche. Au plus proche, une
+    // carte serrée sur une ville s'écrasait : Bordeaux vue de près donne une
+    // boîte plus étroite qu'un quart de degré, dont les deux bords tombaient
+    // sur le même quart. La zone devenait plate, la grille de l'air se réduisait
+    // à un seul point répété cent huit fois — la pastille verte unique de
+    // l'écran — et la NASA recevait une boîte sans surface. Vers l'extérieur, la
+    // zone fait toujours au moins un quart de degré et couvre ce qu'on regarde.
+    let bas = |v: f64| (v * 4.0).floor() / 4.0;
+    let haut = |v: f64| (v * 4.0).ceil() / 4.0;
     Some(format!(
         "{},{},{},{}",
-        q(borne(o, 180.0)),
-        q(borne(su, 90.0)),
-        q(borne(e, 180.0)),
-        q(borne(no, 90.0))
+        bas(borne(o, 180.0)),
+        bas(borne(su, 85.0)),
+        haut(borne(e, 180.0)),
+        haut(borne(no, 85.0))
     ))
 }
 
@@ -863,6 +875,25 @@ struct AirPoint {
     /// partout. Les deux indices, eux, sont des conventions régionales.
     #[serde(skip_serializing_if = "Option::is_none")]
     pm25: Option<f64>,
+    /// Hauteur et largeur de la maille, en degrés.
+    ///
+    /// Une mesure ne vaut pas en un point mais sur une surface : le modèle CAMS
+    /// travaille au cinquième de degré, et deux relevés distants de dix
+    /// kilomètres rendent la même valeur. Expédier la maille permet à la carte
+    /// de peindre cette surface au lieu de poser une pastille au milieu du vide.
+    dlat: f64,
+    dlon: f64,
+    /// Place de la mesure dans la grille : colonne, ligne, et les dimensions.
+    ///
+    /// La carte a besoin du **treillis**, pas seulement de points épars : pour
+    /// dégrader d'une mesure à sa voisine il lui faut savoir qui est voisin de
+    /// qui. Le déduire des coordonnées serait fragile — une maille sans mesure
+    /// est retirée de la réponse, et le treillis deviné aurait alors un trou
+    /// invisible qui décalerait tout le reste d'une colonne.
+    ix: usize,
+    iy: usize,
+    nx: usize,
+    ny: usize,
 }
 
 struct AirCache {
@@ -876,10 +907,17 @@ static AIR_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, AirCache>>> = Once
 const AIR_TTL: Duration = Duration::from_secs(1800);
 /// Zones gardées, même raison que pour les feux.
 const AIR_MAX_ZONES: usize = 24;
-/// Côté de la grille : 12 × 9 = 108 points, ce qu'Open-Meteo accepte en une
-/// requête, et assez pour que la carte se lise sans trous béants.
-const AIR_GRILLE_X: usize = 12;
-const AIR_GRILLE_Y: usize = 9;
+/// Côté de la grille : 16 × 24 = 384 mailles, de quoi **couvrir** l'écran.
+///
+/// Cent huit suffisaient à poser des pastilles ; elles ne suffisent pas à
+/// peindre une surface. Quatre cents coordonnées passent encore en une requête,
+/// six cents non — Open-Meteo rend alors un 414, l'URL étant trop longue
+/// (mesuré). Plus de lignes que de colonnes parce qu'un téléphone est plus haut
+/// que large, et qu'un degré de longitude couvre moins de terrain qu'un degré
+/// de latitude dès qu'on quitte l'équateur : à cette proportion les mailles
+/// tombent à peu près carrées à l'écran sous nos latitudes.
+const AIR_GRILLE_X: usize = 16;
+const AIR_GRILLE_Y: usize = 24;
 
 /// Points d'échantillonnage d'une zone, répartis régulièrement.
 ///
@@ -1069,25 +1107,52 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
         serde_json::Value::Array(v) => v,
         autre => vec![autre],
     };
+    let (dlat, dlon) = air_maille(zone);
     Some(
         entrees
             .iter()
-            .filter_map(|e| {
+            .zip(points.iter())
+            .enumerate()
+            .filter_map(|(i, (e, (la, lo)))| {
                 let courant = e.get("current")?;
                 let nombre = |cle: &str| courant.get(cle).and_then(|v| v.as_f64());
                 Some(AirPoint {
-                    lat: e.get("latitude")?.as_f64()?,
-                    lon: e.get("longitude")?.as_f64()?,
+                    // Les coordonnées **demandées**, pas celles rendues.
+                    //
+                    // Open-Meteo répond avec le point du modèle le plus proche,
+                    // calé au cinquième de degré : 48,85 devient 48,80 (mesuré).
+                    // Zoomé sur une ville, toutes nos mailles retombent alors
+                    // sur le même point rendu, et la carte n'affichait qu'une
+                    // pastille — empilée quatre cents fois. La réponse conserve
+                    // l'ordre de la demande, ce qui permet de recoller chaque
+                    // mesure à sa maille.
+                    lat: *la,
+                    lon: *lo,
                     eu: nombre("european_aqi"),
                     us: nombre("us_aqi"),
                     pm25: nombre("pm2_5"),
+                    dlat,
+                    dlon,
+                    // `air_grille` parcourt les lignes du sud au nord, et chaque
+                    // ligne d'ouest en est.
+                    ix: i % AIR_GRILLE_X,
+                    iy: i / AIR_GRILLE_X,
+                    nx: AIR_GRILLE_X,
+                    ny: AIR_GRILLE_Y,
                 })
             })
-            // Un point sans aucune mesure ne dessine rien : autant ne pas
+            // Une maille sans aucune mesure ne peint rien : autant ne pas
             // l'expédier.
             .filter(|p| p.eu.is_some() || p.us.is_some() || p.pm25.is_some())
             .collect(),
     )
+}
+
+/// Hauteur et largeur d'une maille de la grille, en degrés.
+fn air_maille(zone: &str) -> (f64, f64) {
+    let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
+    let [o, su, e, no] = n[..] else { return (0.0, 0.0) };
+    ((no - su) / AIR_GRILLE_Y as f64, (e - o) / AIR_GRILLE_X as f64)
 }
 
 /// GET /fires — incendies actifs (NASA FIRMS), dans le monde ou sur une zone.
@@ -4556,6 +4621,35 @@ mod integration {
         assert!(air_grille("nawak").is_empty());
     }
 
+    /// Les mailles doivent **pavér** la zone : mises bout à bout, elles la
+    /// recouvrent exactement. Sans quoi la carte peinte laisserait des rubans
+    /// de fond nu entre les taches.
+    #[test]
+    fn les_mailles_de_l_air_pavent_la_zone() {
+        let zone = "-5,41,10,51.5";
+        let (dlat, dlon) = air_maille(zone);
+        assert!((dlon * AIR_GRILLE_X as f64 - 15.0).abs() < 1e-9, "{dlon}");
+        assert!((dlat * AIR_GRILLE_Y as f64 - 10.5).abs() < 1e-9, "{dlat}");
+
+        // Chaque point est au centre de sa maille : les bords se touchent.
+        let points = air_grille(zone);
+        let mut lons: Vec<f64> = points.iter().map(|(_, lo)| *lo).collect();
+        lons.sort_by(f64::total_cmp);
+        lons.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+        for paire in lons.windows(2) {
+            assert!(
+                (paire[1] - paire[0] - dlon).abs() < 1e-9,
+                "trou entre {} et {}",
+                paire[0],
+                paire[1]
+            );
+        }
+        // Le premier bord gauche retombe sur l'ouest de la zone.
+        assert!((lons[0] - dlon / 2.0 - (-5.0)).abs() < 1e-9, "{}", lons[0]);
+
+        assert_eq!(air_maille("nawak"), (0.0, 0.0));
+    }
+
     /// L'éclaircissement doit garder la **répartition**, pas les plus récentes.
     ///
     /// Couper par ancienneté paraissait juste — on garde les foyers actifs —
@@ -4599,11 +4693,23 @@ mod integration {
         // Rien de demandé : le monde entier.
         assert_eq!(fires_zone(None).as_deref(), Some(FIRES_MONDE));
 
-        // Arrondi au quart de degré : deux cartes voisines partagent une clé.
+        // Arrondi au quart de degré, vers l'extérieur : deux cartes voisines
+        // partagent une clé, et la zone couvre toujours ce qu'on regarde.
         assert_eq!(
             fires_zone(Some("-5.53,41.02,10.04,51.49")).as_deref(),
-            Some("-5.5,41,10,51.5")
+            Some("-5.75,41,10.25,51.5")
         );
+
+        // Une boîte plus étroite qu'un quart de degré — une ville vue de près —
+        // garde une surface. Arrondie au plus proche, elle s'écrasait : les deux
+        // bords tombaient sur le même quart, la grille de l'air se réduisait à un
+        // point répété, et la carte n'affichait qu'une pastille.
+        let serree = fires_zone(Some("-0.62,44.85,-0.55,44.90")).unwrap();
+        let n: Vec<f64> = serree.split(',').map(|v| v.parse().unwrap()).collect();
+        assert!(n[2] - n[0] >= 0.25, "largeur nulle : {serree}");
+        assert!(n[3] - n[1] >= 0.25, "hauteur nulle : {serree}");
+        // Et elle contient bien ce qu'on regardait.
+        assert!(n[0] <= -0.62 && n[2] >= -0.55 && n[1] <= 44.85 && n[3] >= 44.90);
 
         // Dézoomée, MapLibre annonce des longitudes bien au-delà de ±180 —
         // jusqu'à ±246 mesuré sur l'app, le monde s'y répétant. Ces boîtes-là
@@ -4615,7 +4721,7 @@ mod integration {
         );
         assert_eq!(
             fires_zone(Some("-5,41,10,120")).as_deref(),
-            Some("-5,41,10,90")
+            Some("-5,41,10,85")
         );
 
         // Reste refusé ce qui ne peut pas venir d'une carte.
