@@ -1202,19 +1202,50 @@ fn parse_firms_csv(text: &str) -> Vec<FirePoint> {
             .or_insert(FirePoint { lat, lon, t });
     }
     let mut out: Vec<FirePoint> = cells.into_values().collect();
-    // Cellules les plus récentes d'abord, pour que le garde-fou coupe les
-    // vieilles détections et pas les foyers actifs.
     out.sort_by_key(|p| std::cmp::Reverse(p.t));
     if out.len() > FIRES_MAX_POINTS {
-        // Un plafond silencieux se lit comme « tout est là ». Sur le monde
-        // entier il coupe pour de bon, et il vaut mieux le savoir.
-        tracing::info!(
-            "FIRMS : {} cellules ramenées à {FIRES_MAX_POINTS} (les plus récentes)",
-            out.len()
-        );
-        out.truncate(FIRES_MAX_POINTS);
+        let avant = out.len();
+        out = eclaircit(out);
+        // Un plafond silencieux se lit comme « tout est là ».
+        tracing::info!("FIRMS : {avant} cellules éclaircies à {}", out.len());
     }
     out
+}
+
+/// Ramène une liste sous le plafond **sans la trier par ancienneté**.
+///
+/// Couper les plus vieilles paraissait juste : on garde les foyers actifs. Mais
+/// sur le monde entier, l'heure d'une détection dit surtout par où le satellite
+/// vient de passer. Les quatre mille plus récentes tombaient donc toutes dans la
+/// même bande de longitudes — l'Afrique un soir, l'Asie le lendemain — et
+/// l'Europe disparaissait de la carte alors qu'elle brûlait.
+///
+/// On éclaircit donc dans l'espace : la grille est doublée jusqu'à ce que le
+/// compte passe, en gardant la détection la plus récente de chaque maille. Le
+/// dessin perd en finesse là où les feux sont denses, et ne perd aucune région.
+fn eclaircit(points: Vec<FirePoint>) -> Vec<FirePoint> {
+    let mut pas = FIRES_GRID_DEG * 4.0;
+    loop {
+        let mut mailles: HashMap<(i64, i64), FirePoint> = HashMap::new();
+        for p in &points {
+            let cle = ((p.lat / pas).floor() as i64, (p.lon / pas).floor() as i64);
+            mailles
+                .entry(cle)
+                .and_modify(|garde| {
+                    if p.t > garde.t {
+                        *garde = p.clone();
+                    }
+                })
+                .or_insert_with(|| p.clone());
+        }
+        if mailles.len() <= FIRES_MAX_POINTS || pas > 45.0 {
+            let mut out: Vec<FirePoint> = mailles.into_values().collect();
+            out.sort_by_key(|p| std::cmp::Reverse(p.t));
+            out.truncate(FIRES_MAX_POINTS);
+            return out;
+        }
+        pas *= 2.0;
+    }
 }
 
 /// Convertit une acquisition FIRMS (`acq_date` = « AAAA-MM-JJ », `acq_time` =
@@ -4427,6 +4458,41 @@ mod integration {
 
         // Une zone illisible ne produit pas de grille.
         assert!(air_grille("nawak").is_empty());
+    }
+
+    /// L'éclaircissement doit garder la **répartition**, pas les plus récentes.
+    ///
+    /// Couper par ancienneté paraissait juste — on garde les foyers actifs —
+    /// mais sur le monde entier l'heure d'une détection dit surtout par où le
+    /// satellite vient de passer. Les quatre mille plus récentes tombaient
+    /// dans la même bande de longitudes, et l'Europe disparaissait de la carte
+    /// alors qu'elle brûlait.
+    #[test]
+    fn l_eclaircissement_garde_toutes_les_regions() {
+        // Deux amas : un très dense et très récent près de l'équateur, un
+        // clairsemé et plus ancien en Europe. Le second doit survivre.
+        let mut points = Vec::new();
+        for i in 0..12_000 {
+            points.push(FirePoint {
+                lat: 10.0 + (i % 100) as f64 * 0.01,
+                lon: 5.0 + (i / 100) as f64 * 0.01,
+                t: Some(2_000_000),
+            });
+        }
+        for i in 0..40 {
+            points.push(FirePoint {
+                lat: 45.0 + i as f64 * 0.3,
+                lon: 2.0 + i as f64 * 0.2,
+                t: Some(1_000_000),
+            });
+        }
+
+        let out = eclaircit(points);
+        assert!(out.len() <= FIRES_MAX_POINTS, "{} points", out.len());
+        let europe = out.iter().filter(|p| p.lat >= 44.0).count();
+        assert!(europe > 0, "l'Europe a disparu de la carte");
+        // L'amas dense reste représenté, mais n'occupe plus toute la place.
+        assert!(out.iter().any(|p| p.lat < 20.0), "l'amas dense a disparu");
     }
 
     /// La zone vient du client : elle entre dans une URL adressée à la NASA,

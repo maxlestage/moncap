@@ -38,6 +38,7 @@ final class FireService: ObservableObject {
 
     private var lastFetch = Date.distantPast
     private var lastKey = ""
+    private var lastBbox: String?
     /// Récupération en cours. Chaque frappe dans le champ « clé FIRMS » relance
     /// un rafraîchissement : sans annuler le précédent, plusieurs requêtes
     /// lourdes couraient de front et la dernière arrivée — pas la dernière
@@ -49,10 +50,15 @@ final class FireService: ObservableObject {
     /// l'app interroge la NASA **directement**, avec repli sur 2 jours puis sur
     /// notre backend ; sinon elle passe directement par le backend. Les données
     /// FIRMS NRT ne changent que quelques fois par jour.
-    func refresh(key: String) {
+    /// - Parameter bbox: « ouest,sud,est,nord ». Absente, c'est le monde — et
+    ///   le serveur éclaircit alors sa réponse pour tenir sous son plafond.
+    ///   La donner change tout à l'usage : le plafond s'applique à ce qu'on
+    ///   regarde, et non à la planète.
+    func refresh(key: String, bbox: String? = nil) {
         let k = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        let changed = k != lastKey
+        let changed = k != lastKey || bbox != lastBbox
         guard changed || Date().timeIntervalSince(lastFetch) > 900 else { return }
+        lastBbox = bbox
         lastFetch = Date()
         lastKey = k
         let base = baseURL
@@ -63,12 +69,12 @@ final class FireService: ObservableObject {
                 // Un jour sur le monde entier pèse déjà ce que sept jours
                 // pesaient sur la France : la profondeur est le coût, pas
                 // l'étendue.
-                f = await Self.fetchNASA(key: k, days: 1)
+                f = await Self.fetchNASA(key: k, days: 1, bbox: bbox)
                 // Clé refusée ou NASA injoignable : mieux vaut les données du
                 // backend qu'une carte vide.
-                if f == nil { f = await Self.fetchBackend(base: base) }
+                if f == nil { f = await Self.fetchBackend(base: base, bbox: bbox) }
             } else {
-                f = await Self.fetchBackend(base: base)
+                f = await Self.fetchBackend(base: base, bbox: bbox)
             }
             // Une demande plus récente a pris le relais : ne pas écrire.
             if Task.isCancelled { return }
@@ -95,9 +101,12 @@ final class FireService: ObservableObject {
 
     /// Interroge notre backend `GET /fires`. `nonisolated` : décodage hors du
     /// thread principal. Renvoie nil en cas d'échec (affichage gardé).
-    nonisolated private static func fetchBackend(base: URL) async -> [Fire]? {
-        let url = base.appendingPathComponent("fires")
+    nonisolated private static func fetchBackend(base: URL, bbox: String?) async -> [Fire]? {
+        var comps = URLComponents(
+            url: base.appendingPathComponent("fires"), resolvingAgainstBaseURL: false)!
+        if let bbox { comps.queryItems = [URLQueryItem(name: "bbox", value: bbox)] }
         guard
+            let url = comps.url,
             let (data, resp) = try? await URLSession.shared.data(from: url),
             (resp as? HTTPURLResponse)?.statusCode == 200,
             let points = try? JSONDecoder().decode([Point].self, from: data)
@@ -115,12 +124,11 @@ final class FireService: ObservableObject {
     ///
     /// Délai porté à 90 s comme côté serveur : le CSV multi-jours est
     /// volumineux en pleine saison des feux et dépassait le délai par défaut.
-    nonisolated private static func fetchNASA(key: String, days: Int) async -> [Fire]? {
-        // Le monde entier. La France seule laissait la carte des feux vide
-        // partout ailleurs, sans que rien ne dise que c'était voulu.
-        // FIRMS borne lui-même ce qu'il rend ; la profondeur d'historique est
-        // ce qui coûte, d'où un seul jour à cette échelle.
-        let area = "-180,-90,180,90"  // ouest,sud,est,nord
+    nonisolated private static func fetchNASA(key: String, days: Int, bbox: String?) async -> [Fire]? {
+        // La zone regardée, ou le monde à défaut. Demander le monde puis n'en
+        // dessiner qu'un coin gaspille du réseau et rate des foyers : FIRMS
+        // borne ce qu'il rend, et ce qu'il coupe n'est pas ce qu'on regarde.
+        let area = bbox ?? "-180,-90,180,90"  // ouest,sud,est,nord
         guard
             let url = URL(
                 string:
