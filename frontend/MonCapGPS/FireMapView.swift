@@ -38,12 +38,19 @@ struct FireMapLibreView: UIViewRepresentable {
     /// Les détections satellite telles quelles.
     ///
     /// Elles sont dessinées **en plus** des contours, et c'est ce qui rend la
-    /// carte fiable à toute échelle. Les contours naissent d'un regroupement
-    /// de proche en proche : à l'échelle du monde, des milliers de détections
-    /// se soudent en un seul groupe, la grille de calcul se dégrade jusqu'à
-    /// des cellules bien plus grandes que l'empreinte d'un feu, et plus aucun
-    /// contour ne peut se former. On voyait alors « 1467 feux en cours » sur
-    /// une carte vide. Un point par détection ne dépend, lui, de rien.
+    /// carte fiable à toute échelle.
+    ///
+    /// Les contours passent par une projection locale en mètres, ancrée sur la
+    /// première détection du groupe et n'employant qu'un seul cosinus de
+    /// latitude. C'est juste sur un foyer, qui tient dans quelques kilomètres.
+    /// Mais le regroupement se fait de proche en proche : à l'échelle du monde,
+    /// des milliers de détections se soudent en un groupe continental, et la
+    /// projection place alors les contours très loin de leur position réelle —
+    /// parfois hors du globe, auquel cas rien ne s'affiche. On lisait « 1467
+    /// feux en cours » sur une carte vide : les contours existaient, ils
+    /// n'étaient simplement pas là où on regardait.
+    ///
+    /// Un point par détection ne dépend, lui, d'aucune projection.
     let fires: [Fire]
     /// Identifiant du foyer touché.
     let onSelect: (Int) -> Void
@@ -413,17 +420,27 @@ struct FireMapScreen: View {
                     .background(.regularMaterial, in: Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                // Compteur en avant, comme le bandeau « 15 feux en cours » du site.
+                // Le compteur porte sur les **détections**, pas sur les
+                // contours. Un grand feu produit des dizaines de pixels VIIRS :
+                // annoncer « 1467 feux » pour 1467 détections surestimait
+                // largement. Et les contours ne se forment qu'à l'échelle d'un
+                // foyer, si bien que le compteur tombait à zéro dès qu'on
+                // dézoomait, alors que la carte montrait toujours des points.
+                // Deux littéraux entiers, et non un pluriel interpolé : « point
+                // \(s) chaud\(s) » donnerait la clé « %lld point%@ chaud%@ », que
+                // le catalogue ne peut pas traduire correctement.
                 Text(
-                    perimeters.isEmpty
+                    service.fires.isEmpty
                         ? "Carte des feux en cours"
-                        : "\(perimeters.count) feu\(perimeters.count > 1 ? "x" : "") en cours"
+                        : service.fires.count > 1
+                            ? "\(service.fires.count) points chauds"
+                            : "\(service.fires.count) point chaud"
                 )
                 .font(.headline)
                 Text(
-                    perimeters.isEmpty
+                    service.fires.isEmpty
                         ? "Aucun foyer détecté"
-                        : "touchez un foyer · \(OrthoSource.attribution)"
+                        : "détections satellite · \(OrthoSource.attribution)"
                 )
                 .font(.caption2)
                 .foregroundStyle(.secondary)

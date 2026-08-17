@@ -81,6 +81,38 @@
         }
       }
     },
+    "%lld point chaud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld hot spot"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld punto caliente"
+          }
+        }
+      }
+    },
+    "%lld points chauds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld hot spots"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld puntos calientes"
+          }
+        }
+      }
+    },
     "%lld points · %@": {
       "localizations": {
         "en": {
@@ -3325,6 +3357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "calculando la ruta"
+          }
+        }
+      }
+    },
+    "détections satellite · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "satellite detections · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "detecciones por satélite · %@"
           }
         }
       }
