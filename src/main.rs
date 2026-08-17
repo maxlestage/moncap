@@ -947,10 +947,13 @@ async fn list_air(Query(q): Query<FiresQuery>) -> Response {
 
 /// Attente bornée : au-delà, on rend la main et le fond prend le relais.
 ///
-/// Douze secondes : au-delà, l'utilisateur croit l'app figée, et une carte qui
-/// se remplit à la seconde suivante vaut mieux qu'un écran bloqué.
+/// Cinq secondes. Douze laissaient le temps à la donnée d'arriver, mais une
+/// carte qui ne réagit pas pendant douze secondes passe pour figée — et
+/// l'attente était payée à chaque nouveau cadrage. Passé ce délai le
+/// rafraîchissement continue en fond, et le client redemande : mieux vaut deux
+/// allers-retours courts qu'un seul qu'on croit bloqué.
 async fn attends<T>(travail: impl std::future::Future<Output = Option<T>>) -> Option<T> {
-    tokio::time::timeout(Duration::from_secs(12), travail)
+    tokio::time::timeout(Duration::from_secs(5), travail)
         .await
         .ok()
         .flatten()
