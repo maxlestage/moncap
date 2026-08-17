@@ -879,6 +879,17 @@ struct AirPoint {
     /// de peindre cette surface au lieu de poser une pastille au milieu du vide.
     dlat: f64,
     dlon: f64,
+    /// Place de la mesure dans la grille : colonne, ligne, et les dimensions.
+    ///
+    /// La carte a besoin du **treillis**, pas seulement de points épars : pour
+    /// dégrader d'une mesure à sa voisine il lui faut savoir qui est voisin de
+    /// qui. Le déduire des coordonnées serait fragile — une maille sans mesure
+    /// est retirée de la réponse, et le treillis deviné aurait alors un trou
+    /// invisible qui décalerait tout le reste d'une colonne.
+    ix: usize,
+    iy: usize,
+    nx: usize,
+    ny: usize,
 }
 
 struct AirCache {
@@ -1097,7 +1108,8 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
         entrees
             .iter()
             .zip(points.iter())
-            .filter_map(|(e, (la, lo))| {
+            .enumerate()
+            .filter_map(|(i, (e, (la, lo)))| {
                 let courant = e.get("current")?;
                 let nombre = |cle: &str| courant.get(cle).and_then(|v| v.as_f64());
                 Some(AirPoint {
@@ -1117,6 +1129,12 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
                     pm25: nombre("pm2_5"),
                     dlat,
                     dlon,
+                    // `air_grille` parcourt les lignes du sud au nord, et chaque
+                    // ligne d'ouest en est.
+                    ix: i % AIR_GRILLE_X,
+                    iy: i / AIR_GRILLE_X,
+                    nx: AIR_GRILLE_X,
+                    ny: AIR_GRILLE_Y,
                 })
             })
             // Une maille sans aucune mesure ne peint rien : autant ne pas
