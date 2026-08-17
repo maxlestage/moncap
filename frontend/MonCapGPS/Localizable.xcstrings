@@ -2033,6 +2033,22 @@
         }
       }
     },
+    "Mesures momentanément indisponibles.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Measurements unavailable right now."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mediciones no disponibles por ahora."
+          }
+        }
+      }
+    },
     "Mise à jour il y a %lld h": {
       "localizations": {
         "en": {
