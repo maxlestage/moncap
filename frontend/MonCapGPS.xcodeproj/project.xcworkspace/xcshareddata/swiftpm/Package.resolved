@@ -1,0 +1,68 @@
+{
+  "pins": [
+    {
+      "identity": "anycodable",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/Flight-School/AnyCodable",
+      "state": {
+        "revision": "862808b2070cd908cb04f9aafe7de83d35f81b05",
+        "version": "0.6.7"
+      }
+    },
+    {
+      "identity": "light-swift-untar",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/UInt2048/Light-Swift-Untar.git",
+      "state": {
+        "revision": "fcff1f1b82373ea64b9565a364f63ffe7fdecf9f",
+        "version": "1.0.4"
+      }
+    },
+    {
+      "identity": "maplibre-gl-native-distribution",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/maplibre/maplibre-gl-native-distribution",
+      "state": {
+        "revision": "5ee345ca5d65238a6fce29bba87816204be7df20",
+        "version": "6.28.0"
+      }
+    },
+    {
+      "identity": "swift-docc-plugin",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/apple/swift-docc-plugin",
+      "state": {
+        "revision": "647c708be89f834fa6a6d4945442793a77ddf5b6",
+        "version": "1.5.0"
+      }
+    },
+    {
+      "identity": "swift-docc-symbolkit",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/swiftlang/swift-docc-symbolkit",
+      "state": {
+        "revision": "b45d1f2ed151d057b54504d653e0da5552844e34",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "identity": "valhalla-mobile",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/Rallista/valhalla-mobile",
+      "state": {
+        "revision": "fe12a51499db3be67ed03ae20a974be6ffdbd867",
+        "version": "0.5.1"
+      }
+    },
+    {
+      "identity": "valhalla-openapi-models-swift",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/Rallista/valhalla-openapi-models-swift.git",
+      "state": {
+        "revision": "440addd4a9f5b07c44c4c2e8c9eb18e6e9334687",
+        "version": "0.2.2"
+      }
+    }
+  ],
+  "version": 2
+}
