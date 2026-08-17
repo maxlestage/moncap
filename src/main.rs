@@ -505,18 +505,22 @@ fn fires_zone(brut: Option<&str>) -> Option<String> {
         .filter_map(|v| v.trim().parse::<f64>().ok())
         .collect();
     let [o, su, e, no] = n[..] else { return None };
-    // Une boîte inversée ou hors du globe ne vient pas d'un client honnête.
-    if !(-180.0..=180.0).contains(&o)
-        || !(-180.0..=180.0).contains(&e)
-        || !(-90.0..=90.0).contains(&su)
-        || !(-90.0..=90.0).contains(&no)
-        || o >= e
-        || su >= no
-    {
+    if [o, su, e, no].iter().any(|v| !v.is_finite()) || o >= e || su >= no {
         return None;
     }
+    // Ramenée dans le globe plutôt que refusée. Dézoomée, une carte MapLibre
+    // annonce des longitudes bien au-delà de ±180 — jusqu'à ±246 mesuré sur
+    // l'app — parce que le monde s'y répète. Refuser ces boîtes rendait un 400,
+    // et la carte restait vide précisément quand on regardait le plus large.
+    let borne = |v: f64, max: f64| v.clamp(-max, max);
     let q = |v: f64| (v * 4.0).round() / 4.0;
-    Some(format!("{},{},{},{}", q(o), q(su), q(e), q(no)))
+    Some(format!(
+        "{},{},{},{}",
+        q(borne(o, 180.0)),
+        q(borne(su, 90.0)),
+        q(borne(e, 180.0)),
+        q(borne(no, 90.0))
+    ))
 }
 
 /// Durée de fraîcheur du cache des feux (les données FIRMS NRT ne sont mises à
@@ -913,14 +917,81 @@ async fn list_air(Query(q): Query<FiresQuery>) -> Response {
     };
 
     let cache = AIR_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
-    let (data, stale) = match cache.lock().await.get(&zone) {
-        Some(c) => (c.data.clone(), c.fetched_at.elapsed() >= AIR_TTL),
-        None => (Vec::new(), true),
-    };
-    if stale {
-        spawn_air_refresh(zone);
+    let connue = cache
+        .lock()
+        .await
+        .get(&zone)
+        .map(|c| (c.data.clone(), c.fetched_at.elapsed() >= AIR_TTL));
+
+    match connue {
+        Some((data, stale)) => {
+            if stale {
+                spawn_air_refresh(zone);
+            }
+            Json(data).into_response()
+        }
+        // Même raison que pour les feux : un cadrage neuf ne doit pas
+        // s'afficher désert le temps d'un aller-retour.
+        None => match attends(fetch_air(&zone)).await {
+            Some(data) => {
+                range_air(&zone, data.clone()).await;
+                Json(data).into_response()
+            }
+            None => {
+                spawn_air_refresh(zone);
+                Json(Vec::<AirPoint>::new()).into_response()
+            }
+        },
     }
-    Json(data).into_response()
+}
+
+/// Attente bornée : au-delà, on rend la main et le fond prend le relais.
+///
+/// Douze secondes : au-delà, l'utilisateur croit l'app figée, et une carte qui
+/// se remplit à la seconde suivante vaut mieux qu'un écran bloqué.
+async fn attends<T>(travail: impl std::future::Future<Output = Option<T>>) -> Option<T> {
+    tokio::time::timeout(Duration::from_secs(12), travail)
+        .await
+        .ok()
+        .flatten()
+}
+
+/// Range une zone de feux dans le cache, en faisant de la place au besoin.
+async fn range_feux(zone: &str, data: Vec<FirePoint>) {
+    let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    let mut table = cache.lock().await;
+    if table.len() >= FIRES_MAX_ZONES && !table.contains_key(zone) {
+        if let Some(vieille) = table
+            .iter()
+            .min_by_key(|(_, c)| c.fetched_at)
+            .map(|(k, _)| k.clone())
+        {
+            table.remove(&vieille);
+        }
+    }
+    table.insert(
+        zone.to_string(),
+        FiresCache { fetched_at: Instant::now(), data },
+    );
+}
+
+/// Range une grille d'air dans le cache, en faisant de la place au besoin.
+async fn range_air(zone: &str, data: Vec<AirPoint>) {
+    let cache = AIR_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    let mut table = cache.lock().await;
+    if table.len() >= AIR_MAX_ZONES && !table.contains_key(zone) {
+        if let Some(vieille) = table
+            .iter()
+            .min_by_key(|(_, c)| c.fetched_at)
+            .map(|(k, _)| k.clone())
+        {
+            table.remove(&vieille);
+        }
+    }
+    table.insert(
+        zone.to_string(),
+        AirCache { fetched_at: Instant::now(), data },
+    );
 }
 
 /// Rafraîchit la grille d'une zone en tâche de fond, une par une.
@@ -1035,14 +1106,36 @@ async fn list_fires(Query(q): Query<FiresQuery>) -> Response {
     };
 
     let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
-    let (data, stale) = match cache.lock().await.get(&zone) {
-        Some(c) => (c.data.clone(), c.fetched_at.elapsed() >= FIRES_TTL),
-        None => (Vec::new(), true),
+    let connue = match cache.lock().await.get(&zone) {
+        Some(c) => Some((c.data.clone(), c.fetched_at.elapsed() >= FIRES_TTL)),
+        None => None,
     };
-    if stale {
-        spawn_fires_refresh(key, zone);
+
+    match connue {
+        // Zone déjà vue : on répond tout de suite, quitte à rafraîchir derrière.
+        Some((data, stale)) => {
+            if stale {
+                spawn_fires_refresh(key, zone);
+            }
+            Json(data).into_response()
+        }
+        // Zone inconnue : on **attend**. Répondre une liste vide en lançant la
+        // recherche derrière condamnait chaque nouveau cadrage à s'afficher
+        // désert : sur une carte qu'on fait glisser, chaque zone est nouvelle
+        // une fois, et c'est précisément ce moment-là qu'on regarde.
+        None => {
+            let data = attends(fetch_fires_days(&key, 1, &zone)).await;
+            if let Some(data) = data {
+                range_feux(&zone, data.clone()).await;
+                Json(data).into_response()
+            } else {
+                // Trop long ou en échec : le rafraîchissement continue en fond,
+                // la prochaine demande trouvera le résultat.
+                spawn_fires_refresh(key, zone);
+                Json(Vec::<FirePoint>::new()).into_response()
+            }
+        }
     }
-    Json(data).into_response()
 }
 
 /// Zone regardée, en degrés : `?bbox=ouest,sud,est,nord`. Absente, c'est le
@@ -4509,12 +4602,23 @@ mod integration {
             Some("-5.5,41,10,51.5")
         );
 
-        // Boîte inversée, hors du globe, incomplète, ou pleine de texte.
+        // Dézoomée, MapLibre annonce des longitudes bien au-delà de ±180 —
+        // jusqu'à ±246 mesuré sur l'app, le monde s'y répétant. Ces boîtes-là
+        // sont ramenées dans le globe, et non refusées : les refuser rendait
+        // un 400, et la carte restait vide quand on regardait le plus large.
+        assert_eq!(
+            fires_zone(Some("-246.5,-85.05,246.5,85.05")).as_deref(),
+            Some("-180,-85,180,85")
+        );
+        assert_eq!(
+            fires_zone(Some("-5,41,10,120")).as_deref(),
+            Some("-5,41,10,90")
+        );
+
+        // Reste refusé ce qui ne peut pas venir d'une carte.
         for mauvaise in [
             "10,41,-5,51",           // est avant ouest
             "-5,51,10,41",           // nord avant sud
-            "-200,41,10,51",         // hors du globe
-            "-5,41,10,120",          // latitude impossible
             "-5,41,10",              // incomplète
             "",                      // vide
             "a,b,c,d",               // pas des nombres
