@@ -181,6 +181,12 @@ T: dict[str, tuple[str, str]] = {
         "Updated less than 1 h ago",
     ),
     "Mise à jour il y a %lld h": ("Actualizado hace %lld h", "Updated %lld h ago"),
+    "%lld point chaud": ("%lld punto caliente", "%lld hot spot"),
+    "%lld points chauds": ("%lld puntos calientes", "%lld hot spots"),
+    "détections satellite · %@": (
+        "detecciones por satélite · %@",
+        "satellite detections · %@",
+    ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),
