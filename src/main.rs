@@ -904,10 +904,14 @@ struct AirCache {
 static AIR_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, AirCache>>> = OnceLock::new();
 
 /// La qualité de l'air bouge à l'heure, pas à la minute.
-const AIR_TTL: Duration = Duration::from_secs(1800);
+///
+/// Une heure pleine, et non la demi-heure d'avant : la réponse d'Open-Meteo
+/// porte `interval: 3600` et une heure ronde comme horodatage — rafraîchir plus
+/// souvent redemandait la même valeur, et chaque coordonnée nous est comptée.
+const AIR_TTL: Duration = Duration::from_secs(3600);
 /// Zones gardées, même raison que pour les feux.
 const AIR_MAX_ZONES: usize = 24;
-/// Côté de la grille : 16 × 24 = 384 mailles, de quoi **couvrir** l'écran.
+/// Plafond de la grille : 16 × 24 = 384 mailles, de quoi **couvrir** l'écran.
 ///
 /// Cent huit suffisaient à poser des pastilles ; elles ne suffisent pas à
 /// peindre une surface. Quatre cents coordonnées passent encore en une requête,
@@ -919,6 +923,33 @@ const AIR_MAX_ZONES: usize = 24;
 const AIR_GRILLE_X: usize = 16;
 const AIR_GRILLE_Y: usize = 24;
 
+/// Pas du modèle CAMS, en degrés — mesuré : une demande à 48,85 revient à 48,80.
+const AIR_PAS_MODELE: f64 = 0.2;
+
+/// Nombre de colonnes et de lignes pour une zone, sans dépasser la finesse du
+/// modèle.
+///
+/// Chez Open-Meteo **chaque coordonnée compte pour un appel**, et le quota
+/// gratuit se compte à la journée. Demander 384 points sur une ville, c'est
+/// payer 384 appels pour lire 384 fois la même valeur : le modèle ne distingue
+/// rien en deçà du cinquième de degré. Le dyno s'est fait refuser pour cette
+/// raison — 0 mesure rendue en 1 087 ms, quand la même requête passait depuis
+/// ailleurs. La grille suit donc la taille réelle de la zone, et une ville ne
+/// coûte plus que quatre appels.
+///
+/// Jamais moins de deux : la carte dégrade d'une mesure à sa voisine, et il lui
+/// faut des voisines.
+fn air_dims(o: f64, su: f64, e: f64, no: f64) -> (usize, usize) {
+    let compte = |etendue: f64, max: usize| {
+        let n = (etendue / AIR_PAS_MODELE).round();
+        (n as usize).clamp(2, max)
+    };
+    (
+        compte(e - o, AIR_GRILLE_X),
+        compte(no - su, AIR_GRILLE_Y),
+    )
+}
+
 /// Points d'échantillonnage d'une zone, répartis régulièrement.
 ///
 /// Les points sont placés au **centre** des mailles et non sur les bords :
@@ -927,11 +958,12 @@ const AIR_GRILLE_Y: usize = 24;
 fn air_grille(zone: &str) -> Vec<(f64, f64)> {
     let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
     let [o, su, e, no] = n[..] else { return vec![] };
-    let pas_x = (e - o) / AIR_GRILLE_X as f64;
-    let pas_y = (no - su) / AIR_GRILLE_Y as f64;
-    let mut points = Vec::with_capacity(AIR_GRILLE_X * AIR_GRILLE_Y);
-    for iy in 0..AIR_GRILLE_Y {
-        for ix in 0..AIR_GRILLE_X {
+    let (nx, ny) = air_dims(o, su, e, no);
+    let pas_x = (e - o) / nx as f64;
+    let pas_y = (no - su) / ny as f64;
+    let mut points = Vec::with_capacity(nx * ny);
+    for iy in 0..ny {
+        for ix in 0..nx {
             points.push((
                 su + pas_y * (iy as f64 + 0.5),
                 o + pas_x * (ix as f64 + 0.5),
@@ -1116,6 +1148,13 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
         autre => vec![autre],
     };
     let (dlat, dlon) = air_maille(zone);
+    let (nx, ny) = {
+        let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
+        match n[..] {
+            [o, su, e, no] => air_dims(o, su, e, no),
+            _ => return None,
+        }
+    };
     Some(
         entrees
             .iter()
@@ -1143,10 +1182,10 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
                     dlon,
                     // `air_grille` parcourt les lignes du sud au nord, et chaque
                     // ligne d'ouest en est.
-                    ix: i % AIR_GRILLE_X,
-                    iy: i / AIR_GRILLE_X,
-                    nx: AIR_GRILLE_X,
-                    ny: AIR_GRILLE_Y,
+                    ix: i % nx,
+                    iy: i / nx,
+                    nx,
+                    ny,
                 })
             })
             // Une maille sans aucune mesure ne peint rien : autant ne pas
@@ -1160,7 +1199,8 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
 fn air_maille(zone: &str) -> (f64, f64) {
     let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
     let [o, su, e, no] = n[..] else { return (0.0, 0.0) };
-    ((no - su) / AIR_GRILLE_Y as f64, (e - o) / AIR_GRILLE_X as f64)
+    let (nx, ny) = air_dims(o, su, e, no);
+    ((no - su) / ny as f64, (e - o) / nx as f64)
 }
 
 /// GET /fires — incendies actifs (NASA FIRMS), dans le monde ou sur une zone.
@@ -4612,6 +4652,8 @@ mod integration {
     /// laisseraient le milieu de chaque maille sans mesure.
     #[test]
     fn la_grille_de_l_air_couvre_la_zone_sans_toucher_les_bords() {
+        // Quinze degrés sur dix et demi : bien au-delà du pas du modèle, donc
+        // la grille est plafonnée.
         let points = air_grille("-5,41,10,51.5");
         assert_eq!(points.len(), AIR_GRILLE_X * AIR_GRILLE_Y);
 
@@ -4656,6 +4698,39 @@ mod integration {
         assert!((lons[0] - dlon / 2.0 - (-5.0)).abs() < 1e-9, "{}", lons[0]);
 
         assert_eq!(air_maille("nawak"), (0.0, 0.0));
+    }
+
+    /// La grille ne doit jamais être plus fine que le modèle.
+    ///
+    /// Chez Open-Meteo chaque coordonnée compte pour un appel, et le quota se
+    /// compte à la journée. Demander 384 points sur une ville, c'est payer 384
+    /// appels pour lire 384 fois la même valeur — le modèle ne distingue rien
+    /// en deçà du cinquième de degré. C'est ce qui a fait refuser le dyno.
+    #[test]
+    fn la_grille_de_l_air_ne_depasse_pas_la_finesse_du_modele() {
+        // Une ville vue de près : la zone fait un quart de degré.
+        let ville = air_grille("-0.75,44.75,-0.5,45");
+        assert_eq!(ville.len(), 4, "une ville ne doit coûter que quatre appels");
+
+        // Jamais moins de deux par côté : la nappe dégrade d'une mesure à sa
+        // voisine, et il lui faut des voisines.
+        let (nx, ny) = air_dims(0.0, 0.0, 0.01, 0.01);
+        assert_eq!((nx, ny), (2, 2));
+
+        // Une zone moyenne suit la finesse du modèle sans la dépasser.
+        let (nx, ny) = air_dims(0.0, 0.0, 1.0, 2.0);
+        assert_eq!((nx, ny), (5, 10), "un degré vaut cinq mailles de 0,2°");
+
+        // Le monde reste plafonné.
+        assert_eq!(
+            air_dims(-180.0, -85.0, 180.0, 85.0),
+            (AIR_GRILLE_X, AIR_GRILLE_Y)
+        );
+
+        // Et les indices restent cohérents avec les dimensions annoncées.
+        let (nx, _) = air_dims(-0.75, 44.75, -0.5, 45.0);
+        assert_eq!(nx, 2);
+        assert_eq!(ville.len() % nx, 0);
     }
 
     /// L'éclaircissement doit garder la **répartition**, pas les plus récentes.
