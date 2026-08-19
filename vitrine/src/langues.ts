@@ -86,7 +86,7 @@ const FR: Contenu = {
   nom: "Français",
   titre: "MonCap GPS — comparez, puis roulez, avec ou sans réseau",
   description:
-    "Un GPS iOS qui compare jusqu'à 15 itinéraires — durée, virages, dénivelé, carburant, péages — puis vous guide. 206 régions d'Europe téléchargeables pour rouler sans réseau.",
+    "Un GPS iOS qui compare jusqu'à 15 itinéraires — durée, virages, dénivelé, carburant, péages — puis vous guide. 212 régions d'Europe téléchargeables pour rouler — et pédaler, et marcher — sans réseau. Trams et bus compris.",
   h1: ["Comparez, puis roulez", "avec ou sans réseau"],
   chapeau:
     "Un GPS pour iPhone qui met les itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — puis vous guide. Téléchargez votre région une fois, et il continue de calculer tout seul : vallées, tunnels, étranger.",
@@ -99,7 +99,7 @@ const FR: Contenu = {
   chiffres: [
     { valeur: String(ITINERAIRES_MAX), legende: "itinéraires au maximum" },
     { valeur: "19", legende: "catégories de lieux" },
-    { valeur: "206", legende: "régions téléchargeables" },
+    { valeur: "212", legende: "régions téléchargeables" },
     { valeur: "49", legende: "pays d'Europe" },
     { valeur: "0 €", legende: "aucun abonnement" },
   ],
@@ -143,7 +143,19 @@ const FR: Contenu = {
       emoji: "🔥",
       titre: "Carte des feux",
       texte:
-        "Les foyers détectés par satellite, sur photo aérienne au vingt centimètres. Utile l'été, sur les routes du Sud.",
+        "Les foyers détectés par satellite, dans le monde entier, sur la zone que vous regardez. Utile l'été, sur les routes du Sud.",
+    },
+    {
+      emoji: "🚊",
+      titre: "Trams, bus et trains",
+      texte:
+        "Un quatrième mode, à côté de la voiture : les itinéraires en transports en commun, avec les lignes aux couleurs du réseau, les correspondances et les heures réelles de départ et d'arrivée.",
+    },
+    {
+      emoji: "🫁",
+      titre: "Qualité de l'air",
+      texte:
+        "Une carte dédiée : l'indice européen peint en continu sur la région, du turquoise au pourpre, et la mesure de là où vous êtes lisible sans un geste.",
     },
     {
       emoji: "🔊",
@@ -227,7 +239,7 @@ const ES: Contenu = {
   nom: "Español",
   titre: "MonCap GPS — compara y conduce, con o sin cobertura",
   description:
-    "Un GPS para iOS que compara hasta 15 rutas — duración, giros, desnivel, combustible, peajes — y luego te guía. 206 regiones de Europa descargables para conducir sin cobertura.",
+    "Un GPS para iOS que compara hasta 15 rutas — duración, giros, desnivel, combustible, peajes — y luego te guía. 212 regiones de Europa descargables para conducir — y pedalear, y caminar — sin cobertura. Tranvías y buses incluidos.",
   h1: ["Compara y conduce", "con o sin cobertura"],
   chapeau:
     "Un GPS para iPhone que pone las rutas una al lado de otra — duración, giros, desnivel, combustible, peajes — y luego te guía. Descarga tu región una vez y sigue calculando solo: valles, túneles, extranjero.",
@@ -240,7 +252,7 @@ const ES: Contenu = {
   chiffres: [
     { valeur: String(ITINERAIRES_MAX), legende: "rutas como máximo" },
     { valeur: "19", legende: "categorías de lugares" },
-    { valeur: "206", legende: "regiones descargables" },
+    { valeur: "212", legende: "regiones descargables" },
     { valeur: "49", legende: "países de Europa" },
     { valeur: "0 €", legende: "sin suscripción" },
   ],
@@ -284,7 +296,19 @@ const ES: Contenu = {
       emoji: "🔥",
       titre: "Mapa de incendios",
       texte:
-        "Los focos detectados por satélite, sobre foto aérea de veinte centímetros. Útil en verano, en las carreteras del sur.",
+        "Los focos detectados por satélite, en el mundo entero, sobre la zona que estás mirando. Útil en verano, en las carreteras del sur.",
+    },
+    {
+      emoji: "🚊",
+      titre: "Tranvías, buses y trenes",
+      texte:
+        "Un cuarto modo, junto al coche: las rutas en transporte público, con las líneas en los colores de la red, los transbordos y las horas reales de salida y llegada.",
+    },
+    {
+      emoji: "🫁",
+      titre: "Calidad del aire",
+      texte:
+        "Un mapa dedicado: el índice europeo pintado en continuo sobre la región, del turquesa al púrpura, y la medición de donde estás legible sin un gesto.",
     },
     {
       emoji: "🔊",
@@ -368,7 +392,7 @@ const EN: Contenu = {
   nom: "English",
   titre: "MonCap GPS — compare, then drive, with or without signal",
   description:
-    "An iOS GPS that compares up to 15 routes — time, turns, elevation, fuel, tolls — then guides you. 206 downloadable European regions for driving with no signal.",
+    "An iOS GPS that compares up to 15 routes — time, turns, elevation, fuel, tolls — then guides you. 212 downloadable European regions to drive — and cycle, and walk — with no signal. Trams and buses included.",
   h1: ["Compare, then drive", "with or without signal"],
   chapeau:
     "An iPhone GPS that lays the routes side by side — time, turns, elevation, fuel, tolls — then guides you. Download your region once and it keeps computing on its own: valleys, tunnels, abroad.",
@@ -381,7 +405,7 @@ const EN: Contenu = {
   chiffres: [
     { valeur: String(ITINERAIRES_MAX), legende: "routes at most" },
     { valeur: "19", legende: "place categories" },
-    { valeur: "206", legende: "downloadable regions" },
+    { valeur: "212", legende: "downloadable regions" },
     { valeur: "49", legende: "European countries" },
     { valeur: "0 €", legende: "no subscription" },
   ],
@@ -425,7 +449,19 @@ const EN: Contenu = {
       emoji: "🔥",
       titre: "Wildfire map",
       texte:
-        "Satellite-detected hotspots, over twenty-centimetre aerial imagery. Useful in summer, on southern roads.",
+        "Satellite-detected hotspots, worldwide, for the area you are looking at. Useful in summer, on southern roads.",
+    },
+    {
+      emoji: "🚊",
+      titre: "Trams, buses and trains",
+      texte:
+        "A fourth mode, next to driving: public transit routes, with lines in the network's own colours, transfers, and real departure and arrival times.",
+    },
+    {
+      emoji: "🫁",
+      titre: "Air quality",
+      texte:
+        "A dedicated map: the European index painted continuously over the region, from turquoise to purple, with the reading for where you are visible at a glance.",
     },
     {
       emoji: "🔊",

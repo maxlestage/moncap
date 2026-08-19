@@ -84,7 +84,11 @@ export const MAQUETTE_ITINERAIRES: readonly Itineraire[] = [
   },
 ];
 
-export const MODES: readonly string[] = ["À pied", "Vélo", "Voiture"];
+export const MODES: readonly string[] = ["À pied", "Vélo", "Voiture", "Transports"];
+
+/** Le mode montré actif sur la maquette : les lignes dessinées — carburant,
+ * péages — sont celles de la voiture, pas d'un tram. */
+export const MODE_ACTIF = "Voiture";
 
 // --- Bandeau des lieux ---------------------------------------------------
 

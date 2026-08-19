@@ -511,7 +511,7 @@ T: dict[str, tuple[str, str]] = {
 # depuis ce tableau plutôt que les retaper garantit qu'un écran dessiné sur
 # le site dit exactement ce que l'application affiche.
 VITRINE = [
-    "À pied", "Vélo", "Voiture", "Démarrer",
+    "À pied", "Vélo", "Voiture", "Transports", "Démarrer",
     "Le plus simple", "Le plus rapide", "Le plus court",
     "Essence", "Parking", "Recharge", "Restaurants", "Hôtels", "Supermarché",
     "Pharmacie", "Distributeur", "Toilettes", "Eau potable", "Handicapé",
