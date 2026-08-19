@@ -147,10 +147,6 @@ T: dict[str, tuple[str, str]] = {
         "Address search needs a network connection. Press and hold the map to pick a point: the route is then computed on the device.",
     ),
     "Aucun itinéraire": ("Ninguna ruta", "No route"),
-    "Le calcul a échoué. Ce mode de déplacement a besoin du réseau.": (
-        "El cálculo ha fallado. Este modo de transporte necesita cobertura.",
-        "The computation failed. This travel mode needs a network connection.",
-    ),
     "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.": (
         "No hay ninguna región de rutas instalada. Descarga la que te interesa desde la pantalla sin conexión.",
         "No routing region is installed. Download the one you need from the offline screen.",
