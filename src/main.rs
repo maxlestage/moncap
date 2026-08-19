@@ -1133,6 +1133,13 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
     let brut: Option<serde_json::Value> = async {
         let resp = http_client()
             .get(&url)
+            // Transitous exige un client qui se nomme : sans User-Agent, il
+            // répond 403 — mesuré, 403 anonyme contre 200 nommé. reqwest n'en
+            // envoie aucun par défaut, et le dyno s'est fait refuser pour ça.
+            .header(
+                "User-Agent",
+                "moncap-gps/1.2 (moncap-c41a5aaf07e8.herokuapp.com)",
+            )
             .timeout(Duration::from_secs(12))
             .send()
             .await
