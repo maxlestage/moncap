@@ -973,6 +973,204 @@ fn air_grille(zone: &str) -> Vec<(f64, f64)> {
     points
 }
 
+// ---------------------------------------------------------------------------
+// Transports en commun (Transitous)
+//
+// Transitous est un service communautaire de calcul d'itinéraires en
+// transports, bâti sur MOTIS et alimenté par les GTFS publics — sans clé.
+// Mesuré sur Bordeaux : six itinéraires mêlant trams E et C, bus 70, G et 27,
+// et le TER, en une requête. L'app passe par ici et non en direct : la réponse
+// brute pèse 219 Ko là où l'écran a besoin de quelques kilo-octets, et le
+// fournisseur se remplace alors d'un seul côté.
+
+/// Un tronçon d'un trajet : une marche, ou un véhicule et sa ligne.
+#[derive(Clone, Serialize)]
+struct TransitLeg {
+    /// WALK, TRAM, BUS, REGIONAL_RAIL, RAIL, SUBWAY, FERRY…
+    mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ligne: Option<String>,
+    /// Couleur de la ligne, hexadécimal sans croisillon, telle que le réseau
+    /// la publie.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    couleur: Option<String>,
+    /// La girouette du véhicule — ce qu'on lit sur son front.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    direction: Option<String>,
+    de: String,
+    a: String,
+    depart: String,
+    arrivee: String,
+    /// Tracé en polyligne encodée, précision sept — celle de MOTIS, qui
+    /// l'annonce dans sa réponse.
+    trace: String,
+}
+
+/// Un itinéraire complet.
+#[derive(Clone, Serialize)]
+struct TransitItineraire {
+    duree_s: i64,
+    depart: String,
+    arrivee: String,
+    correspondances: i64,
+    legs: Vec<TransitLeg>,
+}
+
+struct TransitCache {
+    fetched_at: Instant,
+    data: Vec<TransitItineraire>,
+}
+
+static TRANSIT_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, TransitCache>>> =
+    OnceLock::new();
+
+/// Quatre-vingt-dix secondes : un horaire de passage est une donnée du moment,
+/// mais deux appuis successifs sur le même trajet n'ont pas à payer deux fois.
+const TRANSIT_TTL: Duration = Duration::from_secs(90);
+const TRANSIT_MAX_ZONES: usize = 64;
+
+#[derive(Deserialize)]
+struct TransitQuery {
+    from: Option<String>,
+    to: Option<String>,
+}
+
+/// « lat,lon » validé et arrondi au dix-millième — onze mètres, le même arrêt.
+fn transit_point(brut: Option<&str>) -> Option<(f64, f64)> {
+    let n: Vec<f64> = brut?
+        .split(',')
+        .filter_map(|v| v.trim().parse::<f64>().ok())
+        .collect();
+    let [lat, lon] = n[..] else { return None };
+    if !lat.is_finite() || !lon.is_finite() || lat.abs() > 90.0 || lon.abs() > 180.0 {
+        return None;
+    }
+    let q = |v: f64| (v * 10_000.0).round() / 10_000.0;
+    Some((q(lat), q(lon)))
+}
+
+/// Taille les itinéraires MOTIS au strict nécessaire de l'écran.
+fn transit_taille(brut: &serde_json::Value) -> Vec<TransitItineraire> {
+    let texte = |v: &serde_json::Value, cle: &str| {
+        v.get(cle).and_then(|x| x.as_str()).map(str::to_string)
+    };
+    let nom = |v: &serde_json::Value, cle: &str| {
+        v.get(cle)
+            .and_then(|x| x.get("name"))
+            .and_then(|x| x.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    brut.get("itineraries")
+        .and_then(|v| v.as_array())
+        .map(|its| {
+            its.iter()
+                .filter_map(|it| {
+                    let legs = it
+                        .get("legs")?
+                        .as_array()?
+                        .iter()
+                        .filter_map(|l| {
+                            Some(TransitLeg {
+                                mode: texte(l, "mode")?,
+                                ligne: texte(l, "routeShortName").filter(|s| !s.is_empty()),
+                                couleur: texte(l, "routeColor").filter(|s| !s.is_empty()),
+                                direction: texte(l, "headsign").filter(|s| !s.is_empty()),
+                                de: nom(l, "from"),
+                                a: nom(l, "to"),
+                                depart: texte(l, "startTime").unwrap_or_default(),
+                                arrivee: texte(l, "endTime").unwrap_or_default(),
+                                trace: l
+                                    .get("legGeometry")
+                                    .and_then(|g| g.get("points"))
+                                    .and_then(|p| p.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    if legs.is_empty() {
+                        return None;
+                    }
+                    Some(TransitItineraire {
+                        duree_s: it.get("duration").and_then(|v| v.as_i64()).unwrap_or(0),
+                        depart: texte(it, "startTime").unwrap_or_default(),
+                        arrivee: texte(it, "endTime").unwrap_or_default(),
+                        correspondances: it.get("transfers").and_then(|v| v.as_i64()).unwrap_or(0),
+                        legs,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// GET /transit — itinéraires en transports en commun entre deux points.
+///
+/// `?from=lat,lon&to=lat,lon`. La réponse est un tableau d'itinéraires, du
+/// plus tôt arrivé au plus tard, chacun détaillant ses tronçons.
+async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
+    let (Some(de), Some(vers)) = (
+        transit_point(q.from.as_deref()),
+        transit_point(q.to.as_deref()),
+    ) else {
+        return (StatusCode::BAD_REQUEST, "from et to attendus : lat,lon").into_response();
+    };
+
+    let zone = format!("{},{}|{},{}", de.0, de.1, vers.0, vers.1);
+    let cache = TRANSIT_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
+    if let Some(connu) = cache.lock().await.get(&zone) {
+        if connu.fetched_at.elapsed() < TRANSIT_TTL {
+            return Json(connu.data.clone()).into_response();
+        }
+    }
+
+    let url = format!(
+        "https://api.transitous.org/api/v1/plan\
+         ?fromPlace={},{}&toPlace={},{}&numItineraries=8",
+        de.0, de.1, vers.0, vers.1
+    );
+    let brut: Option<serde_json::Value> = async {
+        let resp = http_client()
+            .get(&url)
+            .timeout(Duration::from_secs(12))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            tracing::warn!("Transit : statut HTTP {}", resp.status());
+            return None;
+        }
+        resp.json().await.ok()
+    }
+    .await;
+
+    let Some(brut) = brut else {
+        // Pas de liste vide : vide veut dire « aucun trajet possible », et
+        // l'app l'annoncerait comme tel. Ici on ne sait rien — même leçon que
+        // pour la qualité de l'air.
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "transports indisponibles pour l'instant",
+        )
+            .into_response();
+    };
+
+    let data = transit_taille(&brut);
+    let mut table = cache.lock().await;
+    if table.len() >= TRANSIT_MAX_ZONES && !table.contains_key(&zone) {
+        if let Some(vieille) = table
+            .iter()
+            .min_by_key(|(_, c)| c.fetched_at)
+            .map(|(k, _)| k.clone())
+        {
+            table.remove(&vieille);
+        }
+    }
+    table.insert(zone, TransitCache { fetched_at: Instant::now(), data: data.clone() });
+    Json(data).into_response()
+}
+
 /// GET /air — qualité de l'air sur la zone regardée.
 ///
 /// `?bbox=ouest,sud,est,nord`, mêmes bornes que pour les feux. Sans paramètre,
@@ -2343,6 +2541,7 @@ fn build_app(state: AppState) -> Router {
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
         .route("/air", get(list_air))
+        .route("/transit", get(list_transit))
         // Le courtier des paquets d'itinéraires. Ouvert comme les tuiles : ce
         // sont des données OpenStreetMap, redistribuables (ODbL). Le préfixe
         // d'étiquette borne strictement ce qui peut sortir du dépôt privé.
@@ -4698,6 +4897,68 @@ mod integration {
         assert!((lons[0] - dlon / 2.0 - (-5.0)).abs() < 1e-9, "{}", lons[0]);
 
         assert_eq!(air_maille("nawak"), (0.0, 0.0));
+    }
+
+    /// Les points de transit viennent du client et entrent dans une URL vers
+    /// Transitous : bornés, arrondis, ou refusés.
+    #[test]
+    fn le_point_de_transit_est_borne() {
+        assert_eq!(transit_point(Some("44.8820,-0.6051")), Some((44.882, -0.6051)));
+        // Arrondi au dix-millième : onze mètres, le même arrêt — et une clé
+        // de cache que deux appuis voisins partagent.
+        assert_eq!(transit_point(Some("44.88204,-0.60508")), Some((44.882, -0.6051)));
+        for mauvais in ["91,0", "0,181", "nawak", "1", "", "1,2,3"] {
+            assert!(transit_point(Some(mauvais)).is_none(), "{mauvais:?}");
+        }
+        assert!(transit_point(None).is_none());
+    }
+
+    /// La taille garde ce que l'écran montre, et rien d'autre.
+    ///
+    /// Le gabarit reprend la forme réelle d'une réponse MOTIS, relevée sur
+    /// Transitous pour Bordeaux : la réponse brute pèse 219 Ko pour six
+    /// itinéraires, l'écran a besoin de la ligne, sa couleur, la girouette,
+    /// les arrêts, les heures et le tracé.
+    #[test]
+    fn la_taille_du_transit_garde_l_essentiel() {
+        let brut: serde_json::Value = serde_json::json!({
+            "itineraries": [{
+                "duration": 3180, "transfers": 1,
+                "startTime": "2026-08-19T18:40:00Z", "endTime": "2026-08-19T19:33:00Z",
+                "legs": [
+                    {"mode": "WALK", "startTime": "2026-08-19T18:40:00Z",
+                     "endTime": "2026-08-19T18:47:00Z",
+                     "from": {"name": "START", "lat": 44.882, "lon": -0.605},
+                     "to": {"name": "Ausone", "lat": 44.8792, "lon": -0.6025},
+                     "legGeometry": {"points": "abc", "precision": 7}},
+                    {"mode": "TRAM", "routeShortName": "E", "routeColor": "967651",
+                     "headsign": "Quinconces",
+                     "startTime": "2026-08-19T18:47:00Z", "endTime": "2026-08-19T19:03:00Z",
+                     "from": {"name": "Ausone"}, "to": {"name": "Quinconces"},
+                     "legGeometry": {"points": "def", "precision": 7},
+                     "agencyName": "TBM", "tripId": "long-inutile", "intermediateStops": []}
+                ]
+            }]
+        });
+        let its = transit_taille(&brut);
+        assert_eq!(its.len(), 1);
+        let it = &its[0];
+        assert_eq!((it.duree_s, it.correspondances), (3180, 1));
+        assert_eq!(it.legs.len(), 2);
+        let tram = &it.legs[1];
+        assert_eq!(tram.ligne.as_deref(), Some("E"));
+        assert_eq!(tram.couleur.as_deref(), Some("967651"));
+        assert_eq!(tram.direction.as_deref(), Some("Quinconces"));
+        assert_eq!((tram.de.as_str(), tram.a.as_str()), ("Ausone", "Quinconces"));
+        assert_eq!(tram.trace, "def");
+        // La marche n'a ni ligne ni couleur, et ne les invente pas.
+        assert!(it.legs[0].ligne.is_none() && it.legs[0].couleur.is_none());
+        // Ce que l'écran ne montre pas n'est pas expédié.
+        let json = serde_json::to_string(&its).unwrap();
+        assert!(!json.contains("tripId") && !json.contains("agencyName"));
+
+        // Une réponse sans itinéraire rend une liste vide, pas une panique.
+        assert!(transit_taille(&serde_json::json!({})).is_empty());
     }
 
     /// La grille ne doit jamais être plus fine que le modèle.

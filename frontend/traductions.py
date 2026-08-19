@@ -147,6 +147,40 @@ T: dict[str, tuple[str, str]] = {
         "Address search needs a network connection. Press and hold the map to pick a point: the route is then computed on the device.",
     ),
     "Aucun itinéraire": ("Ninguna ruta", "No route"),
+    "Transports": ("Transporte", "Transit"),
+    "%.0f min · direct · %@": ("%.0f min · directo · %@", "%.0f min · direct · %@"),
+    "%.0f min · 1 correspondance · %@": (
+        "%.0f min · 1 transbordo · %@",
+        "%.0f min · 1 transfer · %@",
+    ),
+    "%.0f min · %d correspondances · %@": (
+        "%.0f min · %d transbordos · %@",
+        "%.0f min · %d transfers · %@",
+    ),
+    "Les transports en commun ont besoin du réseau.": (
+        "El transporte público necesita cobertura.",
+        "Public transit needs a network connection.",
+    ),
+    "Aucun trajet en transports trouvé pour cette destination.": (
+        "No se ha encontrado ningún trayecto en transporte para este destino.",
+        "No transit journey found for this destination.",
+    ),
+    "%@ %@ direction %@ — descendre à %@": (
+        "%@ %@ dirección %@ — bajar en %@",
+        "%@ %@ towards %@ — get off at %@",
+    ),
+    "%@ direction %@ — descendre à %@": (
+        "%@ dirección %@ — bajar en %@",
+        "%@ towards %@ — get off at %@",
+    ),
+    "Marcher jusqu'à %@": ("Caminar hasta %@", "Walk to %@"),
+    "la destination": ("el destino", "the destination"),
+    "Tram": ("Tranvía", "Tram"),
+    "Bus": ("Bus", "Bus"),
+    "Métro": ("Metro", "Subway"),
+    "Train": ("Tren", "Train"),
+    "Bac": ("Ferri", "Ferry"),
+    "Marche": ("A pie", "Walking"),
     "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.": (
         "No hay ninguna región de rutas instalada. Descarga la que te interesa desde la pantalla sin conexión.",
         "No routing region is installed. Download the one you need from the offline screen.",

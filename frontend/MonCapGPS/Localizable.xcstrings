@@ -17,6 +17,54 @@
         }
       }
     },
+    "%.0f min · %d correspondances · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · %d transfers · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · %d transbordos · %@"
+          }
+        }
+      }
+    },
+    "%.0f min · 1 correspondance · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · 1 transfer · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · 1 transbordo · %@"
+          }
+        }
+      }
+    },
+    "%.0f min · direct · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · direct · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · directo · %@"
+          }
+        }
+      }
+    },
     "%.1f km restants": {
       "localizations": {
         "en": {
@@ -29,6 +77,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "%.1f km restantes"
+          }
+        }
+      }
+    },
+    "%@ %@ direction %@ — descendre à %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ towards %@ — get off at %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %@ dirección %@ — bajar en %@"
+          }
+        }
+      }
+    },
+    "%@ direction %@ — descendre à %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ towards %@ — get off at %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dirección %@ — bajar en %@"
           }
         }
       }
@@ -529,6 +609,22 @@
         }
       }
     },
+    "Aucun trajet en transports trouvé pour cette destination.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No transit journey found for this destination."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se ha encontrado ningún trayecto en transporte para este destino."
+          }
+        }
+      }
+    },
     "Aucun trajet enregistré pour l'instant. Lance une navigation : ton trajet sera sauvegardé automatiquement à l'arrivée.": {
       "localizations": {
         "en": {
@@ -705,6 +801,22 @@
         }
       }
     },
+    "Bac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ferry"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ferri"
+          }
+        }
+      }
+    },
     "Baignade": {
       "localizations": {
         "en": {
@@ -797,6 +909,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Llovizna"
+          }
+        }
+      }
+    },
+    "Bus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bus"
           }
         }
       }
@@ -1921,6 +2049,22 @@
         }
       }
     },
+    "Les transports en commun ont besoin du réseau.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Public transit needs a network connection."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El transporte público necesita cobertura."
+          }
+        }
+      }
+    },
     "Liste des régions indisponible — il faut du réseau une fois.": {
       "localizations": {
         "en": {
@@ -1949,6 +2093,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ahora, %@"
+          }
+        }
+      }
+    },
+    "Marche": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walking"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pie"
+          }
+        }
+      }
+    },
+    "Marcher jusqu'à %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walk to %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caminar hasta %@"
           }
         }
       }
@@ -2189,6 +2365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Contraseña: 6 caracteres como mínimo."
+          }
+        }
+      }
+    },
+    "Métro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subway"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metro"
           }
         }
       }
@@ -3217,6 +3409,54 @@
         }
       }
     },
+    "Train": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Train"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tren"
+          }
+        }
+      }
+    },
+    "Tram": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tram"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tranvía"
+          }
+        }
+      }
+    },
+    "Transports": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transit"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transporte"
+          }
+        }
+      }
+    },
     "Travaux": {
       "localizations": {
         "en": {
@@ -3517,6 +3757,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "cerrado %@"
+          }
+        }
+      }
+    },
+    "la destination": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the destination"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "el destino"
           }
         }
       }
