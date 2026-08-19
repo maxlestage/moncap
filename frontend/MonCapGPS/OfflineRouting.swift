@@ -95,6 +95,29 @@ final class OfflineRouter: NSObject, ObservableObject {
         var poids: String { String(format: "%.0f Mo", Double(octets) / 1_000_000) }
     }
 
+    /// Pourquoi le dernier calcul local n'a rien rendu.
+    ///
+    /// Trois échecs très différents finissaient par le même message à l'écran —
+    /// « aucune région ne couvre ce trajet » — y compris quand la région
+    /// couvrait parfaitement le trajet mais que son paquet refusait de
+    /// s'ouvrir. Un message qui devine envoie chercher au mauvais endroit ;
+    /// celui-ci rapporte ce que le moteur a réellement dit.
+    enum EchecLocal: Equatable {
+        /// Rien d'installé : il n'y a même pas de quoi essayer.
+        case aucuneRegion
+        /// Le paquet est là mais ne s'ouvre pas — archive incomplète, config
+        /// illisible. Rien à voir avec la géographie.
+        case paquetIllisible(region: String)
+        /// Le moteur a répondu, et a nommé son refus.
+        case refus(region: String, raison: String)
+        /// Le moteur a répondu quelque chose d'inexploitable, sans erreur
+        /// nommée. Rare, et il vaut mieux le dire que l'habiller.
+        case sansItineraire(region: String)
+    }
+
+    /// Le dernier échec, gardé pour que l'écran puisse en parler.
+    @Published private(set) var dernierEchec: EchecLocal?
+
     /// Régions publiées, relevées sur les Releases.
     @Published private(set) var regions: [Region] = []
     /// Régions gardées sur l'appareil, dans l'ordre d'installation.
@@ -473,11 +496,40 @@ final class OfflineRouter: NSObject, ObservableObject {
         guard let json = try? JSONSerialization.data(withJSONObject: demande) else { return [] }
         let texte = String(decoding: json, as: UTF8.self)
 
-        for region in installees {
-            guard let moteur = moteur(region.id) else { continue }
-            let trouves = OfflineRoute.toutes(json: moteur.route(rawRequest: texte))
-            if !trouves.isEmpty { return trouves }
+        guard !installees.isEmpty else {
+            dernierEchec = .aucuneRegion
+            return []
         }
+
+        // On retient l'échec le plus **instructif**, pas le dernier venu : un
+        // paquet qui ne s'ouvre pas est un fait matériel, à dire avant un refus
+        // de couverture qui, lui, peut être normal.
+        var echec: EchecLocal?
+        let retiens = { (neuf: EchecLocal) in
+            switch (echec, neuf) {
+            case (.some(.paquetIllisible), _): break
+            default: echec = neuf
+            }
+        }
+
+        for region in installees {
+            guard let moteur = moteur(region.id) else {
+                retiens(.paquetIllisible(region: region.nom))
+                continue
+            }
+            let brut = moteur.route(rawRequest: texte)
+            let trouves = OfflineRoute.toutes(json: brut)
+            if !trouves.isEmpty {
+                dernierEchec = nil
+                return trouves
+            }
+            if let raison = OfflineRoute.erreur(json: brut) {
+                retiens(.refus(region: region.nom, raison: raison))
+            } else {
+                retiens(.sansItineraire(region: region.nom))
+            }
+        }
+        dernierEchec = echec
         return []
     }
 
@@ -516,6 +568,28 @@ struct OfflineRoute {
     /// Valhalla place celles-ci dans `alternates`, chacune enveloppée dans son
     /// propre objet `trip` — d'où la lecture en deux temps plutôt qu'une
     /// simple boucle.
+    /// L'erreur que Valhalla a nommée, s'il en a nommé une.
+    ///
+    /// Sa réponse d'échec porte `error` et `error_code` — par exemple « No
+    /// suitable edges near location » quand une extrémité tombe hors du
+    /// paquet. La jeter revenait à devoir deviner ensuite ce qui s'était
+    /// passé.
+    static func erreur(json: String) -> String? {
+        guard
+            let data = json.data(using: .utf8),
+            let racine = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let message = racine["error"] as? String,
+            !message.isEmpty
+        else { return nil }
+        return message
+    }
+
+    /// Vrai si le refus dit qu'une extrémité tombe hors des routes connues du
+    /// paquet — le cas de couverture, distinct d'une panne.
+    static func estHorsCouverture(_ raison: String) -> Bool {
+        raison.localizedCaseInsensitiveContains("edges near location")
+    }
+
     static func toutes(json: String) -> [OfflineRoute] {
         guard
             let data = json.data(using: .utf8),

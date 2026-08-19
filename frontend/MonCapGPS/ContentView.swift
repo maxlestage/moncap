@@ -3428,10 +3428,12 @@ struct MapHomeView: View {
 
     /// Pourquoi aucun itinéraire n'a pu être proposé.
     ///
-    /// Trois causes, trois gestes : il n'y a pas de paquet, le paquet ne couvre
-    /// pas ce trajet-là, ou c'est le réseau qui manque. Un message unique
-    /// enverrait chercher au mauvais endroit — on l'a déjà vu avec la liste des
-    /// régions, qui accusait le réseau alors qu'il allait très bien.
+    /// Le message ne **devine** plus. Il disait « aucune région ne couvre ce
+    /// trajet » dans tous les cas — y compris quand la région couvrait
+    /// parfaitement le trajet mais que son paquet refusait de s'ouvrir, ce qui
+    /// envoyait chercher un défaut de couverture là où il fallait réinstaller.
+    /// Le routeur rapporte désormais ce que le moteur a réellement dit, et
+    /// c'est cela qui s'affiche.
     private func raisonSansItineraire() -> String {
         if travelMode != .car {
             return NSLocalizedString(
@@ -3443,9 +3445,38 @@ struct MapHomeView: View {
                 "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.",
                 comment: "")
         }
-        return NSLocalizedString(
-            "Aucune région installée ne couvre ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
-            comment: "")
+
+        switch router.dernierEchec {
+        case .aucuneRegion, .none:
+            return NSLocalizedString(
+                "Aucune région installée ne couvre ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
+                comment: "")
+
+        case .paquetIllisible(let region):
+            return String(
+                format: NSLocalizedString(
+                    "Le paquet « %@ » ne s'ouvre pas. Supprime-le et réinstalle-le depuis l'écran hors ligne.",
+                    comment: ""), region)
+
+        case .refus(let region, let raison):
+            if OfflineRoute.estHorsCouverture(raison) {
+                return String(
+                    format: NSLocalizedString(
+                        "« %@ » ne couvre pas ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
+                        comment: ""), region)
+            }
+            // Une erreur qu'on n'a pas prévue se montre telle quelle : mieux
+            // vaut une phrase technique exacte qu'une explication inventée.
+            return String(
+                format: NSLocalizedString(
+                    "« %@ » a refusé le calcul : %@", comment: ""), region, raison)
+
+        case .sansItineraire(let region):
+            return String(
+                format: NSLocalizedString(
+                    "« %@ » n'a trouvé aucune route entre ces deux points, sans dire pourquoi.",
+                    comment: ""), region)
+        }
     }
 
     /// Calcule plusieurs itinéraires vers une destination et les propose :

@@ -1793,6 +1793,22 @@
         }
       }
     },
+    "Le paquet « %@ » ne s'ouvre pas. Supprime-le et réinstalle-le depuis l'écran hors ligne.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The “%@” package will not open. Delete it and reinstall it from the offline screen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El paquete «%@» no se abre. Elimínalo y vuelve a instalarlo desde la pantalla sin conexión."
+          }
+        }
+      }
+    },
     "Le plus court": {
       "localizations": {
         "en": {
@@ -3677,6 +3693,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "has llegado"
+          }
+        }
+      }
+    },
+    "« %@ » a refusé le calcul : %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” refused the computation: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» ha rechazado el cálculo: %@"
+          }
+        }
+      }
+    },
+    "« %@ » n'a trouvé aucune route entre ces deux points, sans dire pourquoi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” found no route between these two points, without saying why."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» no ha encontrado ninguna ruta entre estos dos puntos, sin decir por qué."
+          }
+        }
+      }
+    },
+    "« %@ » ne couvre pas ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” does not cover this trip. It must fit entirely within one package — that is what the overlapping areas are for."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» no cubre este trayecto. Debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan."
           }
         }
       }
