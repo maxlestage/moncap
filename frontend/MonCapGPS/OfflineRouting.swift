@@ -525,8 +525,11 @@ final class OfflineRouter: NSObject, ObservableObject {
     ///
     /// Renvoie `nil` si aucune région n'est gardée ou si aucune ne couvre le
     /// trajet : l'appelant garde alors son itinéraire précédent.
-    func route(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> OfflineRoute? {
-        routes(from: from, to: to, max: 1).first
+    func route(
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+        costing: String = "auto"
+    ) -> OfflineRoute? {
+        routes(from: from, to: to, max: 1, costing: costing).first
     }
 
     /// Plusieurs itinéraires entre deux points, calculés sur l'appareil.
@@ -540,16 +543,23 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// processeur, pas de la donnée. Cinq par défaut, parce qu'au-delà les
     /// tracés se ressemblent trop pour qu'un choix ait du sens, et que chacun
     /// se paie en secondes d'attente sur un téléphone.
+    ///
+    /// `costing` : `auto`, `bicycle` ou `pedestrian`. Les trois se calculent
+    /// sur les **mêmes tuiles** — le graphe porte tous les chemins, la fonction
+    /// de coût choisit lesquels emprunter. Le brider à la voiture, comme
+    /// c'était le cas, envoyait le vélo et la marche sur le réseau en plein
+    /// mode avion, pour un calcul que le paquet installé savait faire.
     func routes(
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
-        max nombre: Int = OfflineRouter.maxItineraires
+        max nombre: Int = OfflineRouter.maxItineraires,
+        costing: String = "auto"
     ) -> [OfflineRoute] {
         var demande: [String: Any] = [
             "locations": [
                 ["lat": from.latitude, "lon": from.longitude],
                 ["lat": to.latitude, "lon": to.longitude],
             ],
-            "costing": "auto",
+            "costing": costing,
             "directions_options": [
                 "units": "kilometers",
                 // Les consignes suivent la langue de l'app : elles alimentent

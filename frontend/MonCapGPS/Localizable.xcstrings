@@ -1809,22 +1809,6 @@
         }
       }
     },
-    "Le calcul a échoué. Ce mode de déplacement a besoin du réseau.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The computation failed. This travel mode needs a network connection."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El cálculo ha fallado. Este modo de transporte necesita cobertura."
-          }
-        }
-      }
-    },
     "Le paquet « %@ » ne s'ouvre pas. Supprime-le et réinstalle-le depuis l'écran hors ligne.": {
       "localizations": {
         "en": {
