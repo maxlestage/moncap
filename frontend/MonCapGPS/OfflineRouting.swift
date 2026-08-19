@@ -1,6 +1,9 @@
 import CoreLocation
 import Foundation
 import Valhalla
+// Le type `ValhallaConfig` et son init `tileExtractTar:` — la config accordée
+// au moteur embarqué, dans laquelle on n'injecte que le chemin de l'archive.
+import ValhallaConfigModels
 
 /// Calcul d'itinéraire **sur l'appareil**, sans réseau.
 ///
@@ -235,12 +238,6 @@ final class OfflineRouter: NSObject, ObservableObject {
             FileManager.default.fileExists(atPath: Self.archivePath($0.id).path)
         }
         if installees.count != lues.count { enregistre() }
-        // Réparation au démarrage : après une mise à jour de l'app, le
-        // conteneur a changé de nom et les configurations désignent un dossier
-        // disparu. Les remettre d'aplomb ici évite que la première demande —
-        // souvent faite sans réseau, au moment où l'on en a le plus besoin —
-        // tombe sur un paquet réputé illisible.
-        for region in installees { Self.rafraichitChemin(region.id) }
     }
 
     private static let key = "moncap.valhallaRegions"
@@ -492,6 +489,11 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// Elle porte des chemins absolus (`/data/…`) qui n'existent pas sur
     /// l'appareil : seuls ceux-là changent, tout le reste — des dizaines de
     /// réglages de coût, de vitesse et de tri — est conservé tel quel.
+    ///
+    /// Le moteur ne lit **plus** ce fichier : sa forme suit la version du
+    /// générateur, pas celle du moteur embarqué, et cet écart l'a fait mourir
+    /// à l'ouverture (cf. `moteur(_:)`). Il est gardé sur disque comme trace
+    /// de la construction, et `termine` s'en sert pour valider l'installation.
     nonisolated static func corrige(config: Data, pour id: String) throws -> Data {
         guard
             var racine = try JSONSerialization.jsonObject(with: config) as? [String: Any],
@@ -506,41 +508,6 @@ final class OfflineRouter: NSObject, ObservableObject {
         mjolnir.removeValue(forKey: "timezone")
         racine["mjolnir"] = mjolnir
         return try JSONSerialization.data(withJSONObject: racine)
-    }
-
-    /// Remet le chemin de l'archive à jour dans la configuration.
-    ///
-    /// **La panne du mode avion tenait à cela.** iOS renomme le conteneur de
-    /// l'application à chaque installation : le dossier porte un identifiant
-    /// qui change à chaque mise à jour, donc à chaque livraison TestFlight.
-    ///
-    /// Or les deux moitiés du paquet ne vieillissaient pas de la même façon.
-    /// L'archive était retrouvée par un chemin **recalculé à l'exécution**, si
-    /// bien que la région continuait de s'afficher installée, ses 522 Mo bien
-    /// présents. Mais la configuration, elle, portait le chemin **figé au
-    /// téléchargement** : Valhalla cherchait l'archive dans un conteneur
-    /// disparu, refusait de s'ouvrir, et le routeur passait au suivant sans
-    /// rien dire. D'où « aucune région installée ne couvre ce trajet », en
-    /// plein milieu d'une région parfaitement installée.
-    ///
-    /// Le chemin est donc revérifié avant chaque ouverture, et réécrit s'il a
-    /// bougé. Une lecture de quelques kilo-octets, contre une région qui ne
-    /// sert plus à rien.
-    nonisolated static func rafraichitChemin(_ id: String) {
-        let config = configPath(id)
-        guard
-            let data = try? Data(contentsOf: config),
-            var racine = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            var mjolnir = racine["mjolnir"] as? [String: Any]
-        else { return }
-
-        let voulu = archivePath(id).path
-        guard (mjolnir["tile_extract"] as? String) != voulu else { return }
-
-        mjolnir["tile_extract"] = voulu
-        racine["mjolnir"] = mjolnir
-        guard let neuf = try? JSONSerialization.data(withJSONObject: racine) else { return }
-        try? neuf.write(to: config)
     }
 
     // MARK: - Calcul
@@ -643,16 +610,32 @@ final class OfflineRouter: NSObject, ObservableObject {
     }()
 
     /// Moteur d'une région, ouvert à la première demande et gardé ensuite.
+    ///
+    /// La configuration est bâtie **sur l'appareil**, depuis celle que le
+    /// wrapper embarque, en n'y injectant que le chemin du tar — l'init prévu
+    /// pour cela, celui des tests officiels du paquet.
+    ///
+    /// La configuration téléchargée avec l'archive n'est plus donnée au
+    /// moteur, et c'était la panne du mode hors ligne. Elle est engendrée par
+    /// l'image `valhalla:latest` du chantier de tuiles, quand l'app embarque
+    /// le moteur 3.6.3 : entre les deux, des clés obligatoires ont changé de
+    /// nom — lu dans le source du moteur au commit embarqué,
+    /// `get<size_t>("service_limits.pedestrian.max_transit_walking_distance")`
+    /// lance si la clé manque, et le générateur récent l'a renommée en
+    /// `max_multimodal_walking_distance`. Le moteur mourait donc à
+    /// l'ouverture, avant même de regarder l'archive, et l'écran concluait
+    /// « aucune région ne couvre ce trajet ». Une config d'un autre âge que
+    /// son moteur est une panne assurée ; celle du wrapper est accordée au
+    /// sien par construction.
     private func moteur(_ id: String) -> Valhalla? {
         if let deja = moteurs[id] { return deja }
         // Les fuseaux horaires que réclame Valhalla sont installés par le
         // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
         // rien à faire ici.
-        // Le conteneur de l'app a pu être renommé depuis le téléchargement :
-        // sans cette remise à jour, l'ouverture échoue alors que l'archive est
-        // là. Cf. `rafraichitChemin`.
-        Self.rafraichitChemin(id)
-        guard let neuf = try? Valhalla(configPath: Self.configPath(id).path) else { return nil }
+        guard
+            let config = try? ValhallaConfig(tileExtractTar: Self.archivePath(id)),
+            let neuf = try? Valhalla(config)
+        else { return nil }
         moteurs[id] = neuf
         return neuf
     }

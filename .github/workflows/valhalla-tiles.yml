@@ -311,8 +311,14 @@ jobs:
           valhalla_build_tiles -c /data/valhalla.json /data/fusionne.osm.pbf
           valhalla_build_extract -c /data/valhalla.json -v
           SH
+          # Épinglée sur la version du moteur embarqué par l'app
+          # (valhalla-mobile 0.5.1 → Valhalla 3.6.3). Avec `latest`, le
+          # générateur prend de l'avance sur le moteur : des clés obligatoires
+          # de la configuration changent de nom, et le moteur meurt à
+          # l'ouverture du paquet. À monter en même temps que valhalla-mobile,
+          # jamais séparément.
           docker run --rm -v "$PWD/data:/data" -w /data \
-            ghcr.io/valhalla/valhalla:latest bash /data/construit.sh
+            ghcr.io/valhalla/valhalla:3.6.3 bash /data/construit.sh
           ls -lh data/tuiles.tar data/valhalla.json
           echo "TAILLE=$(du -h data/tuiles.tar | cut -f1)" >> "$GITHUB_ENV"
           # Une pièce jointe de Release plafonne à 2 Gio ; au-delà l'envoi
