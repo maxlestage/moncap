@@ -150,6 +150,22 @@ T: dict[str, tuple[str, str]] = {
         "No hay ninguna región de rutas instalada. Descarga la que te interesa desde la pantalla sin conexión.",
         "No routing region is installed. Download the one you need from the offline screen.",
     ),
+    "Le paquet « %@ » ne s'ouvre pas. Supprime-le et réinstalle-le depuis l'écran hors ligne.": (
+        "El paquete «%@» no se abre. Elimínalo y vuelve a instalarlo desde la pantalla sin conexión.",
+        "The “%@” package will not open. Delete it and reinstall it from the offline screen.",
+    ),
+    "« %@ » ne couvre pas ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.": (
+        "«%@» no cubre este trayecto. Debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan.",
+        "“%@” does not cover this trip. It must fit entirely within one package — that is what the overlapping areas are for.",
+    ),
+    "« %@ » a refusé le calcul : %@": (
+        "«%@» ha rechazado el cálculo: %@",
+        "“%@” refused the computation: %@",
+    ),
+    "« %@ » n'a trouvé aucune route entre ces deux points, sans dire pourquoi.": (
+        "«%@» no ha encontrado ninguna ruta entre estos dos puntos, sin decir por qué.",
+        "“%@” found no route between these two points, without saying why.",
+    ),
     "Aucune région installée ne couvre ce trajet. Il doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.": (
         "Ninguna región instalada cubre este trayecto. Debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan.",
         "No installed region covers this trip. It must fit entirely within one package — that is what the overlapping areas are for.",
