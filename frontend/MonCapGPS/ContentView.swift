@@ -42,6 +42,12 @@ struct RouteOption: Identifiable {
     var descent: Double?
     /// L'itinéraire emprunte des sections à péage.
     var hasTolls = false
+    /// Tronçons de transports en commun, pour l'onglet Transports. Présents,
+    /// la carte d'option montre la chaîne des lignes et les horaires plutôt
+    /// que kilomètres et virages — qui ne veulent rien dire dans un tram.
+    var transit: [TransitLeg]?
+    /// « 18:40 → 19:23 », heures réelles de départ et d'arrivée.
+    var horaire: String?
 }
 
 /// Profil d'altitude d'une suite de points via l'API open-meteo (gratuite,
@@ -361,7 +367,7 @@ struct POI: Identifiable {
 
 /// Mode de déplacement : à pied, à vélo, en voiture.
 enum TravelMode: String, CaseIterable, Identifiable {
-    case walk, bike, car
+    case walk, bike, car, transit
     var id: String { rawValue }
 
     /// MapKit ne calcule pas d'itinéraire vélo : on l'approxime avec le tracé
@@ -385,6 +391,10 @@ enum TravelMode: String, CaseIterable, Identifiable {
         case .walk: return "pedestrian"
         case .bike: return "bicycle"
         case .car: return "auto"
+        // Jamais employé : le transit est calculé par le serveur, et les
+        // chemins locaux sont gardés en amont. La marche est le repli le
+        // moins faux si un appel se glissait quand même jusqu'ici.
+        case .transit: return "pedestrian"
         }
     }
 
@@ -393,6 +403,7 @@ enum TravelMode: String, CaseIterable, Identifiable {
         case .walk: return "figure.walk"
         case .bike: return "bicycle"
         case .car: return "car.fill"
+        case .transit: return "tram.fill"
         }
     }
 
@@ -401,6 +412,7 @@ enum TravelMode: String, CaseIterable, Identifiable {
         case .walk: return "À pied"
         case .bike: return "Vélo"
         case .car: return "Voiture"
+        case .transit: return "Transports"
         }
     }
 }
@@ -1499,6 +1511,8 @@ struct MapHomeView: View {
         case .car: return avatar
         case .walk: return "walk"
         case .bike: return "bike"
+        // En transports, on est un piéton entre deux véhicules.
+        case .transit: return "walk"
         }
     }
 
@@ -2119,9 +2133,61 @@ struct MapHomeView: View {
     }
 
     /// Infos principales d'un itinéraire : durée, distance, virages, arrivée.
+    ///
+    /// En transports, ni kilomètres ni virages — la durée, les
+    /// correspondances et les heures réelles, qui sont ce qu'on compare. Trois
+    /// libellés entiers plutôt qu'un pluriel bricolé dans la phrase : une
+    /// interpolation `%d correspondance(s)` fabriquerait une clé illisible
+    /// pour les traducteurs.
     private func routeCoreText(_ o: RouteOption) -> String {
-        String(format: NSLocalizedString("%.0f min · %.1f km · %d virages · arr. %@", comment: ""),
+        if o.transit != nil {
+            let horaire = o.horaire ?? routeArrival(o.minutes)
+            switch o.turns {
+            case 0:
+                return String(
+                    format: NSLocalizedString("%.0f min · direct · %@", comment: ""),
+                    o.minutes, horaire)
+            case 1:
+                return String(
+                    format: NSLocalizedString("%.0f min · 1 correspondance · %@", comment: ""),
+                    o.minutes, horaire)
+            default:
+                return String(
+                    format: NSLocalizedString("%.0f min · %d correspondances · %@", comment: ""),
+                    o.minutes, o.turns, horaire)
+            }
+        }
+        return String(format: NSLocalizedString("%.0f min · %.1f km · %d virages · arr. %@", comment: ""),
                o.minutes, o.km, o.turns, routeArrival(o.minutes))
+    }
+
+    /// La chaîne des lignes d'un itinéraire en transports : les pastilles des
+    /// véhicules, la marche réduite à son pictogramme.
+    private func transitChaine(_ legs: [TransitLeg]) -> some View {
+        HStack(spacing: 4) {
+            ForEach(Array(legs.enumerated()), id: \.offset) { i, l in
+                if i > 0 {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                if l.estVehicule {
+                    HStack(spacing: 3) {
+                        Image(systemName: l.symbole).font(.caption2)
+                        if let ligne = l.ligne {
+                            Text(verbatim: ligne).font(.caption2.weight(.bold))
+                        }
+                    }
+                    .padding(.vertical, 2).padding(.horizontal, 5)
+                    .background(l.teinte.opacity(0.9), in: RoundedRectangle(cornerRadius: 5))
+                    .foregroundStyle(.white)
+                } else {
+                    Image(systemName: "figure.walk")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     /// Dénivelé (côte ↗ / descente ↘) si connu.
@@ -2190,6 +2256,9 @@ struct MapHomeView: View {
     /// Infos détaillées : ligne principale + dénivelé sur une ligne à part.
     private func routeDetails(_ o: RouteOption, compact: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
+            if let legs = o.transit {
+                transitChaine(legs)
+            }
             Text(routeCoreText(o))
                 .lineLimit(compact ? 1 : 2)
                 .minimumScaleFactor(compact ? 0.6 : 0.85)
@@ -3501,6 +3570,14 @@ struct MapHomeView: View {
         routeCoords = []
         routeInfo = nil
 
+        // Les transports ont leur propre chemin : le calcul vient du serveur,
+        // pas de MapKit ni de Valhalla, et leurs cartes montrent des lignes et
+        // des horaires plutôt que des kilomètres.
+        if travelMode == .transit {
+            await presentTransitOptions(from: from, to: dest)
+            return
+        }
+
         var builds: [RouteBuild]
         // Hors ligne assumé : rien ne part sur le réseau. Valhalla sait
         // proposer des variantes, on lui en demande cinq — le calcul est
@@ -3538,13 +3615,18 @@ struct MapHomeView: View {
             let tt = travelMode.transportType
             // Alternatives directes d'Apple (souvent 2–3).
             builds = await buildRoutes(from: from, to: dest, alternates: true, transportType: tt)
-            // En voiture, diversifie via des points de passage décalés de part et
-            // d'autre du trajet direct, pour viser une quinzaine de choix (calcul
-            // parallèle borné, anti-throttling). À pied, les alternatives directes
-            // suffisent.
-            if travelMode == .car {
+            // Diversifie via des points de passage décalés de part et d'autre
+            // du trajet direct, pour viser une quinzaine de choix (calcul
+            // parallèle borné, anti-throttling). Tous les modes y ont droit —
+            // les alternatives directes d'Apple s'arrêtent à deux ou trois, et
+            // c'est à pied ou à vélo qu'un détour par les quais change tout.
+            // La marche en demande moins : ses tracés convergent vite, et six
+            // détours n'y donnent pas plus de choix que trois.
+            do {
+                let fractions: [Double] =
+                    travelMode == .walk ? [0.22, 0.46, 0.7] : [0.1, 0.22, 0.34, 0.46, 0.58, 0.7]
                 var vias: [CLLocationCoordinate2D] = []
-                for f in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
+                for f in fractions {
                     for s in [1.0, -1.0] {
                         vias.append(offsetVia(from: from, to: dest, fraction: f, side: s))
                     }
@@ -3566,16 +3648,19 @@ struct MapHomeView: View {
                 }
             }
         }
-        // Filet de sécurité : le réseau n'a rien rendu — coupure, mode avion,
-        // serveur d'Apple injoignable. Si un paquet couvre le trajet, il répond
-        // ici même, que l'interrupteur « Naviguer hors ligne » soit mis ou non.
-        // Celui-ci veut dire « privilégie le calcul local », pas « c'est le seul
-        // moyen d'y avoir droit » : personne ne pense à l'activer au moment où
-        // le réseau tombe.
-        if builds.isEmpty {
-            builds = router.routes(from: from, to: dest,
-                                   max: OfflineRouter.maxItineraires,
-                                   costing: travelMode.costing)
+        // Renfort local : le réseau n'a rien rendu — coupure, mode avion,
+        // serveur d'Apple injoignable — ou trop peu pour qu'un choix ait du
+        // sens. Si un paquet couvre le trajet, il complète ici même, que
+        // l'interrupteur « Naviguer hors ligne » soit mis ou non : celui-ci
+        // veut dire « privilégie le calcul local », pas « c'est le seul moyen
+        // d'y avoir droit ». À pied et à vélo, Apple s'arrête souvent à deux
+        // tracés ; Valhalla en ajoute jusqu'à quinze — et pour le vélo, avec
+        // un vrai profil, ce que MapKit n'a pas. La déduplication d'en
+        // dessous retire ce qui ferait doublon.
+        if builds.count < 4 {
+            builds += router.routes(from: from, to: dest,
+                                    max: OfflineRouter.maxItineraires,
+                                    costing: travelMode.costing)
                 .map {
                     RouteBuild(coords: $0.coordinates, steps: $0.steps,
                                km: $0.km, minutes: $0.minutes, hasTolls: $0.hasTolls)
@@ -3638,6 +3723,114 @@ struct MapHomeView: View {
 
         // Enrichit chaque itinéraire avec son dénivelé (en tâche de fond).
         Task { await loadElevations(for: options) }
+    }
+
+    /// Itinéraires en transports en commun, calculés par le serveur.
+    ///
+    /// Chaque itinéraire devient une `RouteOption` ordinaire — tracé, étapes,
+    /// durée — enrichie de ses tronçons : tout l'aval (carte, fiche, Démarrer)
+    /// fonctionne sans une ligne de plus. Les « virages » y comptent les
+    /// correspondances, ce que l'affichage sait dire.
+    private func presentTransitOptions(
+        from: CLLocationCoordinate2D, to dest: CLLocationCoordinate2D
+    ) async {
+        guard let its = await TransitService.fetch(from: from, to: dest) else {
+            itineraireImpossible = NSLocalizedString(
+                "Les transports en commun ont besoin du réseau.", comment: "")
+            return
+        }
+        guard !its.isEmpty else {
+            itineraireImpossible = NSLocalizedString(
+                "Aucun trajet en transports trouvé pour cette destination.", comment: "")
+            return
+        }
+
+        var options: [RouteOption] = its.compactMap { it in
+            var coords: [CLLocationCoordinate2D] = []
+            var etapes: [NavStep] = []
+            for l in it.legs {
+                let trace = TransitService.decode(l.trace)
+                let debut = trace.first ?? coords.last ?? from
+                let texte: String
+                if l.estVehicule {
+                    // La girouette d'abord : c'est elle qu'on cherche des yeux
+                    // sur le quai. À défaut, le terminus du tronçon.
+                    let cap = l.direction ?? l.a
+                    if let ligne = l.ligne {
+                        texte = String(
+                            format: NSLocalizedString(
+                                "%@ %@ direction %@ — descendre à %@", comment: ""),
+                            l.nomDuMode, ligne, cap, l.a)
+                    } else {
+                        texte = String(
+                            format: NSLocalizedString(
+                                "%@ direction %@ — descendre à %@", comment: ""),
+                            l.nomDuMode, cap, l.a)
+                    }
+                } else {
+                    // Le serveur borne le trajet par START/END, des jalons et
+                    // non des noms : on ne les affiche pas tels quels.
+                    let but = (l.a == "END" || l.a.isEmpty)
+                        ? NSLocalizedString("la destination", comment: "") : l.a
+                    texte = String(
+                        format: NSLocalizedString("Marcher jusqu'à %@", comment: ""), but)
+                }
+                etapes.append(NavStep(text: texte, coord: debut))
+                coords += trace
+            }
+            guard coords.count >= 2 else { return nil }
+
+            var km = 0.0
+            for i in 1..<coords.count {
+                km += CLLocation(latitude: coords[i - 1].latitude, longitude: coords[i - 1].longitude)
+                    .distance(from: CLLocation(latitude: coords[i].latitude, longitude: coords[i].longitude))
+                    / 1000
+            }
+            var o = RouteOption(
+                coordinates: coords, steps: etapes,
+                minutes: Double(it.duree_s) / 60, km: km, turns: it.correspondances)
+            o.transit = it.legs
+            if let d = TransitService.heure(it.depart), let a = TransitService.heure(it.arrivee) {
+                o.horaire = "\(d) → \(a)"
+            }
+            return o
+        }
+        guard !options.isEmpty else {
+            itineraireImpossible = NSLocalizedString(
+                "Aucun trajet en transports trouvé pour cette destination.", comment: "")
+            return
+        }
+
+        // « Le plus simple » = le moins de correspondances, puis le plus
+        // rapide — en tram, la simplicité se compte en changements.
+        if let best = options.indices.min(by: {
+            (options[$0].turns, options[$0].minutes) < (options[$1].turns, options[$1].minutes)
+        }) {
+            options[best].isSimplest = true
+        }
+        options.sort { ($0.isSimplest ? 0 : 1, $0.minutes) < ($1.isSimplest ? 0 : 1, $1.minutes) }
+
+        let altColors: [Color] = [
+            .blue, .orange, .purple, .pink, .teal, .red, .brown, .cyan, .indigo, .mint, .yellow,
+        ]
+        var alt = 0
+        options = options.map { o in
+            var oo = o
+            if o.isSimplest {
+                oo.color = .green
+            } else {
+                oo.color = altColors[alt % altColors.count]
+                alt += 1
+            }
+            return oo
+        }
+
+        pendingDestination = dest
+        routeOptions = options
+        selectedRouteID = options.first { $0.isSimplest }?.id ?? options.first?.id
+        routesExpanded = false
+        fitCoordinates(options.flatMap { $0.coordinates } + [from])
+        // Pas de dénivelé : dans un tram, la côte est l'affaire du tram.
     }
 
     /// Récupère le dénivelé (côte / descente) de chaque itinéraire et met à jour
