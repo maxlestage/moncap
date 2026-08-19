@@ -598,7 +598,9 @@ final class OfflineRouter: NSObject, ObservableObject {
             let trouves = OfflineRoute.toutes(json: brut)
             if !trouves.isEmpty {
                 dernierEchec = nil
-                return trouves
+                return complete(
+                    trouves, moteur: moteur, from: from, to: to,
+                    max: nombre, costing: costing)
             }
             if let raison = OfflineRoute.erreur(json: brut) {
                 retiens(.refus(region: region.nom, raison: raison))
@@ -608,6 +610,85 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
         dernierEchec = echec
         return []
+    }
+
+    /// Complète les variantes du moteur par des détours forcés.
+    ///
+    /// Même plafond levé, Valhalla rend rarement plus de trois ou quatre
+    /// variantes : son algorithme ne cherche pas la diversité, il écarte ce
+    /// qui ressemble trop au principal. Les détours la fabriquent — un point
+    /// de passage décalé de part et d'autre du trajet direct, le même éventail
+    /// que le mode en ligne — et la déduplication jette ce qui retombe sur un
+    /// tracé déjà vu. Une douzaine d'appels au moteur, quelques dixièmes de
+    /// seconde chacun : c'est le prix des quinze choix, payé une fois par
+    /// recherche.
+    private func complete(
+        _ base: [OfflineRoute], moteur: Valhalla,
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+        max nombre: Int, costing: String
+    ) -> [OfflineRoute] {
+        var routes = Array(base.prefix(nombre))
+        guard routes.count < nombre, nombre > 1 else { return routes }
+        var vues = Set(routes.map(Self.empreinte))
+
+        for fraction in [0.1, 0.22, 0.34, 0.46, 0.58, 0.7] {
+            for cote in [1.0, -1.0] {
+                guard routes.count < nombre else { return routes }
+                let via = Self.detour(from: from, to: to, fraction: fraction, cote: cote)
+                let demande: [String: Any] = [
+                    "locations": [
+                        ["lat": from.latitude, "lon": from.longitude],
+                        // « through » : un point de passage, pas un arrêt —
+                        // le trajet reste d'un seul tenant. Pas de variantes
+                        // ici, Valhalla les refuse dès trois points.
+                        ["lat": via.latitude, "lon": via.longitude, "type": "through"],
+                        ["lat": to.latitude, "lon": to.longitude],
+                    ],
+                    "costing": costing,
+                    "directions_options": [
+                        "units": "kilometers", "language": Self.langueValhalla,
+                    ],
+                ]
+                guard let json = try? JSONSerialization.data(withJSONObject: demande) else {
+                    continue
+                }
+                let texte = String(decoding: json, as: UTF8.self)
+                for r in OfflineRoute.toutes(json: moteur.route(rawRequest: texte)) {
+                    if vues.insert(Self.empreinte(r)).inserted {
+                        routes.append(r)
+                    }
+                }
+            }
+        }
+        return routes
+    }
+
+    /// Empreinte d'un tracé : sa longueur au dixième et son point médian au
+    /// millième — deux détours qui retombent sur la même route s'y confondent.
+    private static func empreinte(_ r: OfflineRoute) -> String {
+        let m = r.coordinates[r.coordinates.count / 2]
+        return String(format: "%.1f|%.3f|%.3f", r.km, m.latitude, m.longitude)
+    }
+
+    /// Point décalé perpendiculairement au trajet direct — la même géométrie
+    /// que l'éventail du mode en ligne.
+    private static func detour(
+        from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D,
+        fraction: Double, cote: Double
+    ) -> CLLocationCoordinate2D {
+        let midLat = (a.latitude + b.latitude) / 2
+        let mParLat = 111_320.0
+        let mParLon = 111_320.0 * cos(midLat * .pi / 180)
+        let ax = a.longitude * mParLon, ay = a.latitude * mParLat
+        let bx = b.longitude * mParLon, by = b.latitude * mParLat
+        let mx = (ax + bx) / 2, my = (ay + by) / 2
+        let dx = bx - ax, dy = by - ay
+        let long = max(1, (dx * dx + dy * dy).squareRoot())
+        let px = -dy / long, py = dx / long
+        let decale = long * fraction * cote
+        return CLLocationCoordinate2D(
+            latitude: (my + py * decale) / mParLat,
+            longitude: (mx + px * decale) / mParLon)
     }
 
     /// Langue des consignes, accordée à celle que le paquet a retenue.
@@ -642,9 +723,26 @@ final class OfflineRouter: NSObject, ObservableObject {
         // Les fuseaux horaires que réclame Valhalla sont installés par le
         // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
         // rien à faire ici.
+        //
+        // La config du wrapper, à un réglage près : son plafond de variantes
+        // est à deux, si bien que le moteur ne rendait jamais plus de trois
+        // tracés quoi qu'on demande. Le réglage se fait sur le JSON encodé —
+        // c'est exactement ce que `Valhalla(config)` écrit sur disque avant
+        // d'ouvrir, on ne fait qu'insérer une clé au passage — et la config
+        // vit dans un fichier par région, à côté de son archive.
         guard
             let config = try? ValhallaConfig(tileExtractTar: Self.archivePath(id)),
-            let neuf = try? Valhalla(config)
+            let brut = try? JSONEncoder().encode(config),
+            var racine = (try? JSONSerialization.jsonObject(with: brut)) as? [String: Any]
+        else { return nil }
+        var limites = racine["service_limits"] as? [String: Any] ?? [:]
+        limites["max_alternates"] = Self.maxItineraires - 1
+        racine["service_limits"] = limites
+        let chemin = Self.dossier.appendingPathComponent("\(id).moteur.json")
+        guard
+            let json = try? JSONSerialization.data(withJSONObject: racine),
+            (try? json.write(to: chemin)) != nil,
+            let neuf = try? Valhalla(configPath: chemin.path)
         else { return nil }
         moteurs[id] = neuf
         return neuf
