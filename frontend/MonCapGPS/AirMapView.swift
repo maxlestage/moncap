@@ -555,19 +555,28 @@ struct AirMapScreen: View {
     }
 
     /// Les commandes de droite : revenir sur soi.
+    /// Les commandes de droite : voir le monde entier.
+    ///
+    /// Le retour sur soi n'a plus besoin de bouton — la fiche « Autour de
+    /// toi » le porte, c'est elle qu'on touche naturellement pour revenir à
+    /// soi. La place libérée va au geste inverse : embrasser la planète d'un
+    /// coup. Le serveur sert la grille mondiale comme n'importe quelle zone —
+    /// mesuré : 384 mailles, l'indice de 8 à 113 selon les continents.
     private var commandes: some View {
         Button {
-            if let c = center { cam = MapCam(center: c, zoom: 6) }
+            selection = nil
+            // Cadrée sur les terres habitées : à ce zoom, l'Antarctique ne
+            // mesure rien et mangerait un tiers de l'écran.
+            cam = MapCam(
+                center: CLLocationCoordinate2D(latitude: 22, longitude: 10), zoom: 0.6)
         } label: {
-            Image(systemName: "location.fill")
+            Image(systemName: "globe.europe.africa.fill")
                 .font(.headline)
                 .foregroundStyle(.tint)
                 .frame(width: 40, height: 40)
                 .background(.regularMaterial, in: Circle())
         }
-        .accessibilityLabel(Text("Recentrer sur ma position"))
-        .opacity(center == nil ? 0 : 1)
-        .disabled(center == nil)
+        .accessibilityLabel(Text("Voir le monde entier"))
     }
 
     /// Fiche d'une mesure : le chiffre dans sa couleur, son palier, et les
@@ -608,7 +617,15 @@ struct AirMapScreen: View {
 
             Spacer(minLength: 0)
 
-            if !chezMoi {
+            if chezMoi {
+                // La fiche est un bouton : la toucher ramène la carte sur soi.
+                // C'est le pendant du globe d'en haut — lui éloigne, elle
+                // rapproche — et le pictogramme le laisse deviner.
+                Image(systemName: "location.fill")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 28, height: 28)
+            } else {
                 Button { selection = nil } label: {
                     Image(systemName: "xmark")
                         .font(.footnote.weight(.bold))
@@ -621,6 +638,15 @@ struct AirMapScreen: View {
         .padding(13)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard chezMoi, let c = center else { return }
+            selection = nil
+            cam = MapCam(center: c, zoom: 6)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(chezMoi ? .isButton : [])
+        .accessibilityHint(chezMoi ? Text("Recentrer sur ma position") : Text(""))
     }
 
     /// Légende : sans elle, six couleurs ne disent rien.

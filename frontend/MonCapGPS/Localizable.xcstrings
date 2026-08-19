@@ -3553,6 +3553,22 @@
         }
       }
     },
+    "Voir le monde entier": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See the whole world"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ver el mundo entero"
+          }
+        }
+      }
+    },
     "Voiture": {
       "localizations": {
         "en": {

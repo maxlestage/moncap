@@ -225,6 +225,7 @@ T: dict[str, tuple[str, str]] = {
         "Measurements unavailable right now.",
     ),
     "Point touché": ("Punto seleccionado", "Selected point"),
+    "Voir le monde entier": ("Ver el mundo entero", "See the whole world"),
     "Recentrer sur ma position": (
         "Centrar en mi posición",
         "Recenter on my location",
