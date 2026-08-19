@@ -136,7 +136,9 @@ test("chaque langue garde la même matière", () => {
     // Le bandeau garde l'étendue européenne et annonce le vrai plafond.
     const valeurs = l.chiffres.map((n) => n.valeur);
     expect(valeurs).toContain(String(ITINERAIRES_MAX));
-    expect(valeurs).toContain("206");
+    // 212 : le compte réel des Releases publiées, relevé sur le courtier
+    // (/offline/regions) le 19 août 2026.
+    expect(valeurs).toContain("212");
     expect(valeurs).toContain("49");
 
     // Le plafond doit se lire comme un plafond. « 15 itinéraires » seul

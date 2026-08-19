@@ -3648,18 +3648,21 @@ struct MapHomeView: View {
                 }
             }
         }
-        // Renfort local : le réseau n'a rien rendu — coupure, mode avion,
-        // serveur d'Apple injoignable — ou trop peu pour qu'un choix ait du
-        // sens. Si un paquet couvre le trajet, il complète ici même, que
-        // l'interrupteur « Naviguer hors ligne » soit mis ou non : celui-ci
-        // veut dire « privilégie le calcul local », pas « c'est le seul moyen
-        // d'y avoir droit ». À pied et à vélo, Apple s'arrête souvent à deux
-        // tracés ; Valhalla en ajoute jusqu'à quinze — et pour le vélo, avec
-        // un vrai profil, ce que MapKit n'a pas. La déduplication d'en
-        // dessous retire ce qui ferait doublon.
-        if builds.count < 4 {
+        // Renfort local : dès que le réseau rend moins que le plafond de
+        // quinze, Valhalla complète — que l'interrupteur « Naviguer hors
+        // ligne » soit mis ou non : celui-ci veut dire « privilégie le calcul
+        // local », pas « c'est le seul moyen d'y avoir droit ». En ligne comme
+        // hors ligne, l'écran promet le même éventail. À pied et à vélo,
+        // Apple s'arrête souvent à deux tracés ; Valhalla en ajoute jusqu'à
+        // quinze — et pour le vélo, avec un vrai profil, ce que MapKit n'a
+        // pas. Sans région installée couvrant le trajet, l'appel rend vite
+        // une liste vide et ne coûte rien. La déduplication d'en dessous
+        // retire ce qui ferait doublon.
+        if builds.count < OfflineRouter.maxItineraires {
+            // Seulement le manque : quand le réseau a déjà fourni treize
+            // tracés, deux détours locaux suffisent — pas douze.
             builds += router.routes(from: from, to: dest,
-                                    max: OfflineRouter.maxItineraires,
+                                    max: OfflineRouter.maxItineraires - builds.count,
                                     costing: travelMode.costing)
                 .map {
                     RouteBuild(coords: $0.coordinates, steps: $0.steps,

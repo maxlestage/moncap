@@ -4,6 +4,7 @@ import {
   LIEUX,
   MAQUETTE_ITINERAIRES,
   MAQUETTE_REGIONS,
+  MODE_ACTIF,
   MODES,
 } from "./content";
 import type { Contenu } from "./langues";
@@ -34,8 +35,8 @@ function MaquetteComparateur({ c }: { c: Contenu }) {
     <figure className="maquette">
       <div className="ecran">
         <div className="modes" aria-hidden="true">
-          {MODES.map((m, i) => (
-            <span key={m} className={i === MODES.length - 1 ? "actif" : ""}>
+          {MODES.map((m) => (
+            <span key={m} className={m === MODE_ACTIF ? "actif" : ""}>
               {app(c.code, m)}
             </span>
           ))}

@@ -1127,7 +1127,7 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
 
     let url = format!(
         "https://api.transitous.org/api/v1/plan\
-         ?fromPlace={},{}&toPlace={},{}&numItineraries=8",
+         ?fromPlace={},{}&toPlace={},{}&numItineraries=15",
         de.0, de.1, vers.0, vers.1
     );
     let brut: Option<serde_json::Value> = async {
@@ -1163,7 +1163,9 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
             .into_response();
     };
 
-    let data = transit_taille(&brut);
+    // Le même plafond que partout ailleurs : quinze choix, celui de l'écran.
+    let mut data = transit_taille(&brut);
+    data.truncate(15);
     let mut table = cache.lock().await;
     if table.len() >= TRANSIT_MAX_ZONES && !table.contains_key(&zone) {
         if let Some(vieille) = table
