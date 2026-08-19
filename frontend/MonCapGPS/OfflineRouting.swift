@@ -235,6 +235,12 @@ final class OfflineRouter: NSObject, ObservableObject {
             FileManager.default.fileExists(atPath: Self.archivePath($0.id).path)
         }
         if installees.count != lues.count { enregistre() }
+        // Réparation au démarrage : après une mise à jour de l'app, le
+        // conteneur a changé de nom et les configurations désignent un dossier
+        // disparu. Les remettre d'aplomb ici évite que la première demande —
+        // souvent faite sans réseau, au moment où l'on en a le plus besoin —
+        // tombe sur un paquet réputé illisible.
+        for region in installees { Self.rafraichitChemin(region.id) }
     }
 
     private static let key = "moncap.valhallaRegions"
@@ -502,6 +508,41 @@ final class OfflineRouter: NSObject, ObservableObject {
         return try JSONSerialization.data(withJSONObject: racine)
     }
 
+    /// Remet le chemin de l'archive à jour dans la configuration.
+    ///
+    /// **La panne du mode avion tenait à cela.** iOS renomme le conteneur de
+    /// l'application à chaque installation : le dossier porte un identifiant
+    /// qui change à chaque mise à jour, donc à chaque livraison TestFlight.
+    ///
+    /// Or les deux moitiés du paquet ne vieillissaient pas de la même façon.
+    /// L'archive était retrouvée par un chemin **recalculé à l'exécution**, si
+    /// bien que la région continuait de s'afficher installée, ses 522 Mo bien
+    /// présents. Mais la configuration, elle, portait le chemin **figé au
+    /// téléchargement** : Valhalla cherchait l'archive dans un conteneur
+    /// disparu, refusait de s'ouvrir, et le routeur passait au suivant sans
+    /// rien dire. D'où « aucune région installée ne couvre ce trajet », en
+    /// plein milieu d'une région parfaitement installée.
+    ///
+    /// Le chemin est donc revérifié avant chaque ouverture, et réécrit s'il a
+    /// bougé. Une lecture de quelques kilo-octets, contre une région qui ne
+    /// sert plus à rien.
+    nonisolated static func rafraichitChemin(_ id: String) {
+        let config = configPath(id)
+        guard
+            let data = try? Data(contentsOf: config),
+            var racine = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            var mjolnir = racine["mjolnir"] as? [String: Any]
+        else { return }
+
+        let voulu = archivePath(id).path
+        guard (mjolnir["tile_extract"] as? String) != voulu else { return }
+
+        mjolnir["tile_extract"] = voulu
+        racine["mjolnir"] = mjolnir
+        guard let neuf = try? JSONSerialization.data(withJSONObject: racine) else { return }
+        try? neuf.write(to: config)
+    }
+
     // MARK: - Calcul
 
     /// Itinéraire routier entre deux points, calculé sur l'appareil.
@@ -607,6 +648,10 @@ final class OfflineRouter: NSObject, ObservableObject {
         // Les fuseaux horaires que réclame Valhalla sont installés par le
         // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
         // rien à faire ici.
+        // Le conteneur de l'app a pu être renommé depuis le téléchargement :
+        // sans cette remise à jour, l'ouverture échoue alors que l'archive est
+        // là. Cf. `rafraichitChemin`.
+        Self.rafraichitChemin(id)
         guard let neuf = try? Valhalla(configPath: Self.configPath(id).path) else { return nil }
         moteurs[id] = neuf
         return neuf
