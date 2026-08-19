@@ -625,6 +625,22 @@
         }
       }
     },
+    "Aucune région installée ne répond à cet endroit.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No installed region answers at this location."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna región instalada responde en este lugar."
+          }
+        }
+      }
+    },
     "Aucune région reconnue ici. Ouvre la liste complète.": {
       "localizations": {
         "en": {
@@ -1101,6 +1117,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cubierto"
+          }
+        }
+      }
+    },
+    "Couvre ta position": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Covers your location"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cubre tu posición"
           }
         }
       }

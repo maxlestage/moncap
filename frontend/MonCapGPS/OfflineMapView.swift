@@ -155,6 +155,12 @@ struct OfflineMapScreen: View {
     @MainActor
     private func chercheRegion() async {
         guard let c = centre else { return }
+        // D'abord ce qui marche sans réseau : demander aux paquets installés
+        // s'ils couvrent le point. Le reste — nommer la région, la retrouver
+        // dans les Releases — a besoin d'une connexion, et échouera en mode
+        // avion sans que cela doive effacer la réponse qu'on a déjà.
+        router.chercheRegionCouvrante(c)
+
         await router.loadRegions()
         guard
             let lieu = try? await CLGeocoder().reverseGeocodeLocation(
@@ -355,8 +361,36 @@ struct OfflineMapScreen: View {
                         in: RoundedRectangle(cornerRadius: 14))
                 }
                 .disabled(deja)
-            } else if router.chargement {
+            } else if router.chargement || router.verifieCouverture {
                 ProgressView()
+            } else if let couvrante = router.regionCouvrante {
+                // Ce qui est déjà installé et couvre le point se dit **avant**
+                // toute proposition de téléchargement : annoncer « aucune
+                // région reconnue ici » à quelqu'un dont le paquet couvre
+                // précisément l'endroit où il se trouve, c'est le pousser à
+                // retélécharger ce qu'il a déjà.
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    VStack(alignment: .leading, spacing: 1) {
+                        // Nom propre Geofabrik : verbatim, il ne se traduit pas.
+                        Text(couvrante.nom)
+                            .font(.subheadline.weight(.semibold))
+                        Text("Couvre ta position")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .background(Color.green.opacity(0.18), in: RoundedRectangle(cornerRadius: 14))
+            } else if router.ready {
+                // Des régions installées, mais aucune qui réponde ici : c'est
+                // un fait, et il vaut mieux le dire que laisser croire à un
+                // simple défaut de reconnaissance.
+                Text("Aucune région installée ne répond à cet endroit.")
+                    .font(.caption2).foregroundStyle(.secondary)
             } else {
                 Text("Aucune région reconnue ici. Ouvre la liste complète.")
                     .font(.caption2).foregroundStyle(.secondary)
