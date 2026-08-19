@@ -109,6 +109,11 @@ T: dict[str, tuple[str, str]] = {
         "Cálculo en el dispositivo · %@",
         "Computed on the device · %@",
     ),
+    "Couvre ta position": ("Cubre tu posición", "Covers your location"),
+    "Aucune région installée ne répond à cet endroit.": (
+        "Ninguna región instalada responde en este lugar.",
+        "No installed region answers at this location.",
+    ),
     "Aucune région reconnue ici. Ouvre la liste complète.": (
         "Ninguna región reconocida aquí. Abre la lista completa.",
         "No region recognised here. Open the full list.",
@@ -564,7 +569,8 @@ def verbatim(fichiers: list[tuple[str, str]]) -> list[str]:
     permis = {
         "nav.instruction", "router.message", "packs.message",
         "kind.emoji", "w.emoji", "t.emoji",
-        "gardee.poids", "region.nom", "r.label", "r.name", "r.subtitle",
+        "gardee.poids", "region.nom", "couvrante.nom",
+        "r.label", "r.name", "r.subtitle",
         "place.label", "p.label", "e.name", "t.label",
     }
     # Limite assumée : la liste est indexée par expression, non par site.

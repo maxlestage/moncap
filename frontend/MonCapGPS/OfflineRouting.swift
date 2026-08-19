@@ -118,6 +118,65 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// Le dernier échec, gardé pour que l'écran puisse en parler.
     @Published private(set) var dernierEchec: EchecLocal?
 
+    /// La région installée qui couvre la position, une fois vérifiée.
+    @Published private(set) var regionCouvrante: Installee?
+    /// Vrai pendant la vérification.
+    @Published private(set) var verifieCouverture = false
+    /// Position déjà vérifiée, au centième de degré près — un kilomètre.
+    private var couvertureVerifiee: String?
+
+    /// Cherche laquelle des régions installées couvre cette position.
+    ///
+    /// En **demandant aux paquets**, et non au réseau. L'écran hors ligne
+    /// interrogeait le géocodeur d'Apple pour nommer la région, puis la liste
+    /// des Releases pour la reconnaître : deux services réseau, c'est-à-dire
+    /// exactement ce dont on ne dispose pas au moment où la question se pose.
+    /// En mode avion les deux échouaient, et l'écran annonçait « aucune région
+    /// reconnue ici » à quelqu'un qui avait la bonne région installée.
+    ///
+    /// Le paquet, lui, sait sans réseau ce qu'il contient. On lui demande un
+    /// trajet de quelques centaines de mètres autour du point : s'il le rend,
+    /// le point est dans son extrait. C'est la seule réponse qui ne se paie ni
+    /// en donnée ni en suppositions.
+    ///
+    /// Ouvrir un paquet coûte, et ce coût est payé ici plutôt qu'au premier
+    /// itinéraire — même dépense, plus tôt, et le calcul suivant en profite.
+    func chercheRegionCouvrante(_ c: CLLocationCoordinate2D) {
+        let case_ = String(format: "%.2f|%.2f", c.latitude, c.longitude)
+        guard couvertureVerifiee != case_, !installees.isEmpty else { return }
+        couvertureVerifiee = case_
+        verifieCouverture = true
+
+        // Quatre cents mètres vers le nord : assez pour exiger une vraie route,
+        // assez peu pour rester dans la même région.
+        let voisin = CLLocationCoordinate2D(
+            latitude: c.latitude + 0.0036, longitude: c.longitude)
+        let demande: [String: Any] = [
+            "locations": [
+                ["lat": c.latitude, "lon": c.longitude],
+                ["lat": voisin.latitude, "lon": voisin.longitude],
+            ],
+            "costing": "auto",
+            "directions_options": ["units": "kilometers", "language": Self.langueValhalla],
+        ]
+        guard let json = try? JSONSerialization.data(withJSONObject: demande) else {
+            verifieCouverture = false
+            return
+        }
+        let texte = String(decoding: json, as: UTF8.self)
+
+        var trouvee: Installee?
+        for region in installees {
+            guard let moteur = moteur(region.id) else { continue }
+            if !OfflineRoute.toutes(json: moteur.route(rawRequest: texte)).isEmpty {
+                trouvee = region
+                break
+            }
+        }
+        regionCouvrante = trouvee
+        verifieCouverture = false
+    }
+
     /// Régions publiées, relevées sur les Releases.
     @Published private(set) var regions: [Region] = []
     /// Régions gardées sur l'appareil, dans l'ordre d'installation.
@@ -176,6 +235,12 @@ final class OfflineRouter: NSObject, ObservableObject {
             FileManager.default.fileExists(atPath: Self.archivePath($0.id).path)
         }
         if installees.count != lues.count { enregistre() }
+        // Réparation au démarrage : après une mise à jour de l'app, le
+        // conteneur a changé de nom et les configurations désignent un dossier
+        // disparu. Les remettre d'aplomb ici évite que la première demande —
+        // souvent faite sans réseau, au moment où l'on en a le plus besoin —
+        // tombe sur un paquet réputé illisible.
+        for region in installees { Self.rafraichitChemin(region.id) }
     }
 
     private static let key = "moncap.valhallaRegions"
@@ -443,6 +508,41 @@ final class OfflineRouter: NSObject, ObservableObject {
         return try JSONSerialization.data(withJSONObject: racine)
     }
 
+    /// Remet le chemin de l'archive à jour dans la configuration.
+    ///
+    /// **La panne du mode avion tenait à cela.** iOS renomme le conteneur de
+    /// l'application à chaque installation : le dossier porte un identifiant
+    /// qui change à chaque mise à jour, donc à chaque livraison TestFlight.
+    ///
+    /// Or les deux moitiés du paquet ne vieillissaient pas de la même façon.
+    /// L'archive était retrouvée par un chemin **recalculé à l'exécution**, si
+    /// bien que la région continuait de s'afficher installée, ses 522 Mo bien
+    /// présents. Mais la configuration, elle, portait le chemin **figé au
+    /// téléchargement** : Valhalla cherchait l'archive dans un conteneur
+    /// disparu, refusait de s'ouvrir, et le routeur passait au suivant sans
+    /// rien dire. D'où « aucune région installée ne couvre ce trajet », en
+    /// plein milieu d'une région parfaitement installée.
+    ///
+    /// Le chemin est donc revérifié avant chaque ouverture, et réécrit s'il a
+    /// bougé. Une lecture de quelques kilo-octets, contre une région qui ne
+    /// sert plus à rien.
+    nonisolated static func rafraichitChemin(_ id: String) {
+        let config = configPath(id)
+        guard
+            let data = try? Data(contentsOf: config),
+            var racine = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            var mjolnir = racine["mjolnir"] as? [String: Any]
+        else { return }
+
+        let voulu = archivePath(id).path
+        guard (mjolnir["tile_extract"] as? String) != voulu else { return }
+
+        mjolnir["tile_extract"] = voulu
+        racine["mjolnir"] = mjolnir
+        guard let neuf = try? JSONSerialization.data(withJSONObject: racine) else { return }
+        try? neuf.write(to: config)
+    }
+
     // MARK: - Calcul
 
     /// Itinéraire routier entre deux points, calculé sur l'appareil.
@@ -548,6 +648,10 @@ final class OfflineRouter: NSObject, ObservableObject {
         // Les fuseaux horaires que réclame Valhalla sont installés par le
         // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
         // rien à faire ici.
+        // Le conteneur de l'app a pu être renommé depuis le téléchargement :
+        // sans cette remise à jour, l'ouverture échoue alors que l'archive est
+        // là. Cf. `rafraichitChemin`.
+        Self.rafraichitChemin(id)
         guard let neuf = try? Valhalla(configPath: Self.configPath(id).path) else { return nil }
         moteurs[id] = neuf
         return neuf
