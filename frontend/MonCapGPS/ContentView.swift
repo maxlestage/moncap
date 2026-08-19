@@ -374,6 +374,20 @@ enum TravelMode: String, CaseIterable, Identifiable {
     /// renvoyée par MapKit (voiture, marche).
     var speedKmh: Double? { self == .bike ? 16 : nil }
 
+    /// Fonction de coût Valhalla pour le calcul sur l'appareil.
+    ///
+    /// Les trois modes se calculent sur les mêmes tuiles : le graphe porte
+    /// tous les chemins, la fonction de coût choisit lesquels emprunter. Et
+    /// contrairement à MapKit, Valhalla a un **vrai** profil vélo — pas une
+    /// marche accélérée à 16 km/h.
+    var costing: String {
+        switch self {
+        case .walk: return "pedestrian"
+        case .bike: return "bicycle"
+        case .car: return "auto"
+        }
+    }
+
     var icon: String {
         switch self {
         case .walk: return "figure.walk"
@@ -3398,7 +3412,8 @@ struct MapHomeView: View {
         guard let from = location.coordinate else { return }
         multiRoutes = []
         let to = CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon)
-        if horsLigne, let local = router.route(from: from, to: to) {
+        if horsLigne, let local = router.route(from: from, to: to,
+                                               costing: travelMode.costing) {
             nav.start(steps: local.steps, coordinates: local.coordinates,
                       distanceKm: local.km, etaMinutes: local.minutes, destination: to)
             speedLimit.preload(along: local.coordinates)
@@ -3409,7 +3424,8 @@ struct MapHomeView: View {
         guard let route = await drivingRoute(from: from, to: to) else {
             // Le réseau n'a rien rendu : un paquet installé peut encore
             // répondre, interrupteur ou non.
-            if let local = router.route(from: from, to: to) {
+            if let local = router.route(from: from, to: to,
+                                        costing: travelMode.costing) {
                 nav.start(steps: local.steps, coordinates: local.coordinates,
                           distanceKm: local.km, etaMinutes: local.minutes, destination: to)
                 speedLimit.preload(along: local.coordinates)
@@ -3435,11 +3451,9 @@ struct MapHomeView: View {
     /// Le routeur rapporte désormais ce que le moteur a réellement dit, et
     /// c'est cela qui s'affiche.
     private func raisonSansItineraire() -> String {
-        if travelMode != .car {
-            return NSLocalizedString(
-                "Le calcul a échoué. Ce mode de déplacement a besoin du réseau.",
-                comment: "")
-        }
+        // Plus de branche « ce mode a besoin du réseau » : les trois modes se
+        // calculent désormais sur l'appareil, avec les mêmes tuiles. Les
+        // causes d'échec sont donc les mêmes pour tous.
         if !router.ready {
             return NSLocalizedString(
                 "Aucune région d'itinéraires n'est installée. Télécharge celle qui te concerne depuis l'écran hors ligne.",
@@ -3495,8 +3509,13 @@ struct MapHomeView: View {
         // La liste vide laisse volontairement passer au réseau : aucune région
         // installée ne couvre alors le trajet, et rendre la main sans rien
         // proposer serait pire que de déroger au mode choisi.
-        let locaux = (horsLigne && travelMode == .car)
-            ? router.routes(from: from, to: dest, max: OfflineRouter.maxItineraires)
+        //
+        // Tous les modes, pas la seule voiture : brider le calcul local à
+        // `auto` envoyait le vélo et la marche sur le réseau en plein mode
+        // avion, pour un calcul que le paquet installé savait faire.
+        let locaux = horsLigne
+            ? router.routes(from: from, to: dest, max: OfflineRouter.maxItineraires,
+                            costing: travelMode.costing)
             : []
         if !locaux.isEmpty {
             builds = locaux.map {
@@ -3553,9 +3572,10 @@ struct MapHomeView: View {
         // Celui-ci veut dire « privilégie le calcul local », pas « c'est le seul
         // moyen d'y avoir droit » : personne ne pense à l'activer au moment où
         // le réseau tombe.
-        if builds.isEmpty, travelMode == .car {
+        if builds.isEmpty {
             builds = router.routes(from: from, to: dest,
-                                   max: OfflineRouter.maxItineraires)
+                                   max: OfflineRouter.maxItineraires,
+                                   costing: travelMode.costing)
                 .map {
                     RouteBuild(coords: $0.coordinates, steps: $0.steps,
                                km: $0.km, minutes: $0.minutes, hasTolls: $0.hasTolls)
@@ -3673,7 +3693,8 @@ struct MapHomeView: View {
         // Hors ligne assumé : on ne tente même pas le réseau. Attendre son
         // échec ferait patienter le bandeau « Recalcul… » plusieurs secondes,
         // au pire moment — celui où l'on vient de rater une sortie.
-        if horsLigne, travelMode == .car, let local = router.route(from: from, to: to) {
+        if horsLigne, let local = router.route(from: from, to: to,
+                                               costing: travelMode.costing) {
             nav.applyReroute(
                 steps: local.steps, coords: local.coordinates,
                 km: local.km, minutes: local.minutes)
@@ -3686,8 +3707,8 @@ struct MapHomeView: View {
             // Apple exige une connexion. Si les tuiles de la région sont
             // installées, le calcul se fait sur l'appareil — c'est tout
             // l'intérêt : rater une sortie hors couverture ne condamne plus.
-            if travelMode == .car,
-                let local = OfflineRouter.shared.route(from: from, to: to)
+            if let local = OfflineRouter.shared.route(from: from, to: to,
+                                                      costing: travelMode.costing)
             {
                 nav.applyReroute(
                     steps: local.steps, coords: local.coordinates,
