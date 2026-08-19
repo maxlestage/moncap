@@ -2164,30 +2164,43 @@ struct MapHomeView: View {
     /// La chaîne des lignes d'un itinéraire en transports : les pastilles des
     /// véhicules, la marche réduite à son pictogramme.
     private func transitChaine(_ legs: [TransitLeg]) -> some View {
-        HStack(spacing: 4) {
-            ForEach(Array(legs.enumerated()), id: \.offset) { i, l in
-                if i > 0 {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 7, weight: .bold))
-                        .foregroundStyle(.secondary)
-                }
-                if l.estVehicule {
-                    HStack(spacing: 3) {
-                        Image(systemName: l.symbole).font(.caption2)
-                        if let ligne = l.ligne {
-                            Text(verbatim: ligne).font(.caption2.weight(.bold))
-                        }
+        // Défilement horizontal plutôt qu'étirement : une chaîne de cinq
+        // tronçons ne se comprime pas, et sans ce fourreau elle imposait sa
+        // largeur à toute la carte d'option — qui débordait de l'écran, rognée
+        // des deux côtés. Ici la chaîne longue se fait glisser du doigt, et la
+        // rangée garde la largeur de l'écran.
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(Array(legs.enumerated()), id: \.offset) { i, l in
+                    if i > 0 {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 2).padding(.horizontal, 5)
-                    .background(l.teinte.opacity(0.9), in: RoundedRectangle(cornerRadius: 5))
-                    .foregroundStyle(.white)
-                } else {
-                    Image(systemName: "figure.walk")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    if l.estVehicule {
+                        HStack(spacing: 3) {
+                            Image(systemName: l.symbole).font(.caption2)
+                            if let ligne = l.ligne {
+                                Text(verbatim: ligne)
+                                    .font(.caption2.weight(.bold))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                        }
+                        .padding(.vertical, 2).padding(.horizontal, 5)
+                        .background(l.teinte.opacity(0.9), in: RoundedRectangle(cornerRadius: 5))
+                        .foregroundStyle(.white)
+                    } else {
+                        Image(systemName: "figure.walk")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
+        // Une hauteur tenue : la pastille est un insigne, pas une vignette —
+        // rien ne doit pouvoir la faire enfler avec la rangée.
+        .frame(height: 20)
     }
 
     /// Dénivelé (côte ↗ / descente ↘) si connu.
@@ -2259,9 +2272,12 @@ struct MapHomeView: View {
             if let legs = o.transit {
                 transitChaine(legs)
             }
+            // En transports, une seule ligne quoi qu'il arrive : coupée en
+            // deux, l'heure « 06:23 → 07:17 » perdait son zéro au pli et se
+            // lisait 7:17. Mieux vaut une ligne qui se serre un peu.
             Text(routeCoreText(o))
-                .lineLimit(compact ? 1 : 2)
-                .minimumScaleFactor(compact ? 0.6 : 0.85)
+                .lineLimit(compact || o.transit != nil ? 1 : 2)
+                .minimumScaleFactor(compact || o.transit != nil ? 0.6 : 0.85)
             if let elev = routeElevationText(o) {
                 Text(elev)
                     .lineLimit(1)
@@ -2292,10 +2308,15 @@ struct MapHomeView: View {
         let fastestID = routeOptions.min { $0.minutes < $1.minutes }?.id
         let shortestID = routeOptions.min { $0.km < $1.km }?.id
         return VStack(alignment: .leading, spacing: 8) {
-            // Choix du mode : à pied / vélo / voiture (recalcule les itinéraires).
+            // Choix du mode (recalcule les itinéraires). Des pictogrammes
+            // seuls : à quatre onglets, les libellés ne tiennent plus dans un
+            // segment — « Transports » sortait de l'écran — et l'icône se lit
+            // plus vite qu'un mot. Le nom reste dit au lecteur d'écran.
             Picker("Mode", selection: $travelMode) {
                 ForEach(TravelMode.allCases) { m in
-                    Label(LocalizedStringKey(m.label), systemImage: m.icon).tag(m)
+                    Image(systemName: m.icon)
+                        .accessibilityLabel(Text(LocalizedStringKey(m.label)))
+                        .tag(m)
                 }
             }
             .pickerStyle(.segmented)
@@ -2610,7 +2631,9 @@ struct MapHomeView: View {
                 Section {
                     Picker("Mode", selection: $travelMode) {
                         ForEach(TravelMode.allCases) { m in
-                            Label(LocalizedStringKey(m.label), systemImage: m.icon).tag(m)
+                            Image(systemName: m.icon)
+                        .accessibilityLabel(Text(LocalizedStringKey(m.label)))
+                        .tag(m)
                         }
                     }
                     .pickerStyle(.segmented)
