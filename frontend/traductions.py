@@ -167,6 +167,7 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Transports": ("Transporte", "Transit"),
     "Maintenant": ("Ahora", "Now"),
+    "il y a %d h": ("hace %d h", "%d h ago"),
     "Partir à": ("Salir a las", "Leave at"),
     "Arriver avant": ("Llegar antes de las", "Arrive by"),
     "%.0f min · direct · %@": ("%.0f min · directo · %@", "%.0f min · direct · %@"),

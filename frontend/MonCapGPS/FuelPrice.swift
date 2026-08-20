@@ -13,6 +13,22 @@ final class FuelPriceService: ObservableObject {
 
     private var lastFetch = Date.distantPast
     private var lastType = ""
+    private static let cle = "moncap.carburant.dernier"
+
+    init() {
+        // Le dernier prix local relevé, resservi au lancement : les prix
+        // bougent moins vite qu'on ne perd le réseau, et sept jours de
+        // fraîcheur valent mieux que le repli national.
+        if let d = UserDefaults.standard.dictionary(forKey: Self.cle),
+            let prix = d["prix"] as? Double, let type = d["type"] as? String,
+            let n = d["stations"] as? Int, let quand = d["quand"] as? Double,
+            Date().timeIntervalSince1970 - quand < 7 * 86_400
+        {
+            pricePerLiter = prix
+            stationCount = n
+            lastType = type
+        }
+    }
 
     /// Prix de repli si l'open data est indisponible (ordres de grandeur).
     static let fallback: [String: Double] = [
@@ -33,9 +49,17 @@ final class FuelPriceService: ObservableObject {
             if let (price, count) = await Self.fetch(near: c, type: type) {
                 pricePerLiter = price
                 stationCount = count
-            } else {
-                pricePerLiter = nil
-                stationCount = 0
+                UserDefaults.standard.set(
+                    ["prix": price, "type": type, "stations": count,
+                     "quand": Date().timeIntervalSince1970],
+                    forKey: Self.cle)
+            }
+            else {
+                // Échec : on garde le dernier prix connu. L'effacer — c'était
+                // le cas — remplaçait une moyenne locale d'hier par le repli
+                // national, précisément quand le réseau manque. Et on
+                // réessaie dans dix minutes, pas dans six heures.
+                lastFetch = Date().addingTimeInterval(-(6 * 3600) + 600)
             }
         }
     }
