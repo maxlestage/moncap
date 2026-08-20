@@ -157,6 +157,27 @@ T: dict[str, tuple[str, str]] = {
     "Étape %d": ("Parada %d", "Stop %d"),
     "Au plus court": ("El más corto", "Shortest order"),
     "Partager l'itinéraire": ("Compartir la ruta", "Share the route"),
+    "Rentrer à la maison": ("Volver a casa", "Go home"),
+    "Aller au travail": ("Ir al trabajo", "Go to work"),
+    "Itinéraire vers": ("Ruta hacia", "Route to"),
+    "Destination": ("Destino", "Destination"),
+    "Maison": ("Casa", "Home"),
+    "Travail": ("Trabajo", "Work"),
+    "Définis d'abord ton domicile dans les favoris de MonCap GPS.": (
+        "Define primero tu casa en los favoritos de MonCap GPS.",
+        "First set your home in MonCap GPS favourites.",
+    ),
+    "Définis d'abord ton travail dans les favoris de MonCap GPS.": (
+        "Define primero tu trabajo en los favoritos de MonCap GPS.",
+        "First set your work in MonCap GPS favourites.",
+    ),
+    "C'est parti vers la maison.": ("En marcha hacia casa.", "On the way home."),
+    "C'est parti vers le travail.": ("En marcha hacia el trabajo.", "On the way to work."),
+    "Je n'ai pas trouvé cette adresse — il faut du réseau pour chercher un nom de lieu.": (
+        "No encontré esa dirección — hace falta red para buscar un nombre de lugar.",
+        "I couldn't find that address — network is needed to look up a place name.",
+    ),
+    "Voilà les itinéraires.": ("Aquí están las rutas.", "Here are the routes."),
     "Trace GPX 🥾": ("Traza GPX 🥾", "GPX track 🥾"),
     "Importer une trace GPX": ("Importar una traza GPX", "Import a GPX track"),
     "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau.": (
