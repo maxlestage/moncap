@@ -21,11 +21,16 @@ final class MonCapPlus: ObservableObject {
     /// (abonnement auto-renouvelable, 3,99 €/mois, essai de 14 jours).
     static let produitID = "moncap.plus.mensuel"
 
-    /// Vrai quand l'abonnement est actif. Les vues s'y accrochent.
+    /// Vrai quand Plus est acquis — par abonnement, ou offert. Les vues s'y
+    /// accrochent.
     @Published private(set) var actif = false
     /// Le produit chargé depuis l'App Store — nil tant que la boutique n'a
     /// pas répondu (ou que le produit n'existe pas encore côté Apple).
     @Published private(set) var produit: Product?
+    /// Plus offert par la maison : le serveur tient une liste d'invités, et
+    /// le compte le dit à la connexion. Persisté — l'invitation tient aussi
+    /// hors ligne, comme l'abonnement.
+    private var offert = UserDefaults.standard.bool(forKey: "moncap.plus.offert")
 
     private var veille: Task<Void, Never>?
 
@@ -55,7 +60,17 @@ final class MonCapPlus: ObservableObject {
                 a = true
             }
         }
-        actif = a
+        actif = a || offert
+    }
+
+    /// Le serveur a dit si ce compte est invité : on le retient, et l'état
+    /// visible suit. Appelé à chaque lecture du compte — être retiré de la
+    /// liste se voit donc aussi.
+    func majOffert(_ nouveau: Bool) {
+        guard nouveau != offert else { return }
+        offert = nouveau
+        UserDefaults.standard.set(nouveau, forKey: "moncap.plus.offert")
+        Task { await rafraichitDroit() }
     }
 
     /// Lance l'achat. Rend vrai si l'abonnement est actif au retour —
@@ -138,6 +153,9 @@ struct PaywallView: View {
     @ObservedObject private var plus = MonCapPlus.shared
     @Environment(\.dismiss) private var ferme
     @State private var enCours = false
+    /// Feuille système des codes promo App Store (codes d'offre créés dans
+    /// App Store Connect — de quoi inviter sans faire payer).
+    @State private var montreCode = false
 
     var body: some View {
         NavigationStack {
@@ -201,8 +219,11 @@ struct PaywallView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Button("Restaurer les achats") {
-                            Task { await plus.restaure(); if plus.actif { ferme() } }
+                        HStack(spacing: 16) {
+                            Button("Restaurer les achats") {
+                                Task { await plus.restaure(); if plus.actif { ferme() } }
+                            }
+                            Button("J'ai un code") { montreCode = true }
                         }
                         .font(.caption)
 
@@ -231,5 +252,14 @@ struct PaywallView: View {
             }
         }
         .task { if plus.produit == nil { await plus.charge() } }
+        // La feuille système de saisie de code (offres App Store Connect) :
+        // au retour, on relit les droits — le code vient peut-être d'ouvrir
+        // l'abonnement.
+        .offerCodeRedemption(isPresented: $montreCode) { _ in
+            Task {
+                await plus.rafraichitDroit()
+                if plus.actif { ferme() }
+            }
+        }
     }
 }

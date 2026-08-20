@@ -218,6 +218,7 @@ T: dict[str, tuple[str, str]] = {
         "The store isn't responding — try again with signal.",
     ),
     "Restaurer les achats": ("Restaurar compras", "Restore purchases"),
+    "J'ai un code": ("Tengo un código", "I have a code"),
     "Abonnement mensuel, renouvelé automatiquement, résiliable à tout moment dans les réglages iOS.": (
         "Suscripción mensual, renovada automáticamente, cancelable en cualquier momento en los ajustes de iOS.",
         "Monthly subscription, renews automatically, cancel anytime in iOS settings.",
