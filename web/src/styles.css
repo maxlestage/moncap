@@ -1,6 +1,8 @@
 :root {
-  --blue: #2563eb;
-  --bg: #f5f6f8;
+  --marine: #0e2a5e;
+  --bleu: #1a57e6;
+  --blue: #1a57e6;
+  --bg: #eef1f7;
   --border: #e2e5ea;
 }
 
@@ -11,7 +13,8 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
+  background: linear-gradient(180deg, #e5ecfa 0, var(--bg) 340px);
+  min-height: 100vh;
   color: #1a1d21;
 }
 
@@ -21,40 +24,87 @@ body {
   padding: 16px;
 }
 
-header h1 {
-  margin: 0 0 8px;
-  font-size: 1.5rem;
+/* Le bandeau : le dégradé de marque, la marque à gauche, l'identité et la
+ * sortie à droite — la même maison que l'écran de connexion et le site. */
+.entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background:
+    radial-gradient(600px 200px at 85% -30%, rgba(56, 152, 200, 0.4), transparent 65%),
+    linear-gradient(160deg, var(--marine), var(--bleu));
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  box-shadow: 0 10px 30px rgba(3, 16, 45, 0.25);
+}
+
+.entete h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  color: #fff;
 }
 
 .apibar {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 10px;
 }
 
-.apibar input {
-  flex: 1;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+.apibar .user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 6px 12px 6px 8px;
+  color: #eaf1ff;
+  font-size: 0.88rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .map {
-  height: 380px;
+  height: 420px;
   width: 100%;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   overflow: hidden;
+  box-shadow: 0 10px 30px rgba(3, 16, 45, 0.1);
 }
 
 .controls {
-  margin-top: 16px;
+  margin-top: 14px;
+}
+
+/* Un panneau par sujet : la page cesse d'être une pile de boutons. */
+.panneau {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 16px rgba(3, 16, 45, 0.05);
+}
+
+.panneau h2 {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #55617a;
 }
 
 .hint {
   color: #6b7280;
   font-size: 0.9rem;
-  margin: 4px 0 12px;
+  margin: -4px 0 12px;
 }
 
 .row {
@@ -63,6 +113,10 @@ header h1 {
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.row:last-child {
+  margin-bottom: 0;
 }
 
 .row label {
@@ -74,22 +128,37 @@ header h1 {
 
 .row input[type="number"] {
   width: 80px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
+
+.row input[type="number"]:focus {
+  outline: none;
+  border-color: var(--bleu);
+  box-shadow: 0 0 0 3px rgba(26, 87, 230, 0.15);
 }
 
 button,
 .btn {
-  background: var(--blue);
+  background: linear-gradient(160deg, var(--bleu), #1243b8);
   color: #fff;
   border: none;
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 0.9rem;
+  font-weight: 600;
   text-decoration: none;
   display: inline-block;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+button:not(:disabled):hover,
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(26, 87, 230, 0.3);
 }
 
 button:disabled {
@@ -97,8 +166,41 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Action secondaire : blanche et bordée, pour ne pas crier partout. */
+button.secondaire,
+.btn.secondaire {
+  background: #fff;
+  color: var(--marine);
+  border: 1.5px solid var(--border);
+}
+
+button.secondaire:not(:disabled):hover,
+.btn.secondaire:hover {
+  border-color: var(--bleu);
+  box-shadow: 0 4px 12px rgba(26, 87, 230, 0.15);
+}
+
+/* Fantôme, pour vivre sur le bandeau sombre. */
+button.ghost {
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+button.ghost:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
 button.danger {
-  background: #dc2626;
+  background: #fff;
+  color: #b91c1c;
+  border: 1.5px solid #fecaca;
+}
+
+button.danger:not(:disabled):hover {
+  border-color: #dc2626;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);
 }
 
 .info {
@@ -284,12 +386,15 @@ button.active {
 }
 
 .alerts-row .alert-btn {
-  background: #fff;
+  background: #f6f8fd;
   color: #1a1d21;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
+  font-weight: 600;
 }
 .alerts-row .alert-btn:hover {
-  background: #f3f4f6;
+  background: #fff;
+  border-color: var(--bleu);
+  box-shadow: 0 4px 12px rgba(26, 87, 230, 0.15);
 }
 
 /* Pin emoji des signalements sur la carte */
@@ -445,14 +550,32 @@ button.active {
 
 /* Avatars */
 .avatars { align-items: center; gap: 8px; }
-.avatars-label { font-size: 0.9rem; color: #374151; }
+/* Le choix d'avatar, replié : un mur de treize voitures n'a pas à occuper
+ * l'écran en permanence — la barre du haut montre déjà l'élu. */
+.avatars-panneau summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+}
+.avatars-panneau summary::-webkit-details-marker { display: none; }
+.avatars-panneau summary h2 { margin: 0; }
+.avatars-panneau[open] summary { margin-bottom: 12px; }
+.avatars-panneau summary .user-avatar { width: 34px; height: 34px; }
 .avatar-pick {
   background: #fff;
   border: 2px solid var(--border);
-  border-radius: 12px;
-  padding: 4px;
+  border-radius: 14px;
+  padding: 5px;
   cursor: pointer;
   line-height: 0;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.avatar-pick:hover {
+  transform: translateY(-2px);
+  border-color: var(--bleu);
+  box-shadow: none;
 }
 .avatar-pick.selected { border-color: var(--blue); background: #eff6ff; }
 .avatar-pick img { width: 44px; height: 44px; object-fit: contain; }
