@@ -367,7 +367,9 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="app">
-      <header>
+      {/* Le bandeau porte les couleurs de la maison, comme l'écran de
+          connexion : la marque à gauche, l'identité et la sortie à droite. */}
+      <header className="entete">
         <h1>
           🛰️ MonCap GPS{" "}
           <span className={`dot ${connected ? "on" : "off"}`} title={connected ? "Temps réel connecté" : "Déconnecté"} />
@@ -376,7 +378,9 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
           <span className="user">
             <img className="user-avatar" src={avatarUrl(avatar)} alt="" /> {getUsername()}
           </span>
-          <button onClick={signOut}>Déconnexion</button>
+          <button className="ghost" onClick={signOut}>
+            Déconnexion
+          </button>
         </div>
       </header>
 
@@ -431,96 +435,111 @@ function MapApp({ onLogout }: { onLogout: () => void }) {
         onVoteAlert={voteAlert}
       />
 
+      {/* Sous la carte, des panneaux : chacun son sujet, chacun sa carte
+          blanche — la page cesse d'être une pile de boutons. */}
       <section className="controls">
-        <p className="hint">Astuce : clique sur la carte pour ajouter une position.</p>
-
-        <div className="row avatars">
-          <span className="avatars-label">Mon avatar :</span>
-          {AVATARS.map((a) => (
-            <button
-              key={a.id}
-              className={`avatar-pick ${avatar === a.id ? "selected" : ""}`}
-              title={a.label}
-              onClick={() => {
-                setAvatar(a.id);
-                setAvatarState(a.id);
-              }}
-            >
-              <img src={a.url} alt={a.label} />
+        <div className="panneau">
+          <h2>Sur la route</h2>
+          <div className="row">
+            <button className={sharing ? "active" : ""} onClick={toggleSharing}>
+              {sharing ? "🟢 Partage en direct…" : "📍 Partager ma position"}
             </button>
-          ))}
+            {liveList.length > 0 && <span className="badge">{liveList.length} en direct</span>}
+          </div>
+          <div className="row alerts-row">
+            {ALERT_TYPES.map((a) => (
+              <button key={a.category} className="alert-btn" onClick={() => report(a.category, a.label)}>
+                {a.emoji} {a.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="row">
-          <button className={sharing ? "active" : ""} onClick={toggleSharing}>
-            {sharing ? "🟢 Partage en direct…" : "📍 Partager ma position"}
-          </button>
-          {liveList.length > 0 && <span className="badge">{liveList.length} en direct</span>}
-        </div>
-
-        <div className="row alerts-row">
-          {ALERT_TYPES.map((a) => (
-            <button key={a.category} className="alert-btn" onClick={() => report(a.category, a.label)}>
-              {a.emoji} {a.label}
+        <div className="panneau">
+          <h2>Itinéraire</h2>
+          <p className="hint">Touche la carte pour poser une position, puis relie-les.</p>
+          <div className="row">
+            <label>
+              Vitesse (km/h)
+              <input type="number" min={1} value={speed} onChange={(e) => setSpeed(Number(e.target.value) || 1)} />
+            </label>
+            <button onClick={computeRoute} disabled={positions.length < 2}>
+              Itinéraire complet
             </button>
-          ))}
+            <a className="btn secondaire" href={api.gpxUrl()} target="_blank" rel="noreferrer">
+              Exporter GPX
+            </a>
+            <label className="btn secondaire">
+              Importer GPX
+              <input
+                type="file"
+                accept=".gpx,application/gpx+xml,text/xml"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importGpx(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+          {routeInfo && <p className="info">{routeInfo}</p>}
+
+          {stats && (
+            <p className="stats">
+              {stats.count} positions · longueur {stats.total_km.toFixed(1)} km
+              {stats.centroid &&
+                ` · centre ${stats.centroid.lat.toFixed(3)}, ${stats.centroid.lon.toFixed(3)}`}
+            </p>
+          )}
+
+          <ul className="list">
+            {positions.map((p) => (
+              <li key={p.id}>
+                <span>
+                  <strong>{p.label}</strong>{" "}
+                  <em>
+                    {p.lat.toFixed(4)}, {p.lon.toFixed(4)}
+                  </em>
+                </span>
+                <span className="actions">
+                  <button className="secondaire" onClick={() => rename(p)}>
+                    Renommer
+                  </button>
+                  <button className="danger" onClick={() => remove(p.id)}>
+                    Supprimer
+                  </button>
+                </span>
+              </li>
+            ))}
+            {positions.length === 0 && <li className="empty">Aucune position.</li>}
+          </ul>
         </div>
 
-        <div className="row">
-          <label>
-            Vitesse (km/h)
-            <input type="number" min={1} value={speed} onChange={(e) => setSpeed(Number(e.target.value) || 1)} />
-          </label>
-          <button onClick={computeRoute} disabled={positions.length < 2}>
-            Itinéraire complet
-          </button>
-          <a className="btn" href={api.gpxUrl()} target="_blank" rel="noreferrer">
-            Exporter GPX
-          </a>
-          <label className="btn">
-            Importer GPX
-            <input
-              type="file"
-              accept=".gpx,application/gpx+xml,text/xml"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importGpx(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </div>
-
-        {routeInfo && <p className="info">{routeInfo}</p>}
-
-        {stats && (
-          <p className="stats">
-            {stats.count} positions · longueur {stats.total_km.toFixed(1)} km
-            {stats.centroid &&
-              ` · centre ${stats.centroid.lat.toFixed(3)}, ${stats.centroid.lon.toFixed(3)}`}
-          </p>
-        )}
-
-        <ul className="list">
-          {positions.map((p) => (
-            <li key={p.id}>
-              <span>
-                <strong>{p.label}</strong>{" "}
-                <em>
-                  {p.lat.toFixed(4)}, {p.lon.toFixed(4)}
-                </em>
-              </span>
-              <span className="actions">
-                <button onClick={() => rename(p)}>Renommer</button>
-                <button className="danger" onClick={() => remove(p.id)}>
-                  Supprimer
-                </button>
-              </span>
-            </li>
-          ))}
-          {positions.length === 0 && <li className="empty">Aucune position.</li>}
-        </ul>
+        {/* Treize voitures, c'est un mur d'images : replié par défaut,
+            l'avatar courant en montre déjà la couleur dans le bandeau. */}
+        <details className="panneau avatars-panneau">
+          <summary>
+            <h2>Mon avatar</h2>
+            <img className="user-avatar" src={avatarUrl(avatar)} alt="" />
+          </summary>
+          <div className="row avatars">
+            {AVATARS.map((a) => (
+              <button
+                key={a.id}
+                className={`avatar-pick ${avatar === a.id ? "selected" : ""}`}
+                title={a.label}
+                onClick={() => {
+                  setAvatar(a.id);
+                  setAvatarState(a.id);
+                }}
+              >
+                <img src={a.url} alt={a.label} />
+              </button>
+            ))}
+          </div>
+        </details>
       </section>
     </div>
   );
