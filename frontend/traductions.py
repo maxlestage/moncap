@@ -411,8 +411,40 @@ T: dict[str, tuple[str, str]] = {
         "satellite detections · %@",
     ),
     "Chercher une région": ("Buscar una región", "Search a region"),
-    "e-mail": ("correo electrónico", "email"),
     "mot de passe": ("contraseña", "password"),
+    "pseudonyme": ("seudónimo", "username"),
+    "Pseudonyme : 3 caractères minimum.": (
+        "Seudónimo: 3 caracteres como mínimo.",
+        "Username: at least 3 characters.",
+    ),
+    "Un pseudonyme suffit — aucun e-mail demandé.": (
+        "Un seudónimo basta — no se pide correo.",
+        "A username is enough — no email asked.",
+    ),
+    "Identifiant ou mot de passe incorrect.": (
+        "Identificador o contraseña incorrectos.",
+        "Wrong username or password.",
+    ),
+    "Impossible de créer le compte.": (
+        "No se pudo crear la cuenta.",
+        "Couldn't create the account.",
+    ),
+    "Serveur injoignable. Réessaie.": (
+        "Servidor inalcanzable. Reintenta.",
+        "Server unreachable. Try again.",
+    ),
+    "Échec de l'authentification": ("Fallo de autenticación", "Authentication failed"),
+    "Saisie invalide.": ("Entrada no válida.", "Invalid input."),
+    # Messages renvoyés par le serveur, affichés tels quels par l'écran de
+    # connexion (LocalizedStringKey) : présents ici, ils se traduisent.
+    "nom d'utilisateur déjà pris": (
+        "nombre de usuario ya en uso",
+        "username already taken",
+    ),
+    "nom (≥3) et mot de passe (≥6) requis": (
+        "nombre (≥3) y contraseña (≥6) requeridos",
+        "name (≥3) and password (≥6) required",
+    ),
     "Clé API TomTom": ("Clave de API TomTom", "TomTom API key"),
     "Clé FIRMS (MAP_KEY)": ("Clave FIRMS (MAP_KEY)", "FIRMS key (MAP_KEY)"),
     "Type de vélo": ("Tipo de bicicleta", "Bike type"),
@@ -664,7 +696,6 @@ T: dict[str, tuple[str, str]] = {
     "Itinéraire": ("Ruta", "Route"),
     # Messages de validation : affichés par `Text(String)`, donc passés par
     # `LocalizedStringKey` au site d'appel.
-    "Adresse e-mail invalide.": ("Correo electrónico no válido.", "Invalid email address."),
     "Mot de passe : 6 caractères minimum.": (
         "Contraseña: 6 caracteres como mínimo.",
         "Password: 6 characters minimum.",
@@ -794,7 +825,18 @@ def cles_orphelines(fichiers: list[tuple[str, str]]) -> list[str]:
     # Les clés à spécificateur viennent de l'interpolation SwiftUI ou d'un
     # format : elles n'apparaissent pas telles quelles dans les sources.
     rangs = {"1re"} | {f"{n}e" for n in range(2, 10)}
-    return [k for k in T if "%" not in k and k not in rangs and f'"{k}"' not in tout]
+    # Les messages venus du serveur ne figurent dans aucun source Swift :
+    # ils arrivent par le réseau, et l'écran de connexion les affiche en
+    # LocalizedStringKey — présents au catalogue, ils se traduisent.
+    serveur = {
+        "nom d'utilisateur déjà pris",
+        "nom (≥3) et mot de passe (≥6) requis",
+    }
+    return [
+        k for k in T
+        if "%" not in k and k not in rangs and k not in serveur
+        and f'"{k}"' not in tout
+    ]
 
 
 def appels_sans_cle(fichiers: list[tuple[str, str]]) -> list[str]:

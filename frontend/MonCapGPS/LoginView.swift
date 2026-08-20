@@ -17,21 +17,30 @@ struct LoginView: View {
             Text(signupMode ? "Créer un compte" : "Connexion")
                 .foregroundStyle(.secondary)
 
-            // Champs exclus du .textCase(.lowercase) de l'écran : le texte
-            // saisi s'affiche exactement tel qu'il est tapé (casse respectée),
-            // sans quoi le champ montrait « max@x.com » pour « Max@X.com ».
-            // Placeholders déjà en minuscules pour garder l'aspect « en petit ».
-            TextField("e-mail", text: $username)
+            // Un pseudonyme, pas un e-mail : le serveur n'a jamais stocké
+            // d'adresse, et la confidentialité le promet. Champs exclus du
+            // .textCase(.lowercase) de l'écran : la saisie s'affiche telle
+            // qu'elle est tapée (l'auth est sensible à la casse).
+            TextField("pseudonyme", text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .keyboardType(.emailAddress)
-                .textContentType(.emailAddress)
+                .textContentType(.username)
                 .textFieldStyle(.roundedBorder)
                 .textCase(nil)
 
+            // `.newPassword` à l'inscription : le trousseau propose un mot de
+            // passe fort et le retient — `.password` à la connexion pour
+            // qu'il ressorte le bon.
             SecureField("mot de passe", text: $password)
+                .textContentType(signupMode ? .newPassword : .password)
                 .textFieldStyle(.roundedBorder)
                 .textCase(nil)
+
+            if signupMode {
+                Text("Un pseudonyme suffit — aucun e-mail demandé.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             if !errorMessage.isEmpty {
                 Text(LocalizedStringKey(errorMessage)).font(.footnote).foregroundStyle(.red)
@@ -78,7 +87,7 @@ struct LoginView: View {
             } catch APIError.unauthorized {
                 errorMessage = signupMode
                     ? "Impossible de créer le compte."
-                    : "E-mail ou mot de passe incorrect."
+                    : "Identifiant ou mot de passe incorrect."
             } catch APIError.server(let msg) {
                 errorMessage = msg.isEmpty ? "Échec de l'authentification" : msg
             } catch {
