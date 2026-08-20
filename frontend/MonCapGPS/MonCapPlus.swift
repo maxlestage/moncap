@@ -31,6 +31,11 @@ final class MonCapPlus: ObservableObject {
     /// le compte le dit à la connexion. Persisté — l'invitation tient aussi
     /// hors ligne, comme l'abonnement.
     private var offert = UserDefaults.standard.bool(forKey: "moncap.plus.offert")
+    /// Fin de la période en cours (essai ou mois payé), datée par Apple —
+    /// nil sans abonnement (y compris pour un Plus offert).
+    @Published private(set) var renouvellement: Date?
+    /// Vrai pendant la période d'essai gratuite.
+    @Published private(set) var enEssai = false
 
     private var veille: Task<Void, Never>?
 
@@ -53,15 +58,31 @@ final class MonCapPlus: ObservableObject {
 
     func rafraichitDroit() async {
         var a = false
+        var fin: Date?
+        var essai = false
         for await droit in StoreKit.Transaction.currentEntitlements {
             if case .verified(let t) = droit,
                 t.productID == Self.produitID, t.revocationDate == nil
             {
                 a = true
+                fin = t.expirationDate
+                essai = t.offer?.paymentMode == .freeTrial
             }
         }
         actif = a || offert
+        renouvellement = fin
+        enEssai = essai
     }
+
+    /// Jours restants de la période en cours, arrondis vers le haut — on dit
+    /// « il reste 1 jour » jusqu'au bout, jamais « 0 » avant l'heure.
+    var joursRestants: Int? {
+        guard let renouvellement else { return nil }
+        return max(0, Int((renouvellement.timeIntervalSinceNow / 86_400).rounded(.up)))
+    }
+
+    /// Vrai quand Plus vient de la liste d'invités, pas d'un abonnement.
+    var estOffert: Bool { actif && renouvellement == nil && offert }
 
     /// Le serveur a dit si ce compte est invité : on le retient, et l'état
     /// visible suit. Appelé à chaque lecture du compte — être retiré de la
