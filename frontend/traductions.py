@@ -149,6 +149,9 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Aucun itinéraire": ("Ninguna ruta", "No route"),
     "Transports": ("Transporte", "Transit"),
+    "Maintenant": ("Ahora", "Now"),
+    "Partir à": ("Salir a las", "Leave at"),
+    "Arriver avant": ("Llegar antes de las", "Arrive by"),
     "%.0f min · direct · %@": ("%.0f min · directo · %@", "%.0f min · direct · %@"),
     "%.0f min · 1 correspondance · %@": (
         "%.0f min · 1 transbordo · %@",
