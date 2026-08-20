@@ -187,6 +187,24 @@ const FR: Contenu = {
       texte:
         "Le trajet part en lien — destination, étapes, mode. Qui a l'application l'ouvre sur le même trajet, prêt à partir ; qui ne l'a pas voit la carte et rejoint par Plans ou Google Maps.",
     },
+    {
+      emoji: "🗣️",
+      titre: "« Dis Siri, ramène-moi à la maison »",
+      texte:
+        "Le guidage démarre à la voix, vers le domicile ou le travail enregistrés — même sans réseau, leurs positions sont déjà sur l'appareil. Et dans Raccourcis, une adresse dictée devient un itinéraire.",
+    },
+    {
+      emoji: "🔒",
+      titre: "Le guidage sans déverrouiller",
+      texte:
+        "La flèche, la consigne, la distance et l'heure d'arrivée vivent sur l'écran verrouillé et dans la Dynamic Island. Un coup d'œil suffit, le téléphone reste dans sa poche.",
+    },
+    {
+      emoji: "🚘",
+      titre: "Prête pour CarPlay",
+      texte:
+        "L'écran voiture est écrit : la même carte, le tracé du guidage, la consigne du moment et sa distance. Il s'allumera dès l'agrément CarPlay d'Apple — brancher le téléphone suffira.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -370,6 +388,24 @@ const ES: Contenu = {
       texte:
         "La ruta se envía como enlace — destino, paradas, modo. Quien tiene la aplicación la abre sobre la misma ruta, lista para salir; quien no la tiene ve el mapa y llega con Plans o Google Maps.",
     },
+    {
+      emoji: "🗣️",
+      titre: "«Oye Siri, llévame a casa»",
+      texte:
+        "La guía arranca con la voz, hacia la casa o el trabajo guardados — incluso sin cobertura, sus posiciones ya están en el dispositivo. Y en Atajos, una dirección dictada se convierte en ruta.",
+    },
+    {
+      emoji: "🔒",
+      titre: "La guía sin desbloquear",
+      texte:
+        "La flecha, la indicación, la distancia y la hora de llegada viven en la pantalla bloqueada y en la Dynamic Island. Basta un vistazo, el teléfono se queda en el bolsillo.",
+    },
+    {
+      emoji: "🚘",
+      titre: "Lista para CarPlay",
+      texte:
+        "La pantalla del coche está escrita: el mismo mapa, el trazado de la guía, la indicación del momento y su distancia. Se encenderá con la aprobación CarPlay de Apple — bastará con conectar el teléfono.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -552,6 +588,24 @@ const EN: Contenu = {
       titre: "A trip that travels as a link",
       texte:
         "The trip goes out as a link — destination, stops, mode. Whoever has the app opens it on the same trip, ready to go; whoever doesn't sees the map and gets there with Apple or Google Maps.",
+    },
+    {
+      emoji: "🗣️",
+      titre: "“Hey Siri, take me home”",
+      texte:
+        "Guidance starts by voice, to your saved home or work — even offline, since their positions are already on the device. And in Shortcuts, a spoken address becomes a route.",
+    },
+    {
+      emoji: "🔒",
+      titre: "Guidance without unlocking",
+      texte:
+        "The arrow, the instruction, the distance and the arrival time live on the lock screen and in the Dynamic Island. A glance is enough; the phone stays in your pocket.",
+    },
+    {
+      emoji: "🚘",
+      titre: "Ready for CarPlay",
+      texte:
+        "The car screen is written: the same map, the route being driven, the current instruction and its distance. It lights up as soon as Apple grants the CarPlay approval — plugging in the phone will be enough.",
     },
   ],
   horsLigneCartes: [
