@@ -31,7 +31,9 @@ struct RouteOption: Identifiable {
     let coordinates: [CLLocationCoordinate2D]
     /// Étapes pour la navigation (assemblées si l'itinéraire a plusieurs tronçons).
     let steps: [NavStep]
-    let minutes: Double
+    /// Durée totale, arrêts aux étapes compris — modifiable quand un temps
+    /// d'arrêt change sans que le tracé bouge.
+    var minutes: Double
     let km: Double
     let turns: Int
     var isSimplest = false
@@ -678,6 +680,10 @@ struct MapHomeView: View {
     /// Les étapes intermédiaires du trajet en préparation, dans l'ordre.
     @State private var etapes: [CLLocationCoordinate2D] = []
     @State private var etapeNoms: [String] = []
+    /// Minutes d'arrêt prévues à chaque étape (0 = simple passage). Comptées
+    /// dans la durée affichée : un détour chez Paul, c'est le trajet plus le
+    /// quart d'heure chez Paul.
+    @State private var etapeArrets: [Int] = []
     /// Vrai le temps de désigner la prochaine étape sur la carte.
     @State private var ajouteEtape = false
     /// Étapes déjà atteintes pendant le guidage (index dans `etapes`) : le
@@ -2484,10 +2490,28 @@ struct MapHomeView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(Array(etapeNoms.enumerated()), id: \.offset) { i, nom in
+                            let arret = etapeArrets.indices.contains(i) ? etapeArrets[i] : 0
                             HStack(spacing: 4) {
-                                Text(verbatim: "\(i + 1) · \(nom)")
+                                // Toucher le nom ouvre le temps d'arrêt : ce
+                                // qu'on règle le plus souvent sur une étape.
+                                Menu {
+                                    Picker("Temps d'arrêt", selection: lienArret(i)) {
+                                        Text("Sans arrêt").tag(0)
+                                        ForEach([5, 15, 30], id: \.self) { m in
+                                            Text(verbatim: "\(m) min").tag(m)
+                                        }
+                                        Text(verbatim: "1 h").tag(60)
+                                    }
+                                } label: {
+                                    Text(
+                                        verbatim: arret > 0
+                                            ? "\(i + 1) · \(nom) · \(arret >= 60 ? "1 h" : "\(arret)′")"
+                                            : "\(i + 1) · \(nom)"
+                                    )
                                     .font(.caption2.weight(.semibold))
                                     .lineLimit(1)
+                                    .foregroundStyle(.primary)
+                                }
                                 Button { retireEtape(i) } label: {
                                     Image(systemName: "xmark")
                                         .font(.system(size: 9, weight: .bold))
@@ -2510,6 +2534,19 @@ struct MapHomeView: View {
                         .buttonStyle(.bordered)
                         .tint(ajouteEtape ? .orange : .indigo)
                         .controlSize(.mini)
+                        // À partir de deux étapes, l'ordre devient un choix —
+                        // et la géométrie sait le faire mieux que la mémoire.
+                        if etapes.count >= 2 {
+                            Button {
+                                ordonneAuPlusCourt()
+                            } label: {
+                                Label("Au plus court", systemImage: "arrow.triangle.swap")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.teal)
+                            .controlSize(.mini)
+                        }
                     }
                 }
                 .frame(height: 30)
@@ -2672,6 +2709,7 @@ struct MapHomeView: View {
                     pendingDestination = nil
                     etapes = []
                     etapeNoms = []
+                    etapeArrets = []
                     etapesAtteintes = []
                     ajouteEtape = false
                 } label: {
@@ -4109,9 +4147,12 @@ struct MapHomeView: View {
             return
         }
 
+        // La durée promise inclut les arrêts prévus : partir « pour 1 h 40 »
+        // quand on a dit rester un quart d'heure chez Paul, c'est 1 h 55.
         var option = RouteOption(
             coordinates: build.coords, steps: build.steps,
-            minutes: build.minutes, km: build.km,
+            minutes: build.minutes + Double(etapeArrets.reduce(0, +)),
+            km: build.km,
             turns: build.steps.count, hasTolls: build.hasTolls)
         option.isSimplest = true
         option.color = .green
@@ -4245,6 +4286,7 @@ struct MapHomeView: View {
     private func ajouterEtape(_ coord: CLLocationCoordinate2D) {
         ajouteEtape = false
         etapes.append(coord)
+        etapeArrets.append(0)
         etapeNoms.append(
             String(format: NSLocalizedString("Étape %d", comment: ""), etapes.count))
         if let dest = pendingDestination {
@@ -4265,7 +4307,94 @@ struct MapHomeView: View {
         guard etapes.indices.contains(index) else { return }
         etapes.remove(at: index)
         etapeNoms.remove(at: index)
+        if etapeArrets.indices.contains(index) { etapeArrets.remove(at: index) }
         etapesAtteintes = []
+        recalculeApresEtapes()
+    }
+
+    /// Le temps d'arrêt d'une étape, relié au menu de sa pastille. Le tracé ne
+    /// bouge pas quand on le change : seule la durée affichée est corrigée,
+    /// sans relancer le calcul.
+    private func lienArret(_ index: Int) -> Binding<Int> {
+        Binding(
+            get: { etapeArrets.indices.contains(index) ? etapeArrets[index] : 0 },
+            set: { nouveau in
+                guard etapeArrets.indices.contains(index) else { return }
+                let delta = Double(nouveau - etapeArrets[index])
+                etapeArrets[index] = nouveau
+                if routeOptions.count == 1, delta != 0 {
+                    routeOptions[0].minutes += delta
+                }
+            })
+    }
+
+    /// Réordonne les étapes pour minimiser le chemin : force brute jusqu'à
+    /// sept étapes (au pire 5 040 ordres, des additions), plus proche voisin
+    /// au-delà. La distance est à vol d'oiseau — c'est un tri, pas un calcul
+    /// d'itinéraire — donc tout fonctionne hors ligne.
+    private func ordonneAuPlusCourt() {
+        guard etapes.count >= 2, let from = location.coordinate,
+            let dest = pendingDestination
+        else { return }
+        let ordre = meilleurOrdre(depuis: from, vers: dest)
+        guard ordre != Array(etapes.indices) else { return }
+        etapes = ordre.map { etapes[$0] }
+        etapeNoms = ordre.map { etapeNoms.indices.contains($0) ? etapeNoms[$0] : "" }
+        etapeArrets = ordre.map { etapeArrets.indices.contains($0) ? etapeArrets[$0] : 0 }
+        etapesAtteintes = []
+        Task { await presentRouteOptions(to: dest) }
+    }
+
+    private func meilleurOrdre(
+        depuis from: CLLocationCoordinate2D, vers dest: CLLocationCoordinate2D
+    ) -> [Int] {
+        let n = etapes.count
+        func cout(_ ordre: [Int]) -> Double {
+            var total = 0.0
+            var courant = from
+            for i in ordre {
+                total += metersBetween(courant, etapes[i])
+                courant = etapes[i]
+            }
+            return total + metersBetween(courant, dest)
+        }
+        if n <= 7 {
+            var meilleur = Array(0..<n)
+            var record = cout(meilleur)
+            func explore(_ pris: [Int], _ reste: [Int]) {
+                if reste.isEmpty {
+                    let c = cout(pris)
+                    if c < record {
+                        record = c
+                        meilleur = pris
+                    }
+                    return
+                }
+                for (k, i) in reste.enumerated() {
+                    var suivant = reste
+                    suivant.remove(at: k)
+                    explore(pris + [i], suivant)
+                }
+            }
+            explore([], Array(0..<n))
+            return meilleur
+        }
+        var reste = Set(0..<n)
+        var ordre: [Int] = []
+        var courant = from
+        while let prochain = reste.min(by: {
+            metersBetween(courant, etapes[$0]) < metersBetween(courant, etapes[$1])
+        }) {
+            ordre.append(prochain)
+            reste.remove(prochain)
+            courant = etapes[prochain]
+        }
+        return ordre
+    }
+
+    /// Relance le calcul après un changement d'étapes, si une destination
+    /// est posée.
+    private func recalculeApresEtapes() {
         if let dest = pendingDestination {
             Task { await presentRouteOptions(to: dest) }
         }
@@ -4400,8 +4529,13 @@ struct MapHomeView: View {
             return
         }
         // Les étapes pas encore atteintes restent au programme : rater une
-        // sortie n'annule pas le passage chez Paul.
+        // sortie n'annule pas le passage chez Paul — ni le temps qu'on
+        // comptait y rester, encore devant nous lui aussi.
         let restantes = etapesRestantes()
+        let arrets = Double(
+            etapes.indices
+                .filter { !etapesAtteintes.contains($0) }
+                .reduce(0) { $0 + (etapeArrets.indices.contains($1) ? etapeArrets[$1] : 0) })
         // Hors ligne assumé : on ne tente même pas le réseau. Attendre son
         // échec ferait patienter le bandeau « Recalcul… » plusieurs secondes,
         // au pire moment — celui où l'on vient de rater une sortie.
@@ -4410,7 +4544,7 @@ struct MapHomeView: View {
                                                vias: restantes) {
             nav.applyReroute(
                 steps: local.steps, coords: local.coordinates,
-                km: local.km, minutes: local.minutes)
+                km: local.km, minutes: local.minutes + arrets)
             speedLimit.preload(along: local.coordinates)
             return
         }
@@ -4422,14 +4556,14 @@ struct MapHomeView: View {
             {
                 nav.applyReroute(
                     steps: build.steps, coords: build.coords,
-                    km: build.km, minutes: build.minutes)
+                    km: build.km, minutes: build.minutes + arrets)
                 speedLimit.preload(along: build.coords)
             } else if let local = router.route(
                 from: from, to: to, costing: travelMode.costing, vias: restantes)
             {
                 nav.applyReroute(
                     steps: local.steps, coords: local.coordinates,
-                    km: local.km, minutes: local.minutes)
+                    km: local.km, minutes: local.minutes + arrets)
                 speedLimit.preload(along: local.coordinates)
             } else {
                 nav.rerouteFailed()
@@ -4543,49 +4677,7 @@ struct MapHomeView: View {
         }
     }
 
-    /// Enchaîne des tronçons MapKit sur une suite de points — départ, étapes,
-/// destination — en un seul trajet. À chaque étape, l'« arrivée » du tronçon
-/// est remplacée par une consigne d'étape nommée, et le « départ » du tronçon
-/// suivant est retiré : on ne dit pas « vous êtes arrivé » chez Paul quand on
-/// ne fait qu'y passer.
-fileprivate func chaineEtapes(
-    points: [CLLocationCoordinate2D], noms: [String],
-    transportType: MKDirectionsTransportType
-) async -> RouteBuild? {
-    guard points.count >= 2 else { return nil }
-    var coords: [CLLocationCoordinate2D] = []
-    var steps: [NavStep] = []
-    var km = 0.0
-    var minutes = 0.0
-    var tolls = false
-    for i in 0..<(points.count - 1) {
-        guard
-            let leg = await buildRoutes(
-                from: points[i], to: points[i + 1],
-                alternates: false, transportType: transportType
-            ).first
-        else { return nil }
-        var legSteps = leg.steps
-        if i > 0 { legSteps = Array(legSteps.dropFirst()) }
-        if i < points.count - 2 {
-            legSteps = Array(legSteps.dropLast())
-            let nom = i < noms.count ? noms[i] : ""
-            legSteps.append(
-                NavStep(
-                    text: String(
-                        format: NSLocalizedString("Étape : %@", comment: ""), nom),
-                    coord: points[i + 1]))
-        }
-        coords += leg.coords
-        steps += legSteps
-        km += leg.km
-        minutes += leg.minutes
-        tolls = tolls || leg.hasTolls
-    }
-    return RouteBuild(coords: coords, steps: steps, km: km, minutes: minutes, hasTolls: tolls)
-}
-
-/// Cap (0 = nord) d'un point vers un autre.
+    /// Cap (0 = nord) d'un point vers un autre.
     private func bearingBetween(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
         let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
         let dLon = (b.longitude - a.longitude) * .pi / 180

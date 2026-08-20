@@ -155,6 +155,9 @@ T: dict[str, tuple[str, str]] = {
     "Étape": ("Parada", "Stop"),
     "Touche la carte": ("Toca el mapa", "Tap the map"),
     "Étape %d": ("Parada %d", "Stop %d"),
+    "Au plus court": ("El más corto", "Shortest order"),
+    "Temps d'arrêt": ("Tiempo de parada", "Stop time"),
+    "Sans arrêt": ("Sin parada", "No stop"),
     "Étape : %@": ("Parada: %@", "Stop: %@"),
     "🔥 Traverse une zone de feux vers le km %d": (
         "🔥 Atraviesa una zona de incendios hacia el km %d",
