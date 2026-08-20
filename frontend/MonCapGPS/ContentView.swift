@@ -3949,6 +3949,11 @@ struct MapHomeView: View {
             positions = try await api.positions()
             stats = try? await api.stats()
             accountInfo = try? await api.accountInfo()
+            // Le compte dit si Plus est offert (liste d'invités du serveur) :
+            // l'état ne bouge que quand le serveur a vraiment répondu.
+            if let info = accountInfo {
+                plus.majOffert(info.plus_offert ?? false)
+            }
             leaders = (try? await api.leaderboard()) ?? leaders
             await updateRoute()
         } catch APIError.unauthorized {

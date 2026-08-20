@@ -85,6 +85,9 @@ struct AccountInfo: Codable {
     let trips: Int
     let positions: Int
     let searches: Int
+    /// MonCap Plus offert par la maison (liste d'invités côté serveur).
+    /// Optionnel : un vieux serveur ne le dit pas.
+    let plus_offert: Bool?
 }
 
 /// Une ligne du classement des contributeurs (nom pseudonymisé).
