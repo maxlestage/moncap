@@ -513,6 +513,22 @@
         }
       }
     },
+    "Aller au travail": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to work"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ir al trabajo"
+          }
+        }
+      }
+    },
     "Alternative": {
       "localizations": {
         "en": {
@@ -961,6 +977,38 @@
         }
       }
     },
+    "C'est parti vers la maison.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the way home."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En marcha hacia casa."
+          }
+        }
+      }
+    },
+    "C'est parti vers le travail.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the way to work."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En marcha hacia el trabajo."
+          }
+        }
+      }
+    },
     "Calcul de l'itinéraire…": {
       "localizations": {
         "en": {
@@ -1377,6 +1425,22 @@
         }
       }
     },
+    "Destination": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destination"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destino"
+          }
+        }
+      }
+    },
     "Destinations": {
       "localizations": {
         "en": {
@@ -1469,6 +1533,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fijar %@ en mi posición"
+          }
+        }
+      }
+    },
+    "Définis d'abord ton domicile dans les favoris de MonCap GPS.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First set your home in MonCap GPS favourites."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Define primero tu casa en los favoritos de MonCap GPS."
+          }
+        }
+      }
+    },
+    "Définis d'abord ton travail dans les favoris de MonCap GPS.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First set your work in MonCap GPS favourites."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Define primero tu trabajo en los favoritos de MonCap GPS."
           }
         }
       }
@@ -1953,6 +2049,22 @@
         }
       }
     },
+    "Itinéraire vers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Route to"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruta hacia"
+          }
+        }
+      }
+    },
     "Itinéraires hors réseau": {
       "localizations": {
         "en": {
@@ -1965,6 +2077,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rutas sin conexión"
+          }
+        }
+      }
+    },
+    "Je n'ai pas trouvé cette adresse — il faut du réseau pour chercher un nom de lieu.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I couldn't find that address — network is needed to look up a place name."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No encontré esa dirección — hace falta red para buscar un nombre de lugar."
           }
         }
       }
@@ -2173,6 +2301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ahora, %@"
+          }
+        }
+      }
+    },
+    "Maison": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Home"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Casa"
           }
         }
       }
@@ -3041,6 +3185,22 @@
         }
       }
     },
+    "Rentrer à la maison": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go home"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volver a casa"
+          }
+        }
+      }
+    },
     "Renvoyer le lien de suivi": {
       "localizations": {
         "en": {
@@ -3681,6 +3841,22 @@
         }
       }
     },
+    "Travail": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Work"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trabajo"
+          }
+        }
+      }
+    },
     "Travaux": {
       "localizations": {
         "en": {
@@ -3821,6 +3997,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ciudad"
+          }
+        }
+      }
+    },
+    "Voilà les itinéraires.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Here are the routes."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aquí están las rutas."
           }
         }
       }

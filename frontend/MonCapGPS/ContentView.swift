@@ -780,6 +780,13 @@ struct MapHomeView: View {
         // Un lien moncap://trajet?… — depuis la page de partage, un message,
         // un autre appareil : le trajet s'ouvre ici comme si on l'avait posé.
         .onOpenURL { ouvreLien($0) }
+        // Une demande Siri (« Ramène-moi à la maison ») : app ouverte, la
+        // notification arrive ; lancée à froid, la relève au premier passage
+        // suffit — la demande attend dans UserDefaults.
+        .onReceive(NotificationCenter.default.publisher(for: GuidageDemande.signal)) { _ in
+            traiteGuidageDemande()
+        }
+        .onAppear { traiteGuidageDemande() }
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(service: fires)
         }
@@ -4967,6 +4974,22 @@ struct MapHomeView: View {
             comps.queryItems = items
             guard let url = comps.url else { return }
             Sharer.present([url])
+        }
+    }
+
+    /// Traite une demande de guidage venue de Siri : calcule vers le point
+    /// demandé, et démarre le guidage sur la meilleure option quand la
+    /// demande le dit (« Ramène-moi à la maison » part sans autre geste).
+    private func traiteGuidageDemande() {
+        guard let demande = GuidageDemande.releve() else { return }
+        let dest = CLLocationCoordinate2D(latitude: demande.lat, longitude: demande.lon)
+        showSearch = false
+        showPlaces = false
+        Task {
+            await presentRouteOptions(to: dest)
+            if demande.demarre, let o = routeOptions.first {
+                startNavigation(option: o)
+            }
         }
     }
 
