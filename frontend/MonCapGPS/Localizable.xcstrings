@@ -2289,6 +2289,22 @@
         }
       }
     },
+    "Mise à jour disponible · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update available · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualización disponible · %@"
+          }
+        }
+      }
+    },
     "Mise à jour il y a %lld h": {
       "localizations": {
         "en": {
