@@ -2673,6 +2673,22 @@
         }
       }
     },
+    "Partager l'itinéraire": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share the route"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartir la ruta"
+          }
+        }
+      }
+    },
     "Partager ma position en direct": {
       "localizations": {
         "en": {
