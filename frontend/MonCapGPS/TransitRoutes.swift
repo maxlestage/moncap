@@ -30,6 +30,10 @@ struct TransitLeg: Decodable, Hashable {
     let arrivee: String
     /// Polyligne encodée, précision sept — celle de MOTIS.
     let trace: String
+    /// Retard temps réel en secondes, quand le réseau le publie. Absent :
+    /// horaire théorique — un vieux serveur n'envoie pas le champ, et l'app
+    /// ne doit pas s'en trouver muette.
+    let retard_s: Int?
 
     var estVehicule: Bool { mode != "WALK" }
 
@@ -84,8 +88,14 @@ struct TransitItineraire: Decodable {
 enum TransitService {
     /// Demande les itinéraires au backend. `nil` : injoignable ou refusé —
     /// distinct d'une liste vide, qui veut dire « aucun trajet possible ».
+    ///
+    /// `depart` : l'heure souhaitée — de départ, ou d'arrivée au plus tard si
+    /// `arriveeAvant`. Absente : maintenant. Envoyée en UTC terminé par « Z »,
+    /// le seul format que le serveur accepte — un « +02:00 » serait mangé par
+    /// l'encodage d'URL.
     static func fetch(
-        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
+        depart: Date? = nil, arriveeAvant: Bool = false
     ) async -> [TransitItineraire]? {
         var comps = URLComponents(
             url: APIClient().baseURL.appendingPathComponent("transit"),
@@ -94,6 +104,15 @@ enum TransitService {
             URLQueryItem(name: "from", value: String(format: "%.5f,%.5f", from.latitude, from.longitude)),
             URLQueryItem(name: "to", value: String(format: "%.5f,%.5f", to.latitude, to.longitude)),
         ]
+        if let depart {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime]
+            f.timeZone = TimeZone(identifier: "UTC")
+            comps.queryItems?.append(URLQueryItem(name: "time", value: f.string(from: depart)))
+            if arriveeAvant {
+                comps.queryItems?.append(URLQueryItem(name: "arrive", value: "1"))
+            }
+        }
         guard let url = comps.url,
             let (data, resp) = try? await URLSession.shared.data(from: url),
             (resp as? HTTPURLResponse)?.statusCode == 200,

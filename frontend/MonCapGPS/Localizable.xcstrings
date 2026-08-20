@@ -545,6 +545,22 @@
         }
       }
     },
+    "Arriver avant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrive by"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llegar antes de las"
+          }
+        }
+      }
+    },
     "Arrivée": {
       "localizations": {
         "en": {
@@ -2081,6 +2097,22 @@
         }
       }
     },
+    "Maintenant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Now"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ahora"
+          }
+        }
+      }
+    },
     "Maintenant, %@": {
       "localizations": {
         "en": {
@@ -2605,6 +2637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partículas finas: %.0f µg/m³"
+          }
+        }
+      }
+    },
+    "Partir à": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave at"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salir a las"
           }
         }
       }

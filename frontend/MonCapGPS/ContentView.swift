@@ -366,6 +366,20 @@ struct POI: Identifiable {
 }
 
 /// Mode de déplacement : à pied, à vélo, en voiture.
+/// Le moment d'un trajet en transports en commun.
+enum TransitQuand: String, CaseIterable, Identifiable {
+    case maintenant, partirA, arriverA
+    var id: String { rawValue }
+
+    var libelle: String {
+        switch self {
+        case .maintenant: return "Maintenant"
+        case .partirA: return "Partir à"
+        case .arriverA: return "Arriver avant"
+        }
+    }
+}
+
 enum TravelMode: String, CaseIterable, Identifiable {
     case walk, bike, car, transit
     var id: String { rawValue }
@@ -596,6 +610,11 @@ struct MapHomeView: View {
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
     @State private var showAirMap = false
+    /// Le moment du trajet en transports : maintenant, partir à, ou arriver
+    /// avant. Les horaires sont toute la donnée d'un tram — les figer sur
+    /// « maintenant » interdisait de préparer le bus de demain matin.
+    @State private var transitQuand = TransitQuand.maintenant
+    @State private var transitDate = Date()
     /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
     @AppStorage("moncap.firmsKey") private var firmsKey = ""
     /// Partage de position en direct.
@@ -2189,6 +2208,15 @@ struct MapHomeView: View {
                                     .lineLimit(1)
                                     .fixedSize()
                             }
+                            // Le retard temps réel, dans la pastille même :
+                            // « +3′ » à côté de la ligne. Une minute de seuil,
+                            // en deçà c'est du bruit d'horloge.
+                            if let r = l.retard_s, abs(r) >= 60 {
+                                Text(verbatim: r > 0 ? "+\(r / 60)′" : "\(r / 60)′")
+                                    .font(.caption2.weight(.heavy))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
                         }
                         .padding(.vertical, 2).padding(.horizontal, 5)
                         .background(l.teinte.opacity(0.9), in: RoundedRectangle(cornerRadius: 5))
@@ -2326,6 +2354,50 @@ struct MapHomeView: View {
             .onChange(of: travelMode) { _, _ in
                 if let dest = pendingDestination {
                     Task { await presentRouteOptions(to: dest) }
+                }
+            }
+
+            // En transports, l'heure est un paramètre du calcul, pas un
+            // détail : le menu choisit le sens (partir / arriver avant), la
+            // roue choisit l'heure, et tout changement recalcule.
+            if travelMode == .transit {
+                HStack(spacing: 10) {
+                    Menu {
+                        ForEach(TransitQuand.allCases) { q in
+                            Button {
+                                transitQuand = q
+                                if let dest = pendingDestination {
+                                    Task { await presentRouteOptions(to: dest) }
+                                }
+                            } label: {
+                                if q == transitQuand {
+                                    Label(LocalizedStringKey(q.libelle), systemImage: "checkmark")
+                                } else {
+                                    Text(LocalizedStringKey(q.libelle))
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                            Text(LocalizedStringKey(transitQuand.libelle))
+                            Image(systemName: "chevron.up.chevron.down").font(.caption2)
+                        }
+                        .font(.caption.weight(.semibold))
+                    }
+                    if transitQuand != .maintenant {
+                        DatePicker(
+                            "", selection: $transitDate,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .labelsHidden()
+                        .onChange(of: transitDate) { _, _ in
+                            if let dest = pendingDestination {
+                                Task { await presentRouteOptions(to: dest) }
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
             }
 
@@ -3800,7 +3872,12 @@ struct MapHomeView: View {
     private func presentTransitOptions(
         from: CLLocationCoordinate2D, to dest: CLLocationCoordinate2D
     ) async {
-        guard let its = await TransitService.fetch(from: from, to: dest) else {
+        let depart = transitQuand == .maintenant ? nil : transitDate
+        guard
+            let its = await TransitService.fetch(
+                from: from, to: dest,
+                depart: depart, arriveeAvant: transitQuand == .arriverA)
+        else {
             itineraireImpossible = NSLocalizedString(
                 "Les transports en commun ont besoin du réseau.", comment: "")
             return
