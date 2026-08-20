@@ -186,6 +186,13 @@ test("chaque langue garde la même matière", () => {
     // tant qu'il n'est pas accordé.
     expect(atouts, `${l.code}`).toContain("siri");
     expect(atouts, `${l.code}`).toContain("dynamic island");
+
+    // Le prix est dit, et le même partout : le bandeau de chiffres et la
+    // carte MonCap Plus annoncent 3,99 €/mois — la page a longtemps dit
+    // « 0 € — aucun abonnement », et ce genre de retard est un mensonge.
+    expect(valeurs.join(" "), `${l.code}`).toMatch(/3[.,]99/);
+    expect(atouts, `${l.code}`).toMatch(/3[.,]99/);
+    expect(atouts, `${l.code}`).toContain("moncap plus");
     const carplay = l.atouts.find((a) =>
       sansAccents(`${a.titre} ${a.texte}`).includes("carplay"),
     );
