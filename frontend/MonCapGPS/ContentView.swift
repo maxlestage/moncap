@@ -776,7 +776,10 @@ struct MapHomeView: View {
         .sheet(isPresented: $showSearch) { searchSheet }
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
-        .sheet(isPresented: $showArrive) { ArriveNotifyView() }
+        .sheet(isPresented: $showArrive) {
+            ArriveNotifyView()
+                .presentationBackground(Color(.systemBackground))
+        }
         .sheet(isPresented: $showPaywall) { PaywallView() }
         .alert(
             "Aucun itinéraire", isPresented: Binding(
@@ -3327,6 +3330,9 @@ struct MapHomeView: View {
             }
         }
         .presentationDetents([.large])
+        // Fond opaque assumé : le verre d'iOS 26+ laisse la carte saigner à
+        // travers la feuille — texte illisible, icônes fantômes (constaté).
+        .presentationBackground(Color(.systemBackground))
         // Le paywall de cette feuille : une feuille peut en présenter une
         // autre, celle de la carte ne peut pas passer par-dessus celle-ci.
         .sheet(isPresented: $showPaywallRecherche) { PaywallView() }
@@ -3744,6 +3750,8 @@ struct MapHomeView: View {
             }
             .presentationDetents([.medium, .large])
         }
+        // Même règle que la feuille de recherche : opaque, pas de verre.
+        .presentationBackground(Color(.systemBackground))
     }
 
     // MARK: - Crédits
@@ -3828,6 +3836,7 @@ struct MapHomeView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(Color(.systemBackground))
     }
 
     // MARK: - Feuille « Mes trajets » (historique)
@@ -3888,6 +3897,7 @@ struct MapHomeView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(Color(.systemBackground))
         .sheet(isPresented: $showPaywallTrips) { PaywallView() }
         .sheet(isPresented: $showFacturation) { FacturationView(trajets: trips) }
     }

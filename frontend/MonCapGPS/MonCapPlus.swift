@@ -251,6 +251,9 @@ struct PaywallView: View {
                 }
             }
         }
+        // Fond opaque : le verre d'iOS 26+ rendrait le paywall illisible sur
+        // la carte — et un écran de vente illisible ne vend rien.
+        .presentationBackground(Color(.systemBackground))
         .task { if plus.produit == nil { await plus.charge() } }
         // La feuille système de saisie de code (offres App Store Connect) :
         // au retour, on relit les droits — le code vient peut-être d'ouvrir
