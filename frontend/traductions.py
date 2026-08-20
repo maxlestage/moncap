@@ -418,9 +418,18 @@ T: dict[str, tuple[str, str]] = {
         "Correo o contraseña incorrectos.",
         "Wrong email or password.",
     ),
-    "Ton e-mail sert d'identifiant — rien ne t'y sera envoyé.": (
-        "Tu correo sirve de identificador — no se te enviará nada.",
-        "Your email is your login — nothing will be sent to it.",
+    "Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.": (
+        "Tu correo sirve de identificador — solo para eso, y para recuperar tu contraseña.",
+        "Your email is your login — used only for that, and to recover your password.",
+    ),
+    "Mot de passe oublié ?": ("¿Contraseña olvidada?", "Forgot your password?"),
+    "Si un compte existe avec cette adresse, un lien vient d'être envoyé. Regarde ta boîte (et les indésirables).": (
+        "Si existe una cuenta con esa dirección, se acaba de enviar un enlace. Mira tu buzón (y el correo no deseado).",
+        "If an account exists for that address, a link was just sent. Check your inbox (and spam).",
+    ),
+    "La réinitialisation n'est pas encore configurée.": (
+        "La recuperación aún no está configurada.",
+        "Password recovery isn't configured yet.",
     ),
     "Impossible de créer le compte.": (
         "No se pudo crear la cuenta.",
