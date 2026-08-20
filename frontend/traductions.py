@@ -32,6 +32,7 @@ T: dict[str, tuple[str, str]] = {
     "Reprendre": ("Reanudar", "Resume"),
     "Effacer": ("Borrar", "Clear"),
     "Tout effacer": ("Borrar todo", "Clear all"),
+    "Réessayer": ("Reintentar", "Retry"),
     "Signaler": ("Avisar", "Report"),
     "Y aller": ("Ir", "Go"),
     "Détail": ("Detalle", "Details"),

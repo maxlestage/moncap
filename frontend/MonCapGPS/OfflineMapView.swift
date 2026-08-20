@@ -210,6 +210,23 @@ struct OfflineMapScreen: View {
     /// découpage en tuiles et leur conservation.
     private var vectorPanel: some View {
         VStack(spacing: 12) {
+            // Chaque moitié du panneau porte son titre : deux téléchargements
+            // cohabitent ici — des images, un graphe routier — et sans
+            // en-têtes, boutons et réglages semblaient tous sortir du même
+            // sac. « Tout effacer » vit à côté de ce qu'il efface, et
+            // seulement quand il y a quelque chose à effacer.
+            HStack {
+                Label("Fonds de carte", systemImage: "square.3.layers.3d.down.right")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if packs.packCount > 0 {
+                    Button("Tout effacer", role: .destructive) {
+                        packs.clearAll()
+                    }
+                    .font(.caption.weight(.semibold))
+                }
+            }
+
             Picker("Détail", selection: $depth) {
                 ForEach(Depth.allCases) { d in Text(LocalizedStringKey(d.rawValue)).tag(d) }
             }
@@ -293,15 +310,11 @@ struct OfflineMapScreen: View {
             Divider()
             routage
 
-            HStack {
-                Text("© OpenStreetMap contributors")
-                    .font(.caption2).foregroundStyle(.secondary)
-                Spacer()
-                Button("Tout effacer", role: .destructive) {
-                    packs.clearAll()
-                }
-                .font(.caption.weight(.semibold))
-            }
+            // Le crédit seul, centré : il partageait sa ligne avec « Tout
+            // effacer », un remerciement collé à un bouton destructif.
+            Text("© OpenStreetMap contributors")
+                .font(.caption2).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
@@ -317,11 +330,17 @@ struct OfflineMapScreen: View {
     private var routage: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
+                // Une ligne chacun : pliés, le titre et le lien occupaient
+                // quatre lignes à eux deux et l'en-tête devenait un pavé.
                 Label("Itinéraires hors réseau", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                     .font(.subheadline.weight(.semibold))
-                Spacer()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 10)
                 Button("Toutes les régions") { showRegions = true }
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize()
             }
 
             if router.downloading {
@@ -402,8 +421,22 @@ struct OfflineMapScreen: View {
                 Toggle("Naviguer hors ligne", isOn: $horsLigne)
                     .font(.subheadline)
             }
-            if let m = router.message {
-                Text(m).font(.caption2).foregroundStyle(.orange)
+            // L'avertissement ne s'affiche que s'il apporte quelque chose.
+            // Une tentative ratée — au sortir du mode avion, la radio met
+            // quelques secondes à se réveiller — épinglait « il faut du
+            // réseau » pour toujours, juste sous une région installée
+            // annoncée en vert : l'écran se contredisait. Quand une carte
+            // utile est déjà affichée, le message se tait ; sinon il
+            // s'accompagne du geste qui le résout.
+            if let m = router.message, suggestion == nil, router.regionCouvrante == nil {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(m).font(.caption2).foregroundStyle(.orange)
+                    Spacer(minLength: 8)
+                    Button("Réessayer") {
+                        Task { await router.loadRegions() }
+                    }
+                    .font(.caption.weight(.semibold))
+                }
             }
         }
     }
