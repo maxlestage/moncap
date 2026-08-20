@@ -88,6 +88,9 @@ struct AccountInfo: Codable {
     /// MonCap Plus offert par la maison (liste d'invités côté serveur).
     /// Optionnel : un vieux serveur ne le dit pas.
     let plus_offert: Bool?
+    /// Secondes Unix de la création du compte — l'ancre de l'essai de
+    /// quatorze jours. Optionnel : un vieux serveur ne le dit pas.
+    let created_at: Double?
 }
 
 /// Une ligne du classement des contributeurs (nom pseudonymisé).
