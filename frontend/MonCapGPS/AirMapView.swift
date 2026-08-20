@@ -809,8 +809,11 @@ struct AirMapLibreView: UIViewRepresentable {
         /// refaite à chaque réévaluation de la vue.
         private var dessine: String = ""
 
-        private static let source = "air-src"
-        private static let couche = "air-nappe"
+        /// Une paire d'identifiants par tranche possible : la zone plafonne à
+        /// 360° de large, soit deux tranches de 180° — la troisième est une
+        /// marge si un arrondi en réclamait une.
+        private static let sources = ["air-src-0", "air-src-1", "air-src-2"]
+        private static let couches = ["air-nappe-0", "air-nappe-1", "air-nappe-2"]
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             styleReady = true
@@ -840,56 +843,73 @@ struct AirMapLibreView: UIViewRepresentable {
             if signature == dessine { return }
             dessine = signature
 
-            if let vieille = style.layer(withIdentifier: Self.couche) {
-                style.removeLayer(vieille)
+            for id in Self.couches {
+                if let vieille = style.layer(withIdentifier: id) {
+                    style.removeLayer(vieille)
+                }
             }
-            if let vieille = style.source(withIdentifier: Self.source) {
-                style.removeSource(vieille)
+            for id in Self.sources {
+                if let vieille = style.source(withIdentifier: id) {
+                    style.removeSource(vieille)
+                }
             }
             guard !points.isEmpty,
                 let g = AirNappe.grille(points),
-                let image = AirNappe.image(g)
+                let image = AirNappe.image(g),
+                let cg = image.cgImage
             else { return }
 
-            // Le tour complet du globe est un quadrilatère dégénéré : −180°
-            // et +180° sont le même méridien, si bien que la nappe mondiale
-            // avait ses deux bords au même endroit — et MapLibre ne dessinait
-            // rien. Un cheveu en retrait suffit, invisible à ce zoom.
-            var ouest = g.o
-            var est = g.e
-            if est - ouest >= 359.9 {
-                ouest = -179.95
-                est = 179.95
-            }
-            let quad = MLNCoordinateQuadMake(
-                CLLocationCoordinate2D(latitude: g.no, longitude: ouest),
-                CLLocationCoordinate2D(latitude: g.su, longitude: ouest),
-                CLLocationCoordinate2D(latitude: g.su, longitude: est),
-                CLLocationCoordinate2D(latitude: g.no, longitude: est))
-            let src = MLNImageSource(
-                identifier: Self.source, coordinateQuad: quad, image: image)
-            style.addSource(src)
+            // Jamais plus d'un hémisphère par image. Un quadrilatère qui fait
+            // le tour du globe passe mal au moteur : décollé d'un cheveu il
+            // se dessinait, mais écrasé en une lamelle sur un bord de l'écran
+            // — constaté sur l'appareil. Découpée en tranches d'au plus 180°,
+            // chaque moitié est un quadrilatère ordinaire, et le moteur les
+            // pose côte à côte sans couture, la découpe tombant sur un bord
+            // de pixel.
+            let largeurTotale = g.e - g.o
+            let tranches = min(
+                Self.sources.count, max(1, Int(ceil(largeurTotale / 180.0))))
+            let pixels = cg.width / tranches
 
-            let couche = MLNRasterStyleLayer(identifier: Self.couche, source: src)
-            // Assez opaque pour se lire d'un coup d'œil, assez transparent pour
-            // qu'on reconnaisse encore le pays sous la couleur.
-            couche.rasterOpacity = NSExpression(forConstantValue: 0.55)
-            // Filtrage linéaire : l'image est déjà seize fois plus fine que le
-            // treillis, si bien que seule la frontière entre deux niveaux
-            // s'adoucit. C'est ce qu'annonce la légende, un ruban dégradé et
-            // non six pastilles.
-            // La valeur littérale plutôt que la catégorie `NSValue` : l'en-tête
-            // documente les deux, et celle-ci ne dépend pas du nom que
-            // l'importateur Swift donne à un constructeur d'énumération ObjC.
-            couche.rasterResamplingMode = NSExpression(forConstantValue: "linear")
+            for i in 0..<tranches {
+                let xDebut = i * pixels
+                let xFin = i == tranches - 1 ? cg.width : (i + 1) * pixels
+                guard
+                    let morceau = cg.cropping(
+                        to: CGRect(
+                            x: xDebut, y: 0,
+                            width: xFin - xDebut, height: cg.height))
+                else { continue }
 
-            // Glissée **sous** les libellés : une nappe posée par-dessus noierait
-            // les noms de villes, et une carte de l'air dont on ne lit plus les
-            // villes ne dit plus où l'on respire mal.
-            if let premierTexte = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
-                style.insertLayer(couche, below: premierTexte)
-            } else {
-                style.addLayer(couche)
+                let o = g.o + largeurTotale * Double(xDebut) / Double(cg.width)
+                let e = g.o + largeurTotale * Double(xFin) / Double(cg.width)
+                let quad = MLNCoordinateQuadMake(
+                    CLLocationCoordinate2D(latitude: g.no, longitude: o),
+                    CLLocationCoordinate2D(latitude: g.su, longitude: o),
+                    CLLocationCoordinate2D(latitude: g.su, longitude: e),
+                    CLLocationCoordinate2D(latitude: g.no, longitude: e))
+                let src = MLNImageSource(
+                    identifier: Self.sources[i], coordinateQuad: quad,
+                    image: UIImage(cgImage: morceau))
+                style.addSource(src)
+
+                let couche = MLNRasterStyleLayer(identifier: Self.couches[i], source: src)
+                // Assez opaque pour se lire d'un coup d'œil, assez transparent
+                // pour qu'on reconnaisse encore le pays sous la couleur.
+                couche.rasterOpacity = NSExpression(forConstantValue: 0.55)
+                // Filtrage linéaire : l'image est déjà seize fois plus fine que
+                // le treillis, si bien que seule la frontière entre deux
+                // niveaux s'adoucit. La valeur littérale plutôt que la
+                // catégorie `NSValue` : l'en-tête documente les deux.
+                couche.rasterResamplingMode = NSExpression(forConstantValue: "linear")
+
+                // Glissée **sous** les libellés : une nappe posée par-dessus
+                // noierait les noms de villes.
+                if let premierTexte = style.layers.first(where: { $0 is MLNSymbolStyleLayer }) {
+                    style.insertLayer(couche, below: premierTexte)
+                } else {
+                    style.addLayer(couche)
+                }
             }
         }
 
