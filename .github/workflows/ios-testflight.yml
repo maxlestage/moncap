@@ -26,7 +26,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Seuls les secrets App Store Connect sont nécessaires (le reste est
       # généré en ligne). Sans eux, on s'arrête proprement.
@@ -50,7 +50,7 @@ jobs:
 
       - name: Python
         if: steps.guard.outputs.ready == 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
