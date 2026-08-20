@@ -79,6 +79,23 @@ async function auth(path: string, username: string, password: string): Promise<v
 export const signup = (u: string, p: string) => auth("/auth/signup", u, p);
 export const login = (u: string, p: string) => auth("/auth/login", u, p);
 
+/**
+ * Demande un lien de réinitialisation. Le serveur répond 204 que le compte
+ * existe ou non — la réponse ne dit jamais si une adresse est inscrite — et
+ * 503 quand l'envoi de courriels n'est pas configuré.
+ */
+export async function motDePasseOublie(email: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/auth/forgot`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username: email }),
+  });
+  if (res.status === 503) {
+    throw new Error("La réinitialisation n'est pas encore configurée.");
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
 // --- API positions / itinéraires ---
 
 export const api = {
