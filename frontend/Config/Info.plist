@@ -10,6 +10,29 @@
 		<string>location</string>
 		<string>audio</string>
 	</array>
+	<!-- CarPlay : la scène est déclarée, l'écran (CarPlayEcran.swift) est
+	     prêt. Elle reste dormante tant que l'entitlement
+	     com.apple.developer.carplay-maps n'a pas été accordé par Apple
+	     (demande sur developer.apple.com → Additional Capabilities) : sans
+	     lui, iOS ne crée jamais cette scène. Seule la scène CarPlay est
+	     listée : l'écran du téléphone reste piloté par SwiftUI. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>MonCapCarPlay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<!-- Lien profond moncap://trajet?… : la page de partage d'itinéraire du
 	     serveur (« Ouvrir dans MonCap GPS ») rouvre l'app sur le même trajet. -->
 	<key>CFBundleURLTypes</key>

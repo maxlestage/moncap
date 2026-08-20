@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import MapKit
 
 /// Une étape de navigation : texte d'instruction + point de la manœuvre.
@@ -260,6 +261,18 @@ extension NavInstruction {
 /// quand on sort de l'itinéraire.
 @MainActor
 final class NavigationManager: ObservableObject {
+    /// L'instance vivante, tendue à l'écran CarPlay : lui vit dans une autre
+    /// scène et n'a pas accès au `@StateObject` de la vue. Un sujet plutôt
+    /// qu'une simple variable — CarPlay peut se brancher avant que l'app
+    /// n'ait construit son écran, et il sera prévenu quand l'instance
+    /// arrivera.
+    nonisolated static let instanceCourante =
+        CurrentValueSubject<NavigationManager?, Never>(nil)
+
+    init() {
+        Self.instanceCourante.send(self)
+    }
+
     @Published var active = false
     @Published var rerouting = false
     @Published var instruction = NavInstruction.waiting.display
