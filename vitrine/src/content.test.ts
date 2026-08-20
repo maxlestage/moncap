@@ -197,16 +197,24 @@ test("chaque langue garde la même matière", () => {
     expect(atouts, `${l.code}`).toContain("moncap plus");
     expect(l.tarifs.plus.prix, `${l.code}`).toMatch(/3[.,]99/);
     expect(l.tarifs.pro.prix, `${l.code}`).toMatch(/9[.,]99/);
-    // L'essai dit ses quatorze jours, aucune carte ne dit « gratuit » en
-    // prix — rien de gratuit passé l'essai, c'est la règle — et chacune a
-    // de quoi comparer.
-    expect(l.tarifs.essai.prix, `${l.code}`).toContain("14");
-    expect(l.tarifs.essai.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
+    // Deux cartes, pas trois : l'essai n'est pas une formule et n'a pas de
+    // carte. La section le dit quand même (le verrou après quatorze jours
+    // doit être annoncé), et chaque carte a de quoi comparer.
+    expect(sansAccents(l.tarifs.note), `${l.code}`).toMatch(
+      /quatorze|catorce|fourteen/,
+    );
     expect(l.tarifs.plus.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
     expect(l.tarifs.pro.points.length, `${l.code}`).toBeGreaterThanOrEqual(3);
-    for (const f of [l.tarifs.essai, l.tarifs.plus, l.tarifs.pro]) {
+    for (const f of [l.tarifs.plus, l.tarifs.pro]) {
       expect(f.prix, `${l.code}`).not.toContain("0 €");
       for (const p of f.points) expect(p.trim().length).toBeGreaterThan(0);
+    }
+    // Rien n'est gratuit, et rien ne se présente comme tel : le mot est
+    // banni de la page, dans les trois langues — même en négation, même en
+    // promesse. Un délai d'essai n'est pas de la gratuité, c'est un délai.
+    const tout = JSON.stringify(l).toLowerCase();
+    for (const interdit of [/gratuit/, /gratis/, /gratuito/, /\bfree\b/]) {
+      expect(tout, `${l.code} — mot banni ${interdit}`).not.toMatch(interdit);
     }
     // Les nouveautés pro sont dites : journal, facturation, tournées.
     expect(atouts, `${l.code}`).toMatch(/csv/);
