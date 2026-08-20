@@ -9,12 +9,42 @@
 /* Begin PBXBuildFile section */
 		AA0000000000000000000030 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000032 /* MapLibre */; };
 		AA0000000000000000000040 /* Valhalla in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000042 /* Valhalla */; };
+		AA000000000000000000005C /* Guidage.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000051 /* Guidage.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA000000000000000000005A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000006 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000052;
+			remoteInfo = Guidage;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA000000000000000000005B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA000000000000000000005C /* Guidage.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000010 /* MonCapGPS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = MonCapGPS;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000050 /* Guidage */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Guidage;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -29,6 +59,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000054 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -36,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000010 /* MonCapGPS */,
+				AA0000000000000000000050 /* Guidage */,
 				AA0000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -44,6 +82,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000003 /* MonCapGPS.app */,
+				AA0000000000000000000051 /* Guidage.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -52,6 +91,7 @@
 
 /* Begin PBXFileReference section */
 		AA0000000000000000000003 /* MonCapGPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MonCapGPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000051 /* Guidage.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Guidage.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXNativeTarget section */
@@ -62,10 +102,12 @@
 				AA0000000000000000000021 /* Sources */,
 				AA0000000000000000000020 /* Frameworks */,
 				AA0000000000000000000022 /* Resources */,
+				AA000000000000000000005B /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA0000000000000000000059 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000010 /* MonCapGPS */,
@@ -79,7 +121,37 @@
 			productReference = AA0000000000000000000003 /* MonCapGPS.app */;
 			productType = "com.apple.product-type.application";
 		};
+		AA0000000000000000000052 /* Guidage */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000056 /* Build configuration list for PBXNativeTarget "Guidage" */;
+			buildPhases = (
+				AA0000000000000000000053 /* Sources */,
+				AA0000000000000000000054 /* Frameworks */,
+				AA0000000000000000000055 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000050 /* Guidage */,
+			);
+			name = Guidage;
+			packageProductDependencies = (
+			);
+			productName = Guidage;
+			productReference = AA0000000000000000000051 /* Guidage.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		AA0000000000000000000059 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000052 /* Guidage */;
+			targetProxy = AA000000000000000000005A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXProject section */
 		AA0000000000000000000006 /* Project object */ = {
@@ -90,6 +162,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					AA0000000000000000000004 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					AA0000000000000000000052 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -114,6 +189,7 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000004 /* MonCapGPS */,
+				AA0000000000000000000052 /* Guidage */,
 			);
 		};
 /* End PBXProject section */
@@ -126,10 +202,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000055 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA0000000000000000000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000053 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -296,6 +386,54 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000057 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2FW8T4UX4L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/GuidageInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Guidage;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxlestage.moncap.Guidage;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000058 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2FW8T4UX4L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/GuidageInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Guidage;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxlestage.moncap.Guidage;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -313,6 +451,15 @@
 			buildConfigurations = (
 				AA000000000000000000000A /* Debug */,
 				AA000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000056 /* Build configuration list for PBXNativeTarget "Guidage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000057 /* Debug */,
+				AA0000000000000000000058 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

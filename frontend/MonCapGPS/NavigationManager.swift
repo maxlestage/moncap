@@ -339,6 +339,17 @@ final class NavigationManager: ObservableObject {
         load(steps: steps, coords: coordinates, km: distanceKm, min: etaMinutes,
              announceStart: true, resumingAt: resumingAt)
         active = true
+        // La Live Activity suit le guidage : écran verrouillé et Dynamic
+        // Island montrent la consigne sans un déverrouillage.
+        GuidageActivite.demarre(etatActivite())
+    }
+
+    /// L'état courant du guidage, dans la forme que la Live Activity affiche.
+    private func etatActivite() -> GuidageAttributs.ContentState {
+        .init(
+            instruction: instruction, distanceM: distanceToNext,
+            etaMinutes: etaMinutes, restantKm: remainingKm,
+            symbole: maneuver.icon)
     }
 
     /// Applique un itinéraire plus rapide trouvé en cours de route
@@ -411,6 +422,7 @@ final class NavigationManager: ObservableObject {
         rerouting = false
         rerouteFailures = 0
         toldOffline = false
+        GuidageActivite.termine()
         RouteStore.clear()
         synth.stopSpeaking(at: .immediate)
         steps = []
@@ -471,6 +483,10 @@ final class NavigationManager: ObservableObject {
             lastEtaSpoken = Date()
             speak(trf("Arrivée prévue vers %@.", Self.arrivalString(inMinutes: etaMinutes)))
         }
+
+        // L'écran verrouillé suit : la Live Activity reçoit le même état que
+        // le bandeau — elle filtre elle-même ce qui ne se voit pas.
+        GuidageActivite.maj(etatActivite())
     }
 
     /// Heure d'arrivée estimée (« 18:32 »).
