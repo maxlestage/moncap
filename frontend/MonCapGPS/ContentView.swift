@@ -797,6 +797,15 @@ struct MapHomeView: View {
                 .presentationBackground(Color(.systemBackground))
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        // Le verrou de la maison : l'essai fini et rien de payé, l'app se
+        // ferme derrière le paywall — rien de gratuit passé quatorze jours,
+        // pour personne. Le lien est calculé : dès qu'un achat (ou une
+        // restauration, un code, l'invitation) rouvre l'accès, il tombe.
+        .fullScreenCover(
+            isPresented: Binding(get: { !plus.accesPlus }, set: { _ in })
+        ) {
+            PaywallView(bloquant: true)
+        }
         .alert(
             "Aucun itinéraire", isPresented: Binding(
                 get: { itineraireImpossible != nil },
@@ -2634,7 +2643,7 @@ struct MapHomeView: View {
                                 // Plus : sans abonnement, le bouton mène au
                                 // paywall — les étapes elles-mêmes restent
                                 // libres, dans l'ordre où on les pose.
-                                if plus.actif {
+                                if plus.accesPlus {
                                     ordonneAuPlusCourt()
                                 } else {
                                     showPaywall = true
@@ -3190,7 +3199,7 @@ struct MapHomeView: View {
                 // en mode avion, parce qu'il n'a jamais eu besoin de réseau.
                 Section("Trace GPX 🥾") {
                     Button {
-                        if plus.actif {
+                        if plus.accesPlus {
                             importeGPX = true
                         } else {
                             showPaywallRecherche = true
@@ -3477,75 +3486,71 @@ struct MapHomeView: View {
     private var placesSheet: some View {
         NavigationStack {
             List {
-                // L'abonnement d'abord : où en est-on (essai, échéance,
-                // offert), et tout pour s'abonner ou gérer.
-                Section("MonCap Plus") {
-                    if plus.actif {
-                        if plus.enEssai, let jours = plus.joursRestants {
-                            Label {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Essai gratuit en cours")
-                                        .font(.subheadline.weight(.semibold))
+                // L'abonnement d'abord : où en est-on — essai qui court,
+                // Plus, Pro, offert — et tout pour choisir ou gérer.
+                Section("Ma formule") {
+                    if plus.estOffert {
+                        Label("Tout offert 🎁", systemImage: "checkmark.seal.fill")
+                            .foregroundStyle(.green)
+                    } else if plus.niveau != .aucun {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(
+                                    plus.niveau == .pro
+                                        ? "MonCap Pro actif" : "MonCap Plus actif")
+                                    .font(.subheadline.weight(.semibold))
+                                if let fin = plus.renouvellement {
                                     Text(
                                         String(
                                             format: NSLocalizedString(
-                                                "Il reste %d jour(s) — puis %@ par mois.",
-                                                comment: ""),
-                                            jours, plus.prixAffiche))
+                                                "Renouvellement le %@.", comment: ""),
+                                            dateCourte(fin)))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-                            } icon: {
-                                Image(systemName: "star.fill").foregroundStyle(.indigo)
                             }
-                        } else if plus.estOffert {
-                            Label("MonCap Plus — offert 🎁", systemImage: "checkmark.seal.fill")
-                                .foregroundStyle(.green)
-                        } else {
+                        } icon: {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundStyle(plus.niveau == .pro ? .teal : .green)
+                        }
+                        Button {
+                            gereAbonnement = true
+                        } label: {
+                            Label("Gérer l'abonnement", systemImage: "gearshape")
+                        }
+                    } else {
+                        if plus.essaiEnCours {
                             Label {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Abonnement actif")
+                                    Text("Essai en cours — tout est ouvert")
                                         .font(.subheadline.weight(.semibold))
-                                    if let fin = plus.renouvellement {
+                                    if let jours = plus.joursEssaiRestants {
                                         Text(
                                             String(
                                                 format: NSLocalizedString(
-                                                    "Renouvellement le %@.", comment: ""),
-                                                dateCourte(fin)))
+                                                    "Il reste %d jour(s), puis une formule.",
+                                                    comment: ""), jours))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
                             } icon: {
-                                Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                                Image(systemName: "star.fill").foregroundStyle(.indigo)
                             }
                         }
-                        if !plus.estOffert {
-                            Button {
-                                gereAbonnement = true
-                            } label: {
-                                Label("Gérer l'abonnement", systemImage: "gearshape")
-                            }
-                        }
-                    } else {
                         Button {
                             apresMenu = { showPaywall = true }
                             showPlaces = false
                         } label: {
                             Label {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Découvrir MonCap Plus")
+                                    Text("Choisir ma formule")
                                         .font(.subheadline.weight(.semibold))
                                     Text(
-                                        plus.essaiGratuit
-                                            ? String(
-                                                format: NSLocalizedString(
-                                                    "14 jours d'essai, puis %@ par mois.",
-                                                    comment: ""), plus.prixAffiche)
-                                            : String(
-                                                format: NSLocalizedString(
-                                                    "%@ par mois, sans engagement.",
-                                                    comment: ""), plus.prixAffiche))
+                                        String(
+                                            format: NSLocalizedString(
+                                                "Plus %@ ou Pro %@ par mois.", comment: ""),
+                                            plus.prixPlus, plus.prixPro))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -3977,13 +3982,13 @@ struct MapHomeView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Menu {
                         Button {
-                            if plus.actif { exporteJournal() } else { showPaywallTrips = true }
+                            if plus.accesPro { exporteJournal() } else { showPaywallTrips = true }
                         } label: {
                             Label("Exporter en CSV", systemImage: "doc.text")
                         }
-                        .disabled(trips.isEmpty && plus.actif)
+                        .disabled(trips.isEmpty && plus.accesPro)
                         Button {
-                            if plus.actif { showFacturation = true } else { showPaywallTrips = true }
+                            if plus.accesPro { showFacturation = true } else { showPaywallTrips = true }
                         } label: {
                             Label("Facturation", systemImage: "eurosign.circle")
                         }
@@ -4059,10 +4064,11 @@ struct MapHomeView: View {
             positions = try await api.positions()
             stats = try? await api.stats()
             accountInfo = try? await api.accountInfo()
-            // Le compte dit si Plus est offert (liste d'invités du serveur) :
+            // Le compte dit la date de création (l'ancre de l'essai de
+            // quatorze jours) et si tout est offert (liste d'invités) :
             // l'état ne bouge que quand le serveur a vraiment répondu.
             if let info = accountInfo {
-                plus.majOffert(info.plus_offert ?? false)
+                plus.majCompte(creeLe: info.created_at, offert: info.plus_offert ?? false)
             }
             leaders = (try? await api.leaderboard()) ?? leaders
             await updateRoute()

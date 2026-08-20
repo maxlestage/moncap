@@ -50,8 +50,9 @@ test("les données structurées disent l'app et ses deux prix", () => {
     expect(d.operatingSystem).toBe("iOS");
     expect(d.description).toBe(l.description);
     expect(d.inLanguage).toBe(l.code);
+    // Deux offres payantes, aucune à 0 € — rien de gratuit passé l'essai.
     const prix = d.offers.map((o: { price: string }) => o.price);
-    expect(prix).toEqual(["0", "3.99"]);
+    expect(prix).toEqual(["3.99", "9.99"]);
     // La locale Open Graph existe pour chaque langue servie.
     expect(OG_LOCALES[l.code]).toMatch(/^[a-z]{2}_[A-Z]{2}$/);
   }

@@ -97,6 +97,22 @@
         }
       }
     },
+    "%@ / mois": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / month"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / mes"
+          }
+        }
+      }
+    },
     "%@ direction %@ — descendre à %@": {
       "localizations": {
         "en": {
@@ -109,38 +125,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ dirección %@ — bajar en %@"
-          }
-        }
-      }
-    },
-    "%@ par mois": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ per month"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ al mes"
-          }
-        }
-      }
-    },
-    "%@ par mois, sans engagement.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ per month, cancel anytime."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ al mes, sin permanencia."
           }
         }
       }
@@ -321,38 +305,6 @@
         }
       }
     },
-    "14 jours d'essai gratuit": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "14-day free trial"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "14 días de prueba gratis"
-          }
-        }
-      }
-    },
-    "14 jours d'essai, puis %@ par mois.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "14-day trial, then %@ per month."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "14 días de prueba, después %@ al mes."
-          }
-        }
-      }
-    },
     "1re": {
       "localizations": {
         "en": {
@@ -369,18 +321,18 @@
         }
       }
     },
-    "212 régions d'Europe téléchargeables : itinéraires, lieux et limites de vitesse sans réseau.": {
+    "212 régions hors ligne": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "212 European regions to download: routes, places and speed limits with no signal."
+            "value": "212 offline regions"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "212 regiones de Europa descargables: rutas, lugares y límites de velocidad sin cobertura."
+            "value": "212 regiones sin conexión"
           }
         }
       }
@@ -525,22 +477,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abandonar"
-          }
-        }
-      }
-    },
-    "Abonnement actif": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Subscription active"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Suscripción activa"
           }
         }
       }
@@ -1313,6 +1249,54 @@
         }
       }
     },
+    "Choisir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir"
+          }
+        }
+      }
+    },
+    "Choisir ma formule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose my plan"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir mi fórmula"
+          }
+        }
+      }
+    },
+    "Choisis ta formule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your plan"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige tu fórmula"
+          }
+        }
+      }
+    },
     "Classement des contributeurs": {
       "localizations": {
         "en": {
@@ -1745,22 +1729,6 @@
         }
       }
     },
-    "Découvrir MonCap Plus": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Discover MonCap Plus"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Descubrir MonCap Plus"
-          }
-        }
-      }
-    },
     "Définir %@ sur ma position": {
       "localizations": {
         "en": {
@@ -1985,18 +1953,18 @@
         }
       }
     },
-    "Essai gratuit en cours": {
+    "Essai en cours — tout est ouvert": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Free trial running"
+            "value": "Trial running — everything is open"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Prueba gratis en curso"
+            "value": "Prueba en curso — todo está abierto"
           }
         }
       }
@@ -2081,18 +2049,18 @@
         }
       }
     },
-    "Facturation des trajets": {
+    "Facturation PDF des trajets": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trip invoicing"
+            "value": "PDF invoicing of your trips"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Facturación de trayectos"
+            "value": "Facturación PDF de los trayectos"
           }
         }
       }
@@ -2305,18 +2273,34 @@
         }
       }
     },
-    "Il reste %d jour(s) — puis %@ par mois.": {
+    "Il reste %d jour(s) d'essai — tout est ouvert.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%d day(s) left — then %@ per month."
+            "value": "%d trial day(s) left — everything is open."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quedan %d día(s) — después %@ al mes."
+            "value": "Quedan %d día(s) de prueba — todo está abierto."
+          }
+        }
+      }
+    },
+    "Il reste %d jour(s), puis une formule.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d day(s) left, then a plan."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quedan %d día(s), después una fórmula."
           }
         }
       }
@@ -2561,50 +2545,34 @@
         }
       }
     },
-    "Journal kilométrique exportable": {
+    "Journal kilométrique exportable (CSV)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Exportable mileage log"
+            "value": "Exportable mileage log (CSV)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Registro de kilómetros exportable"
+            "value": "Registro de kilómetros exportable (CSV)"
           }
         }
       }
     },
-    "L'essentiel reste gratuit. Plus déverrouille le hors ligne et les outils pro.": {
+    "L'app entière : guidage, comparateur, transports": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The essentials stay free. Plus unlocks offline and the pro tools."
+            "value": "The whole app: guidance, comparison, transit"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lo esencial sigue gratis. Plus desbloquea el sin conexión y las herramientas pro."
-          }
-        }
-      }
-    },
-    "L'ordre le plus court calculé pour toutes tes étapes, même nombreuses — hors ligne compris.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The shortest order computed for all your stops, however many — offline included."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "El orden más corto calculado para todas tus paradas, aunque sean muchas — sin conexión incluido."
+            "value": "La app entera: guía, comparador, transportes"
           }
         }
       }
@@ -2785,22 +2753,6 @@
         }
       }
     },
-    "Les régions hors ligne": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Offline regions"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Las regiones sin conexión"
-          }
-        }
-      }
-    },
     "Les transports en commun ont besoin du réseau.": {
       "localizations": {
         "en": {
@@ -2829,6 +2781,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lista de regiones no disponible: hace falta cobertura una vez."
+          }
+        }
+      }
+    },
+    "Ma formule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My plan"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mi fórmula"
           }
         }
       }
@@ -3201,18 +3169,34 @@
         }
       }
     },
-    "MonCap Plus — offert 🎁": {
+    "MonCap Plus actif": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "MonCap Plus — on the house 🎁"
+            "value": "MonCap Plus active"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "MonCap Plus — regalado 🎁"
+            "value": "MonCap Plus activo"
+          }
+        }
+      }
+    },
+    "MonCap Pro actif": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap Pro active"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap Pro activo"
           }
         }
       }
@@ -3617,6 +3601,22 @@
         }
       }
     },
+    "Plus %@ ou Pro %@ par mois.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus %@ or Pro %@ per month."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus %@ o Pro %@ al mes."
+          }
+        }
+      }
+    },
     "Point de vue": {
       "localizations": {
         "en": {
@@ -3757,6 +3757,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calidad del aire"
+          }
+        }
+      }
+    },
+    "Quatorze jours pour tout essayer, puis une formule — rien de gratuit, c'est la règle.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fourteen days to try everything, then a plan — nothing free, that's the rule."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Catorce días para probarlo todo, después una fórmula — nada gratis, es la regla."
           }
         }
       }
@@ -4401,6 +4417,22 @@
         }
       }
     },
+    "Ta formule actuelle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your current plan"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu fórmula actual"
+          }
+        }
+      }
+    },
     "Tape une adresse ou un lieu, puis choisis une destination.": {
       "localizations": {
         "en": {
@@ -4449,22 +4481,6 @@
         }
       }
     },
-    "Tes trajets en CSV — dates, distances, durées — prêts pour la comptabilité.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your trips as CSV — dates, distances, durations — ready for bookkeeping."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tus trayectos en CSV — fechas, distancias, duraciones — listos para la contabilidad."
-          }
-        }
-      }
-    },
     "Toilettes": {
       "localizations": {
         "en": {
@@ -4493,6 +4509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tu correo sirve de identificador — solo para eso, y para recuperar tu contraseña."
+          }
+        }
+      }
+    },
+    "Ton essai est terminé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trial is over"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu prueba ha terminado"
           }
         }
       }
@@ -4577,6 +4609,22 @@
         }
       }
     },
+    "Tout MonCap Plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything in MonCap Plus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo MonCap Plus"
+          }
+        }
+      }
+    },
     "Tout droit": {
       "localizations": {
         "en": {
@@ -4605,6 +4653,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Borrar todo"
+          }
+        }
+      }
+    },
+    "Tout offert 🎁": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything on the house 🎁"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo regalado 🎁"
           }
         }
       }
@@ -4845,38 +4909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una ruta hasta cada punto"
-          }
-        }
-      }
-    },
-    "Une facture PDF par période, au taux kilométrique de ton choix.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A PDF invoice per period, at the per-kilometre rate you choose."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Una factura PDF por período, con la tarifa por kilómetro que elijas."
-          }
-        }
-      }
-    },
-    "Une randonnée ou un parcours d'une autre app devient ton itinéraire, consignes comprises.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A hike or a route from another app becomes your route, instructions included."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Una caminata o una ruta de otra app se vuelve tu itinerario, indicaciones incluidas."
           }
         }
       }
@@ -5309,22 +5341,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "toma la salida %@"
-          }
-        }
-      }
-    },
-    "puis %@ par mois": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "then %@ per month"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "después %@ al mes"
           }
         }
       }

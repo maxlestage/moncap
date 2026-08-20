@@ -1,49 +1,52 @@
 import StoreKit
 import SwiftUI
 
-/// L'abonnement MonCap Plus : 3,99 € par mois, mensuel seul.
+/// Les formules de MonCap : **rien de gratuit passé quatorze jours**, pour
+/// personne — c'est la règle de la maison.
 ///
-/// Le cœur de l'app reste gratuit — chercher, comparer, être guidé. Plus
-/// déverrouille ce qui coûte ou ce qui sert aux pros : les régions hors
-/// ligne, l'import GPX, l'optimisation de tournées, le journal kilométrique
-/// exportable et la facturation.
+/// - L'**essai** : quatorze jours, tout ouvert, ancré à la date de création
+///   du compte **côté serveur** — l'horloge d'un téléphone se triche, pas la
+///   nôtre. La date est persistée : l'essai se compte aussi hors ligne.
+/// - **MonCap Plus (3,99 €/mois)** : l'app entière — guidage, comparateur,
+///   transports, régions hors ligne, GPX, tournées optimisées.
+/// - **MonCap Pro (9,99 €/mois)** : tout Plus, plus les outils de ceux qui
+///   roulent pour travailler — journal kilométrique CSV, facturation PDF.
+/// - Les **invités** de la maison (liste PLUS_OFFERT du serveur) ont tout,
+///   offert : c'est un choix du patron, pas une gratuité.
 ///
-/// StoreKit 2 tout du long : l'état vient de `Transaction.currentEntitlements`
-/// (vérifié par le système, pas par nous), les renouvellements et
-/// remboursements arrivent par `Transaction.updates`. Aucun serveur à nous
-/// dans la boucle : Apple est la source de vérité, y compris hors ligne où
-/// StoreKit ressert le dernier état connu.
+/// StoreKit 2 : l'état vient de `Transaction.currentEntitlements`, les deux
+/// produits vivent dans le même groupe d'abonnement — Apple gère seul le
+/// passage de l'un à l'autre.
 @MainActor
 final class MonCapPlus: ObservableObject {
     static let shared = MonCapPlus()
 
-    /// L'identifiant du produit, à créer tel quel dans App Store Connect
-    /// (abonnement auto-renouvelable, 3,99 €/mois, essai de 14 jours).
-    static let produitID = "moncap.plus.mensuel"
+    /// Les identifiants, à créer tels quels dans App Store Connect, dans le
+    /// même groupe. Pas d'offre d'essai Apple : l'essai est celui du compte.
+    static let produitPlusID = "moncap.plus.mensuel"
+    static let produitProID = "moncap.pro.mensuel"
 
-    /// Vrai quand Plus est acquis — par abonnement, ou offert. Les vues s'y
-    /// accrochent.
-    @Published private(set) var actif = false
-    /// Le produit chargé depuis l'App Store — nil tant que la boutique n'a
-    /// pas répondu (ou que le produit n'existe pas encore côté Apple).
-    @Published private(set) var produit: Product?
-    /// Plus offert par la maison : le serveur tient une liste d'invités, et
-    /// le compte le dit à la connexion. Persisté — l'invitation tient aussi
-    /// hors ligne, comme l'abonnement.
-    private var offert = UserDefaults.standard.bool(forKey: "moncap.plus.offert")
-    /// Fin de la période en cours (essai ou mois payé), datée par Apple —
-    /// nil sans abonnement (y compris pour un Plus offert).
+    enum Niveau {
+        case aucun, plus, pro
+    }
+
+    /// Le niveau d'abonnement StoreKit (hors essai, hors offert).
+    @Published private(set) var niveau: Niveau = .aucun
+    @Published private(set) var produits: [Product] = []
+    /// Fin de la période en cours de l'abonnement, datée par Apple.
     @Published private(set) var renouvellement: Date?
-    /// Vrai pendant la période d'essai gratuite.
-    @Published private(set) var enEssai = false
+    /// Plus offert par la maison (liste d'invités). Persisté.
+    private var offert = UserDefaults.standard.bool(forKey: "moncap.plus.offert")
+    /// Création du compte (secondes Unix), apprise du serveur, persistée —
+    /// zéro tant que le serveur n'a pas répondu une première fois.
+    @Published private(set) var creeLe =
+        UserDefaults.standard.double(forKey: "moncap.compte.creeLe")
 
     private var veille: Task<Void, Never>?
 
     private init() {
         veille = Task { [weak self] in
             await self?.charge()
-            // Les renouvellements, remboursements et achats faits ailleurs
-            // (autre appareil, réglages iOS) arrivent par ce flux.
             for await maj in StoreKit.Transaction.updates {
                 if case .verified(let t) = maj { await t.finish() }
                 await self?.rafraichitDroit()
@@ -51,53 +54,88 @@ final class MonCapPlus: ObservableObject {
         }
     }
 
+    // MARK: - L'essai et les accès
+
+    private static let dureeEssai: Double = 14 * 86_400
+
+    /// Vrai pendant les quatorze jours. Tant que le serveur n'a jamais dit
+    /// la date du compte, on ne bloque pas : la toute première ouverture
+    /// hors ligne n'a pas à punir.
+    var essaiEnCours: Bool {
+        guard creeLe > 0 else { return true }
+        return Date().timeIntervalSince1970 < creeLe + Self.dureeEssai
+    }
+
+    /// Jours d'essai restants, arrondis vers le haut — « il reste 1 jour »
+    /// jusqu'au bout. Nil tant que la date du compte n'est pas connue.
+    var joursEssaiRestants: Int? {
+        guard creeLe > 0 else { return nil }
+        let restant = creeLe + Self.dureeEssai - Date().timeIntervalSince1970
+        return max(0, Int((restant / 86_400).rounded(.up)))
+    }
+
+    /// L'app entière — guidage, comparateur, transports, hors ligne, GPX,
+    /// tournées : l'essai, n'importe quel abonnement, ou l'invitation.
+    var accesPlus: Bool { essaiEnCours || niveau != .aucun || offert }
+
+    /// Les outils Pro — journal kilométrique, facturation : l'essai (qui
+    /// montre tout), Pro, ou l'invitation.
+    var accesPro: Bool { essaiEnCours || niveau == .pro || offert }
+
+    /// Vrai quand tout vient de la liste d'invités, pas d'un abonnement.
+    var estOffert: Bool { offert && niveau == .aucun }
+
+    // MARK: - Le compte
+
+    /// Le serveur a répondu : la date de création ancre l'essai, la liste
+    /// d'invités dit l'offert. Appelé à chaque lecture du compte.
+    func majCompte(creeLe nouveau: Double?, offert nouvelOffert: Bool) {
+        if let nouveau, nouveau > 0, nouveau != creeLe {
+            creeLe = nouveau
+            UserDefaults.standard.set(nouveau, forKey: "moncap.compte.creeLe")
+        }
+        if nouvelOffert != offert {
+            offert = nouvelOffert
+            UserDefaults.standard.set(nouvelOffert, forKey: "moncap.plus.offert")
+        }
+        objectWillChange.send()
+    }
+
+    // MARK: - La boutique
+
     func charge() async {
-        produit = try? await Product.products(for: [Self.produitID]).first
+        produits =
+            (try? await Product.products(for: [Self.produitPlusID, Self.produitProID])) ?? []
         await rafraichitDroit()
     }
 
+    var produitPlus: Product? { produits.first { $0.id == Self.produitPlusID } }
+    var produitPro: Product? { produits.first { $0.id == Self.produitProID } }
+
+    /// Prix affichables — ceux de la boutique quand elle a répondu, les
+    /// valeurs de lancement sinon : le paywall reste lisible hors ligne.
+    var prixPlus: String { produitPlus?.displayPrice ?? "3,99 €" }
+    var prixPro: String { produitPro?.displayPrice ?? "9,99 €" }
+
     func rafraichitDroit() async {
-        var a = false
+        var n = Niveau.aucun
         var fin: Date?
-        var essai = false
         for await droit in StoreKit.Transaction.currentEntitlements {
-            if case .verified(let t) = droit,
-                t.productID == Self.produitID, t.revocationDate == nil
-            {
-                a = true
+            guard case .verified(let t) = droit, t.revocationDate == nil else { continue }
+            if t.productID == Self.produitProID {
+                n = .pro
                 fin = t.expirationDate
-                essai = t.offer?.paymentMode == .freeTrial
+            } else if t.productID == Self.produitPlusID, n != .pro {
+                n = .plus
+                fin = t.expirationDate
             }
         }
-        actif = a || offert
+        niveau = n
         renouvellement = fin
-        enEssai = essai
     }
 
-    /// Jours restants de la période en cours, arrondis vers le haut — on dit
-    /// « il reste 1 jour » jusqu'au bout, jamais « 0 » avant l'heure.
-    var joursRestants: Int? {
-        guard let renouvellement else { return nil }
-        return max(0, Int((renouvellement.timeIntervalSinceNow / 86_400).rounded(.up)))
-    }
-
-    /// Vrai quand Plus vient de la liste d'invités, pas d'un abonnement.
-    var estOffert: Bool { actif && renouvellement == nil && offert }
-
-    /// Le serveur a dit si ce compte est invité : on le retient, et l'état
-    /// visible suit. Appelé à chaque lecture du compte — être retiré de la
-    /// liste se voit donc aussi.
-    func majOffert(_ nouveau: Bool) {
-        guard nouveau != offert else { return }
-        offert = nouveau
-        UserDefaults.standard.set(nouveau, forKey: "moncap.plus.offert")
-        Task { await rafraichitDroit() }
-    }
-
-    /// Lance l'achat. Rend vrai si l'abonnement est actif au retour —
-    /// l'annulation de la feuille Apple n'est pas une erreur, juste un non.
-    func achete() async -> Bool {
-        guard let produit else { return false }
+    /// Lance l'achat du produit donné. L'annulation n'est pas une erreur.
+    func achete(_ produit: Product) async -> Bool {
         if let resultat = try? await produit.purchase(),
             case .success(let verif) = resultat,
             case .verified(let t) = verif
@@ -105,77 +143,48 @@ final class MonCapPlus: ObservableObject {
             await t.finish()
         }
         await rafraichitDroit()
-        return actif
+        return niveau != .aucun
     }
 
-    /// Resynchronise avec l'App Store (« Restaurer les achats »).
     func restaure() async {
         try? await AppStore.sync()
         await rafraichitDroit()
     }
-
-    /// Prix affichable : celui de la boutique quand elle a répondu, la
-    /// valeur de lancement sinon — le paywall reste lisible hors ligne.
-    var prixAffiche: String {
-        if let produit { return produit.displayPrice }
-        return "3,99 €"
-    }
-
-    /// L'essai gratuit annoncé par la boutique, s'il existe.
-    var essaiGratuit: Bool {
-        produit?.subscription?.introductoryOffer?.paymentMode == .freeTrial
-    }
 }
 
-/// Ce que Plus déverrouille — la liste vit ici pour que le paywall et les
-/// points de blocage racontent la même chose.
-enum PlusAtout: CaseIterable {
-    case horsLigne, tournees, journal, facturation, gpx
-
-    var icone: String {
-        switch self {
-        case .horsLigne: return "arrow.down.circle.fill"
-        case .tournees: return "arrow.triangle.swap"
-        case .journal: return "doc.text.fill"
-        case .facturation: return "eurosign.circle.fill"
-        case .gpx: return "point.topleft.down.curvedto.point.bottomright.up"
-        }
-    }
-
-    var titre: LocalizedStringKey {
-        switch self {
-        case .horsLigne: return "Les régions hors ligne"
-        case .tournees: return "Tournées optimisées"
-        case .journal: return "Journal kilométrique exportable"
-        case .facturation: return "Facturation des trajets"
-        case .gpx: return "Import de traces GPX"
-        }
-    }
-
-    var detail: LocalizedStringKey {
-        switch self {
-        case .horsLigne:
-            return "212 régions d'Europe téléchargeables : itinéraires, lieux et limites de vitesse sans réseau."
-        case .tournees:
-            return "L'ordre le plus court calculé pour toutes tes étapes, même nombreuses — hors ligne compris."
-        case .journal:
-            return "Tes trajets en CSV — dates, distances, durées — prêts pour la comptabilité."
-        case .facturation:
-            return "Une facture PDF par période, au taux kilométrique de ton choix."
-        case .gpx:
-            return "Une randonnée ou un parcours d'une autre app devient ton itinéraire, consignes comprises."
-        }
-    }
+/// Ce que chaque formule contient — le paywall et le site racontent pareil.
+struct FormuleAtout: Identifiable {
+    var id: String { titre }
+    let icone: String
+    let titre: LocalizedStringKey
 }
 
-/// Le paywall : ce que Plus apporte, le prix, l'achat, la restauration.
-/// Présenté en feuille quand on touche une fonction verrouillée.
+enum Formules {
+    static let plus: [FormuleAtout] = [
+        .init(icone: "map.fill", titre: "L'app entière : guidage, comparateur, transports"),
+        .init(icone: "arrow.down.circle.fill", titre: "212 régions hors ligne"),
+        .init(
+            icone: "point.topleft.down.curvedto.point.bottomright.up",
+            titre: "Import de traces GPX"),
+        .init(icone: "arrow.triangle.swap", titre: "Tournées optimisées"),
+    ]
+    static let pro: [FormuleAtout] = [
+        .init(icone: "checkmark.seal.fill", titre: "Tout MonCap Plus"),
+        .init(icone: "doc.text.fill", titre: "Journal kilométrique exportable (CSV)"),
+        .init(icone: "eurosign.circle.fill", titre: "Facturation PDF des trajets"),
+    ]
+}
+
+/// Le paywall : l'essai qui reste, les deux formules, l'achat, la
+/// restauration. En mode « bloquant » (essai terminé), il ne se ferme pas —
+/// rien de gratuit passé quatorze jours, pour personne.
 struct PaywallView: View {
+    var bloquant = false
+
     @ObservedObject private var plus = MonCapPlus.shared
     @Environment(\.dismiss) private var ferme
     @State private var enCours = false
-    /// Feuille système des codes promo App Store (codes d'offre créés dans
-    /// App Store Connect — de quoi inviter sans faire payer).
+    /// Feuille système des codes promo App Store.
     @State private var montreCode = false
 
     var body: some View {
@@ -183,66 +192,43 @@ struct PaywallView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("MonCap Plus")
+                        Text(bloquant ? "Ton essai est terminé" : "Choisis ta formule")
                             .font(.largeTitle.bold())
-                        Text("L'essentiel reste gratuit. Plus déverrouille le hors ligne et les outils pro.")
+                        if let jours = plus.joursEssaiRestants, plus.essaiEnCours {
+                            Text(
+                                String(
+                                    format: NSLocalizedString(
+                                        "Il reste %d jour(s) d'essai — tout est ouvert.",
+                                        comment: ""), jours))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Quatorze jours pour tout essayer, puis une formule — rien de gratuit, c'est la règle.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    carte(
+                        nom: "MonCap Plus", prix: plus.prixPlus,
+                        atouts: Formules.plus, produit: plus.produitPlus,
+                        actif: plus.niveau == .plus, teinte: .indigo)
+                    carte(
+                        nom: "MonCap Pro", prix: plus.prixPro,
+                        atouts: Formules.pro, produit: plus.produitPro,
+                        actif: plus.niveau == .pro, teinte: .teal)
+
+                    if plus.produits.isEmpty {
+                        Text("La boutique ne répond pas — réessaie avec du réseau.")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        ForEach(PlusAtout.allCases, id: \.self) { a in
-                            HStack(alignment: .top, spacing: 12) {
-                                Image(systemName: a.icone)
-                                    .font(.title3)
-                                    .foregroundStyle(.indigo)
-                                    .frame(width: 30)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.titre).font(.subheadline.weight(.semibold))
-                                    Text(a.detail)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .padding(16)
-                    .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-
                     VStack(spacing: 10) {
-                        Button {
-                            enCours = true
-                            Task {
-                                if await plus.achete() { ferme() }
-                                enCours = false
-                            }
-                        } label: {
-                            VStack(spacing: 2) {
-                                if plus.essaiGratuit {
-                                    Text("14 jours d'essai gratuit")
-                                        .font(.headline)
-                                    Text(String(format: NSLocalizedString("puis %@ par mois", comment: ""), plus.prixAffiche))
-                                        .font(.caption)
-                                } else {
-                                    Text(String(format: NSLocalizedString("%@ par mois", comment: ""), plus.prixAffiche))
-                                        .font(.headline)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.indigo)
-                        .disabled(enCours || plus.produit == nil)
-
-                        if plus.produit == nil {
-                            Text("La boutique ne répond pas — réessaie avec du réseau.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
                         HStack(spacing: 16) {
                             Button("Restaurer les achats") {
-                                Task { await plus.restaure(); if plus.actif { ferme() } }
+                                Task {
+                                    await plus.restaure()
+                                    if plus.niveau != .aucun, !bloquant { ferme() }
+                                }
                             }
                             Button("J'ai un code") { montreCode = true }
                         }
@@ -252,14 +238,21 @@ struct PaywallView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity)
 
                         HStack(spacing: 14) {
                             Link(
                                 "Confidentialité",
-                                destination: URL(string: "https://moncap-c41a5aaf07e8.herokuapp.com/confidentialite")!)
+                                destination: URL(
+                                    string:
+                                        "https://moncap-c41a5aaf07e8.herokuapp.com/confidentialite"
+                                )!)
                             Link(
                                 "Conditions",
-                                destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                                destination: URL(
+                                    string:
+                                        "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+                                )!)
                         }
                         .font(.caption2)
                     }
@@ -267,23 +260,64 @@ struct PaywallView: View {
                 .padding(20)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Fermer") { ferme() }
+                if !bloquant {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Fermer") { ferme() }
+                    }
                 }
             }
         }
-        // Fond opaque : le verre d'iOS 26+ rendrait le paywall illisible sur
-        // la carte — et un écran de vente illisible ne vend rien.
+        .interactiveDismissDisabled(bloquant)
         .presentationBackground(Color(.systemBackground))
-        .task { if plus.produit == nil { await plus.charge() } }
-        // La feuille système de saisie de code (offres App Store Connect) :
-        // au retour, on relit les droits — le code vient peut-être d'ouvrir
-        // l'abonnement.
+        .task { if plus.produits.isEmpty { await plus.charge() } }
         .offerCodeRedemption(isPresented: $montreCode) { _ in
             Task {
                 await plus.rafraichitDroit()
-                if plus.actif { ferme() }
+                if plus.niveau != .aucun, !bloquant { ferme() }
             }
         }
+    }
+
+    /// La carte d'une formule : nom, prix mensuel, atouts, bouton.
+    private func carte(
+        nom: String, prix: String, atouts: [FormuleAtout], produit: Product?,
+        actif: Bool, teinte: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(verbatim: nom).font(.title3.bold())
+                Spacer()
+                Text(String(format: NSLocalizedString("%@ / mois", comment: ""), prix))
+                    .font(.headline)
+                    .foregroundStyle(teinte)
+            }
+            ForEach(atouts) { a in
+                HStack(spacing: 10) {
+                    Image(systemName: a.icone)
+                        .font(.subheadline)
+                        .foregroundStyle(teinte)
+                        .frame(width: 24)
+                    Text(a.titre).font(.subheadline)
+                }
+            }
+            Button {
+                guard let produit else { return }
+                enCours = true
+                Task {
+                    if await plus.achete(produit), !bloquant { ferme() }
+                    enCours = false
+                }
+            } label: {
+                Text(actif ? "Ta formule actuelle" : "Choisir")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(teinte)
+            .disabled(enCours || produit == nil || actif)
+        }
+        .padding(16)
+        .background(teinte.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
     }
 }

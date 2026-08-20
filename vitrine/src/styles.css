@@ -999,8 +999,8 @@ footer .signature {
 }
 
 /* --- Les tarifs -----------------------------------------------------------
- * Deux formules côte à côte, le prix mensuel en grand : il compte autant que
- * les fonctions. La payante porte l'accent — c'est elle qu'on compare. */
+ * Trois cartes — l'essai, Plus, Pro — le prix mensuel en grand : il compte
+ * autant que les fonctions. Plus porte l'accent — c'est lui qu'on compare. */
 .formules {
   display: grid;
   grid-template-columns: 1fr;
@@ -1040,13 +1040,6 @@ footer .signature {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--doux);
-}
-
-.formule .essai {
-  margin: 0.3rem 0 0;
-  font-size: 0.87rem;
-  font-weight: 700;
-  color: var(--accent);
 }
 
 .formule ul {
@@ -1168,9 +1161,6 @@ footer .signature {
   .pied-colonnes {
     grid-template-columns: repeat(3, 1fr);
   }
-  .formules {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 @media (min-width: 64rem) {
@@ -1178,6 +1168,12 @@ footer .signature {
     padding-block: 5rem;
   }
   .cartes {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  /* Trois formules de front seulement quand chacune garde de quoi
+   * respirer — entre les deux, une colonne qui se lit vaut mieux que
+   * trois qui s'écrasent. */
+  .formules {
     grid-template-columns: repeat(3, 1fr);
   }
 }
