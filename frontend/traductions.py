@@ -156,6 +156,7 @@ T: dict[str, tuple[str, str]] = {
     "Touche la carte": ("Toca el mapa", "Tap the map"),
     "Étape %d": ("Parada %d", "Stop %d"),
     "Au plus court": ("El más corto", "Shortest order"),
+    "Partager l'itinéraire": ("Compartir la ruta", "Share the route"),
     "Trace GPX 🥾": ("Traza GPX 🥾", "GPX track 🥾"),
     "Importer une trace GPX": ("Importar una traza GPX", "Import a GPX track"),
     "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau.": (

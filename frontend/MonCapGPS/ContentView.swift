@@ -777,6 +777,9 @@ struct MapHomeView: View {
         } message: {
             Text(shareError ?? "")
         }
+        // Un lien moncap://trajet?… — depuis la page de partage, un message,
+        // un autre appareil : le trajet s'ouvre ici comme si on l'avait posé.
+        .onOpenURL { ouvreLien($0) }
         .fullScreenCover(isPresented: $showFireMap) {
             FireMapScreen(service: fires)
         }
@@ -2741,6 +2744,19 @@ struct MapHomeView: View {
                 .buttonStyle(.bordered)
                 .tint(.blue)
                 .disabled(selected == nil)
+
+                // Le trajet part en lien : une page web chez le courtier, qui
+                // tend le lien profond vers l'app à qui l'a — et Plans ou
+                // Google Maps à qui ne l'a pas.
+                Button { partageTrajet() } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 40, height: 34)
+                }
+                .buttonStyle(.bordered)
+                .tint(.indigo)
+                .disabled(pendingDestination == nil)
+                .accessibilityLabel(Text("Partager l'itinéraire"))
 
                 Button {
                     previewTask?.cancel()
@@ -4913,5 +4929,86 @@ struct MapHomeView: View {
         routesExpanded = false
         fitCoordinates(coords)
         Task { await chargeRisques(options: [option], dest: arrivee) }
+    }
+
+    /// Compose le lien de partage du trajet en cours et ouvre la feuille de
+    /// partage. Le lien est une page web du courtier : tout voyage dans ses
+    /// paramètres (destination, étapes, mode, nom géocodé) — aucun stockage,
+    /// rien n'expire. La page tend le lien profond `moncap://` à qui a l'app.
+    private func partageTrajet() {
+        guard let dest = pendingDestination else { return }
+        let etapesActuelles = etapes
+        let mode = travelMode.rawValue
+        Task {
+            var items = [
+                URLQueryItem(
+                    name: "a",
+                    value: String(format: "%.5f,%.5f", dest.latitude, dest.longitude)),
+                URLQueryItem(name: "mode", value: mode),
+            ]
+            if !etapesActuelles.isEmpty {
+                let v = etapesActuelles.prefix(5)
+                    .map { String(format: "%.5f,%.5f", $0.latitude, $0.longitude) }
+                    .joined(separator: "|")
+                items.append(URLQueryItem(name: "v", value: v))
+            }
+            // Le nom de l'endroit, si le géocodage veut bien le dire — le
+            // lien reste bon sans lui.
+            if let lieu = try? await CLGeocoder()
+                .reverseGeocodeLocation(
+                    CLLocation(latitude: dest.latitude, longitude: dest.longitude)
+                ).first, let nom = lieu.name ?? lieu.locality
+            {
+                items.append(URLQueryItem(name: "nom", value: String(nom.prefix(60))))
+            }
+            var comps = URLComponents(
+                url: APIClient().baseURL.appendingPathComponent("t"),
+                resolvingAgainstBaseURL: false)!
+            comps.queryItems = items
+            guard let url = comps.url else { return }
+            Sharer.present([url])
+        }
+    }
+
+    /// Ouvre un trajet reçu par lien profond `moncap://trajet?…` : le mode,
+    /// les étapes et la destination reprennent leur place, et le calcul part.
+    private func ouvreLien(_ url: URL) {
+        guard url.scheme == "moncap",
+            let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            comps.host == "trajet"
+        else { return }
+        let items = comps.queryItems ?? []
+        func valeur(_ nom: String) -> String? {
+            items.first { $0.name == nom }?.value
+        }
+        func coord(_ brut: String?) -> CLLocationCoordinate2D? {
+            guard let parts = brut?.components(separatedBy: ","), parts.count == 2,
+                let lat = Double(parts[0]), let lon = Double(parts[1]),
+                abs(lat) <= 90, abs(lon) <= 180
+            else { return nil }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+        }
+        guard let dest = coord(valeur("a")) else { return }
+        if let mode = valeur("mode").flatMap(TravelMode.init(rawValue:)) {
+            travelMode = mode
+        }
+        etapes = []
+        etapeNoms = []
+        etapeArrets = []
+        etapesAtteintes = []
+        traceGPX = nil
+        if let brut = valeur("v") {
+            for (i, morceau) in brut.components(separatedBy: "|").prefix(5).enumerated() {
+                guard let c = coord(morceau) else { continue }
+                etapes.append(c)
+                etapeArrets.append(0)
+                etapeNoms.append(
+                    String(format: NSLocalizedString("Étape %d", comment: ""), i + 1))
+            }
+        }
+        showSearch = false
+        showPlaces = false
+        pendingDestination = dest
+        Task { await presentRouteOptions(to: dest) }
     }
 }
