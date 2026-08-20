@@ -2518,6 +2518,162 @@ tick(); setInterval(tick,4000);
     )
 }
 
+/// Un « lat,lon » venu d'un lien de partage : deux nombres finis dans les
+/// bornes du globe, arrondis à 1e-5. Rien d'autre n'entre dans la page — les
+/// coordonnées rendues sont reformatées depuis ces nombres, jamais recopiées
+/// du texte reçu.
+fn partage_coord(brut: &str) -> Option<(f64, f64)> {
+    let mut morceaux = brut.split(',');
+    let lat: f64 = morceaux.next()?.trim().parse().ok()?;
+    let lon: f64 = morceaux.next()?.trim().parse().ok()?;
+    if morceaux.next().is_some() || !lat.is_finite() || !lon.is_finite() {
+        return None;
+    }
+    if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
+        return None;
+    }
+    Some(((lat * 1e5).round() / 1e5, (lon * 1e5).round() / 1e5))
+}
+
+/// Texte venu d'un lien, prêt pour du HTML : échappé, borné à soixante
+/// caractères, sans caractères de contrôle.
+fn partage_echappe(brut: &str) -> String {
+    let mut s = String::with_capacity(brut.len());
+    for c in brut.chars().take(60) {
+        match c {
+            '&' => s.push_str("&amp;"),
+            '<' => s.push_str("&lt;"),
+            '>' => s.push_str("&gt;"),
+            '"' => s.push_str("&quot;"),
+            '\'' => s.push_str("&#39;"),
+            c if c.is_control() => {}
+            c => s.push(c),
+        }
+    }
+    s
+}
+
+/// Valeur encodée pour la partie requête d'un lien (RFC 3986 strict : seuls
+/// les non-réservés passent tels quels).
+fn partage_encode(brut: &str) -> String {
+    let mut s = String::with_capacity(brut.len());
+    for b in brut.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                s.push(b as char)
+            }
+            _ => s.push_str(&format!("%{b:02X}")),
+        }
+    }
+    s
+}
+
+#[derive(Deserialize)]
+struct PartageQuery {
+    /// Destination « lat,lon » — le seul champ obligatoire.
+    a: String,
+    #[serde(default)]
+    nom: String,
+    #[serde(default)]
+    mode: String,
+    /// Étapes « lat,lon|lat,lon », cinq au plus.
+    #[serde(default)]
+    v: String,
+}
+
+/// GET /t — la page d'un itinéraire partagé depuis l'app.
+///
+/// Aucun stockage : le lien porte tout (destination, nom, mode, étapes), la
+/// page ne fait que le rendre — une carte, le nom, et le lien profond
+/// `moncap://` qui ouvre l'app avec le même trajet. Qui n'a pas l'app a les
+/// liens Plans et Google Maps en dessous.
+async fn trajet_partage(Query(q): Query<PartageQuery>) -> Response {
+    let Some((lat, lon)) = partage_coord(&q.a) else {
+        return (StatusCode::BAD_REQUEST, "destination invalide").into_response();
+    };
+    let mode = match q.mode.as_str() {
+        m @ ("walk" | "bike" | "transit") => m,
+        _ => "car",
+    };
+    let mut vias: Vec<(f64, f64)> = Vec::new();
+    for morceau in q.v.split('|').take(5) {
+        if morceau.is_empty() {
+            continue;
+        }
+        let Some(p) = partage_coord(morceau) else {
+            return (StatusCode::BAD_REQUEST, "étape invalide").into_response();
+        };
+        vias.push(p);
+    }
+
+    let nom = q.nom.trim();
+    let nom_html = partage_echappe(nom);
+    let titre = if nom_html.is_empty() {
+        "Itinéraire partagé".to_string()
+    } else {
+        nom_html.clone()
+    };
+    let mode_libelle = match mode {
+        "walk" => "🚶 À pied",
+        "bike" => "🚴 À vélo",
+        "transit" => "🚌 En transports",
+        _ => "🚗 En voiture",
+    };
+
+    // Le lien profond est reconstruit depuis les valeurs validées, jamais
+    // recopié de la requête. Les étapes voyagent encodées : un « | » brut
+    // fait échouer l'analyse d'URL côté iOS.
+    let mut lien = format!("moncap://trajet?a={lat},{lon}&mode={mode}");
+    if !vias.is_empty() {
+        let liste = vias
+            .iter()
+            .map(|(la, lo)| format!("{la},{lo}"))
+            .collect::<Vec<_>>()
+            .join("|");
+        lien.push_str(&format!("&v={}", partage_encode(&liste)));
+    }
+    if !nom.is_empty() {
+        lien.push_str(&format!("&nom={}", partage_encode(nom)));
+    }
+
+    let jalons_js = vias
+        .iter()
+        .map(|(la, lo)| format!("L.circleMarker([{la},{lo}],{{radius:6,color:'#63c'}}).addTo(map);"))
+        .collect::<Vec<_>>()
+        .join("");
+
+    Html(format!(
+        r#"<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{titre} — MonCap GPS</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html,body{{margin:0;height:100%;font-family:-apple-system,system-ui,sans-serif}}
+  #map{{position:absolute;inset:0}}
+  #bar{{position:absolute;z-index:1000;left:12px;top:12px;right:12px;background:#fff;
+    border-radius:14px;padding:12px 14px;box-shadow:0 2px 10px rgba(0,0,0,.15)}}
+  #nom{{font-weight:700}} #sub{{color:#777;font-size:13px;margin-top:2px}}
+  #ouvre{{display:block;margin-top:10px;text-align:center;background:#2a7;color:#fff;
+    text-decoration:none;font-weight:700;border-radius:10px;padding:10px}}
+  #autres{{margin-top:8px;font-size:13px;text-align:center}}
+  #autres a{{color:#57c;margin:0 6px}}
+</style></head><body>
+<div id="bar"><div id="nom">{titre}</div><div id="sub">{mode_libelle}</div>
+<a id="ouvre" href="{lien}">Ouvrir dans MonCap GPS</a>
+<div id="autres"><a href="https://maps.apple.com/?daddr={lat},{lon}">Plans</a>
+<a href="https://www.google.com/maps/dir/?api=1&amp;destination={lat},{lon}">Google Maps</a></div></div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map=L.map('map').setView([{lat},{lon}],12);
+L.tileLayer('https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
+  {{maxZoom:19,attribution:'© OpenStreetMap'}}).addTo(map);
+L.marker([{lat},{lon}]).addTo(map);{jalons_js}
+</script></body></html>"#
+    ))
+    .into_response()
+}
+
 /// GET /health — sonde de disponibilité. Vérifie que la base répond
 /// (`SELECT 1`) : 200 « ok » si tout va bien, 503 sinon. Utile pour le
 /// monitoring : distingue « process vivant » de « service réellement prêt ».
@@ -2678,6 +2834,7 @@ fn build_app(state: AppState) -> Router {
         )
         .route("/live/:token/pos", get(live_pos))
         .route("/privacy", get(privacy_page))
+        .route("/t", get(trajet_partage))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
         .fallback_service(web)
@@ -3989,6 +4146,38 @@ mod tests {
     #[test]
     fn distance_to_self_is_zero() {
         assert!(haversine_km(&PARIS, &PARIS) < 1e-9);
+    }
+
+    #[test]
+    fn partage_coord_borne_le_globe() {
+        assert_eq!(partage_coord("48.8566,2.3522"), Some((48.8566, 2.3522)));
+        assert_eq!(partage_coord(" 44.5 , -1.2 "), Some((44.5, -1.2)));
+        // Arrondi à 1e-5 : le lien profond reste court et stable.
+        assert_eq!(partage_coord("44.123456789,-1.20000049"), Some((44.12346, -1.2)));
+        assert_eq!(partage_coord("91,0"), None);
+        assert_eq!(partage_coord("0,181"), None);
+        assert_eq!(partage_coord("48.85,2.35,3"), None);
+        assert_eq!(partage_coord("abc"), None);
+        assert_eq!(partage_coord("NaN,2"), None);
+        assert_eq!(partage_coord(""), None);
+    }
+
+    #[test]
+    fn partage_echappe_neutralise_le_html() {
+        assert_eq!(
+            partage_echappe(r#"<b>&"'"#),
+            "&lt;b&gt;&amp;&quot;&#39;"
+        );
+        // Borné à soixante caractères : un nom de lieu, pas un roman.
+        assert_eq!(partage_echappe(&"a".repeat(100)).chars().count(), 60);
+        assert_eq!(partage_echappe("Chez\u{7}Paul"), "ChezPaul");
+    }
+
+    #[test]
+    fn partage_encode_reserve_tout() {
+        assert_eq!(partage_encode("chez Paul & fils"), "chez%20Paul%20%26%20fils");
+        assert_eq!(partage_encode("44.5,-1.2|44.6,-1.1"), "44.5%2C-1.2%7C44.6%2C-1.1");
+        assert_eq!(partage_encode("été"), "%C3%A9t%C3%A9");
     }
 
     #[test]

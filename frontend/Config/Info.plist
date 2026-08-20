@@ -10,6 +10,19 @@
 		<string>location</string>
 		<string>audio</string>
 	</array>
+	<!-- Lien profond moncap://trajet?… : la page de partage d'itinéraire du
+	     serveur (« Ouvrir dans MonCap GPS ») rouvre l'app sur le même trajet. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.moncap.gps.trajet</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>moncap</string>
+			</array>
+		</dict>
+	</array>
 	<!-- Pas un jeu : déclaré explicitement, sinon iOS 27 logge à chaque
 	     lancement « LSSupportsGameMode key not found in Info.plist ». -->
 	<key>LSSupportsGameMode</key>
