@@ -593,22 +593,6 @@
         }
       }
     },
-    "Adresse e-mail invalide.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Invalid email address."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Correo electrónico no válido."
-          }
-        }
-      }
-    },
     "Afficher les trajets cochés (%lld)": {
       "localizations": {
         "en": {
@@ -2289,6 +2273,22 @@
         }
       }
     },
+    "Identifiant ou mot de passe incorrect.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong username or password."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identificador o contraseña incorrectos."
+          }
+        }
+      }
+    },
     "Il reste %d jour(s) — puis %@ par mois.": {
       "localizations": {
         "en": {
@@ -2333,6 +2333,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importar una traza GPX"
+          }
+        }
+      }
+    },
+    "Impossible de créer le compte.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't create the account."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo crear la cuenta."
           }
         }
       }
@@ -3681,6 +3697,22 @@
         }
       }
     },
+    "Pseudonyme : 3 caractères minimum.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Username: at least 3 characters."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seudónimo: 3 caracteres como mínimo."
+          }
+        }
+      }
+    },
     "Qualité de l'air": {
       "localizations": {
         "en": {
@@ -4065,6 +4097,22 @@
         }
       }
     },
+    "Saisie invalide.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid input."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrada no válida."
+          }
+        }
+      }
+    },
     "Sans arrêt": {
       "localizations": {
         "en": {
@@ -4109,6 +4157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Servidor de mapas propio"
+          }
+        }
+      }
+    },
+    "Serveur injoignable. Réessaie.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server unreachable. Try again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor inalcanzable. Reintenta."
           }
         }
       }
@@ -4705,6 +4769,22 @@
         }
       }
     },
+    "Un pseudonyme suffit — aucun e-mail demandé.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A username is enough — no email asked."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un seudónimo basta — no se pide correo."
+          }
+        }
+      }
+    },
     "Un trajet vers chaque point": {
       "localizations": {
         "en": {
@@ -4993,22 +5073,6 @@
         }
       }
     },
-    "e-mail": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "email"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "correo electrónico"
-          }
-        }
-      }
-    },
     "faites demi-tour": {
       "localizations": {
         "en": {
@@ -5089,6 +5153,38 @@
         }
       }
     },
+    "nom (≥3) et mot de passe (≥6) requis": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "name (≥3) and password (≥6) required"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nombre (≥3) y contraseña (≥6) requeridos"
+          }
+        }
+      }
+    },
+    "nom d'utilisateur déjà pris": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "username already taken"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nombre de usuario ya en uso"
+          }
+        }
+      }
+    },
     "par Maxime Nathan Lestage": {
       "localizations": {
         "en": {
@@ -5149,6 +5245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "toma la salida %@"
+          }
+        }
+      }
+    },
+    "pseudonyme": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "username"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "seudónimo"
           }
         }
       }
@@ -5373,6 +5485,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hay atasco delante. Ruta alternativa."
+          }
+        }
+      }
+    },
+    "Échec de l'authentification": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication failed"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fallo de autenticación"
           }
         }
       }
