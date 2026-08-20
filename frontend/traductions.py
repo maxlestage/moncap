@@ -152,6 +152,15 @@ T: dict[str, tuple[str, str]] = {
         "Address search needs a network connection. Press and hold the map to pick a point: the route is then computed on the device.",
     ),
     "Aucun itinéraire": ("Ninguna ruta", "No route"),
+    "🔥 Traverse une zone de feux vers le km %d": (
+        "🔥 Atraviesa una zona de incendios hacia el km %d",
+        "🔥 Crosses a wildfire area around km %d",
+    ),
+    "🫁 Air %@ à l'arrivée": ("🫁 Aire %@ a la llegada", "🫁 %@ air at arrival"),
+    "🌧️ Pluie probable à l'arrivée (%d %%)": (
+        "🌧️ Lluvia probable a la llegada (%d %%)",
+        "🌧️ Rain likely at arrival (%d %%)",
+    ),
     "Transports": ("Transporte", "Transit"),
     "Maintenant": ("Ahora", "Now"),
     "Partir à": ("Salir a las", "Leave at"),
