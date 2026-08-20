@@ -8,9 +8,10 @@ import SwiftUI
 ///   du compte **côté serveur** — l'horloge d'un téléphone se triche, pas la
 ///   nôtre. La date est persistée : l'essai se compte aussi hors ligne.
 /// - **MonCap Plus (3,99 €/mois)** : l'app entière — guidage, comparateur,
-///   transports, régions hors ligne, GPX, tournées optimisées.
+///   transports, régions hors ligne, GPX.
 /// - **MonCap Pro (9,99 €/mois)** : tout Plus, plus les outils de ceux qui
-///   roulent pour travailler — journal kilométrique CSV, facturation PDF.
+///   roulent pour travailler — tournées optimisées, journal kilométrique
+///   CSV, facturation PDF.
 /// - Les **invités** de la maison (liste PLUS_OFFERT du serveur) ont tout,
 ///   offert : c'est un choix du patron, pas une gratuité.
 ///
@@ -168,10 +169,10 @@ enum Formules {
         .init(
             icone: "point.topleft.down.curvedto.point.bottomright.up",
             titre: "Import de traces GPX"),
-        .init(icone: "arrow.triangle.swap", titre: "Tournées optimisées"),
     ]
     static let pro: [FormuleAtout] = [
         .init(icone: "checkmark.seal.fill", titre: "Tout MonCap Plus"),
+        .init(icone: "arrow.triangle.swap", titre: "Tournées optimisées"),
         .init(icone: "doc.text.fill", titre: "Journal kilométrique exportable (CSV)"),
         .init(icone: "eurosign.circle.fill", titre: "Facturation PDF des trajets"),
     ]
