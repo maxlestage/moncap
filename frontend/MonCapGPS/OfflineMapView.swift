@@ -353,20 +353,26 @@ struct OfflineMapScreen: View {
                     detail: router.enCours)
             } else if let region = suggestion {
                 let deja = router.estInstallee(region)
+                let maj = router.majDisponible(region)
                 Button {
-                    Task { await router.install(region) }
+                    Task { await router.install(region, remplace: maj) }
                 } label: {
                     HStack(spacing: 10) {
                         Image(
-                            systemName: deja
-                                ? "checkmark.circle.fill" : "arrow.down.circle.fill")
+                            systemName: maj
+                                ? "arrow.triangle.2.circlepath.circle.fill"
+                                : deja ? "checkmark.circle.fill" : "arrow.down.circle.fill")
                         VStack(alignment: .leading, spacing: 1) {
                             // Un nom Geofabrik est un nom propre : `Text(String)`
                             // est verbatim, et c'est voulu — « Nouvelle-Aquitaine »
                             // ne se traduit pas.
                             Text(region.nom)
                                 .font(.subheadline.weight(.semibold))
-                            Text(deja ? "Déjà installée" : "Calcul sur l'appareil · \(region.poids)")
+                            // Les routes bougent : une archive reconstruite en
+                            // ligne mérite d'être proposée, pas imposée.
+                            Text(maj
+                                ? "Mise à jour disponible · \(region.poids)"
+                                : deja ? "Déjà installée" : "Calcul sur l'appareil · \(region.poids)")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -376,10 +382,10 @@ struct OfflineMapScreen: View {
                     .padding(.vertical, 12)
                     .padding(.horizontal, 12)
                     .background(
-                        (deja ? Color.green : Color.indigo).opacity(0.18),
+                        (maj ? Color.orange : deja ? Color.green : Color.indigo).opacity(0.18),
                         in: RoundedRectangle(cornerRadius: 14))
                 }
-                .disabled(deja)
+                .disabled(deja && !maj)
             } else if router.chargement || router.verifieCouverture {
                 ProgressView()
             } else if let couvrante = router.regionCouvrante {
@@ -630,17 +636,21 @@ struct RegionButton: View {
 
     var body: some View {
         let deja = router.estInstallee(region)
+        let maj = router.majDisponible(region)
         Button {
-            Task { await router.install(region) }
+            Task { await router.install(region, remplace: maj) }
         } label: {
             Label(
                 "\(libelle) · \(region.poids)",
-                systemImage: deja ? "checkmark.circle.fill" : "arrow.down.circle"
+                systemImage: maj
+                    ? "arrow.triangle.2.circlepath.circle.fill"
+                    : deja ? "checkmark.circle.fill" : "arrow.down.circle"
             )
-            .foregroundStyle(deja ? Color.green : Color.accentColor)
+            .foregroundStyle(maj ? Color.orange : deja ? Color.green : Color.accentColor)
         }
-        // Retélécharger ce qu'on a déjà ne ferait que perdre le forfait.
-        .disabled(deja)
+        // Retélécharger ce qu'on a déjà ne ferait que perdre le forfait —
+        // sauf quand l'archive en ligne est plus fraîche : là, c'est le but.
+        .disabled(deja && !maj)
     }
 
     private var libelle: String {
