@@ -593,6 +593,22 @@
         }
       }
     },
+    "Adresse e-mail invalide.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid email address."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correo electrónico no válido."
+          }
+        }
+      }
+    },
     "Afficher les trajets cochés (%lld)": {
       "localizations": {
         "en": {
@@ -1873,6 +1889,22 @@
         }
       }
     },
+    "E-mail ou mot de passe incorrect.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong email or password."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correo o contraseña incorrectos."
+          }
+        }
+      }
+    },
     "Eau potable": {
       "localizations": {
         "en": {
@@ -2269,22 +2301,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hoteles"
-          }
-        }
-      }
-    },
-    "Identifiant ou mot de passe incorrect.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wrong username or password."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Identificador o contraseña incorrectos."
           }
         }
       }
@@ -3697,22 +3713,6 @@
         }
       }
     },
-    "Pseudonyme : 3 caractères minimum.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Username: at least 3 characters."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Seudónimo: 3 caracteres como mínimo."
-          }
-        }
-      }
-    },
     "Qualité de l'air": {
       "localizations": {
         "en": {
@@ -4433,6 +4433,22 @@
         }
       }
     },
+    "Ton e-mail sert d'identifiant — rien ne t'y sera envoyé.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your email is your login — nothing will be sent to it."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu correo sirve de identificador — no se te enviará nada."
+          }
+        }
+      }
+    },
     "Ton message": {
       "localizations": {
         "en": {
@@ -4769,22 +4785,6 @@
         }
       }
     },
-    "Un pseudonyme suffit — aucun e-mail demandé.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "A username is enough — no email asked."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Un seudónimo basta — no se pide correo."
-          }
-        }
-      }
-    },
     "Un trajet vers chaque point": {
       "localizations": {
         "en": {
@@ -5073,6 +5073,22 @@
         }
       }
     },
+    "e-mail": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "email"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "correo electrónico"
+          }
+        }
+      }
+    },
     "faites demi-tour": {
       "localizations": {
         "en": {
@@ -5245,22 +5261,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "toma la salida %@"
-          }
-        }
-      }
-    },
-    "pseudonyme": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "username"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "seudónimo"
           }
         }
       }

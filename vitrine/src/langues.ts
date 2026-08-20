@@ -438,7 +438,7 @@ const FR: Contenu = {
       {
         titre: "Le compte",
         corps: [
-          "L'application fonctionne avec un compte : un pseudonyme et un mot de passe (conservé haché) sont enregistrés sur le serveur, avec vos recherches récentes de destination. Aucune adresse électronique ni numéro de téléphone n'est demandé.",
+          "L'application fonctionne avec un compte : votre adresse e-mail sert d'identifiant, accompagnée d'un mot de passe (conservé haché) et de vos recherches récentes de destination. L'adresse ne sert à rien d'autre : aucun envoi, aucune lettre d'information, aucune revente. Supprimer le compte supprime tout, l'adresse comprise.",
         ],
       },
       {
@@ -776,7 +776,7 @@ const ES: Contenu = {
       {
         titre: "La cuenta",
         corps: [
-          "La aplicación funciona con una cuenta: un seudónimo y una contraseña (guardada con hash) se registran en el servidor, junto con tus búsquedas recientes de destino. No se pide dirección de correo ni número de teléfono.",
+          "La aplicación funciona con una cuenta: tu dirección de correo sirve de identificador, junto con una contraseña (guardada con hash) y tus búsquedas recientes de destino. La dirección no sirve para nada más: ningún envío, ningún boletín, ninguna reventa. Eliminar la cuenta lo elimina todo, dirección incluida.",
         ],
       },
       {
@@ -1114,7 +1114,7 @@ const EN: Contenu = {
       {
         titre: "The account",
         corps: [
-          "The app works with an account: a pseudonym and a password (stored hashed) are kept on the server, along with your recent destination searches. No email address or phone number is asked for.",
+          "The app works with an account: your email address is your login, along with a password (stored hashed) and your recent destination searches. The address is used for nothing else: no mail-outs, no newsletter, no resale. Deleting the account deletes everything, address included.",
         ],
       },
       {

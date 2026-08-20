@@ -412,18 +412,15 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Chercher une région": ("Buscar una región", "Search a region"),
     "mot de passe": ("contraseña", "password"),
-    "pseudonyme": ("seudónimo", "username"),
-    "Pseudonyme : 3 caractères minimum.": (
-        "Seudónimo: 3 caracteres como mínimo.",
-        "Username: at least 3 characters.",
+    "e-mail": ("correo electrónico", "email"),
+    "Adresse e-mail invalide.": ("Correo electrónico no válido.", "Invalid email address."),
+    "E-mail ou mot de passe incorrect.": (
+        "Correo o contraseña incorrectos.",
+        "Wrong email or password.",
     ),
-    "Un pseudonyme suffit — aucun e-mail demandé.": (
-        "Un seudónimo basta — no se pide correo.",
-        "A username is enough — no email asked.",
-    ),
-    "Identifiant ou mot de passe incorrect.": (
-        "Identificador o contraseña incorrectos.",
-        "Wrong username or password.",
+    "Ton e-mail sert d'identifiant — rien ne t'y sera envoyé.": (
+        "Tu correo sirve de identificador — no se te enviará nada.",
+        "Your email is your login — nothing will be sent to it.",
     ),
     "Impossible de créer le compte.": (
         "No se pudo crear la cuenta.",

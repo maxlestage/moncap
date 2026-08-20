@@ -17,14 +17,16 @@ struct LoginView: View {
             Text(signupMode ? "Créer un compte" : "Connexion")
                 .foregroundStyle(.secondary)
 
-            // Un pseudonyme, pas un e-mail : le serveur n'a jamais stocké
-            // d'adresse, et la confidentialité le promet. Champs exclus du
-            // .textCase(.lowercase) de l'écran : la saisie s'affiche telle
-            // qu'elle est tapée (l'auth est sensible à la casse).
-            TextField("pseudonyme", text: $username)
+            // L'e-mail comme identifiant — choix de produit assumé, et la
+            // politique de confidentialité le dit avec ses limites : aucun
+            // envoi, aucune revente. Champs exclus du .textCase(.lowercase)
+            // de l'écran : la saisie s'affiche telle qu'elle est tapée
+            // (l'auth est sensible à la casse).
+            TextField("e-mail", text: $username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .textContentType(.username)
+                .keyboardType(.emailAddress)
+                .textContentType(.emailAddress)
                 .textFieldStyle(.roundedBorder)
                 .textCase(nil)
 
@@ -37,7 +39,7 @@ struct LoginView: View {
                 .textCase(nil)
 
             if signupMode {
-                Text("Un pseudonyme suffit — aucun e-mail demandé.")
+                Text("Ton e-mail sert d'identifiant — rien ne t'y sera envoyé.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -87,7 +89,7 @@ struct LoginView: View {
             } catch APIError.unauthorized {
                 errorMessage = signupMode
                     ? "Impossible de créer le compte."
-                    : "Identifiant ou mot de passe incorrect."
+                    : "E-mail ou mot de passe incorrect."
             } catch APIError.server(let msg) {
                 errorMessage = msg.isEmpty ? "Échec de l'authentification" : msg
             } catch {
