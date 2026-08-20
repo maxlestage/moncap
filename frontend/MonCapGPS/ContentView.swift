@@ -394,6 +394,21 @@ enum TravelMode: String, CaseIterable, Identifiable {
     /// renvoyée par MapKit (voiture, marche).
     var speedKmh: Double? { self == .bike ? 16 : nil }
 
+    /// Couloir de sortie d'itinéraire, en mètres : au-delà, on recalcule.
+    ///
+    /// Un seul seuil valait pour tous les modes — 55 m, taillé pour la
+    /// voiture. À pied, être à 55 m de son chemin, c'est être perdu depuis
+    /// trois rues : le piéton mérite un couloir serré. Le vélo entre les
+    /// deux. Les bornes restent au-dessus du bruit GPS urbain (10-20 m),
+    /// l'anti-rebond de trois relevés faisant le reste.
+    var seuilEcartM: Double {
+        switch self {
+        case .walk: return 30
+        case .bike: return 40
+        case .car, .transit: return 55
+        }
+    }
+
     /// Fonction de coût Valhalla pour le calcul sur l'appareil.
     ///
     /// Les trois modes se calculent sur les mêmes tuiles : le graphe porte
@@ -816,7 +831,7 @@ struct MapHomeView: View {
             }
 
             if nav.active {
-                nav.update(c)
+                nav.update(c, seuilEcart: travelMode.seuilEcartM)
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
                 maybeCheckFasterRoute(from: c)
@@ -2087,6 +2102,24 @@ struct MapHomeView: View {
                 }
             }
             Spacer()
+
+            // Les voies à l'approche, gauche → droite : la file qui mène la
+            // manœuvre en plein blanc, les autres estompées. À moins de
+            // 400 m seulement — avant, on ne se rabat pas encore — et jamais
+            // pendant un recalcul. Seuls les itinéraires Valhalla les
+            // portent : MapKit ne publie pas les voies.
+            if !nav.rerouting, !nav.voies.isEmpty, nav.distanceToNext < 400 {
+                HStack(spacing: 5) {
+                    ForEach(Array(nav.voies.enumerated()), id: \.offset) { _, v in
+                        Image(systemName: v.symbole)
+                            .font(.callout.weight(.bold))
+                            .foregroundStyle(.white.opacity(v.active ? 1 : 0.35))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
+            }
         }
         .padding(16)
         .background((nav.rerouting ? Color.orange : Color.green).gradient, in: RoundedRectangle(cornerRadius: 18))

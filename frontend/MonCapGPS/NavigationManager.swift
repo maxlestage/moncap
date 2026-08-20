@@ -6,6 +6,49 @@ import MapKit
 struct NavStep {
     let text: String
     let coord: CLLocationCoordinate2D
+    /// Les voies à l'approche de la manœuvre, gauche → droite, quand le
+    /// calcul les connaît. Seuls les itinéraires Valhalla les portent :
+    /// MapKit ne publie pas les voies, et une rangée vide vaut mieux qu'une
+    /// rangée inventée.
+    var voies: [VoieGuidage] = []
+}
+
+/// Une voie de circulation à l'approche d'une manœuvre.
+///
+/// Le masque vient tel quel de Valhalla (`turn_lanes` d'OpenStreetMap) ; les
+/// bits sont ceux de `baldr/turnlanes.h`, lus au commit embarqué par le
+/// wrapper : none 1, through 2, sharp_left 4, left 8, slight_left 16,
+/// slight_right 32, right 64, sharp_right 128, reverse 256, merge 512/1024.
+struct VoieGuidage: Equatable {
+    /// Directions que la voie autorise, en masque de bits.
+    let directions: Int
+    /// Vraie si cette voie mène la manœuvre annoncée.
+    let active: Bool
+
+    /// La flèche de la voie : la direction active si elle est nommée, sinon
+    /// la première autorisée. Symboles SF garantis présents sur iOS 17+.
+    var symbole: String {
+        let d = directionRetenue
+        if d & 2 != 0 { return "arrow.up" }
+        if d & 8 != 0 { return "arrow.turn.up.left" }
+        if d & 64 != 0 { return "arrow.turn.up.right" }
+        if d & 16 != 0 { return "arrow.up.left" }
+        if d & 32 != 0 { return "arrow.up.right" }
+        if d & 4 != 0 { return "arrow.down.left" }
+        if d & 128 != 0 { return "arrow.down.right" }
+        if d & 256 != 0 { return "arrow.uturn.left" }
+        if d & (512 | 1024) != 0 { return "arrow.triangle.merge" }
+        return "arrow.up"
+    }
+
+    /// La direction à dessiner : celle marquée active/valide par le moteur si
+    /// elle existe, sinon l'ensemble du masque.
+    private var directionRetenue: Int {
+        directionActive ?? directions
+    }
+
+    /// Direction précise donnée par le moteur pour cette voie, s'il l'a dite.
+    var directionActive: Int?
 }
 
 /// Raccourci de traduction : la clé **est** la chaîne française.
@@ -229,6 +272,9 @@ final class NavigationManager: ObservableObject {
     /// que le mot affiché.
     private var spokenInstruction = NavInstruction.waiting.spoken
     @Published var distanceToNext: Double = 0
+    /// Les voies de la manœuvre courante, gauche → droite. Vide quand le
+    /// calcul ne les connaît pas — MapKit ne les publie pas.
+    @Published var voies: [VoieGuidage] = []
     @Published var remainingKm: Double = 0
     @Published var etaMinutes: Double = 0
     @Published var routeCoords: [CLLocationCoordinate2D] = []
@@ -361,7 +407,10 @@ final class NavigationManager: ObservableObject {
     }
 
     /// Met à jour la progression à partir de la position courante.
-    func update(_ coord: CLLocationCoordinate2D) {
+    ///
+    /// `seuilEcart` : le couloir de sortie d'itinéraire, fourni par l'appelant
+    /// parce qu'il dépend du mode — serré à pied, large en voiture.
+    func update(_ coord: CLLocationCoordinate2D, seuilEcart: Double = 55) {
         guard active else { return }
 
         // Met à jour en temps réel la distance et la durée restantes.
@@ -370,7 +419,7 @@ final class NavigationManager: ObservableObject {
         // Détection de sortie d'itinéraire (anti-rebond : 3 relevés de suite).
         if !rerouting {
             let deviation = distanceToRoute(coord)
-            if deviation > 55 {
+            if deviation > seuilEcart {
                 offRouteHits += 1
                 let retryDelay = 5.0 * Double(min(6, 1 + rerouteFailures))
                 if offRouteHits >= 3, Date().timeIntervalSince(lastReroute) > retryDelay {
@@ -513,6 +562,7 @@ final class NavigationManager: ObservableObject {
         instruction = n.display
         detail = n.detail
         spokenInstruction = n.spoken
+        voies = step.voies
     }
 
     private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {

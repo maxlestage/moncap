@@ -560,6 +560,10 @@ final class OfflineRouter: NSObject, ObservableObject {
                 ["lat": to.latitude, "lon": to.longitude],
             ],
             "costing": costing,
+            // Les voies à l'approche de chaque manœuvre — « serrez à
+            // droite, deuxième file ». Le sérialiseur ne les écrit que sur
+            // demande, lu dans son source au commit embarqué.
+            "turn_lanes": true,
             "directions_options": [
                 "units": "kilometers",
                 // Les consignes suivent la langue de l'app : elles alimentent
@@ -645,6 +649,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                         ["lat": to.latitude, "lon": to.longitude],
                     ],
                     "costing": costing,
+                    "turn_lanes": true,
                     "directions_options": [
                         "units": "kilometers", "language": Self.langueValhalla,
                     ],
@@ -823,10 +828,20 @@ struct OfflineRoute {
                 let debut = (m["begin_shape_index"] as? Int) ?? 0
                 let position = min(points.count - 1, max(0, depart + debut))
                 guard position >= 0, !points.isEmpty else { continue }
+                // Les voies de la manœuvre, gauche → droite : le masque tel
+                // quel, et « active » quand le moteur nomme la voie qui mène
+                // la manœuvre (`active`) ou une voie possible (`valid`).
+                let voies = ((m["lanes"] as? [[String: Any]]) ?? []).map { v in
+                    VoieGuidage(
+                        directions: (v["directions"] as? Int) ?? 0,
+                        active: v["active"] != nil || v["valid"] != nil,
+                        directionActive: (v["active"] as? Int) ?? (v["valid"] as? Int))
+                }
                 etapes.append(
                     NavStep(
                         text: (m["instruction"] as? String) ?? "",
-                        coord: points[position]))
+                        coord: points[position],
+                        voies: voies))
             }
         }
         guard points.count >= 2 else { return nil }
