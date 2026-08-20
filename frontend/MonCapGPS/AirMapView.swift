@@ -423,6 +423,56 @@ final class AirService: ObservableObject {
     }
 }
 
+/// La mesure d'air autour d'une position, pour la pastille de l'écran
+/// principal.
+///
+/// Léger et paresseux, sur le modèle de `WeatherService` : rafraîchi à la
+/// demi-heure — la donnée d'Open-Meteo est horaire — ou dès qu'on a changé de
+/// case de 0,25°, environ vingt-cinq kilomètres. Une boîte d'un tiers de degré
+/// autour de soi coûte quatre appels Open-Meteo, le plancher de la grille.
+@MainActor
+final class AirAutour: ObservableObject {
+    /// La maille qui contient la position, ou la plus proche servie.
+    @Published private(set) var point: AirPoint?
+
+    private var caseServie: String?
+    private var date = Date.distantPast
+    private let base = APIClient().baseURL
+
+    /// À appeler à chaque position, comme la météo : le tri se fait ici.
+    func update(_ c: CLLocationCoordinate2D) {
+        let case_ = "\((c.latitude * 4).rounded())|\((c.longitude * 4).rounded())"
+        guard caseServie != case_ || Date().timeIntervalSince(date) > 1800 else { return }
+        caseServie = case_
+        date = Date()
+
+        let bbox = String(
+            format: "%.3f,%.3f,%.3f,%.3f",
+            c.longitude - 0.15, c.latitude - 0.15,
+            c.longitude + 0.15, c.latitude + 0.15)
+        var comps = URLComponents(
+            url: base.appendingPathComponent("air"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "bbox", value: bbox)]
+        guard let url = comps.url else { return }
+
+        Task {
+            guard
+                let (data, resp) = try? await URLSession.shared.data(from: url),
+                (resp as? HTTPURLResponse)?.statusCode == 200,
+                let points = try? JSONDecoder().decode([AirPoint].self, from: data),
+                !points.isEmpty
+            else {
+                // Échec : on oublie la case pour que la prochaine position
+                // retente, et la pastille garde sa dernière mesure plutôt que
+                // de clignoter.
+                caseServie = nil
+                return
+            }
+            point = points.first { $0.contient(c) } ?? points.first
+        }
+    }
+}
+
 /// Écran dédié « Qualité de l'air » : une nappe colorée sur le fond de carte
 /// habituel, et une légende qui nomme l'échelle employée.
 struct AirMapScreen: View {
