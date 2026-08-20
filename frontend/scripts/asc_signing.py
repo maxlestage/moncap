@@ -118,17 +118,30 @@ def main():
        "-inkey", key_path, "-in", pem_path,
        "-out", p12_path, "-passout", f"pass:{password}")
 
-    # 5) Bundle ID (App ID) : on le récupère, ou on l'enregistre via l'API.
-    bundles = req("GET", f"/bundleIds?filter[identifier]={BUNDLE_ID}&limit=1", token)
-    if bundles.get("data"):
-        bundle_uid = bundles["data"][0]["id"]
-    else:
+    # 5) Bundle IDs (App IDs) : on les récupère, ou on les enregistre via
+    #    l'API. L'app ET l'extension Guidage (Live Activity) : xcodebuild
+    #    sait créer des profils (-allowProvisioningUpdates) mais pas
+    #    enregistrer un identifiant nouveau — « Automatic signing cannot
+    #    register bundle identifier », constaté au premier export à deux
+    #    cibles. L'API, elle, le peut ; une fois enregistré, c'est acquis
+    #    pour toujours, Xcode Cloud compris.
+    def assure_bundle(identifier, nom):
+        # limit large et comparaison exacte : le filtre de l'API matche par
+        # préfixe, « com.x » renvoie aussi « com.x.Guidage ».
+        bundles = req("GET", f"/bundleIds?filter[identifier]={identifier}&limit=200",
+                      token)
+        for b in bundles.get("data", []):
+            if b["attributes"].get("identifier") == identifier:
+                return b["id"]
         body = {"data": {"type": "bundleIds",
-                         "attributes": {"identifier": BUNDLE_ID,
-                                        "name": "MonCap GPS", "platform": "IOS"}}}
+                         "attributes": {"identifier": identifier,
+                                        "name": nom, "platform": "IOS"}}}
         created = req("POST", "/bundleIds", token, data=json.dumps(body))
-        bundle_uid = created["data"]["id"]
-        print(f"Bundle ID enregistré : {BUNDLE_ID}")
+        print(f"Bundle ID enregistré : {identifier}")
+        return created["data"]["id"]
+
+    bundle_uid = assure_bundle(BUNDLE_ID, "MonCap GPS")
+    assure_bundle(f"{BUNDLE_ID}.Guidage", "MonCap GPS Guidage")
 
     # 6) Profil App Store : supprime l'ancien de même nom, puis recrée
     profs = req("GET", "/profiles?filter[profileType]=IOS_APP_STORE&limit=200", token)
