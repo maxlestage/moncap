@@ -19,8 +19,9 @@
  */
 import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "./src/App";
+import { Legale } from "./src/Legale";
 import { LANGUES } from "./src/langues";
-import type { Contenu } from "./src/langues";
+import type { Contenu, PageLegale } from "./src/langues";
 
 const SORTIE = "dist";
 /** Préfixe sous lequel le backend monte le dossier construit. */
@@ -104,23 +105,66 @@ function tete(c: Contenu): string {
     .join("\n");
 }
 
+/**
+ * La tête d'une page légale : titre et description propres, la même feuille
+ * et la même icône. Pas d'`alternate` — ces pages n'ont pas d'équivalent
+ * exact d'une langue à l'autre (les adresses diffèrent), et un mauvais
+ * `alternate` est pire qu'aucun.
+ */
+function teteLegale(p: PageLegale): string {
+  return [
+    `<title>${attr(p.titre)} — MonCap GPS</title>`,
+    `<meta name="description" content="${attr(p.description)}" />`,
+    `<link rel="icon" type="image/png" href="${favicon}" />`,
+    `<link rel="stylesheet" href="${BASE}/${nomFeuille}" />`,
+  ]
+    .map((l) => `    ${l}`)
+    .join("\n");
+}
+
+/** Verse un rendu dans le gabarit et l'écrit à son adresse. */
+async function emet(
+  code: string,
+  chemin: string,
+  enTete: string,
+  rendu: string,
+): Promise<number> {
+  const page = gabarit
+    .replace('<html lang="fr">', `<html lang="${code}">`)
+    .replace("  </head>", `${enTete}\n  </head>`)
+    .replace('<div id="root"></div>', `<div id="root">${rendu}</div>`)
+    .replace(/\n\s*<script type="module"[^>]*><\/script>/, "");
+
+  // Le français occupe la racine ; tout le reste, un sous-dossier.
+  const fichier =
+    chemin === "/" ? `${SORTIE}/index.html` : `${SORTIE}${chemin}/index.html`;
+  await Bun.write(fichier, page);
+  return page.length;
+}
+
 const pages: { chemin: string; octets: number }[] = [];
 
 for (const c of LANGUES) {
-  const page = gabarit
-    .replace('<html lang="fr">', `<html lang="${c.code}">`)
-    .replace("  </head>", `${tete(c)}\n  </head>`)
-    .replace(
-      '<div id="root"></div>',
-      `<div id="root">${renderToStaticMarkup(<App c={c} res={{ logo }} />)}</div>`,
-    )
-    .replace(/\n\s*<script type="module"[^>]*><\/script>/, "");
-
-  // Le français occupe la racine ; les autres, un sous-dossier.
-  const fichier =
-    c.chemin === "/" ? `${SORTIE}/index.html` : `${SORTIE}${c.chemin}/index.html`;
-  await Bun.write(fichier, page);
-  pages.push({ chemin: c.chemin, octets: page.length });
+  pages.push({
+    chemin: c.chemin,
+    octets: await emet(
+      c.code,
+      c.chemin,
+      tete(c),
+      renderToStaticMarkup(<App c={c} res={{ logo }} />),
+    ),
+  });
+  for (const p of [c.mentions, c.confidentialite]) {
+    pages.push({
+      chemin: p.chemin,
+      octets: await emet(
+        c.code,
+        p.chemin,
+        teteLegale(p),
+        renderToStaticMarkup(<Legale c={c} page={p} res={{ logo }} />),
+      ),
+    });
+  }
 }
 
 // --- Récapitulatif -------------------------------------------------------

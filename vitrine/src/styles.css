@@ -985,6 +985,86 @@ footer .signature {
   white-space: nowrap;
 }
 
+/* --- Le pied commercial --------------------------------------------------
+ * Trois colonnes de liens entre le slogan et la signature : les sections de
+ * la page, les sources de données, le légal. Une colonne sur téléphone,
+ * trois dès que l'écran le permet. */
+.slogan {
+  color: #eaf1ff;
+  font-size: 1.05rem;
+  margin: 0 0 1.1rem;
+  max-width: 34rem;
+}
+
+.pied-colonnes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.6rem;
+  padding: 1.4rem 0 1.6rem;
+  margin-bottom: 1.4rem;
+  border-top: 1px solid rgb(255 255 255 / 0.16);
+  border-bottom: 1px solid rgb(255 255 255 / 0.16);
+}
+
+.pied-colonnes h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9fb6da;
+}
+
+.pied-colonnes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pied-colonnes li {
+  margin: 0.35rem 0;
+}
+
+.pied-colonnes a {
+  color: #c3cfe2;
+  text-decoration: none;
+}
+
+.pied-colonnes a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.copyright {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  color: #9fb6da;
+}
+
+/* --- Pages légales --------------------------------------------------------
+ * Même squelette que la page principale ; le corps est une colonne de texte
+ * à largeur de lecture, rien de plus. */
+.retour {
+  color: inherit;
+}
+
+.juridique {
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+}
+
+.juridique section {
+  max-width: 46rem;
+}
+
+.juridique h2 {
+  margin: 1.6rem 0 0.5rem;
+}
+
+.juridique p {
+  margin: 0 0 0.8rem;
+  line-height: 1.55;
+}
+
 /* --- Écrans plus larges -------------------------------------------------- */
 
 @media (min-width: 40rem) {
@@ -993,6 +1073,9 @@ footer .signature {
   }
   .cartes {
     grid-template-columns: repeat(2, 1fr);
+  }
+  .pied-colonnes {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
