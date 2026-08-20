@@ -95,6 +95,8 @@ struct FacturationView: View {
                 }
             }
         }
+        // Fond opaque : pas de verre sur un document qu'on remplit.
+        .presentationBackground(Color(.systemBackground))
     }
 
     /// Dessine la facture en PDF A4 et l'écrit dans un fichier temporaire.
