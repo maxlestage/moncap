@@ -113,6 +113,22 @@
         }
       }
     },
+    "%@ par mois": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ per month"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ al mes"
+          }
+        }
+      }
+    },
     "%@ sortie": {
       "localizations": {
         "en": {
@@ -141,6 +157,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · %.0f MB de %.0f MB"
+          }
+        }
+      }
+    },
+    "%d trajet(s) sur la période": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d trip(s) in the period"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d trayecto(s) en el período"
           }
         }
       }
@@ -273,6 +305,22 @@
         }
       }
     },
+    "14 jours d'essai gratuit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14-day free trial"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14 días de prueba gratis"
+          }
+        }
+      }
+    },
     "1re": {
       "localizations": {
         "en": {
@@ -285,6 +333,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "1.ª"
+          }
+        }
+      }
+    },
+    "212 régions d'Europe téléchargeables : itinéraires, lieux et limites de vitesse sans réseau.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "212 European regions to download: routes, places and speed limits with no signal."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "212 regiones de Europa descargables: rutas, lugares y límites de velocidad sin cobertura."
           }
         }
       }
@@ -433,6 +497,22 @@
         }
       }
     },
+    "Abonnement mensuel, renouvelé automatiquement, résiliable à tout moment dans les réglages iOS.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Monthly subscription, renews automatically, cancel anytime in iOS settings."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suscripción mensual, renovada automáticamente, cancelable en cualquier momento en los ajustes de iOS."
+          }
+        }
+      }
+    },
     "Accident": {
       "localizations": {
         "en": {
@@ -445,6 +525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Accidente"
+          }
+        }
+      }
+    },
+    "Adresse": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dirección"
           }
         }
       }
@@ -1185,6 +1281,22 @@
         }
       }
     },
+    "Client": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cliente"
+          }
+        }
+      }
+    },
     "Clé API TomTom": {
       "localizations": {
         "en": {
@@ -1261,6 +1373,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cuenta"
+          }
+        }
+      }
+    },
+    "Conditions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Condiciones"
+          }
+        }
+      }
+    },
+    "Confidentialité": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacidad"
           }
         }
       }
@@ -1389,6 +1533,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "En %d metros, %@"
+          }
+        }
+      }
+    },
+    "Date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fecha"
+          }
+        }
+      }
+    },
+    "Date;Trajet;Distance (km);Durée (min)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date;Trip;Distance (km);Duration (min)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fecha;Trayecto;Distancia (km);Duración (min)"
           }
         }
       }
@@ -1745,6 +1921,22 @@
         }
       }
     },
+    "Exporter en CSV": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export as CSV"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportar en CSV"
+          }
+        }
+      }
+    },
     "Extrêmement mauvais": {
       "localizations": {
         "en": {
@@ -1757,6 +1949,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extremadamente malo"
+          }
+        }
+      }
+    },
+    "FACTURE": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "INVOICE"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FACTURA"
+          }
+        }
+      }
+    },
+    "Facturation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invoicing"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Facturación"
+          }
+        }
+      }
+    },
+    "Facturation des trajets": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trip invoicing"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Facturación de trayectos"
+          }
+        }
+      }
+    },
+    "Facture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invoice"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Factura"
+          }
+        }
+      }
+    },
+    "Facturé à :": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Billed to:"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Facturado a:"
           }
         }
       }
@@ -1857,6 +2129,22 @@
         }
       }
     },
+    "Générer la facture PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate the PDF invoice"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generar la factura PDF"
+          }
+        }
+      }
+    },
     "Handicapé": {
       "localizations": {
         "en": {
@@ -1901,6 +2189,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hoteles"
+          }
+        }
+      }
+    },
+    "Import de traces GPX": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPX track import"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importación de trazas GPX"
           }
         }
       }
@@ -2097,6 +2401,70 @@
         }
       }
     },
+    "Journal kilométrique exportable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportable mileage log"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registro de kilómetros exportable"
+          }
+        }
+      }
+    },
+    "L'essentiel reste gratuit. Plus déverrouille le hors ligne et les outils pro.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The essentials stay free. Plus unlocks offline and the pro tools."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lo esencial sigue gratis. Plus desbloquea el sin conexión y las herramientas pro."
+          }
+        }
+      }
+    },
+    "L'ordre le plus court calculé pour toutes tes étapes, même nombreuses — hors ligne compris.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The shortest order computed for all your stops, however many — offline included."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El orden más corto calculado para todas tus paradas, aunque sean muchas — sin conexión incluido."
+          }
+        }
+      }
+    },
+    "La boutique ne répond pas — réessaie avec du réseau.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The store isn't responding — try again with signal."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La tienda no responde — reintenta con cobertura."
+          }
+        }
+      }
+    },
     "La recherche d'adresse a besoin du réseau. Appuie longuement sur la carte pour choisir un point : l'itinéraire se calcule alors sur l'appareil.": {
       "localizations": {
         "en": {
@@ -2241,6 +2609,22 @@
         }
       }
     },
+    "Les régions hors ligne": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline regions"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las regiones sin conexión"
+          }
+        }
+      }
+    },
     "Les transports en commun ont besoin du réseau.": {
       "localizations": {
         "en": {
@@ -2365,6 +2749,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Malo"
+          }
+        }
+      }
+    },
+    "Mention libre (TVA, franchise…)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free-form note (VAT, exemption…)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mención libre (IVA, franquicia…)"
           }
         }
       }
@@ -2545,6 +2945,22 @@
         }
       }
     },
+    "Mois facturé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invoiced month"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mes facturado"
+          }
+        }
+      }
+    },
     "Mon avatar": {
       "localizations": {
         "en": {
@@ -2589,6 +3005,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mi vehículo"
+          }
+        }
+      }
+    },
+    "MonCap Plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap Plus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap Plus"
           }
         }
       }
@@ -2689,6 +3121,22 @@
         }
       }
     },
+    "Nom ou entreprise": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name or company"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre o empresa"
+          }
+        }
+      }
+    },
     "Nouvel itinéraire.": {
       "localizations": {
         "en": {
@@ -2701,6 +3149,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nueva ruta."
+          }
+        }
+      }
+    },
+    "N° %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No. %@ · %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "N.º %@ · %@"
           }
         }
       }
@@ -2829,6 +3293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Compartir la ruta"
+          }
+        }
+      }
+    },
+    "Partager la facture": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share the invoice"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartir la factura"
           }
         }
       }
@@ -3265,6 +3745,22 @@
         }
       }
     },
+    "Restaurer les achats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore purchases"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restaurar compras"
+          }
+        }
+      }
+    },
     "Revenir au fond par défaut": {
       "localizations": {
         "en": {
@@ -3373,6 +3869,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Región"
+          }
+        }
+      }
+    },
+    "SIRET %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Company ID %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NIF %@"
+          }
+        }
+      }
+    },
+    "SIRET (optionnel)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Company ID (optional)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NIF (opcional)"
           }
         }
       }
@@ -3617,6 +4145,22 @@
         }
       }
     },
+    "Taux par kilomètre": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate per kilometre"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarifa por kilómetro"
+          }
+        }
+      }
+    },
     "Temps d'arrêt": {
       "localizations": {
         "en": {
@@ -3629,6 +4173,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tiempo de parada"
+          }
+        }
+      }
+    },
+    "Tes trajets en CSV — dates, distances, durées — prêts pour la comptabilité.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your trips as CSV — dates, distances, durations — ready for bookkeeping."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tus trayectos en CSV — fechas, distancias, duraciones — listos para la contabilidad."
           }
         }
       }
@@ -3665,6 +4225,22 @@
         }
       }
     },
+    "Total : %.1f km × %.2f €/km = %.2f €": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total: %.1f km × %.2f €/km = %.2f €"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total: %.1f km × %.2f €/km = %.2f €"
+          }
+        }
+      }
+    },
     "Touche la carte": {
       "localizations": {
         "en": {
@@ -3693,6 +4269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turismo"
+          }
+        }
+      }
+    },
+    "Tournées optimisées": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optimized multi-stop runs"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutas de reparto optimizadas"
           }
         }
       }
@@ -3805,6 +4397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tren"
+          }
+        }
+      }
+    },
+    "Trajet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trip"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trayecto"
           }
         }
       }
@@ -3949,6 +4557,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una ruta hasta cada punto"
+          }
+        }
+      }
+    },
+    "Une facture PDF par période, au taux kilométrique de ton choix.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A PDF invoice per period, at the per-kilometre rate you choose."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una factura PDF por período, con la tarifa por kilómetro que elijas."
+          }
+        }
+      }
+    },
+    "Une randonnée ou un parcours d'une autre app devient ton itinéraire, consignes comprises.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A hike or a route from another app becomes your route, instructions included."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una caminata o una ruta de otra app se vuelve tu itinerario, indicaciones incluidas."
           }
         }
       }
@@ -4353,6 +4993,22 @@
         }
       }
     },
+    "puis %@ par mois": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "then %@ per month"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "después %@ al mes"
+          }
+        }
+      }
+    },
     "rond-point": {
       "localizations": {
         "en": {
@@ -4573,6 +5229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claros"
+          }
+        }
+      }
+    },
+    "Émetteur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Issuer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emisor"
           }
         }
       }

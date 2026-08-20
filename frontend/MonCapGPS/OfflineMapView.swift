@@ -37,6 +37,9 @@ struct OfflineMapScreen: View {
     /// flottant, mais il faut pouvoir y aller quand la reconnaissance échoue.
     @State private var showRegions = false
     @State private var rechercheRegion = ""
+    /// Paywall Plus, ouvert quand on tente de télécharger une nouvelle
+    /// région sans abonnement.
+    @State private var paywall = false
 
     /// Fond réellement affiché : celui de l'utilisateur s'il répond, sinon le
     /// nôtre. Vérifié à l'ouverture, pour ne jamais rester devant un écran vide.
@@ -355,6 +358,13 @@ struct OfflineMapScreen: View {
                 let deja = router.estInstallee(region)
                 let maj = router.majDisponible(region)
                 Button {
+                    // Télécharger une nouvelle région est un atout Plus ;
+                    // mettre à jour ce qu'on a déjà reste libre — on ne
+                    // reprend pas ce qui a été donné.
+                    if !deja && !maj && !MonCapPlus.shared.actif {
+                        paywall = true
+                        return
+                    }
                     Task { await router.install(region, remplace: maj) }
                 } label: {
                     HStack(spacing: 10) {
@@ -386,6 +396,7 @@ struct OfflineMapScreen: View {
                         in: RoundedRectangle(cornerRadius: 14))
                 }
                 .disabled(deja && !maj)
+                .sheet(isPresented: $paywall) { PaywallView() }
             } else if router.chargement || router.verifieCouverture {
                 ProgressView()
             } else if let couvrante = router.regionCouvrante {
@@ -633,11 +644,19 @@ struct RegionButton: View {
     /// Nom entier, pays compris : indispensable dans une liste de recherche,
     /// où plus rien ne dit de quel pays vient la ligne.
     var complet = false
+    /// Paywall local : chaque ligne sait présenter le sien.
+    @State private var paywall = false
 
     var body: some View {
         let deja = router.estInstallee(region)
         let maj = router.majDisponible(region)
         Button {
+            // Nouvelle région = atout Plus ; la mise à jour d'une région
+            // déjà installée reste libre.
+            if !deja && !maj && !MonCapPlus.shared.actif {
+                paywall = true
+                return
+            }
             Task { await router.install(region, remplace: maj) }
         } label: {
             Label(
@@ -651,6 +670,7 @@ struct RegionButton: View {
         // Retélécharger ce qu'on a déjà ne ferait que perdre le forfait —
         // sauf quand l'archive en ligne est plus fraîche : là, c'est le but.
         .disabled(deja && !maj)
+        .sheet(isPresented: $paywall) { PaywallView() }
     }
 
     private var libelle: String {
