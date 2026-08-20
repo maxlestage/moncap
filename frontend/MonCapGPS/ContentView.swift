@@ -150,6 +150,48 @@ fileprivate func viaRoute(
         hasTolls: a.hasTolls || b.hasTolls)
 }
 
+/// Enchaîne des tronçons MapKit sur une suite de points — départ, étapes,
+/// destination — en un seul trajet. À chaque étape, l'« arrivée » du tronçon
+/// est remplacée par une consigne d'étape nommée, et le « départ » du tronçon
+/// suivant est retiré : on ne dit pas « vous êtes arrivé » chez Paul quand on
+/// ne fait qu'y passer.
+fileprivate func chaineEtapes(
+    points: [CLLocationCoordinate2D], noms: [String],
+    transportType: MKDirectionsTransportType
+) async -> RouteBuild? {
+    guard points.count >= 2 else { return nil }
+    var coords: [CLLocationCoordinate2D] = []
+    var steps: [NavStep] = []
+    var km = 0.0
+    var minutes = 0.0
+    var tolls = false
+    for i in 0..<(points.count - 1) {
+        guard
+            let leg = await buildRoutes(
+                from: points[i], to: points[i + 1],
+                alternates: false, transportType: transportType
+            ).first
+        else { return nil }
+        var legSteps = leg.steps
+        if i > 0 { legSteps = Array(legSteps.dropFirst()) }
+        if i < points.count - 2 {
+            legSteps = Array(legSteps.dropLast())
+            let nom = i < noms.count ? noms[i] : ""
+            legSteps.append(
+                NavStep(
+                    text: String(
+                        format: NSLocalizedString("Étape : %@", comment: ""), nom),
+                    coord: points[i + 1]))
+        }
+        coords += leg.coords
+        steps += legSteps
+        km += leg.km
+        minutes += leg.minutes
+        tolls = tolls || leg.hasTolls
+    }
+    return RouteBuild(coords: coords, steps: steps, km: km, minutes: minutes, hasTolls: tolls)
+}
+
 /// Cap (0 = nord) d'un point vers un autre.
 fileprivate func courseBetween(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
     let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
@@ -630,6 +672,14 @@ struct MapHomeView: View {
     /// « maintenant » interdisait de préparer le bus de demain matin.
     @State private var transitQuand = TransitQuand.maintenant
     @State private var transitDate = Date()
+    /// Les étapes intermédiaires du trajet en préparation, dans l'ordre.
+    @State private var etapes: [CLLocationCoordinate2D] = []
+    @State private var etapeNoms: [String] = []
+    /// Vrai le temps de désigner la prochaine étape sur la carte.
+    @State private var ajouteEtape = false
+    /// Étapes déjà atteintes pendant le guidage (index dans `etapes`) : le
+    /// recalcul d'écart ne repasse pas par elles.
+    @State private var etapesAtteintes: Set<Int> = []
     /// Ce que chaque variante rencontre en chemin (feux), par identifiant.
     @State private var risquesParOption: [UUID: String] = [:]
     /// Ce qui attend à l'arrivée, commun à toutes les variantes : air, pluie.
@@ -836,6 +886,12 @@ struct MapHomeView: View {
 
             if nav.active {
                 nav.update(c, seuilEcart: travelMode.seuilEcartM)
+                // Une étape est atteinte à moins de cent cinquante mètres :
+                // le recalcul d'écart ne repassera pas par elle.
+                for (i, e) in etapes.enumerated()
+                where !etapesAtteintes.contains(i) && metersBetween(c, e) < 150 {
+                    etapesAtteintes.insert(i)
+                }
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
                 maybeCheckFasterRoute(from: c)
@@ -1313,8 +1369,10 @@ struct MapHomeView: View {
             buildings3D: is3D,
             onPinTap: handlePinTap,
             onPlaceTap: { coord, _ in
-                // Un lieu du fond de carte touché → propose les itinéraires.
+                // Un lieu du fond de carte touché → propose les itinéraires,
+                // ou pose l'étape qu'on est en train de désigner.
                 guard !nav.active else { return }
+                if ajouteEtape { ajouterEtape(coord); return }
                 Task { await presentRouteOptions(to: coord) }
             },
             onMapTap: handleMapTap,
@@ -1325,6 +1383,7 @@ struct MapHomeView: View {
             // restait sans emploi faute de but à lui nommer.
             onMapLongPress: { coord in
                 guard !nav.active else { return }
+                if ajouteEtape { ajouterEtape(coord); return }
                 Task { await presentRouteOptions(to: coord) }
             },
             onRegionChange: { region in
@@ -2403,6 +2462,44 @@ struct MapHomeView: View {
                 }
             }
 
+            // Les étapes du trajet, dans l'ordre, chacune retirable — et le
+            // bouton qui arme la pose de la suivante sur la carte. Pas en
+            // transports : MOTIS ne chaîne pas les arrêts.
+            if travelMode != .transit, !etapes.isEmpty || pendingDestination != nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(etapeNoms.enumerated()), id: \.offset) { i, nom in
+                            HStack(spacing: 4) {
+                                Text(verbatim: "\(i + 1) · \(nom)")
+                                    .font(.caption2.weight(.semibold))
+                                    .lineLimit(1)
+                                Button { retireEtape(i) } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.indigo.opacity(0.15), in: Capsule())
+                        }
+                        Button {
+                            ajouteEtape.toggle()
+                        } label: {
+                            Label(
+                                ajouteEtape ? "Touche la carte" : "Étape",
+                                systemImage: ajouteEtape ? "hand.tap.fill" : "plus")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(ajouteEtape ? .orange : .indigo)
+                        .controlSize(.mini)
+                    }
+                }
+                .frame(height: 30)
+            }
+
             // Ce qui attend à l'arrivée vaut pour toutes les variantes :
             // dit une fois, ici, plutôt que répété sur chaque carte.
             ForEach(risquesArrivee, id: \.self) { r in
@@ -2558,6 +2655,10 @@ struct MapHomeView: View {
                     selectedRouteID = nil
                     routesExpanded = false
                     pendingDestination = nil
+                    etapes = []
+                    etapeNoms = []
+                    etapesAtteintes = []
+                    ajouteEtape = false
                 } label: {
                     Image(systemName: "xmark")
                         .font(.subheadline.weight(.semibold))
@@ -3769,6 +3870,14 @@ struct MapHomeView: View {
             return
         }
 
+        // Avec des étapes, un seul trajet : celui qu'on a voulu, dans l'ordre
+        // voulu. Un éventail de quinze variantes sur trois arrêts n'aiderait
+        // personne à choisir.
+        if !etapes.isEmpty {
+            await presentRouteAvecEtapes(from: from, to: dest)
+            return
+        }
+
         var builds: [RouteBuild]
         // Hors ligne assumé : rien ne part sur le réseau. Valhalla sait
         // proposer des variantes, on lui en demande cinq — le calcul est
@@ -3922,6 +4031,64 @@ struct MapHomeView: View {
         Task { await chargeRisques(options: options, dest: dest) }
     }
 
+    /// Le trajet à étapes : départ → étapes dans l'ordre → destination.
+    ///
+    /// Valhalla enchaîne nativement (des arrêts « break », les tronçons
+    /// recollés par le décodeur existant) ; MapKit est enchaîné tronçon par
+    /// tronçon. Chaque étape s'annonce par son nom dans le guidage, et se
+    /// marque atteinte à moins de cent cinquante mètres — le recalcul d'écart
+    /// ne repasse pas par elle.
+    private func presentRouteAvecEtapes(
+        from: CLLocationCoordinate2D, to dest: CLLocationCoordinate2D
+    ) async {
+        etapesAtteintes = []
+        var build: RouteBuild?
+
+        if horsLigne,
+            let locale = router.route(
+                from: from, to: dest, costing: travelMode.costing, vias: etapes)
+        {
+            build = RouteBuild(
+                coords: locale.coordinates, steps: locale.steps,
+                km: locale.km, minutes: locale.minutes, hasTolls: locale.hasTolls)
+        }
+        if build == nil {
+            build = await chaineEtapes(
+                points: [from] + etapes + [dest], noms: etapeNoms,
+                transportType: travelMode.transportType)
+        }
+        // Le réseau n'a rien rendu : le paquet installé peut encore répondre,
+        // interrupteur ou non — même règle que sans étapes.
+        if build == nil,
+            let locale = router.route(
+                from: from, to: dest, costing: travelMode.costing, vias: etapes)
+        {
+            build = RouteBuild(
+                coords: locale.coordinates, steps: locale.steps,
+                km: locale.km, minutes: locale.minutes, hasTolls: locale.hasTolls)
+        }
+        guard let build, build.coords.count >= 2 else {
+            itineraireImpossible = raisonSansItineraire()
+            return
+        }
+
+        var option = RouteOption(
+            coordinates: build.coords, steps: build.steps,
+            minutes: build.minutes, km: build.km,
+            turns: build.steps.count, hasTolls: build.hasTolls)
+        option.isSimplest = true
+        option.color = .green
+
+        pendingDestination = dest
+        routeOptions = [option]
+        selectedRouteID = option.id
+        routesExpanded = false
+        fitCoordinates(option.coordinates + [from])
+        let options = [option]
+        Task { await loadElevations(for: options) }
+        Task { await chargeRisques(options: options, dest: dest) }
+    }
+
     /// Itinéraires en transports en commun, calculés par le serveur.
     ///
     /// Chaque itinéraire devient une `RouteOption` ordinaire — tracé, étapes,
@@ -4037,6 +4204,43 @@ struct MapHomeView: View {
         Task { await chargeRisques(options: options, dest: dest) }
     }
 
+    /// Pose une étape là où le doigt l'a désignée, et recalcule.
+    private func ajouterEtape(_ coord: CLLocationCoordinate2D) {
+        ajouteEtape = false
+        etapes.append(coord)
+        etapeNoms.append(
+            String(format: NSLocalizedString("Étape %d", comment: ""), etapes.count))
+        if let dest = pendingDestination {
+            Task { await presentRouteOptions(to: dest) }
+        }
+        // Nomme l'étape quand le réseau le permet ; l'ordinal reste sinon.
+        let index = etapes.count - 1
+        Task {
+            if let lieu = try? await CLGeocoder().reverseGeocodeLocation(
+                CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+            ).first, let nom = lieu.name, index < etapeNoms.count {
+                etapeNoms[index] = nom
+            }
+        }
+    }
+
+    private func retireEtape(_ index: Int) {
+        guard etapes.indices.contains(index) else { return }
+        etapes.remove(at: index)
+        etapeNoms.remove(at: index)
+        etapesAtteintes = []
+        if let dest = pendingDestination {
+            Task { await presentRouteOptions(to: dest) }
+        }
+    }
+
+    /// Les étapes encore devant nous pendant le guidage.
+    private func etapesRestantes() -> [CLLocationCoordinate2D] {
+        etapes.enumerated()
+            .filter { !etapesAtteintes.contains($0.offset) }
+            .map(\.element)
+    }
+
     /// Croise les itinéraires avec ce que l'app sait déjà : les feux sur le
     /// tracé, l'air et la pluie à l'arrivée. Trois requêtes légères, et le
     /// silence en deçà des seuils — une alerte qui crie pour rien apprend à
@@ -4133,15 +4337,41 @@ struct MapHomeView: View {
             nav.rerouteFailed()
             return
         }
+        // Les étapes pas encore atteintes restent au programme : rater une
+        // sortie n'annule pas le passage chez Paul.
+        let restantes = etapesRestantes()
         // Hors ligne assumé : on ne tente même pas le réseau. Attendre son
         // échec ferait patienter le bandeau « Recalcul… » plusieurs secondes,
         // au pire moment — celui où l'on vient de rater une sortie.
         if horsLigne, let local = router.route(from: from, to: to,
-                                               costing: travelMode.costing) {
+                                               costing: travelMode.costing,
+                                               vias: restantes) {
             nav.applyReroute(
                 steps: local.steps, coords: local.coordinates,
                 km: local.km, minutes: local.minutes)
             speedLimit.preload(along: local.coordinates)
+            return
+        }
+        if !restantes.isEmpty {
+            // Le chaînage réseau, puis le repli local, comme au calcul.
+            if let build = await chaineEtapes(
+                points: [from] + restantes + [to], noms: etapeNoms,
+                transportType: travelMode.transportType)
+            {
+                nav.applyReroute(
+                    steps: build.steps, coords: build.coords,
+                    km: build.km, minutes: build.minutes)
+                speedLimit.preload(along: build.coords)
+            } else if let local = router.route(
+                from: from, to: to, costing: travelMode.costing, vias: restantes)
+            {
+                nav.applyReroute(
+                    steps: local.steps, coords: local.coordinates,
+                    km: local.km, minutes: local.minutes)
+                speedLimit.preload(along: local.coordinates)
+            } else {
+                nav.rerouteFailed()
+            }
             return
         }
         guard let route = await drivingRoute(from: from, to: to,
@@ -4251,7 +4481,49 @@ struct MapHomeView: View {
         }
     }
 
-    /// Cap (0 = nord) d'un point vers un autre.
+    /// Enchaîne des tronçons MapKit sur une suite de points — départ, étapes,
+/// destination — en un seul trajet. À chaque étape, l'« arrivée » du tronçon
+/// est remplacée par une consigne d'étape nommée, et le « départ » du tronçon
+/// suivant est retiré : on ne dit pas « vous êtes arrivé » chez Paul quand on
+/// ne fait qu'y passer.
+fileprivate func chaineEtapes(
+    points: [CLLocationCoordinate2D], noms: [String],
+    transportType: MKDirectionsTransportType
+) async -> RouteBuild? {
+    guard points.count >= 2 else { return nil }
+    var coords: [CLLocationCoordinate2D] = []
+    var steps: [NavStep] = []
+    var km = 0.0
+    var minutes = 0.0
+    var tolls = false
+    for i in 0..<(points.count - 1) {
+        guard
+            let leg = await buildRoutes(
+                from: points[i], to: points[i + 1],
+                alternates: false, transportType: transportType
+            ).first
+        else { return nil }
+        var legSteps = leg.steps
+        if i > 0 { legSteps = Array(legSteps.dropFirst()) }
+        if i < points.count - 2 {
+            legSteps = Array(legSteps.dropLast())
+            let nom = i < noms.count ? noms[i] : ""
+            legSteps.append(
+                NavStep(
+                    text: String(
+                        format: NSLocalizedString("Étape : %@", comment: ""), nom),
+                    coord: points[i + 1]))
+        }
+        coords += leg.coords
+        steps += legSteps
+        km += leg.km
+        minutes += leg.minutes
+        tolls = tolls || leg.hasTolls
+    }
+    return RouteBuild(coords: coords, steps: steps, km: km, minutes: minutes, hasTolls: tolls)
+}
+
+/// Cap (0 = nord) d'un point vers un autre.
     private func bearingBetween(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
         let lat1 = a.latitude * .pi / 180, lat2 = b.latitude * .pi / 180
         let dLon = (b.longitude - a.longitude) * .pi / 180
