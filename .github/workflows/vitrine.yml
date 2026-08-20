@@ -43,7 +43,7 @@ jobs:
     steps:
       # Historique complet : l'étape finale rejoue sur la pointe du moment
       # (`pull --rebase`), ce qu'un clone superficiel ne permet pas.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

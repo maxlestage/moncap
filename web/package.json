@@ -9,13 +9,13 @@
     "serve": "bun run build && bun static-server.ts 8080 dist"
   },
   "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "bun-types": "^1.4.0",
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   }
 }
