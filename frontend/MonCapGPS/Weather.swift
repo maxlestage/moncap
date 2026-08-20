@@ -9,9 +9,30 @@ final class WeatherService: ObservableObject {
     @Published private(set) var temperature: Int?
     /// Code temps WMO courant, nil si inconnu.
     @Published private(set) var code: Int?
+    /// Quand la mesure affichée a été relevée : la pastille en dit l'âge dès
+    /// qu'il compte.
+    @Published private(set) var mesureA: Date?
 
     private var lastFetch = Date.distantPast
     private var lastCoord: CLLocationCoordinate2D?
+    private static let cle = "moncap.meteo.derniere"
+
+    init() {
+        // Ressert la dernière mesure au lancement : sans réseau, une météo
+        // d'il y a une heure vaut mieux qu'une pastille absente — son âge est
+        // affiché dès qu'il compte, et au-delà d'un jour on préfère se taire.
+        if let d = UserDefaults.standard.dictionary(forKey: Self.cle),
+            let t = d["t"] as? Int, let c = d["c"] as? Int,
+            let quand = d["quand"] as? Double
+        {
+            let date = Date(timeIntervalSince1970: quand)
+            if Date().timeIntervalSince(date) < 86_400 {
+                temperature = t
+                code = c
+                mesureA = date
+            }
+        }
+    }
 
     /// À appeler à chaque position : rafraîchit au plus toutes les 10 min, ou
     /// dès qu'on s'est déplacé de plus de 3 km.
@@ -28,6 +49,11 @@ final class WeatherService: ObservableObject {
             if let w = await Self.fetch(near: c) {
                 temperature = w.temperature
                 code = w.code
+                mesureA = Date()
+                UserDefaults.standard.set(
+                    ["t": w.temperature, "c": w.code,
+                     "quand": Date().timeIntervalSince1970],
+                    forKey: Self.cle)
             }
         }
     }

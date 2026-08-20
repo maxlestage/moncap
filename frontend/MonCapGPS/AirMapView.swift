@@ -25,7 +25,7 @@ import SwiftUI
 /// parce qu'il dit autre chose : au-dessus du Sahara il monte à 1142 quand
 /// l'européen plafonne à 33 — les poussières n'y sont pas pondérées pareil. Les
 /// deux ne se superposent pas, d'où l'échelle nommée à l'écran.
-struct AirPoint: Identifiable, Decodable {
+struct AirPoint: Identifiable, Codable {
     var id: String { "\(lat),\(lon)" }
     let lat: Double
     let lon: Double
@@ -434,10 +434,27 @@ final class AirService: ObservableObject {
 final class AirAutour: ObservableObject {
     /// La maille qui contient la position, ou la plus proche servie.
     @Published private(set) var point: AirPoint?
+    /// Quand la mesure affichée a été relevée.
+    @Published private(set) var mesureA: Date?
 
     private var caseServie: String?
     private var date = Date.distantPast
     private let base = APIClient().baseURL
+    private static let cle = "moncap.air.derniere"
+    private static let cleDate = "moncap.air.derniereDate"
+
+    init() {
+        // Même politique que la météo : la dernière mesure est resservie au
+        // lancement, datée, et passée un jour on se tait.
+        let quand = UserDefaults.standard.double(forKey: Self.cleDate)
+        if quand > 0, Date().timeIntervalSince1970 - quand < 86_400,
+            let brut = UserDefaults.standard.data(forKey: Self.cle),
+            let p = try? JSONDecoder().decode(AirPoint.self, from: brut)
+        {
+            point = p
+            mesureA = Date(timeIntervalSince1970: quand)
+        }
+    }
 
     /// À appeler à chaque position, comme la météo : le tri se fait ici.
     func update(_ c: CLLocationCoordinate2D) {
@@ -468,7 +485,14 @@ final class AirAutour: ObservableObject {
                 caseServie = nil
                 return
             }
-            point = points.first { $0.contient(c) } ?? points.first
+            let p = points.first { $0.contient(c) } ?? points.first
+            point = p
+            mesureA = Date()
+            if let p, let brut = try? JSONEncoder().encode(p) {
+                UserDefaults.standard.set(brut, forKey: Self.cle)
+                UserDefaults.standard.set(
+                    Date().timeIntervalSince1970, forKey: Self.cleDate)
+            }
         }
     }
 }

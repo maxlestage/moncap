@@ -3873,6 +3873,22 @@
         }
       }
     },
+    "il y a %d h": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d h ago"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hace %d h"
+          }
+        }
+      }
+    },
     "la destination": {
       "localizations": {
         "en": {
