@@ -6,6 +6,7 @@ import {
   MAQUETTE_REGIONS,
   MODE_ACTIF,
   MODES,
+  SOURCES,
 } from "./content";
 import type { Contenu } from "./langues";
 import { LANGUES } from "./langues";
@@ -375,39 +376,94 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
         </div>
       </main>
 
-      {/* Le pied reprend le bleu du bandeau : la page se ferme comme elle
-          s'ouvre, et le bas de l'écran cesse d'être une zone blanche sans
-          rien. Il porte aussi le choix de langue, qu'on ne peut pas
-          atteindre autrement après avoir lu jusqu'ici. */}
-      <footer>
-        <div className="dedans">
-          <div className="pied-haut">
-            <p className="marque">
-              <img
-                className="logo"
-                src={res.logo}
-                width="40"
-                height="40"
-                alt=""
-              />
-              MonCap GPS
-            </p>
-            <Langues c={c} />
-          </div>
-
-          <p className="signature">
-            {c.signature} <strong>{AUTEUR}</strong>.
-          </p>
-
-          <p className="pied-liens">
-            <a className="bouton" href={CONNEXION}>
-              {c.seConnecter}
-            </a>
-          </p>
-
-          <p className="credits">{c.credits}</p>
-        </div>
-      </footer>
+      <Pied c={c} res={res} />
     </>
+  );
+}
+
+/**
+ * Le pied complet, partagé entre la page principale et les pages légales :
+ * la marque et son slogan, les sections de la page, les sources de données
+ * — chacune liée —, le légal, la signature et le copyright.
+ *
+ * Il reprend le bleu du bandeau : la page se ferme comme elle s'ouvre. Il
+ * porte aussi le choix de langue, qu'on ne peut pas atteindre autrement
+ * après avoir lu jusqu'ici.
+ *
+ * Les ancres visent toujours la page principale (`/#id`, `/es#id`…) : le
+ * même pied sert depuis une page légale, où `#id` seul ne mènerait nulle
+ * part.
+ */
+export function Pied({ c, res }: { c: Contenu; res: Ressources }) {
+  return (
+    <footer>
+      <div className="dedans">
+        <div className="pied-haut">
+          <p className="marque">
+            <img
+              className="logo"
+              src={res.logo}
+              width="40"
+              height="40"
+              alt=""
+            />
+            MonCap GPS
+          </p>
+          <Langues c={c} />
+        </div>
+
+        <p className="slogan">{c.pied.slogan}</p>
+
+        <p className="pied-liens">
+          <a className="bouton" href={CONNEXION}>
+            {c.seConnecter}
+          </a>
+        </p>
+
+        <nav className="pied-colonnes">
+          <div>
+            <h3>{c.pied.decouvrir}</h3>
+            <ul>
+              {c.pied.ancres.map((a) => (
+                <li key={a.id}>
+                  <a href={`${c.chemin}#${a.id}`}>{a.nom}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3>{c.pied.donnees}</h3>
+            <ul>
+              {SOURCES.map((s) => (
+                <li key={s.nom}>
+                  <a href={s.url} rel="external noopener">
+                    {s.nom}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3>{c.pied.legalTitre}</h3>
+            <ul>
+              <li>
+                <a href={c.mentions.chemin}>{c.mentions.titre}</a>
+              </li>
+              <li>
+                <a href={c.confidentialite.chemin}>{c.confidentialite.titre}</a>
+              </li>
+            </ul>
+          </div>
+        </nav>
+
+        <p className="signature">
+          {c.signature} <strong>{AUTEUR}</strong>.
+        </p>
+        <p className="credits">{c.credits}</p>
+        <p className="copyright">
+          © {new Date().getFullYear()} {AUTEUR}. {c.pied.copyright}
+        </p>
+      </div>
+    </footer>
   );
 }
