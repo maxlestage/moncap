@@ -70,6 +70,35 @@ export type Contenu = {
   };
   readonly signature: string;
   readonly credits: string;
+  /** Le pied commercial : slogan, titres de colonnes, ancres des sections. */
+  readonly pied: {
+    readonly slogan: string;
+    readonly decouvrir: string;
+    /** Liens vers les sections de la page — les `id` sont ceux d'App.tsx. */
+    readonly ancres: readonly { readonly id: string; readonly nom: string }[];
+    readonly donnees: string;
+    readonly legalTitre: string;
+    readonly copyright: string;
+  };
+  readonly mentions: PageLegale;
+  readonly confidentialite: PageLegale;
+};
+
+/**
+ * Une page légale : mentions ou confidentialité. Le corps est du texte nu,
+ * sans lien ni balise — ce qui s'y dit doit rester vrai sans entretien, et
+ * une adresse morte dans une page légale serait pire qu'ailleurs.
+ */
+export type PageLegale = {
+  /** Adresse de la page, préfixée par la langue hors français. */
+  readonly chemin: string;
+  readonly titre: string;
+  readonly description: string;
+  readonly retour: string;
+  readonly sections: readonly {
+    readonly titre: string;
+    readonly corps: readonly string[];
+  }[];
 };
 
 /** Assemble la pile en associant les libellés de domaine aux outils. */
@@ -279,6 +308,97 @@ const FR: Contenu = {
   signature: "Conçu et développé par",
   credits:
     "Cartes et données routières OpenStreetMap (ODbL), calcul d'itinéraire Valhalla, trafic TomTom, météo open-meteo, prix des carburants data.economie.gouv.fr, foyers NASA FIRMS, photos aériennes IGN.",
+  pied: {
+    slogan: "Le GPS qui compare, puis vous guide — avec ou sans réseau.",
+    decouvrir: "Découvrir",
+    ancres: [
+      { id: "comparateur-titre", nom: "Le comparateur" },
+      { id: "guidage-titre", nom: "Le guidage" },
+      { id: "lieux-titre", nom: "Autour de vous" },
+      { id: "atouts-titre", nom: "Et aussi" },
+      { id: "hors-ligne-titre", nom: "Hors ligne" },
+      { id: "preuve-titre", nom: "La preuve" },
+      { id: "pile-titre", nom: "Sous le capot" },
+      { id: "franchise-titre", nom: "Ce qu'elle ne fait pas" },
+    ],
+    donnees: "Données et moteurs",
+    legalTitre: "Légal",
+    copyright: "Tous droits réservés.",
+  },
+  mentions: {
+    chemin: "/mentions-legales",
+    titre: "Mentions légales",
+    description:
+      "Éditeur, hébergement et licences des données du site et de l'application MonCap GPS.",
+    retour: "← Retour au site",
+    sections: [
+      {
+        titre: "Éditeur",
+        corps: [
+          "Ce site et l'application MonCap GPS sont édités par Maxime Nathan Lestage.",
+          "Contact : maxlestage@icloud.com.",
+        ],
+      },
+      {
+        titre: "Hébergement",
+        corps: [
+          "Le site et son serveur sont hébergés par Heroku (Salesforce, Inc.), 415 Mission Street, San Francisco, CA 94105, États-Unis.",
+        ],
+      },
+      {
+        titre: "Propriété intellectuelle",
+        corps: [
+          "Le code, les textes et la marque MonCap GPS appartiennent à leur auteur. Les cartes et données routières proviennent d'OpenStreetMap, © les contributeurs OpenStreetMap, sous licence ODbL.",
+          "Les autres données affichées — trafic, météo, qualité de l'air, prix des carburants, foyers d'incendie, photos aériennes — restent la propriété de leurs sources respectives, chacune sous sa propre licence.",
+        ],
+      },
+    ],
+  },
+  confidentialite: {
+    chemin: "/confidentialite",
+    titre: "Confidentialité",
+    description:
+      "Ce que MonCap GPS collecte, ce qui reste sur votre téléphone, et vos droits.",
+    retour: "← Retour au site",
+    sections: [
+      {
+        titre: "Ce site",
+        corps: [
+          "Ce site ne dépose aucun cookie, ne charge aucun script, n'embarque ni traceur ni mesure d'audience. Les seules requêtes que votre navigateur envoie servent à afficher la page.",
+        ],
+      },
+      {
+        titre: "Le compte",
+        corps: [
+          "L'application fonctionne avec un compte : un pseudonyme et un mot de passe (conservé haché) sont enregistrés sur le serveur, avec vos recherches récentes de destination. Aucune adresse électronique ni numéro de téléphone n'est demandé.",
+        ],
+      },
+      {
+        titre: "La position",
+        corps: [
+          "Votre position est traitée sur l'appareil pour le guidage. Elle n'est envoyée au serveur que lorsque vous partagez votre trajet en direct, le temps de ce partage. Les favoris Domicile et Travail restent sur le téléphone.",
+        ],
+      },
+      {
+        titre: "Les tiers",
+        corps: [
+          "Certaines données affichées sont demandées directement à leurs sources — météo, qualité de l'air, altitude. Ces services reçoivent alors les coordonnées de la zone demandée, jamais votre identité ni votre compte.",
+        ],
+      },
+      {
+        titre: "Publicité",
+        corps: [
+          "Aucune publicité, aucune revente de données, aucune mesure d'audience. L'application ne vit pas de vos données.",
+        ],
+      },
+      {
+        titre: "Vos droits",
+        corps: [
+          "Vous pouvez demander l'accès, la rectification ou la suppression de ce qui est rattaché à votre compte en écrivant à maxlestage@icloud.com. La suppression du compte emporte celle de ses données.",
+        ],
+      },
+    ],
+  },
 };
 
 const ES: Contenu = {
@@ -480,6 +600,97 @@ const ES: Contenu = {
   signature: "Diseñado y desarrollado por",
   credits:
     "Mapas y datos viarios OpenStreetMap (ODbL), cálculo de rutas Valhalla, tráfico TomTom, meteorología open-meteo, precios de carburantes data.economie.gouv.fr, focos NASA FIRMS, fotos aéreas IGN.",
+  pied: {
+    slogan: "El GPS que compara y luego te guía — con o sin cobertura.",
+    decouvrir: "Descubrir",
+    ancres: [
+      { id: "comparateur-titre", nom: "El comparador" },
+      { id: "guidage-titre", nom: "La guía" },
+      { id: "lieux-titre", nom: "A tu alrededor" },
+      { id: "atouts-titre", nom: "Y además" },
+      { id: "hors-ligne-titre", nom: "Sin conexión" },
+      { id: "preuve-titre", nom: "La prueba" },
+      { id: "pile-titre", nom: "Bajo el capó" },
+      { id: "franchise-titre", nom: "Lo que no hace" },
+    ],
+    donnees: "Datos y motores",
+    legalTitre: "Legal",
+    copyright: "Todos los derechos reservados.",
+  },
+  mentions: {
+    chemin: "/es/aviso-legal",
+    titre: "Aviso legal",
+    description:
+      "Editor, alojamiento y licencias de los datos del sitio y de la aplicación MonCap GPS.",
+    retour: "← Volver al sitio",
+    sections: [
+      {
+        titre: "Editor",
+        corps: [
+          "Este sitio y la aplicación MonCap GPS son editados por Maxime Nathan Lestage.",
+          "Contacto: maxlestage@icloud.com.",
+        ],
+      },
+      {
+        titre: "Alojamiento",
+        corps: [
+          "El sitio y su servidor están alojados en Heroku (Salesforce, Inc.), 415 Mission Street, San Francisco, CA 94105, Estados Unidos.",
+        ],
+      },
+      {
+        titre: "Propiedad intelectual",
+        corps: [
+          "El código, los textos y la marca MonCap GPS pertenecen a su autor. Los mapas y datos viarios provienen de OpenStreetMap, © los contribuidores de OpenStreetMap, bajo licencia ODbL.",
+          "Los demás datos mostrados — tráfico, meteorología, calidad del aire, precios de carburantes, focos de incendio, fotos aéreas — siguen siendo propiedad de sus fuentes respectivas, cada una bajo su propia licencia.",
+        ],
+      },
+    ],
+  },
+  confidentialite: {
+    chemin: "/es/privacidad",
+    titre: "Privacidad",
+    description:
+      "Lo que MonCap GPS recoge, lo que se queda en tu teléfono, y tus derechos.",
+    retour: "← Volver al sitio",
+    sections: [
+      {
+        titre: "Este sitio",
+        corps: [
+          "Este sitio no deposita ninguna cookie, no carga ningún script, no lleva rastreadores ni medición de audiencia. Las únicas peticiones que envía tu navegador sirven para mostrar la página.",
+        ],
+      },
+      {
+        titre: "La cuenta",
+        corps: [
+          "La aplicación funciona con una cuenta: un seudónimo y una contraseña (guardada con hash) se registran en el servidor, junto con tus búsquedas recientes de destino. No se pide dirección de correo ni número de teléfono.",
+        ],
+      },
+      {
+        titre: "La posición",
+        corps: [
+          "Tu posición se procesa en el dispositivo para la guía. Solo se envía al servidor cuando compartes tu trayecto en directo, mientras dura ese compartir. Los favoritos Casa y Trabajo se quedan en el teléfono.",
+        ],
+      },
+      {
+        titre: "Los terceros",
+        corps: [
+          "Algunos datos mostrados se piden directamente a sus fuentes — meteorología, calidad del aire, altitud. Esos servicios reciben entonces las coordenadas de la zona pedida, nunca tu identidad ni tu cuenta.",
+        ],
+      },
+      {
+        titre: "Publicidad",
+        corps: [
+          "Ninguna publicidad, ninguna reventa de datos, ninguna medición de audiencia. La aplicación no vive de tus datos.",
+        ],
+      },
+      {
+        titre: "Tus derechos",
+        corps: [
+          "Puedes pedir el acceso, la rectificación o la supresión de lo que está vinculado a tu cuenta escribiendo a maxlestage@icloud.com. La supresión de la cuenta conlleva la de sus datos.",
+        ],
+      },
+    ],
+  },
 };
 
 const EN: Contenu = {
@@ -681,6 +892,97 @@ const EN: Contenu = {
   signature: "Designed and built by",
   credits:
     "Maps and road data OpenStreetMap (ODbL), routing Valhalla, traffic TomTom, weather open-meteo, fuel prices data.economie.gouv.fr, hotspots NASA FIRMS, aerial imagery IGN.",
+  pied: {
+    slogan: "The GPS that compares, then guides you — with or without signal.",
+    decouvrir: "Discover",
+    ancres: [
+      { id: "comparateur-titre", nom: "The comparator" },
+      { id: "guidage-titre", nom: "Guidance" },
+      { id: "lieux-titre", nom: "Around you" },
+      { id: "atouts-titre", nom: "And also" },
+      { id: "hors-ligne-titre", nom: "Offline" },
+      { id: "preuve-titre", nom: "The proof" },
+      { id: "pile-titre", nom: "Under the hood" },
+      { id: "franchise-titre", nom: "What it doesn't do" },
+    ],
+    donnees: "Data and engines",
+    legalTitre: "Legal",
+    copyright: "All rights reserved.",
+  },
+  mentions: {
+    chemin: "/en/legal",
+    titre: "Legal notice",
+    description:
+      "Publisher, hosting and data licences for the MonCap GPS site and app.",
+    retour: "← Back to the site",
+    sections: [
+      {
+        titre: "Publisher",
+        corps: [
+          "This site and the MonCap GPS app are published by Maxime Nathan Lestage.",
+          "Contact: maxlestage@icloud.com.",
+        ],
+      },
+      {
+        titre: "Hosting",
+        corps: [
+          "The site and its server are hosted by Heroku (Salesforce, Inc.), 415 Mission Street, San Francisco, CA 94105, United States.",
+        ],
+      },
+      {
+        titre: "Intellectual property",
+        corps: [
+          "The code, texts and the MonCap GPS name belong to their author. Maps and road data come from OpenStreetMap, © OpenStreetMap contributors, under the ODbL licence.",
+          "The other data shown — traffic, weather, air quality, fuel prices, fire hotspots, aerial imagery — remain the property of their respective sources, each under its own licence.",
+        ],
+      },
+    ],
+  },
+  confidentialite: {
+    chemin: "/en/privacy",
+    titre: "Privacy",
+    description:
+      "What MonCap GPS collects, what stays on your phone, and your rights.",
+    retour: "← Back to the site",
+    sections: [
+      {
+        titre: "This site",
+        corps: [
+          "This site sets no cookies, loads no scripts, and carries no trackers or analytics. The only requests your browser sends are the ones needed to display the page.",
+        ],
+      },
+      {
+        titre: "The account",
+        corps: [
+          "The app works with an account: a pseudonym and a password (stored hashed) are kept on the server, along with your recent destination searches. No email address or phone number is asked for.",
+        ],
+      },
+      {
+        titre: "Your position",
+        corps: [
+          "Your position is processed on the device for guidance. It is only sent to the server while you share your trip live, for the duration of that share. The Home and Work favourites stay on the phone.",
+        ],
+      },
+      {
+        titre: "Third parties",
+        corps: [
+          "Some of the data shown is requested directly from its sources — weather, air quality, elevation. Those services then receive the coordinates of the requested area, never your identity or your account.",
+        ],
+      },
+      {
+        titre: "Advertising",
+        corps: [
+          "No advertising, no resale of data, no analytics. The app does not live off your data.",
+        ],
+      },
+      {
+        titre: "Your rights",
+        corps: [
+          "You can request access to, correction of, or deletion of what is attached to your account by writing to maxlestage@icloud.com. Deleting the account deletes its data.",
+        ],
+      },
+    ],
+  },
 };
 
 export const LANGUES: readonly Contenu[] = [FR, ES, EN];

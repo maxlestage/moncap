@@ -160,6 +160,27 @@ export const OUTILS: readonly (readonly string[])[] = [
 
 export const AUTEUR = "Maxime Nathan Lestage";
 
+/** Contact de l'éditeur, affiché dans les mentions légales. */
+export const CONTACT = "maxlestage@icloud.com";
+
+/**
+ * Les sources de données et moteurs, avec l'adresse de chacun — le pied les
+ * lie, la ligne de crédits les nomme. Pas de lien vers notre dépôt : il est
+ * privé, un visiteur recevrait un 404 (voir liens.test.tsx).
+ */
+export type Source = { readonly nom: string; readonly url: string };
+
+export const SOURCES: readonly Source[] = [
+  { nom: "OpenStreetMap", url: "https://www.openstreetmap.org/copyright" },
+  { nom: "Valhalla", url: "https://valhalla.github.io/valhalla/" },
+  { nom: "Transitous", url: "https://transitous.org" },
+  { nom: "Open-Meteo", url: "https://open-meteo.com" },
+  { nom: "NASA FIRMS", url: "https://firms.modaps.eosdis.nasa.gov" },
+  { nom: "data.economie.gouv.fr", url: "https://data.economie.gouv.fr" },
+  { nom: "IGN", url: "https://www.ign.fr" },
+  { nom: "TomTom", url: "https://www.tomtom.com" },
+];
+
 /**
  * Le front web, servi par le même backend que cette page. Chemin relatif et
  * non absolu : la vitrine tourne aussi bien sur un dyno Heroku qu'en local,

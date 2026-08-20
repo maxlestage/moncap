@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "./App";
+import { Legale } from "./Legale";
+import { SOURCES } from "./content";
 import { LANGUES } from "./langues";
 
 /**
@@ -12,25 +14,51 @@ import { LANGUES } from "./langues";
  * une adresse morte se rend exactement comme une adresse valide.
  *
  * Ce test lit donc les `href` du rendu et n'accepte qu'une liste connue. Il
- * vaut pour tout lien futur, pas seulement pour ceux-là.
+ * vaut pour tout lien futur, pas seulement pour ceux-là. La liste est
+ * calculée : les pages internes viennent de `langues.ts` (le serveur doit
+ * servir chacune — voir la vitrine dans `src/main.rs`), les externes de
+ * `SOURCES`.
  */
 
-const AUTORISEES = new Set(["/", "/es", "/en", "/app"]);
+const AUTORISEES = new Set<string>([
+  "/app",
+  ...LANGUES.map((l) => l.chemin),
+  ...LANGUES.map((l) => l.mentions.chemin),
+  ...LANGUES.map((l) => l.confidentialite.chemin),
+  // Les ancres du pied visent la page principale de la langue courante.
+  ...LANGUES.flatMap((l) => l.pied.ancres.map((a) => `${l.chemin}#${a.id}`)),
+  ...SOURCES.map((s) => s.url),
+]);
 
 function adresses(html: string): string[] {
   return [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]!);
 }
 
-test("la page ne pointe que vers des adresses que ce serveur sert", () => {
-  for (const c of LANGUES) {
-    const html = renderToStaticMarkup(
-      <App c={c} res={{ logo: "/vitrine/logo.webp" }} />,
-    );
+/** Toutes les pages rendues, principales et légales, dans chaque langue. */
+function rendus(): { code: string; html: string }[] {
+  const res = { logo: "/vitrine/logo.webp" };
+  return LANGUES.flatMap((c) => [
+    { code: c.code, html: renderToStaticMarkup(<App c={c} res={res} />) },
+    {
+      code: `${c.code} mentions`,
+      html: renderToStaticMarkup(<Legale c={c} page={c.mentions} res={res} />),
+    },
+    {
+      code: `${c.code} confidentialité`,
+      html: renderToStaticMarkup(
+        <Legale c={c} page={c.confidentialite} res={res} />,
+      ),
+    },
+  ]);
+}
+
+test("les pages ne pointent que vers des adresses que ce serveur sert", () => {
+  for (const { code, html } of rendus()) {
     for (const a of adresses(html)) {
       // Les ressources construites portent une empreinte dans leur nom : on
       // ne peut pas les énumérer, seulement vérifier leur préfixe.
       if (a.startsWith("/vitrine/")) continue;
-      expect(AUTORISEES.has(a), `${c.code} : adresse inattendue « ${a} »`).toBe(
+      expect(AUTORISEES.has(a), `${code} : adresse inattendue « ${a} »`).toBe(
         true,
       );
     }
@@ -38,11 +66,8 @@ test("la page ne pointe que vers des adresses que ce serveur sert", () => {
 });
 
 test("aucun lien vers le dépôt privé", () => {
-  for (const c of LANGUES) {
-    const html = renderToStaticMarkup(
-      <App c={c} res={{ logo: "/vitrine/logo.webp" }} />,
-    );
-    expect(html, c.code).not.toContain("github.com");
+  for (const { code, html } of rendus()) {
+    expect(html, code).not.toContain("github.com");
   }
 });
 

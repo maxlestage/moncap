@@ -192,6 +192,61 @@ test("chaque langue garde la même matière", () => {
 });
 
 /**
+ * Le pied commercial et les pages légales : présents dans chaque langue,
+ * aux bonnes adresses, et disant la même matière.
+ */
+test("le pied et les pages légales tiennent dans chaque langue", () => {
+  const IDS = [
+    "comparateur-titre",
+    "guidage-titre",
+    "lieux-titre",
+    "atouts-titre",
+    "hors-ligne-titre",
+    "preuve-titre",
+    "pile-titre",
+    "franchise-titre",
+  ];
+  const chemins = new Set<string>();
+  for (const l of LANGUES) {
+    // Les ancres du pied suivent les sections réelles de la page, dans
+    // l'ordre : un id qui divergerait ferait un lien qui remonte en haut
+    // de page sans un mot.
+    expect(l.pied.ancres.map((a) => a.id), l.code).toEqual(IDS);
+    for (const a of l.pied.ancres) {
+      expect(a.nom.trim().length, `${l.code} : ancre sans nom`).toBeGreaterThan(0);
+    }
+    for (const t of [l.pied.slogan, l.pied.decouvrir, l.pied.donnees, l.pied.legalTitre, l.pied.copyright]) {
+      expect(t.trim().length, `${l.code} : pied vide`).toBeGreaterThan(0);
+    }
+
+    for (const p of [l.mentions, l.confidentialite]) {
+      chemins.add(p.chemin);
+      // Hors français, l'adresse porte la langue — comme les pages mêmes.
+      if (l.code !== "fr") {
+        expect(p.chemin, l.code).toStartWith(`/${l.code}/`);
+      }
+      expect(p.sections.length, `${l.code} ${p.titre}`).toBeGreaterThanOrEqual(3);
+      for (const s of p.sections) {
+        expect(s.titre.trim().length).toBeGreaterThan(0);
+        for (const c of s.corps) expect(c.trim().length).toBeGreaterThan(0);
+      }
+    }
+    // La matière obligée : un contact dans les mentions, l'ODbL dite ; la
+    // confidentialité parle des cookies et des droits.
+    const mentions = l.mentions.sections.flatMap((s) => s.corps).join(" ");
+    expect(mentions, l.code).toContain("maxlestage@icloud.com");
+    expect(mentions, l.code).toContain("ODbL");
+    const conf = sansAccents(
+      l.confidentialite.sections.flatMap((s) => s.corps).join(" "),
+    );
+    expect(conf, l.code).toContain("cookie");
+    expect(conf, l.code).toContain("maxlestage@icloud.com");
+  }
+  // Six adresses légales, toutes distinctes.
+  expect(chemins.size).toBe(LANGUES.length * 2);
+});
+
+/**
  * Les langues avancent ensemble : une carte ajoutée en français seulement
  * ferait trois pages qui ne racontent plus la même application.
  */
