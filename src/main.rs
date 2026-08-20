@@ -3631,6 +3631,26 @@ struct AccountInfo {
     trips: u64,
     positions: u64,
     searches: u64,
+    /// MonCap Plus offert par la maison : le pseudo figure dans la liste
+    /// d'invités (variable PLUS_OFFERT). Une vieille app ignore le champ.
+    plus_offert: bool,
+}
+
+/// Le pseudo figure-t-il dans une liste d'invités ? Pseudos séparés par des
+/// virgules, espaces tolérés, casse ignorée — la liste est tapée à la main
+/// dans la configuration Heroku, elle doit pardonner.
+fn est_invite(liste: &str, username: &str) -> bool {
+    liste.split(',').any(|p| {
+        let p = p.trim();
+        !p.is_empty() && p.eq_ignore_ascii_case(username.trim())
+    })
+}
+
+/// Les invités de la maison : MonCap Plus offert, sans achat. La liste vit
+/// dans la variable d'environnement PLUS_OFFERT — ajouter un ami, c'est
+/// ajouter son pseudo dans la configuration, sans déploiement.
+fn plus_offert(username: &str) -> bool {
+    est_invite(&std::env::var("PLUS_OFFERT").unwrap_or_default(), username)
 }
 
 /// Barème des points : signaler rapporte le plus (c'est ce qui aide les autres).
@@ -3666,6 +3686,7 @@ async fn account_info(
             .count(&db),
     )?;
     Ok(Json(AccountInfo {
+        plus_offert: plus_offert(&found.username),
         username: found.username,
         points: score(alerts, trips, positions, searches),
         alerts,
@@ -4176,6 +4197,19 @@ mod tests {
     /// tourne au déploiement. Une route ajoutée sans reconstruire la vitrine
     /// (`bun run build`, puis versionner `dist`) servirait un 404 — ce test
     /// l'attrape avant le déploiement.
+    /// La liste d'invités est tapée à la main dans la configuration : elle
+    /// doit pardonner les espaces et la casse, et ne jamais matcher à moitié.
+    #[test]
+    fn liste_invites_pardonne_la_saisie() {
+        assert!(est_invite("paul,marie", "paul"));
+        assert!(est_invite(" Paul , marie ", "paul"));
+        assert!(est_invite("paul", "PAUL"));
+        assert!(!est_invite("paul,marie", "pau"));
+        assert!(!est_invite("paulette", "paul"));
+        assert!(!est_invite("", "paul"));
+        assert!(!est_invite(",,", ""));
+    }
+
     #[test]
     fn pages_vitrine_construites() {
         for chemin in [
