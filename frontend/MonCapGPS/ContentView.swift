@@ -630,6 +630,10 @@ struct MapHomeView: View {
     /// « maintenant » interdisait de préparer le bus de demain matin.
     @State private var transitQuand = TransitQuand.maintenant
     @State private var transitDate = Date()
+    /// Ce que chaque variante rencontre en chemin (feux), par identifiant.
+    @State private var risquesParOption: [UUID: String] = [:]
+    /// Ce qui attend à l'arrivée, commun à toutes les variantes : air, pluie.
+    @State private var risquesArrivee: [String] = []
     /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
     @AppStorage("moncap.firmsKey") private var firmsKey = ""
     /// Partage de position en direct.
@@ -2342,6 +2346,15 @@ struct MapHomeView: View {
             Text(routeCoreText(o))
                 .lineLimit(compact || o.transit != nil ? 1 : 2)
                 .minimumScaleFactor(compact || o.transit != nil ? 0.6 : 0.85)
+            // Ce que cette variante-là rencontre : un feu sur son tracé.
+            // Propre à chacune — c'est parfois précisément ce qui les départage.
+            if let feu = risquesParOption[o.id] {
+                Text(feu)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
             if let elev = routeElevationText(o) {
                 Text(elev)
                     .lineLimit(1)
@@ -2388,6 +2401,16 @@ struct MapHomeView: View {
                 if let dest = pendingDestination {
                     Task { await presentRouteOptions(to: dest) }
                 }
+            }
+
+            // Ce qui attend à l'arrivée vaut pour toutes les variantes :
+            // dit une fois, ici, plutôt que répété sur chaque carte.
+            ForEach(risquesArrivee, id: \.self) { r in
+                Text(r)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
 
             // En transports, l'heure est un paramètre du calcul, pas un
@@ -3894,6 +3917,9 @@ struct MapHomeView: View {
 
         // Enrichit chaque itinéraire avec son dénivelé (en tâche de fond).
         Task { await loadElevations(for: options) }
+        // Et avec ce qu'il va rencontrer : feux sur le tracé, air et pluie à
+        // l'arrivée (en tâche de fond aussi).
+        Task { await chargeRisques(options: options, dest: dest) }
     }
 
     /// Itinéraires en transports en commun, calculés par le serveur.
@@ -4006,7 +4032,55 @@ struct MapHomeView: View {
         selectedRouteID = options.first { $0.isSimplest }?.id ?? options.first?.id
         routesExpanded = false
         fitCoordinates(options.flatMap { $0.coordinates } + [from])
-        // Pas de dénivelé : dans un tram, la côte est l'affaire du tram.
+        // Pas de dénivelé : dans un tram, la côte est l'affaire du tram. Les
+        // risques, si : un feu ne regarde pas le mode de transport.
+        Task { await chargeRisques(options: options, dest: dest) }
+    }
+
+    /// Croise les itinéraires avec ce que l'app sait déjà : les feux sur le
+    /// tracé, l'air et la pluie à l'arrivée. Trois requêtes légères, et le
+    /// silence en deçà des seuils — une alerte qui crie pour rien apprend à
+    /// être ignorée.
+    private func chargeRisques(
+        options: [RouteOption], dest: CLLocationCoordinate2D
+    ) async {
+        risquesParOption = [:]
+        risquesArrivee = []
+
+        // Une seule requête de feux pour toutes les variantes : elles longent
+        // le même pays.
+        let echantillons = options.flatMap { sampleCoords($0.coordinates, max: 40) }
+        let feux = await RouteRisques.feux(couvrant: echantillons)
+        if !feux.isEmpty {
+            for o in options {
+                if let km = RouteRisques.kmDuPremierFeu(trace: o.coordinates, feux: feux) {
+                    risquesParOption[o.id] = String(
+                        format: NSLocalizedString(
+                            "🔥 Traverse une zone de feux vers le km %d", comment: ""),
+                        km)
+                }
+            }
+        }
+
+        if let niveau = await RouteRisques.niveauAirArrivee(dest), niveau >= 3 {
+            let paliers = [
+                "Bon", "Correct", "Dégradé", "Mauvais", "Très mauvais",
+                "Extrêmement mauvais",
+            ]
+            risquesArrivee.append(
+                String(
+                    format: NSLocalizedString("🫁 Air %@ à l'arrivée", comment: ""),
+                    NSLocalizedString(paliers[min(niveau, 5)], comment: "")))
+        }
+
+        let minutes = options.first?.minutes ?? 0
+        if let proba = await RouteRisques.pluieArrivee(dest, dans: minutes), proba >= 50 {
+            risquesArrivee.append(
+                String(
+                    format: NSLocalizedString(
+                        "🌧️ Pluie probable à l'arrivée (%d %%)", comment: ""),
+                    proba))
+        }
     }
 
     /// Récupère le dénivelé (côte / descente) de chaque itinéraire et met à jour

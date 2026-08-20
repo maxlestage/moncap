@@ -4337,6 +4337,22 @@
         }
       }
     },
+    "🌧️ Pluie probable à l'arrivée (%d %%)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🌧️ Rain likely at arrival (%d %%)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🌧️ Lluvia probable a la llegada (%d %%)"
+          }
+        }
+      }
+    },
     "👍 Toujours là": {
       "localizations": {
         "en": {
@@ -4365,6 +4381,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "👎 Ya no está"
+          }
+        }
+      }
+    },
+    "🔥 Traverse une zone de feux vers le km %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔥 Crosses a wildfire area around km %d"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔥 Atraviesa una zona de incendios hacia el km %d"
+          }
+        }
+      }
+    },
+    "🫁 Air %@ à l'arrivée": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🫁 %@ air at arrival"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🫁 Aire %@ a la llegada"
           }
         }
       }
