@@ -18,10 +18,18 @@ body {
   color: #1a1d21;
 }
 
+/* Mobile d'abord : les valeurs nues visent le téléphone, les points de
+ * rupture n'élargissent qu'ensuite. */
 .app {
   max-width: 900px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 12px;
+}
+
+@media (min-width: 640px) {
+  .app {
+    padding: 16px;
+  }
 }
 
 /* Le bandeau : le dégradé de marque, la marque à gauche, l'identité et la
@@ -43,18 +51,26 @@ body {
 
 .entete h1 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   letter-spacing: -0.01em;
   color: #fff;
 }
 
+/* Sur téléphone, l'identité prend sa propre ligne, pleine largeur : la
+ * pastille e-mail cède la place (elle s'ellipse), le bouton Déconnexion
+ * reste entier à droite — il sortait de l'écran quand la pastille refusait
+ * de rétrécir. */
 .apibar {
+  flex: 1 1 100%;
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .apibar .user {
+  flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -63,14 +79,33 @@ body {
   padding: 6px 12px 6px 8px;
   color: #eaf1ff;
   font-size: 0.88rem;
-  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.apibar button {
+  flex-shrink: 0;
+}
+
+@media (min-width: 640px) {
+  .entete h1 {
+    font-size: 1.35rem;
+  }
+  /* Assez de place : l'identité rejoint le titre sur la même ligne. */
+  .apibar {
+    flex: 0 1 auto;
+  }
+  .apibar .user {
+    flex: 0 1 auto;
+    max-width: 300px;
+  }
+}
+
 .map {
-  height: 420px;
+  /* Une part de l'écran, pas une hauteur figée : sur téléphone la carte
+   * laisse voir qu'il y a des panneaux dessous. */
+  height: min(52vh, 420px);
   width: 100%;
   border-radius: 16px;
   border: 1px solid var(--border);
@@ -227,13 +262,14 @@ button.danger:not(:disabled):hover {
 
 .list li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: #fff;
+  background: #f9fafc;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   margin-bottom: 8px;
 }
 
@@ -385,11 +421,24 @@ button.active {
   font-weight: 600;
 }
 
+/* Les signalements en grille : sur téléphone, deux colonnes régulières et
+ * des cibles pleines largeur valent mieux qu'un drapeau déchiré de
+ * pastilles inégales. */
+.alerts-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
 .alerts-row .alert-btn {
   background: #f6f8fd;
   color: #1a1d21;
   border: 1.5px solid var(--border);
   font-weight: 600;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
 }
 .alerts-row .alert-btn:hover {
   background: #fff;
