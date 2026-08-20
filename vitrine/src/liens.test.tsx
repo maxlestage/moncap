@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { App } from "./App";
 import { Legale } from "./Legale";
-import { SOURCES } from "./content";
+import { DEPOT, SOURCES } from "./content";
 import { LANGUES } from "./langues";
 
 /**
@@ -22,6 +22,7 @@ import { LANGUES } from "./langues";
 
 const AUTORISEES = new Set<string>([
   "/app",
+  DEPOT,
   ...LANGUES.map((l) => l.chemin),
   ...LANGUES.map((l) => l.mentions.chemin),
   ...LANGUES.map((l) => l.confidentialite.chemin),
@@ -65,9 +66,20 @@ test("les pages ne pointent que vers des adresses que ce serveur sert", () => {
   }
 });
 
-test("aucun lien vers le dépôt privé", () => {
+/**
+ * Le dépôt est public depuis août 2026 : le lien « Code source » a le droit
+ * de revivre — mais vers LE dépôt, exactement. La page a longtemps porté
+ * des liens vers un dépôt privé, donc un 404 pour tout visiteur ; ce test
+ * garde la mémoire de l'épisode en n'acceptant que l'adresse déclarée dans
+ * `DEPOT`.
+ */
+test("les seuls liens github visent le dépôt public déclaré", () => {
   for (const { code, html } of rendus()) {
-    expect(html, code).not.toContain("github.com");
+    for (const a of adresses(html)) {
+      if (a.includes("github.com")) {
+        expect(a, code).toBe(DEPOT);
+      }
+    }
   }
 });
 
