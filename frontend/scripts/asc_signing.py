@@ -83,12 +83,27 @@ def main():
               f"API. Crée l'app avec ce bundle ID sur le compte de la clé, ou "
               f"vérifie que la clé appartient au bon compte.")
 
-    # 1) Révoque les certificats de distribution existants (leurs clés privées
-    #    sont perdues de toute façon), pour rester sous la limite Apple.
-    certs = req("GET", "/certificates?filter[certificateType]=IOS_DISTRIBUTION&limit=200", token)
-    for c in certs.get("data", []):
-        req("DELETE", f"/certificates/{c['id']}", token)
-        print(f"Certificat révoqué : {c['id']}")
+    # 1) Révoque les certificats que cette CI laisse derrière elle, pour
+    #    rester sous la limite Apple :
+    #    - la distribution, en entier — ses clés privées sont perdues à
+    #      chaque exécuteur de toute façon, l'app n'est signée que par ici ;
+    #    - le développement, mais SEULEMENT les « Created via API » : chaque
+    #      exécuteur est une machine neuve, xcodebuild y fabrique un
+    #      certificat de développement à chaque archive
+    #      (-allowProvisioningUpdates) sans jamais le nettoyer, et le quota
+    #      finit atteint — « Choose a certificate to revoke », constaté au
+    #      run 253. Les certificats d'Xcode Cloud ou d'un Mac personnel
+    #      portent d'autres noms : on n'y touche pas.
+    for ctype in ("IOS_DISTRIBUTION", "DEVELOPMENT", "IOS_DEVELOPMENT"):
+        certs = req(
+            "GET", f"/certificates?filter[certificateType]={ctype}&limit=200", token
+        )
+        for c in certs.get("data", []):
+            nom = c["attributes"].get("displayName") or ""
+            if ctype != "IOS_DISTRIBUTION" and "Created via API" not in nom:
+                continue
+            req("DELETE", f"/certificates/{c['id']}", token)
+            print(f"Certificat révoqué ({ctype}) : {c['id']} « {nom} »")
 
     # 2) Clé privée + CSR
     key_path = f"{RUNNER_TEMP}/dist_key.pem"
