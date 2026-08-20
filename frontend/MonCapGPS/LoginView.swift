@@ -8,7 +8,11 @@ struct LoginView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var errorMessage = ""
+    /// Message d'information (vert) : « lien envoyé », par opposition aux
+    /// erreurs rouges.
+    @State private var infoMessage = ""
     @State private var busy = false
+    private let api = APIClient()
 
     var body: some View {
         VStack(spacing: 16) {
@@ -39,13 +43,16 @@ struct LoginView: View {
                 .textCase(nil)
 
             if signupMode {
-                Text("Ton e-mail sert d'identifiant — rien ne t'y sera envoyé.")
+                Text("Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 
             if !errorMessage.isEmpty {
                 Text(LocalizedStringKey(errorMessage)).font(.footnote).foregroundStyle(.red)
+            }
+            if !infoMessage.isEmpty {
+                Text(LocalizedStringKey(infoMessage)).font(.footnote).foregroundStyle(.green)
             }
 
             Button(action: submit) {
@@ -62,8 +69,18 @@ struct LoginView: View {
             Button(signupMode ? "Déjà un compte ? Se connecter" : "Pas de compte ? S'inscrire") {
                 signupMode.toggle()
                 errorMessage = ""
+                infoMessage = ""
             }
             .font(.footnote)
+
+            // Le lien de réinitialisation part par courriel : l'adresse tapée
+            // au-dessus suffit. La réponse est la même que le compte existe
+            // ou non — l'écran ne peut pas servir à deviner qui est inscrit.
+            if !signupMode {
+                Button("Mot de passe oublié ?") { motDePasseOublie() }
+                    .font(.footnote)
+                    .disabled(busy)
+            }
 
             Spacer()
         }
@@ -74,9 +91,34 @@ struct LoginView: View {
         .textCase(.lowercase)
     }
 
+    /// Demande le lien de réinitialisation pour l'adresse saisie.
+    private func motDePasseOublie() {
+        let email = AuthStore.normalize(username)
+        guard AuthStore.isValidEmail(email) else {
+            errorMessage = "Adresse e-mail invalide."
+            infoMessage = ""
+            return
+        }
+        busy = true
+        errorMessage = ""
+        infoMessage = ""
+        Task {
+            do {
+                try await api.motDePasseOublie(email: email)
+                infoMessage = "Si un compte existe avec cette adresse, un lien vient d'être envoyé. Regarde ta boîte (et les indésirables)."
+            } catch APIError.server(let msg) {
+                errorMessage = msg
+            } catch {
+                errorMessage = "Serveur injoignable. Réessaie."
+            }
+            busy = false
+        }
+    }
+
     private func submit() {
         busy = true
         errorMessage = ""
+        infoMessage = ""
         Task {
             do {
                 if signupMode {

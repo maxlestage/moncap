@@ -10,7 +10,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    extract::{FromRef, Path, Query, Request, State},
+    extract::{Form, FromRef, Path, Query, Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -33,7 +33,7 @@ use tower_http::{
 };
 
 use auth::AuthUser;
-use entity::{alert, position, search, trip, user};
+use entity::{alert, position, reset_token, search, trip, user};
 use migration::Migrator;
 use sea_orm_migration::MigratorTrait;
 
@@ -2805,6 +2805,10 @@ fn build_app(state: AppState) -> Router {
     let auth_routes = Router::new()
         .route("/auth/signup", post(signup))
         .route("/auth/login", post(login))
+        // La réinitialisation vit sous la même limite stricte : demander
+        // un lien ou en consommer un, c'est de l'authentification.
+        .route("/auth/forgot", post(forgot_password))
+        .route("/auth/reset", post(reset_password))
         .layer(middleware::from_fn(move |req, next| {
             rate_limit(auth_rl.clone(), req, next)
         }));
@@ -2863,6 +2867,9 @@ fn build_app(state: AppState) -> Router {
         .route("/live/:token/pos", get(live_pos))
         .route("/privacy", get(privacy_page))
         .route("/t", get(trajet_partage))
+        // La page du lien reçu par courriel (formulaire du nouveau mot de
+        // passe). Hors du groupe limité : c'est une page, pas une action.
+        .route("/reinitialisation", get(page_reinitialisation))
         .route("/ws", get(ws_handler))
         .merge(auth_routes)
         .fallback_service(web)
@@ -2997,6 +3004,261 @@ struct Credentials {
 struct AuthResponse {
     token: String,
     username: String,
+}
+
+// --- Réinitialisation du mot de passe ------------------------------------
+
+/// Empreinte SHA-256 hexadécimale d'un jeton de réinitialisation : c'est
+/// elle qui est stockée, jamais le jeton lui-même.
+fn empreinte_jeton(jeton: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(jeton.as_bytes());
+    format!("{:x}", h.finalize())
+}
+
+/// L'adresse publique du service, pour les liens envoyés par courriel.
+fn url_publique() -> String {
+    std::env::var("PUBLIC_URL")
+        .unwrap_or_else(|_| "https://moncap-c41a5aaf07e8.herokuapp.com".into())
+}
+
+/// Le SMTP est-il configuré ? Trois variables suffisent : SMTP_HOST,
+/// SMTP_USER, SMTP_PASS (l'expéditeur SMTP_FROM retombe sur SMTP_USER, le
+/// port SMTP_PORT sur 587). Un compte iCloud avec mot de passe d'application
+/// (smtp.mail.me.com) fait très bien l'affaire.
+fn smtp_configure() -> bool {
+    ["SMTP_HOST", "SMTP_USER", "SMTP_PASS"]
+        .iter()
+        .all(|v| std::env::var(v).map(|s| !s.is_empty()).unwrap_or(false))
+}
+
+/// Envoie un courriel en texte brut via le SMTP configuré. Texte brut à
+/// dessein : un courriel de réinitialisation n'a rien à vendre, et le texte
+/// nu passe mieux les filtres.
+async fn envoie_courriel(dest: &str, sujet: &str, corps: String) -> Result<(), String> {
+    use lettre::message::header::ContentType;
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+
+    let hote = std::env::var("SMTP_HOST").map_err(|_| "SMTP_HOST absent".to_string())?;
+    let utilisateur = std::env::var("SMTP_USER").map_err(|_| "SMTP_USER absent".to_string())?;
+    let secret = std::env::var("SMTP_PASS").map_err(|_| "SMTP_PASS absent".to_string())?;
+    let de = std::env::var("SMTP_FROM").unwrap_or_else(|_| utilisateur.clone());
+    let port: u16 = std::env::var("SMTP_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(587);
+
+    let message = Message::builder()
+        .from(de.parse().map_err(|e| format!("expéditeur invalide : {e}"))?)
+        .to(dest.parse().map_err(|e| format!("destinataire invalide : {e}"))?)
+        .subject(sujet)
+        .header(ContentType::TEXT_PLAIN)
+        .body(corps)
+        .map_err(|e| format!("construction du courriel : {e}"))?;
+
+    let transport = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&hote)
+        .map_err(|e| format!("SMTP : {e}"))?
+        .port(port)
+        .credentials(Credentials::new(utilisateur, secret))
+        .build();
+    transport
+        .send(message)
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("envoi : {e}"))
+}
+
+#[derive(Deserialize)]
+struct ForgotRequest {
+    username: String,
+}
+
+/// POST /auth/forgot — envoie un lien de réinitialisation si un compte
+/// existe pour cette adresse.
+///
+/// Répond 204 que le compte existe ou non, y compris quand l'envoi échoue :
+/// la réponse ne doit jamais dire si une adresse a un compte. Le seul autre
+/// statut, 503, part **avant** toute recherche — l'envoi n'est simplement
+/// pas configuré, et ça ne révèle rien non plus.
+async fn forgot_password(
+    State(state): State<AppState>,
+    Json(req): Json<ForgotRequest>,
+) -> Result<StatusCode, AppError> {
+    if !smtp_configure() {
+        return Ok(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    let username = req.username.trim().to_string();
+    if let Some(u) = user::Entity::find()
+        .filter(user::Column::Username.eq(&username))
+        .one(&state.db)
+        .await?
+    {
+        let jeton = auth::random_token();
+        reset_token::ActiveModel {
+            user_id: Set(u.id),
+            token_hash: Set(empreinte_jeton(&jeton)),
+            expires_at: Set(chrono_now() + 3600),
+            used: Set(false),
+            ..Default::default()
+        }
+        .insert(&state.db)
+        .await?;
+        let lien = format!("{}/reinitialisation?jeton={jeton}", url_publique());
+        let corps = format!(
+            "Bonjour,\n\n\
+             Quelqu'un — sans doute toi — a demandé à réinitialiser le mot de \
+             passe MonCap GPS du compte {username}.\n\n\
+             Ouvre ce lien pour en choisir un nouveau (valable une heure, une \
+             seule fois) :\n{lien}\n\n\
+             Si tu n'as rien demandé, ignore ce message : rien ne changera.\n\n\
+             — MonCap GPS"
+        );
+        if let Err(e) =
+            envoie_courriel(&username, "Réinitialisation du mot de passe MonCap GPS", corps).await
+        {
+            // On répond 204 quand même : dire l'échec ici révélerait que le
+            // compte existe. L'erreur va au journal, pas au client.
+            tracing::warn!("courriel de réinitialisation non parti : {e}");
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Secondes Unix courantes (i64, pour la colonne `expires_at`).
+fn chrono_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Le squelette HTML des pages de réinitialisation — même bleu de marque que
+/// les autres pages servies par le courtier.
+fn page_reinit(corps: &str) -> Html<String> {
+    Html(format!(
+        "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+         <meta name=\"robots\" content=\"noindex\">\
+         <title>Réinitialisation — MonCap GPS</title><style>\
+         body{{font-family:-apple-system,system-ui,sans-serif;background:#0e2a5e;\
+         color:#16213a;display:flex;min-height:100vh;align-items:center;\
+         justify-content:center;margin:0;padding:16px}}\
+         .carte{{background:#fff;border-radius:16px;padding:28px;max-width:380px;\
+         width:100%;box-shadow:0 8px 30px rgb(0 0 0/.25)}}\
+         h1{{font-size:1.2rem;margin:0 0 10px}}p{{margin:0 0 14px;line-height:1.5}}\
+         input{{width:100%;box-sizing:border-box;padding:12px;font-size:1rem;\
+         border:1px solid #dfe5f0;border-radius:10px;margin-bottom:12px}}\
+         button{{width:100%;padding:13px;font-size:1rem;font-weight:700;\
+         color:#fff;background:#1a57e6;border:0;border-radius:999px}}\
+         .doux{{color:#55617a;font-size:.85rem}}\
+         </style></head><body><div class=\"carte\">{corps}</div></body></html>"
+    ))
+}
+
+#[derive(Deserialize)]
+struct ReinitQuery {
+    #[serde(default)]
+    jeton: String,
+}
+
+/// Un jeton de lien vaut 32 hexadécimaux (celui que `random_token` émet) :
+/// tout le reste est rejeté avant d'être regardé — ou réfléchi dans du HTML.
+fn jeton_valide(j: &str) -> bool {
+    j.len() == 32 && j.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+/// GET /reinitialisation?jeton=… — la page du lien reçu par courriel : le
+/// formulaire du nouveau mot de passe, ou l'explication si le lien est mort.
+async fn page_reinitialisation(
+    State(state): State<AppState>,
+    Query(q): Query<ReinitQuery>,
+) -> Result<Html<String>, AppError> {
+    let mort = "<h1>Lien expiré</h1><p>Ce lien de réinitialisation n'est plus \
+                valable — il a servi, ou son heure est passée.</p>\
+                <p class=\"doux\">Redemande un lien depuis l'écran de \
+                connexion de l'application (« Mot de passe oublié ? »).</p>";
+    if !jeton_valide(&q.jeton) {
+        return Ok(page_reinit(mort));
+    }
+    let vivant = reset_token::Entity::find()
+        .filter(reset_token::Column::TokenHash.eq(empreinte_jeton(&q.jeton)))
+        .filter(reset_token::Column::Used.eq(false))
+        .filter(reset_token::Column::ExpiresAt.gt(chrono_now()))
+        .one(&state.db)
+        .await?
+        .is_some();
+    if !vivant {
+        return Ok(page_reinit(mort));
+    }
+    Ok(page_reinit(&format!(
+        "<h1>Nouveau mot de passe</h1>\
+         <p class=\"doux\">Pour ton compte MonCap GPS. Six caractères minimum.</p>\
+         <form method=\"post\" action=\"/auth/reset\">\
+         <input type=\"hidden\" name=\"jeton\" value=\"{}\">\
+         <input type=\"password\" name=\"mot_de_passe\" minlength=\"6\" required \
+         autocomplete=\"new-password\" placeholder=\"Nouveau mot de passe\">\
+         <button>Changer le mot de passe</button></form>",
+        q.jeton
+    )))
+}
+
+#[derive(Deserialize)]
+struct ResetForm {
+    #[serde(default)]
+    jeton: String,
+    #[serde(default)]
+    mot_de_passe: String,
+}
+
+/// POST /auth/reset — le formulaire de la page : vérifie le jeton (empreinte,
+/// non utilisé, non expiré), change le mot de passe, brûle le jeton.
+async fn reset_password(
+    State(state): State<AppState>,
+    Form(f): Form<ResetForm>,
+) -> Result<(StatusCode, Html<String>), AppError> {
+    let mort = page_reinit(
+        "<h1>Lien expiré</h1><p>Ce lien n'est plus valable — il a servi, ou \
+         son heure est passée. Redemande-en un depuis l'application.</p>",
+    );
+    if !jeton_valide(&f.jeton) {
+        return Ok((StatusCode::BAD_REQUEST, mort));
+    }
+    if f.mot_de_passe.len() < 6 {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            page_reinit(
+                "<h1>Mot de passe trop court</h1><p>Six caractères minimum — \
+                 reviens en arrière et réessaie.</p>",
+            ),
+        ));
+    }
+    let Some(ligne) = reset_token::Entity::find()
+        .filter(reset_token::Column::TokenHash.eq(empreinte_jeton(&f.jeton)))
+        .filter(reset_token::Column::Used.eq(false))
+        .filter(reset_token::Column::ExpiresAt.gt(chrono_now()))
+        .one(&state.db)
+        .await?
+    else {
+        return Ok((StatusCode::BAD_REQUEST, mort));
+    };
+    let Some(u) = user::Entity::find_by_id(ligne.user_id).one(&state.db).await? else {
+        return Ok((StatusCode::BAD_REQUEST, mort));
+    };
+    let mut compte: user::ActiveModel = u.into();
+    compte.password_hash = Set(auth::hash_password(&f.mot_de_passe)?);
+    compte.update(&state.db).await?;
+    let mut brule: reset_token::ActiveModel = ligne.into();
+    brule.used = Set(true);
+    brule.update(&state.db).await?;
+    Ok((
+        StatusCode::OK,
+        page_reinit(
+            "<h1>C'est fait ✅</h1><p>Ton mot de passe est changé. Retourne \
+             dans l'application et connecte-toi avec le nouveau.</p>",
+        ),
+    ))
 }
 
 /// POST /auth/signup — crée un compte et renvoie un jeton.
@@ -4197,6 +4459,26 @@ mod tests {
     /// tourne au déploiement. Une route ajoutée sans reconstruire la vitrine
     /// (`bun run build`, puis versionner `dist`) servirait un 404 — ce test
     /// l'attrape avant le déploiement.
+    /// Le jeton du lien : 32 hexadécimaux minuscules, rien d'autre — ce qui
+    /// est réfléchi dans le HTML de la page doit être inoffensif par forme.
+    #[test]
+    fn jeton_de_reinitialisation_strict() {
+        assert!(jeton_valide(&auth::random_token()));
+        assert!(!jeton_valide(""));
+        assert!(!jeton_valide("abc"));
+        assert!(!jeton_valide(&"A".repeat(32)));
+        assert!(!jeton_valide("<script>alert(1)</script>abcdef12"));
+        assert!(!jeton_valide(&format!("{}0", auth::random_token())));
+    }
+
+    #[test]
+    fn empreinte_de_jeton_stable_et_distincte() {
+        let j = auth::random_token();
+        assert_eq!(empreinte_jeton(&j), empreinte_jeton(&j));
+        assert_ne!(empreinte_jeton(&j), empreinte_jeton(&auth::random_token()));
+        assert_eq!(empreinte_jeton(&j).len(), 64);
+    }
+
     /// La liste d'invités est tapée à la main dans la configuration : elle
     /// doit pardonner les espaces et la casse, et ne jamais matcher à moitié.
     #[test]
@@ -4856,6 +5138,129 @@ mod integration {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK, "signup doit réussir");
         body_json(resp).await["token"].as_str().unwrap().to_string()
+    }
+
+    /// Sans SMTP configuré, /auth/forgot répond 503 avant toute recherche.
+    #[tokio::test]
+    async fn forgot_sans_smtp_repond_503() {
+        let Some(app) = test_app().await else { return };
+        std::env::remove_var("SMTP_HOST");
+        let resp = app
+            .oneshot(json_req(
+                "POST",
+                "/auth/forgot",
+                None,
+                serde_json::json!({"username": "x@y.fr"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    /// Le flux entier, jeton inséré à la main (sans SMTP) : la page du lien
+    /// s'affiche, le mot de passe change une fois — pas deux —, l'ancien mot
+    /// de passe meurt et le nouveau vit.
+    #[tokio::test]
+    async fn reinitialisation_change_le_mot_de_passe_une_seule_fois() {
+        let Some((app, db)) = test_app_db().await else { return };
+        let nom = uniq("reset");
+        let _ = signup(&app, &nom).await;
+        let u = user::Entity::find()
+            .filter(user::Column::Username.eq(&nom))
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let jeton = auth::random_token();
+        reset_token::ActiveModel {
+            user_id: Set(u.id),
+            token_hash: Set(empreinte_jeton(&jeton)),
+            expires_at: Set(chrono_now() + 3600),
+            used: Set(false),
+            ..Default::default()
+        }
+        .insert(&db)
+        .await
+        .unwrap();
+
+        // La page du lien montre le formulaire.
+        let resp = app
+            .clone()
+            .oneshot(get_req(&format!("/reinitialisation?jeton={jeton}"), None))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Un mauvais jeton est refusé.
+        let faux = auth::random_token();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/reset")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from(format!("jeton={faux}&mot_de_passe=nouveau1")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        // Le bon jeton change le mot de passe.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/reset")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from(format!("jeton={jeton}&mot_de_passe=nouveau1")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // L'ancien mot de passe meurt, le nouveau vit.
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/login",
+                None,
+                serde_json::json!({"username": nom, "password": "s3cret!"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/auth/login",
+                None,
+                serde_json::json!({"username": nom, "password": "nouveau1"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // Le jeton est brûlé : une seconde utilisation échoue.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/reset")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from(format!("jeton={jeton}&mot_de_passe=encore99")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

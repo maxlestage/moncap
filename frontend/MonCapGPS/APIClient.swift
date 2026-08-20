@@ -168,6 +168,26 @@ struct APIClient {
         try await authenticate("auth/login", username, password)
     }
 
+    /// Demande un lien de réinitialisation. Le serveur répond 204 que le
+    /// compte existe ou non (il ne dit jamais si une adresse a un compte),
+    /// et 503 quand l'envoi de courriels n'est pas configuré.
+    func motDePasseOublie(email: String) async throws {
+        var req = URLRequest(url: baseURL.appendingPathComponent("auth/forgot"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["username": email])
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.server("Serveur injoignable")
+        }
+        if http.statusCode == 503 {
+            throw APIError.server("La réinitialisation n'est pas encore configurée.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError.server("Échec")
+        }
+    }
+
     private func authenticate(_ path: String, _ username: String, _ password: String) async throws
         -> AuthResponse
     {
