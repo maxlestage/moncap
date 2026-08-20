@@ -108,12 +108,12 @@ const FR: Contenu = {
     intro:
       "Jusqu'à 15 itinéraires côte à côte, chacun étiqueté le plus simple, le plus rapide ou le plus court. Pour chacun : la durée, la distance, le nombre de virages, l'heure d'arrivée, le dénivelé — et ce que ça coûte.",
     apres:
-      "Le carburant est calculé avec la consommation de votre véhicule et le prix réel des stations autour de vous (open data officiel), pas une moyenne nationale. Les péages s'ajoutent quand l'itinéraire en emprunte. Une forte côte est signalée avant le départ, pas découverte au milieu. À pied, à vélo ou en voiture, et l'on peut demander d'éviter péages ou autoroutes.",
+      "Le carburant est calculé avec la consommation de votre véhicule et le prix réel des stations autour de vous (open data officiel), pas une moyenne nationale. Les péages s'ajoutent quand l'itinéraire en emprunte. Une forte côte est signalée avant le départ, pas découverte au milieu. À pied, à vélo ou en voiture, et l'on peut demander d'éviter péages ou autoroutes. À vélo, on dit même lequel — route, ville ou VTT — et s'il faut fuir les côtes.",
   },
   guidage: {
     titre: "Puis il vous emmène",
     intro:
-      "La flèche suit la manœuvre réelle, la distance au prochain virage se met à jour, et le numéro de sortie s'affiche sous la consigne. La vitesse du moment est comparée à la limite de la route, lue sur OpenStreetMap : elle passe au rouge quand vous la dépassez.",
+      "La flèche suit la manœuvre réelle, la distance au prochain virage se met à jour, et le numéro de sortie s'affiche sous la consigne. À l'approche d'une intersection, les voies à prendre s'allument. La vitesse du moment est comparée à la limite de la route, lue sur OpenStreetMap : elle passe au rouge quand vous la dépassez.",
   },
   lieux: {
     titre: "Ce qu'il y a autour",
@@ -149,7 +149,7 @@ const FR: Contenu = {
       emoji: "🚊",
       titre: "Trams, bus et trains",
       texte:
-        "Un quatrième mode, à côté de la voiture : les itinéraires en transports en commun, avec les lignes aux couleurs du réseau, les correspondances et les heures réelles de départ et d'arrivée.",
+        "Un quatrième mode, à côté de la voiture : les itinéraires en transports en commun, avec les lignes aux couleurs du réseau, les correspondances et les heures réelles — retard du moment compris. On part maintenant, à une heure choisie, ou pour arriver avant l'heure dite.",
     },
     {
       emoji: "🫁",
@@ -162,6 +162,30 @@ const FR: Contenu = {
       titre: "Guidage vocal",
       texte:
         "Les annonces au bon moment, la carte qui pivote dans le sens de la marche, le recalcul dès qu'on s'écarte. Une navigation interrompue se reprend là où elle s'était arrêtée.",
+    },
+    {
+      emoji: "📍",
+      titre: "Des étapes en chemin",
+      texte:
+        "On pose une étape d'un doigt sur la carte, on passe chez Paul avant la mer. Un bouton remet les étapes dans l'ordre le plus court, et chacune peut porter son temps d'arrêt — l'heure d'arrivée le compte, au lieu de mentir.",
+    },
+    {
+      emoji: "🌦️",
+      titre: "Ce que la route rencontrera",
+      texte:
+        "Avant de partir, chaque itinéraire dit ce qu'il traverse : un feu à moins de deux kilomètres du tracé, la pluie à l'heure où vous y passerez — nommée par la ville —, l'air qu'on respire à l'arrivée.",
+    },
+    {
+      emoji: "🥾",
+      titre: "Une trace GPX à suivre",
+      texte:
+        "Une randonnée ou un parcours vélo exporté d'une autre application s'importe d'un geste : la trace devient l'itinéraire, consignes comprises, et se suit jusqu'au bout en mode avion.",
+    },
+    {
+      emoji: "🔗",
+      titre: "Un trajet qui se partage",
+      texte:
+        "Le trajet part en lien — destination, étapes, mode. Qui a l'application l'ouvre sur le même trajet, prêt à partir ; qui ne l'a pas voit la carte et rejoint par Plans ou Google Maps.",
     },
   ],
   horsLigneCartes: [
@@ -188,6 +212,12 @@ const FR: Contenu = {
       titre: "Téléchargement en arrière-plan",
       texte:
         "Un paquet de deux gigaoctets ne demande pas de garder l'écran allumé. Le transfert continue pendant que vous faites autre chose, et même après avoir quitté l'application.",
+    },
+    {
+      emoji: "💊",
+      titre: "Les lieux et les limites, embarqués",
+      texte:
+        "L'annuaire des 19 catégories et les limites de vitesse descendent avec la région, tirés du même extrait OpenStreetMap que les routes. Chercher une pharmacie ou lire la limite du moment marche en mode avion.",
     },
   ],
   preuve: {
@@ -261,12 +291,12 @@ const ES: Contenu = {
     intro:
       "Hasta 15 rutas una al lado de otra, cada una etiquetada como la más sencilla, la más rápida o la más corta. Para cada una: la duración, la distancia, el número de giros, la hora de llegada, el desnivel — y lo que cuesta.",
     apres:
-      "El combustible se calcula con el consumo de tu vehículo y el precio real de las gasolineras a tu alrededor (datos públicos oficiales), no con una media nacional. Los peajes se suman cuando la ruta los usa. Una cuesta pronunciada se avisa antes de salir, no se descubre a mitad de camino. A pie, en bici o en coche, y se puede pedir evitar peajes o autopistas.",
+      "El combustible se calcula con el consumo de tu vehículo y el precio real de las gasolineras a tu alrededor (datos públicos oficiales), no con una media nacional. Los peajes se suman cuando la ruta los usa. Una cuesta pronunciada se avisa antes de salir, no se descubre a mitad de camino. A pie, en bici o en coche, y se puede pedir evitar peajes o autopistas. En bici, hasta se dice cuál — carretera, ciudad o montaña — y si hay que huir de las cuestas.",
   },
   guidage: {
     titre: "Y luego te lleva",
     intro:
-      "La flecha sigue la maniobra real, la distancia al siguiente giro se actualiza, y el número de salida aparece bajo la indicación. La velocidad del momento se compara con el límite de la vía, leído en OpenStreetMap: se pone en rojo cuando lo superas.",
+      "La flecha sigue la maniobra real, la distancia al siguiente giro se actualiza, y el número de salida aparece bajo la indicación. Al acercarse a un cruce, los carriles a tomar se iluminan. La velocidad del momento se compara con el límite de la vía, leído en OpenStreetMap: se pone en rojo cuando lo superas.",
   },
   lieux: {
     titre: "Lo que hay alrededor",
@@ -302,7 +332,7 @@ const ES: Contenu = {
       emoji: "🚊",
       titre: "Tranvías, buses y trenes",
       texte:
-        "Un cuarto modo, junto al coche: las rutas en transporte público, con las líneas en los colores de la red, los transbordos y las horas reales de salida y llegada.",
+        "Un cuarto modo, junto al coche: las rutas en transporte público, con las líneas en los colores de la red, los transbordos y las horas reales — retraso del momento incluido. Se sale ahora, a una hora elegida, o para llegar antes de la hora dicha.",
     },
     {
       emoji: "🫁",
@@ -315,6 +345,30 @@ const ES: Contenu = {
       titre: "Guía por voz",
       texte:
         "Los avisos en el momento justo, el mapa que gira en el sentido de la marcha, el recálculo en cuanto te desvías. Una navegación interrumpida se retoma donde se quedó.",
+    },
+    {
+      emoji: "📍",
+      titre: "Paradas por el camino",
+      texte:
+        "Una parada se pone con un dedo sobre el mapa: se pasa por casa de Pablo antes del mar. Un botón reordena las paradas al camino más corto, y cada una puede llevar su tiempo de parada — la hora de llegada lo cuenta, en vez de mentir.",
+    },
+    {
+      emoji: "🌦️",
+      titre: "Lo que la ruta va a encontrar",
+      texte:
+        "Antes de salir, cada ruta dice lo que atraviesa: un incendio a menos de dos kilómetros del trazado, la lluvia a la hora en que pasarás — nombrada por la ciudad —, el aire que se respira al llegar.",
+    },
+    {
+      emoji: "🥾",
+      titre: "Una traza GPX que seguir",
+      texte:
+        "Una caminata o una ruta en bici exportada de otra aplicación se importa con un gesto: la traza se vuelve la ruta, indicaciones incluidas, y se sigue hasta el final en modo avión.",
+    },
+    {
+      emoji: "🔗",
+      titre: "Una ruta que se comparte",
+      texte:
+        "La ruta se envía como enlace — destino, paradas, modo. Quien tiene la aplicación la abre sobre la misma ruta, lista para salir; quien no la tiene ve el mapa y llega con Plans o Google Maps.",
     },
   ],
   horsLigneCartes: [
@@ -341,6 +395,12 @@ const ES: Contenu = {
       titre: "Descarga en segundo plano",
       texte:
         "Un paquete de dos gigabytes no obliga a mantener la pantalla encendida. La transferencia continúa mientras haces otra cosa, e incluso después de cerrar la aplicación.",
+    },
+    {
+      emoji: "💊",
+      titre: "Los lugares y los límites, a bordo",
+      texte:
+        "El directorio de las 19 categorías y los límites de velocidad bajan con la región, sacados del mismo extracto de OpenStreetMap que las carreteras. Buscar una farmacia o leer el límite del momento funciona en modo avión.",
     },
   ],
   preuve: {
@@ -414,12 +474,12 @@ const EN: Contenu = {
     intro:
       "Up to 15 routes side by side, each labelled the simplest, the fastest or the shortest. For every one: time, distance, number of turns, arrival time, elevation — and what it costs.",
     apres:
-      "Fuel is worked out from your vehicle's consumption and the real price at the stations around you (official open data), not a national average. Tolls are added when the route uses them. A steep climb is flagged before you leave, not discovered halfway. On foot, by bike or by car, and you can ask to avoid tolls or motorways.",
+      "Fuel is worked out from your vehicle's consumption and the real price at the stations around you (official open data), not a national average. Tolls are added when the route uses them. A steep climb is flagged before you leave, not discovered halfway. On foot, by bike or by car, and you can ask to avoid tolls or motorways. On a bike, you even say which one — road, city or mountain — and whether to stay clear of climbs.",
   },
   guidage: {
     titre: "Then it takes you there",
     intro:
-      "The arrow follows the actual manoeuvre, the distance to the next turn updates, and the exit number appears under the instruction. Your current speed is compared with the road's limit, read from OpenStreetMap: it turns red when you go over.",
+      "The arrow follows the actual manoeuvre, the distance to the next turn updates, and the exit number appears under the instruction. Coming up to a junction, the lanes to take light up. Your current speed is compared with the road's limit, read from OpenStreetMap: it turns red when you go over.",
   },
   lieux: {
     titre: "What's around you",
@@ -455,7 +515,7 @@ const EN: Contenu = {
       emoji: "🚊",
       titre: "Trams, buses and trains",
       texte:
-        "A fourth mode, next to driving: public transit routes, with lines in the network's own colours, transfers, and real departure and arrival times.",
+        "A fourth mode, next to driving: public transit routes, with lines in the network's own colours, transfers, and real times — current delay included. Leave now, at a chosen time, or so as to arrive before a set hour.",
     },
     {
       emoji: "🫁",
@@ -468,6 +528,30 @@ const EN: Contenu = {
       titre: "Voice guidance",
       texte:
         "Announcements at the right moment, the map turning with your direction of travel, a recalculation the moment you stray. An interrupted trip resumes where it stopped.",
+    },
+    {
+      emoji: "📍",
+      titre: "Stops along the way",
+      texte:
+        "Drop a stop with one finger on the map — call in at Paul's before the sea. One button reorders the stops into the shortest run, and each can carry its own stop time — the arrival time counts it, instead of lying.",
+    },
+    {
+      emoji: "🌦️",
+      titre: "What the road will meet",
+      texte:
+        "Before you leave, each route says what it crosses: a wildfire within two kilometres of the line, rain at the hour you'll pass through — named by town —, and the air you'll breathe on arrival.",
+    },
+    {
+      emoji: "🥾",
+      titre: "A GPX track to follow",
+      texte:
+        "A hike or a bike route exported from another app imports in one move: the track becomes the route, instructions included, and can be followed to the end in airplane mode.",
+    },
+    {
+      emoji: "🔗",
+      titre: "A trip that travels as a link",
+      texte:
+        "The trip goes out as a link — destination, stops, mode. Whoever has the app opens it on the same trip, ready to go; whoever doesn't sees the map and gets there with Apple or Google Maps.",
     },
   ],
   horsLigneCartes: [
@@ -494,6 +578,12 @@ const EN: Contenu = {
       titre: "Background download",
       texte:
         "A two-gigabyte pack doesn't require keeping the screen on. The transfer carries on while you do something else, and even after you leave the app.",
+    },
+    {
+      emoji: "💊",
+      titre: "Places and limits, on board",
+      texte:
+        "The directory of all 19 categories and the speed limits come down with the region, drawn from the same OpenStreetMap extract as the roads. Finding a pharmacy or reading the current limit works in airplane mode.",
     },
   ],
   preuve: {
