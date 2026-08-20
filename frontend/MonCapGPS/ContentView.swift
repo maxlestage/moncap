@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 import MapKit
 import UIKit
@@ -714,6 +715,14 @@ struct MapHomeView: View {
     @State private var showPaywallTrips = false
     @State private var showPaywallRecherche = false
     @State private var showFacturation = false
+    /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
+    @State private var showPaywallMenu = false
+    @State private var gereAbonnement = false
+    /// Ce qui doit se produire une fois le menu Lieux refermé — présenter
+    /// une autre feuille, ouvrir un partage. Exécuté dans `onDismiss` : le
+    /// « ferme puis attends 0,35 s » devinait la durée de l'animation, et
+    /// iOS 26+ a cessé de se laisser deviner — les boutons semblaient morts.
+    @State private var apresMenu: (() -> Void)?
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -772,7 +781,14 @@ struct MapHomeView: View {
             // Même plafond que la pile du haut, même raison.
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
-        .sheet(isPresented: $showPlaces) { placesSheet }
+        .sheet(
+            isPresented: $showPlaces,
+            onDismiss: {
+                let action = apresMenu
+                apresMenu = nil
+                action?()
+            }
+        ) { placesSheet }
         .sheet(isPresented: $showSearch) { searchSheet }
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
@@ -1318,21 +1334,23 @@ struct MapHomeView: View {
 
     /// Démarre le partage de position en direct, puis présente le lien à envoyer.
     private func startLiveShare() {
-        showPlaces = false
         Task {
             let name = Session.username.isEmpty ? "Un ami" : Session.username
+            // Le lien s'obtient d'abord, le menu se ferme ensuite : le
+            // partage part dans onDismiss, quand la feuille est vraiment
+            // partie — deviner la durée de l'animation ne marche plus sur
+            // iOS 26+.
             if let url = await liveShare.start(name: name) {
                 // Continue d'émettre la position même écran verrouillé.
                 location.setBackgroundTracking(true)
-                // Laisse la feuille « Lieux » se fermer avant de présenter le
-                // partage, sinon iOS ignore la présentation.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                    Sharer.present([url])
-                }
+                apresMenu = { Sharer.present([url]) }
             } else {
-                shareError =
-                    "Le serveur de suivi est injoignable pour le moment. Réessaie dans un instant."
+                apresMenu = {
+                    shareError =
+                        "Le serveur de suivi est injoignable pour le moment. Réessaie dans un instant."
+                }
             }
+            showPlaces = false
         }
     }
 
@@ -3459,25 +3477,97 @@ struct MapHomeView: View {
     private var placesSheet: some View {
         NavigationStack {
             List {
+                // L'abonnement d'abord : où en est-on (essai, échéance,
+                // offert), et tout pour s'abonner ou gérer.
+                Section("MonCap Plus") {
+                    if plus.actif {
+                        if plus.enEssai, let jours = plus.joursRestants {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Essai gratuit en cours")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(
+                                        String(
+                                            format: NSLocalizedString(
+                                                "Il reste %d jour(s) — puis %@ par mois.",
+                                                comment: ""),
+                                            jours, plus.prixAffiche))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: "star.fill").foregroundStyle(.indigo)
+                            }
+                        } else if plus.estOffert {
+                            Label("MonCap Plus — offert 🎁", systemImage: "checkmark.seal.fill")
+                                .foregroundStyle(.green)
+                        } else {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Abonnement actif")
+                                        .font(.subheadline.weight(.semibold))
+                                    if let fin = plus.renouvellement {
+                                        Text(
+                                            String(
+                                                format: NSLocalizedString(
+                                                    "Renouvellement le %@.", comment: ""),
+                                                dateCourte(fin)))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            } icon: {
+                                Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                            }
+                        }
+                        if !plus.estOffert {
+                            Button {
+                                gereAbonnement = true
+                            } label: {
+                                Label("Gérer l'abonnement", systemImage: "gearshape")
+                            }
+                        }
+                    } else {
+                        Button {
+                            apresMenu = { showPaywall = true }
+                            showPlaces = false
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Découvrir MonCap Plus")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(
+                                        plus.essaiGratuit
+                                            ? String(
+                                                format: NSLocalizedString(
+                                                    "14 jours d'essai, puis %@ par mois.",
+                                                    comment: ""), plus.prixAffiche)
+                                            : String(
+                                                format: NSLocalizedString(
+                                                    "%@ par mois, sans engagement.",
+                                                    comment: ""), plus.prixAffiche))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: "star.fill").foregroundStyle(.indigo)
+                            }
+                        }
+                    }
+                }
                 Section {
                     Button {
-                        // Ferme le menu puis présente la feuille (évite deux
-                        // feuilles empilées simultanément).
+                        apresMenu = { showArrive = true }
                         showPlaces = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            showArrive = true
-                        }
                     } label: {
                         Label("Prévenir que je suis arrivé", systemImage: "checkmark.message.fill")
                     }
                     if liveShare.active {
                         Button {
-                            showPlaces = false
                             if let u = liveShare.shareURL {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    Sharer.present([u])
-                                }
+                                apresMenu = { Sharer.present([u]) }
                             }
+                            showPlaces = false
                         } label: {
                             Label("Renvoyer le lien de suivi", systemImage: "link")
                         }
@@ -3501,10 +3591,8 @@ struct MapHomeView: View {
                     }
                     Button {
                         fires.refresh(key: firmsKey)
+                        apresMenu = { showFireMap = true }
                         showPlaces = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            showFireMap = true
-                        }
                     } label: {
                         Label("Carte des feux de forêt", systemImage: "flame.fill")
                     }
@@ -3555,8 +3643,8 @@ struct MapHomeView: View {
                     }
                     .disabled(selectedIDs.isEmpty)
                     Button {
+                        apresMenu = { showTrips = true }
                         showPlaces = false
-                        showTrips = true
                         Task { await loadTrips() }
                     } label: {
                         Label("Mes trajets (\(trips.count))", systemImage: "clock.arrow.circlepath")
@@ -3752,6 +3840,18 @@ struct MapHomeView: View {
         }
         // Même règle que la feuille de recherche : opaque, pas de verre.
         .presentationBackground(Color(.systemBackground))
+        // La feuille système de gestion d'abonnement (résilier, changer) :
+        // celle d'Apple, par-dessus le menu.
+        .manageSubscriptionsSheet(isPresented: $gereAbonnement)
+    }
+
+    /// Une date courte dans la langue de l'app (« 3 sept. 2026 »).
+    private func dateCourte(_ d: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "fr")
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f.string(from: d)
     }
 
     // MARK: - Crédits
@@ -5005,12 +5105,10 @@ struct MapHomeView: View {
             shareError = "Impossible de générer le fichier GPX pour le moment."
             return
         }
-        // Ferme la feuille « Lieux » (d'où part le bouton) avant de présenter la
-        // feuille de partage, sinon iOS ignore la présentation.
+        // Le partage part dans onDismiss du menu, quand la feuille est
+        // vraiment fermée — même mécanisme que le reste du menu.
+        apresMenu = { Sharer.present([url]) }
         showPlaces = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            Sharer.present([url])
-        }
     }
 
     /// Le fichier choisi dans le sélecteur devient une trace suivable —
