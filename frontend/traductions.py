@@ -156,6 +156,16 @@ T: dict[str, tuple[str, str]] = {
     "Touche la carte": ("Toca el mapa", "Tap the map"),
     "Étape %d": ("Parada %d", "Stop %d"),
     "Au plus court": ("El más corto", "Shortest order"),
+    "Trace GPX 🥾": ("Traza GPX 🥾", "GPX track 🥾"),
+    "Importer une trace GPX": ("Importar una traza GPX", "Import a GPX track"),
+    "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau.": (
+        "Una caminata, una ruta en bici exportada de otra app: la traza se muestra en el mapa y se puede seguir paso a paso, incluso sin red.",
+        "A hike, a bike route exported from another app: the track shows on the map and can be followed step by step, even without network.",
+    ),
+    "Ce fichier GPX n'a pas pu être lu.": (
+        "Este archivo GPX no se pudo leer.",
+        "This GPX file could not be read.",
+    ),
     "Temps d'arrêt": ("Tiempo de parada", "Stop time"),
     "Sans arrêt": ("Sin parada", "No stop"),
     "Étape : %@": ("Parada: %@", "Stop: %@"),
