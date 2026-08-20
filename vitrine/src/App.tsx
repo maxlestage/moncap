@@ -343,6 +343,31 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             </ul>
           </section>
 
+          {/* Le prix a sa section, pas une ligne en petit : il compte autant
+              que les fonctions. Deux formules côte à côte, la payante mise
+              en avant, le mensuel écrit en grand. */}
+          <section aria-labelledby="tarifs-titre" className="tarifs">
+            <h2 id="tarifs-titre">{c.tarifs.titre}</h2>
+            <p className="intro">{c.tarifs.intro}</p>
+            <div className="formules">
+              {[c.tarifs.gratuit, c.tarifs.plus].map((f, i) => (
+                <div key={f.nom} className={i === 1 ? "formule vedette" : "formule"}>
+                  <h3>{f.nom}</h3>
+                  <p className="prix">
+                    {f.prix} <span>{f.periode}</span>
+                  </p>
+                  {f.essai && <p className="essai">{f.essai}</p>}
+                  <ul>
+                    {f.points.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <p className="note">{c.tarifs.note}</p>
+          </section>
+
           <section className="preuve" aria-labelledby="preuve-titre">
             <h2 id="preuve-titre">{c.preuve.titre}</h2>
             <p>

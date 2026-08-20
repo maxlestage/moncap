@@ -45,6 +45,14 @@ export type Contenu = {
   readonly atoutsTitre: string;
   readonly atouts: readonly Atout[];
   readonly horsLigneCartes: readonly Atout[];
+  /** La section tarifs : gratuit et Plus côte à côte, prix mensuel en grand. */
+  readonly tarifs: {
+    readonly titre: string;
+    readonly intro: string;
+    readonly gratuit: Formule;
+    readonly plus: Formule;
+    readonly note: string;
+  };
   readonly preuve: {
     readonly titre: string;
     readonly texte: string;
@@ -84,6 +92,18 @@ export type Contenu = {
   };
   readonly mentions: PageLegale;
   readonly confidentialite: PageLegale;
+};
+
+/** Une formule de la section tarifs. */
+export type Formule = {
+  readonly nom: string;
+  /** Le prix seul (« 3,99 € ») — affiché en grand. */
+  readonly prix: string;
+  /** Ce qui suit le prix (« par mois, sans engagement »). */
+  readonly periode: string;
+  /** L'essai gratuit, dit sur la formule payante seulement. */
+  readonly essai?: string;
+  readonly points: readonly string[];
 };
 
 /**
@@ -243,6 +263,12 @@ const FR: Contenu = {
       texte:
         "L'essentiel est gratuit : chercher, comparer, être guidé, les transports. Plus — 3,99 € par mois, 14 jours d'essai — déverrouille les régions hors ligne, l'import GPX, les tournées optimisées, le journal kilométrique exportable et la facturation.",
     },
+    {
+      emoji: "🧾",
+      titre: "Les kilomètres qui se facturent",
+      texte:
+        "Pour ceux qui roulent pour travailler : le journal des trajets s'exporte en CSV pour la comptabilité, une facture PDF se génère par mois au taux kilométrique choisi, et les tournées à beaucoup d'arrêts se remettent dans l'ordre le plus court — même sans réseau.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -276,6 +302,38 @@ const FR: Contenu = {
         "L'annuaire des 19 catégories et les limites de vitesse descendent avec la région, tirés du même extrait OpenStreetMap que les routes. Chercher une pharmacie ou lire la limite du moment marche en mode avion.",
     },
   ],
+  tarifs: {
+    titre: "Le prix, dit simplement",
+    intro:
+      "Pas de pièges : l'essentiel est gratuit, et une seule formule déverrouille le reste.",
+    gratuit: {
+      nom: "MonCap",
+      prix: "0 €",
+      periode: "pour toujours",
+      points: [
+        "Jusqu'à 15 itinéraires comparés — durée, virages, dénivelé, coût",
+        "Guidage vocal, voies et limites de vitesse",
+        "Trams, bus et trains, aux heures réelles",
+        "Ce que la route rencontrera : feux, pluie, air",
+        "Siri, l'écran verrouillé, le partage de trajet",
+      ],
+    },
+    plus: {
+      nom: "MonCap Plus",
+      prix: "3,99 €",
+      periode: "par mois, sans engagement",
+      essai: "14 jours d'essai gratuit",
+      points: [
+        "212 régions hors ligne — itinéraires, lieux, limites de vitesse",
+        "Import de traces GPX",
+        "Tournées optimisées, même à vingt arrêts",
+        "Journal kilométrique exportable (CSV)",
+        "Facturation PDF des trajets",
+      ],
+    },
+    note:
+      "L'abonnement se prend dans l'application, se gère et se résilie dans les réglages iOS. Rien d'autre à payer, jamais.",
+  },
   preuve: {
     titre: "Une mesure vaut mieux qu'une promesse",
     texte:
@@ -326,6 +384,7 @@ const FR: Contenu = {
       { id: "lieux-titre", nom: "Autour de vous" },
       { id: "atouts-titre", nom: "Et aussi" },
       { id: "hors-ligne-titre", nom: "Hors ligne" },
+      { id: "tarifs-titre", nom: "Le prix" },
       { id: "preuve-titre", nom: "La preuve" },
       { id: "pile-titre", nom: "Sous le capot" },
       { id: "franchise-titre", nom: "Ce qu'elle ne fait pas" },
@@ -542,6 +601,12 @@ const ES: Contenu = {
       texte:
         "Lo esencial es gratis: buscar, comparar, ser guiado, los transportes. Plus — 3,99 € al mes, 14 días de prueba — desbloquea las regiones sin conexión, la importación GPX, las rutas de reparto optimizadas, el registro de kilómetros exportable y la facturación.",
     },
+    {
+      emoji: "🧾",
+      titre: "Los kilómetros que se facturan",
+      texte:
+        "Para quienes conducen por trabajo: el registro de trayectos se exporta en CSV para la contabilidad, una factura PDF se genera por mes con la tarifa por kilómetro elegida, y las rutas con muchas paradas se reordenan al camino más corto — incluso sin cobertura.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -575,6 +640,38 @@ const ES: Contenu = {
         "El directorio de las 19 categorías y los límites de velocidad bajan con la región, sacados del mismo extracto de OpenStreetMap que las carreteras. Buscar una farmacia o leer el límite del momento funciona en modo avión.",
     },
   ],
+  tarifs: {
+    titre: "El precio, dicho claro",
+    intro:
+      "Sin trampas: lo esencial es gratis, y una sola fórmula desbloquea el resto.",
+    gratuit: {
+      nom: "MonCap",
+      prix: "0 €",
+      periode: "para siempre",
+      points: [
+        "Hasta 15 rutas comparadas — duración, giros, desnivel, coste",
+        "Guía por voz, carriles y límites de velocidad",
+        "Tranvías, buses y trenes, con horas reales",
+        "Lo que la ruta va a encontrar: incendios, lluvia, aire",
+        "Siri, la pantalla bloqueada, la ruta que se comparte",
+      ],
+    },
+    plus: {
+      nom: "MonCap Plus",
+      prix: "3,99 €",
+      periode: "al mes, sin permanencia",
+      essai: "14 días de prueba gratis",
+      points: [
+        "212 regiones sin conexión — rutas, lugares, límites de velocidad",
+        "Importación de trazas GPX",
+        "Rutas de reparto optimizadas, incluso con veinte paradas",
+        "Registro de kilómetros exportable (CSV)",
+        "Facturación PDF de los trayectos",
+      ],
+    },
+    note:
+      "La suscripción se contrata en la aplicación, se gestiona y se cancela en los ajustes de iOS. Nada más que pagar, nunca.",
+  },
   preuve: {
     titre: "Una medición vale más que una promesa",
     texte:
@@ -625,6 +722,7 @@ const ES: Contenu = {
       { id: "lieux-titre", nom: "A tu alrededor" },
       { id: "atouts-titre", nom: "Y además" },
       { id: "hors-ligne-titre", nom: "Sin conexión" },
+      { id: "tarifs-titre", nom: "El precio" },
       { id: "preuve-titre", nom: "La prueba" },
       { id: "pile-titre", nom: "Bajo el capó" },
       { id: "franchise-titre", nom: "Lo que no hace" },
@@ -841,6 +939,12 @@ const EN: Contenu = {
       texte:
         "The essentials are free: search, compare, be guided, transit. Plus — €3.99 a month, 14-day trial — unlocks offline regions, GPX import, optimized multi-stop runs, the exportable mileage log and invoicing.",
     },
+    {
+      emoji: "🧾",
+      titre: "Kilometres that get invoiced",
+      texte:
+        "For people who drive for a living: the trip log exports as CSV for bookkeeping, a PDF invoice is generated per month at the per-kilometre rate you choose, and many-stop runs are reordered into the shortest path — even with no signal.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -874,6 +978,38 @@ const EN: Contenu = {
         "The directory of all 19 categories and the speed limits come down with the region, drawn from the same OpenStreetMap extract as the roads. Finding a pharmacy or reading the current limit works in airplane mode.",
     },
   ],
+  tarifs: {
+    titre: "The price, said plainly",
+    intro:
+      "No tricks: the essentials are free, and a single plan unlocks the rest.",
+    gratuit: {
+      nom: "MonCap",
+      prix: "0 €",
+      periode: "forever",
+      points: [
+        "Up to 15 routes compared — time, turns, climb, cost",
+        "Voice guidance, lanes and speed limits",
+        "Trams, buses and trains, with real times",
+        "What the road will meet: wildfires, rain, air",
+        "Siri, the lock screen, trips shared as links",
+      ],
+    },
+    plus: {
+      nom: "MonCap Plus",
+      prix: "3.99 €",
+      periode: "per month, cancel anytime",
+      essai: "14-day free trial",
+      points: [
+        "212 offline regions — routes, places, speed limits",
+        "GPX track import",
+        "Optimized multi-stop runs, even with twenty stops",
+        "Exportable mileage log (CSV)",
+        "PDF invoicing of your trips",
+      ],
+    },
+    note:
+      "The subscription is taken out in the app, managed and cancelled in iOS settings. Nothing else to pay, ever.",
+  },
   preuve: {
     titre: "A measurement beats a promise",
     texte:
@@ -924,6 +1060,7 @@ const EN: Contenu = {
       { id: "lieux-titre", nom: "Around you" },
       { id: "atouts-titre", nom: "And also" },
       { id: "hors-ligne-titre", nom: "Offline" },
+      { id: "tarifs-titre", nom: "Pricing" },
       { id: "preuve-titre", nom: "The proof" },
       { id: "pile-titre", nom: "Under the hood" },
       { id: "franchise-titre", nom: "What it doesn't do" },
