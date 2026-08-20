@@ -154,7 +154,9 @@ final class MonCapPlus: ObservableObject {
 
 /// Ce que chaque formule contient — le paywall et le site racontent pareil.
 struct FormuleAtout: Identifiable {
-    var id: String { titre }
+    /// L'icône identifie l'atout : le titre est une clé localisée, pas une
+    /// chaîne, et chaque liste n'utilise jamais deux fois la même icône.
+    var id: String { icone }
     let icone: String
     let titre: LocalizedStringKey
 }
