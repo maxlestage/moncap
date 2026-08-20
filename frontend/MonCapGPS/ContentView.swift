@@ -705,6 +705,15 @@ struct MapHomeView: View {
     @AppStorage("moncap.firmsKey") private var firmsKey = ""
     /// Partage de position en direct.
     @StateObject private var liveShare = LiveShareManager()
+    /// L'abonnement MonCap Plus : l'état vient de StoreKit, partagé partout.
+    @ObservedObject private var plus = MonCapPlus.shared
+    /// Trois paywalls, un par contexte de présentation : la carte, la
+    /// feuille des trajets, la feuille de recherche — un même binding servi
+    /// à plusieurs `.sheet` se présenterait de travers.
+    @State private var showPaywall = false
+    @State private var showPaywallTrips = false
+    @State private var showPaywallRecherche = false
+    @State private var showFacturation = false
     @State private var displayedTrip: Trip?
     /// Points réellement parcourus pendant la navigation en cours.
     @State private var recordedTrack: [CLLocationCoordinate2D] = []
@@ -768,6 +777,7 @@ struct MapHomeView: View {
         .sheet(isPresented: $showReports) { reportsSheet }
         .sheet(isPresented: $showTrips) { tripsSheet }
         .sheet(isPresented: $showArrive) { ArriveNotifyView() }
+        .sheet(isPresented: $showPaywall) { PaywallView() }
         .alert(
             "Aucun itinéraire", isPresented: Binding(
                 get: { itineraireImpossible != nil },
@@ -2599,7 +2609,15 @@ struct MapHomeView: View {
                         // et la géométrie sait le faire mieux que la mémoire.
                         if etapes.count >= 2 {
                             Button {
-                                ordonneAuPlusCourt()
+                                // L'optimisation de tournées est un outil
+                                // Plus : sans abonnement, le bouton mène au
+                                // paywall — les étapes elles-mêmes restent
+                                // libres, dans l'ordre où on les pose.
+                                if plus.actif {
+                                    ordonneAuPlusCourt()
+                                } else {
+                                    showPaywall = true
+                                }
                             } label: {
                                 Label("Au plus court", systemImage: "arrow.triangle.swap")
                                     .font(.caption.weight(.semibold))
@@ -3151,7 +3169,11 @@ struct MapHomeView: View {
                 // en mode avion, parce qu'il n'a jamais eu besoin de réseau.
                 Section("Trace GPX 🥾") {
                     Button {
-                        importeGPX = true
+                        if plus.actif {
+                            importeGPX = true
+                        } else {
+                            showPaywallRecherche = true
+                        }
                     } label: {
                         Label("Importer une trace GPX", systemImage: "square.and.arrow.down")
                     }
@@ -3305,6 +3327,9 @@ struct MapHomeView: View {
             }
         }
         .presentationDetents([.large])
+        // Le paywall de cette feuille : une feuille peut en présenter une
+        // autre, celle de la carte ne peut pas passer par-dessus celle-ci.
+        .sheet(isPresented: $showPaywallRecherche) { PaywallView() }
     }
 
     /// Ligne de favori (Domicile / Travail) : y aller, définir, redéfinir, effacer.
@@ -3837,12 +3862,53 @@ struct MapHomeView: View {
             .navigationTitle("Mes trajets")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Les outils pro du journal : l'export comptable et la
+                // facture. Derrière Plus — c'est précisément pour eux qu'il
+                // existe.
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button {
+                            if plus.actif { exporteJournal() } else { showPaywallTrips = true }
+                        } label: {
+                            Label("Exporter en CSV", systemImage: "doc.text")
+                        }
+                        .disabled(trips.isEmpty && plus.actif)
+                        Button {
+                            if plus.actif { showFacturation = true } else { showPaywallTrips = true }
+                        } label: {
+                            Label("Facturation", systemImage: "eurosign.circle")
+                        }
+                    } label: {
+                        Image(systemName: "briefcase")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Fermer") { showTrips = false }
                 }
             }
         }
         .presentationDetents([.medium, .large])
+        .sheet(isPresented: $showPaywallTrips) { PaywallView() }
+        .sheet(isPresented: $showFacturation) { FacturationView(trajets: trips) }
+    }
+
+    /// Le journal kilométrique en CSV : une ligne par trajet, du plus ancien
+    /// au plus récent, prêt pour un tableur ou la comptabilité. Séparateur
+    /// point-virgule : c'est celui qu'Excel attend dans les régions où la
+    /// virgule est décimale.
+    private func exporteJournal() {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm"
+        var csv = NSLocalizedString("Date;Trajet;Distance (km);Durée (min)", comment: "") + "\n"
+        for t in trips.sorted(by: { $0.created_at < $1.created_at }) {
+            let libelle = t.label.replacingOccurrences(of: ";", with: ",")
+            csv += "\(f.string(from: t.date));\(libelle);"
+            csv += String(format: "%.1f;%.0f\n", t.distance_km, t.duration_min)
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("journal-moncap.csv")
+        guard (try? csv.data(using: .utf8)?.write(to: url)) != nil else { return }
+        Sharer.present([url])
     }
 
     /// Résumé d'un trajet : date, distance et durée.
@@ -4487,6 +4553,11 @@ struct MapHomeView: View {
             explore([], Array(0..<n))
             return meilleur
         }
+        // Au-delà de sept : plus proche voisin pour l'ébauche, puis 2-opt —
+        // on retourne chaque tronçon tant que ça raccourcit, ce qui décroise
+        // les allers-retours que le glouton laisse derrière lui. Sur des
+        // distances à vol d'oiseau, c'est quasi optimal, et instantané
+        // jusqu'à plusieurs dizaines d'arrêts.
         var reste = Set(0..<n)
         var ordre: [Int] = []
         var courant = from
@@ -4496,6 +4567,27 @@ struct MapHomeView: View {
             ordre.append(prochain)
             reste.remove(prochain)
             courant = etapes[prochain]
+        }
+        var record = cout(ordre)
+        var ameliore = true
+        var gardeFou = 0
+        while ameliore, gardeFou < 60 {
+            ameliore = false
+            gardeFou += 1
+            for i in 0..<(n - 1) {
+                for j in (i + 1)..<n {
+                    var essai = ordre
+                    essai[i...j].reverse()
+                    let c = cout(essai)
+                    // Un demi-mètre de marge : sans elle, deux ordres au coût
+                    // égal à l'arrondi près s'échangeraient sans fin.
+                    if c < record - 0.5 {
+                        ordre = essai
+                        record = c
+                        ameliore = true
+                    }
+                }
+            }
         }
         return ordre
     }

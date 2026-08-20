@@ -178,6 +178,83 @@ T: dict[str, tuple[str, str]] = {
         "I couldn't find that address — network is needed to look up a place name.",
     ),
     "Voilà les itinéraires.": ("Aquí están las rutas.", "Here are the routes."),
+    # --- MonCap Plus (abonnement) ---
+    "MonCap Plus": ("MonCap Plus", "MonCap Plus"),
+    "L'essentiel reste gratuit. Plus déverrouille le hors ligne et les outils pro.": (
+        "Lo esencial sigue gratis. Plus desbloquea el sin conexión y las herramientas pro.",
+        "The essentials stay free. Plus unlocks offline and the pro tools.",
+    ),
+    "Les régions hors ligne": ("Las regiones sin conexión", "Offline regions"),
+    "Tournées optimisées": ("Rutas de reparto optimizadas", "Optimized multi-stop runs"),
+    "Journal kilométrique exportable": (
+        "Registro de kilómetros exportable", "Exportable mileage log"),
+    "Facturation des trajets": ("Facturación de trayectos", "Trip invoicing"),
+    "Import de traces GPX": ("Importación de trazas GPX", "GPX track import"),
+    "212 régions d'Europe téléchargeables : itinéraires, lieux et limites de vitesse sans réseau.": (
+        "212 regiones de Europa descargables: rutas, lugares y límites de velocidad sin cobertura.",
+        "212 European regions to download: routes, places and speed limits with no signal.",
+    ),
+    "L'ordre le plus court calculé pour toutes tes étapes, même nombreuses — hors ligne compris.": (
+        "El orden más corto calculado para todas tus paradas, aunque sean muchas — sin conexión incluido.",
+        "The shortest order computed for all your stops, however many — offline included.",
+    ),
+    "Tes trajets en CSV — dates, distances, durées — prêts pour la comptabilité.": (
+        "Tus trayectos en CSV — fechas, distancias, duraciones — listos para la contabilidad.",
+        "Your trips as CSV — dates, distances, durations — ready for bookkeeping.",
+    ),
+    "Une facture PDF par période, au taux kilométrique de ton choix.": (
+        "Una factura PDF por período, con la tarifa por kilómetro que elijas.",
+        "A PDF invoice per period, at the per-kilometre rate you choose.",
+    ),
+    "Une randonnée ou un parcours d'une autre app devient ton itinéraire, consignes comprises.": (
+        "Una caminata o una ruta de otra app se vuelve tu itinerario, indicaciones incluidas.",
+        "A hike or a route from another app becomes your route, instructions included.",
+    ),
+    "14 jours d'essai gratuit": ("14 días de prueba gratis", "14-day free trial"),
+    "puis %@ par mois": ("después %@ al mes", "then %@ per month"),
+    "%@ par mois": ("%@ al mes", "%@ per month"),
+    "La boutique ne répond pas — réessaie avec du réseau.": (
+        "La tienda no responde — reintenta con cobertura.",
+        "The store isn't responding — try again with signal.",
+    ),
+    "Restaurer les achats": ("Restaurar compras", "Restore purchases"),
+    "Abonnement mensuel, renouvelé automatiquement, résiliable à tout moment dans les réglages iOS.": (
+        "Suscripción mensual, renovada automáticamente, cancelable en cualquier momento en los ajustes de iOS.",
+        "Monthly subscription, renews automatically, cancel anytime in iOS settings.",
+    ),
+    "Confidentialité": ("Privacidad", "Privacy"),
+    "Conditions": ("Condiciones", "Terms"),
+    # --- Journal et facturation ---
+    "Exporter en CSV": ("Exportar en CSV", "Export as CSV"),
+    "Facturation": ("Facturación", "Invoicing"),
+    "Date;Trajet;Distance (km);Durée (min)": (
+        "Fecha;Trayecto;Distancia (km);Duración (min)",
+        "Date;Trip;Distance (km);Duration (min)",
+    ),
+    "Émetteur": ("Emisor", "Issuer"),
+    "Nom ou entreprise": ("Nombre o empresa", "Name or company"),
+    "Adresse": ("Dirección", "Address"),
+    "SIRET (optionnel)": ("NIF (opcional)", "Company ID (optional)"),
+    "Facture": ("Factura", "Invoice"),
+    "Client": ("Cliente", "Client"),
+    "Mois facturé": ("Mes facturado", "Invoiced month"),
+    "Taux par kilomètre": ("Tarifa por kilómetro", "Rate per kilometre"),
+    "Mention libre (TVA, franchise…)": (
+        "Mención libre (IVA, franquicia…)", "Free-form note (VAT, exemption…)"),
+    "%d trajet(s) sur la période": (
+        "%d trayecto(s) en el período", "%d trip(s) in the period"),
+    "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    "Partager la facture": ("Compartir la factura", "Share the invoice"),
+    "FACTURE": ("FACTURA", "INVOICE"),
+    "N° %@ · %@": ("N.º %@ · %@", "No. %@ · %@"),
+    "SIRET %@": ("NIF %@", "Company ID %@"),
+    "Facturé à :": ("Facturado a:", "Billed to:"),
+    "Date": ("Fecha", "Date"),
+    "Trajet": ("Trayecto", "Trip"),
+    "Total : %.1f km × %.2f €/km = %.2f €": (
+        "Total: %.1f km × %.2f €/km = %.2f €",
+        "Total: %.1f km × %.2f €/km = %.2f €",
+    ),
     "Trace GPX 🥾": ("Traza GPX 🥾", "GPX track 🥾"),
     "Importer une trace GPX": ("Importar una traza GPX", "Import a GPX track"),
     "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau.": (
@@ -674,6 +751,9 @@ def verbatim(fichiers: list[tuple[str, str]]) -> list[str]:
         "gardee.poids", "region.nom", "couvrante.nom",
         "r.label", "r.name", "r.subtitle",
         "place.label", "p.label", "e.name", "t.label",
+        # Déjà typés LocalizedStringKey à la source (PlusAtout, MonCapPlus) :
+        # la traduction se fait bien, le contrôleur ne voit que la surface.
+        "a.titre", "a.detail",
     }
     # Limite assumée : la liste est indexée par expression, non par site.
     # « t.label » désigne ici le nom d'un trajet — donnée d'utilisateur — mais
