@@ -180,63 +180,61 @@ T: dict[str, tuple[str, str]] = {
     "Voilà les itinéraires.": ("Aquí están las rutas.", "Here are the routes."),
     # --- MonCap Plus (abonnement) ---
     "MonCap Plus": ("MonCap Plus", "MonCap Plus"),
-    "L'essentiel reste gratuit. Plus déverrouille le hors ligne et les outils pro.": (
-        "Lo esencial sigue gratis. Plus desbloquea el sin conexión y las herramientas pro.",
-        "The essentials stay free. Plus unlocks offline and the pro tools.",
+    "Ma formule": ("Mi fórmula", "My plan"),
+    "Ton essai est terminé": ("Tu prueba ha terminado", "Your trial is over"),
+    "Choisis ta formule": ("Elige tu fórmula", "Choose your plan"),
+    "Il reste %d jour(s) d'essai — tout est ouvert.": (
+        "Quedan %d día(s) de prueba — todo está abierto.",
+        "%d trial day(s) left — everything is open.",
     ),
-    "Les régions hors ligne": ("Las regiones sin conexión", "Offline regions"),
-    "Tournées optimisées": ("Rutas de reparto optimizadas", "Optimized multi-stop runs"),
-    "Journal kilométrique exportable": (
-        "Registro de kilómetros exportable", "Exportable mileage log"),
-    "Facturation des trajets": ("Facturación de trayectos", "Trip invoicing"),
+    "Quatorze jours pour tout essayer, puis une formule — rien de gratuit, c'est la règle.": (
+        "Catorce días para probarlo todo, después una fórmula — nada gratis, es la regla.",
+        "Fourteen days to try everything, then a plan — nothing free, that's the rule.",
+    ),
+    "L'app entière : guidage, comparateur, transports": (
+        "La app entera: guía, comparador, transportes",
+        "The whole app: guidance, comparison, transit",
+    ),
+    "212 régions hors ligne": ("212 regiones sin conexión", "212 offline regions"),
     "Import de traces GPX": ("Importación de trazas GPX", "GPX track import"),
-    "212 régions d'Europe téléchargeables : itinéraires, lieux et limites de vitesse sans réseau.": (
-        "212 regiones de Europa descargables: rutas, lugares y límites de velocidad sin cobertura.",
-        "212 European regions to download: routes, places and speed limits with no signal.",
+    "Tout MonCap Plus": ("Todo MonCap Plus", "Everything in MonCap Plus"),
+    "Journal kilométrique exportable (CSV)": (
+        "Registro de kilómetros exportable (CSV)",
+        "Exportable mileage log (CSV)",
     ),
-    "L'ordre le plus court calculé pour toutes tes étapes, même nombreuses — hors ligne compris.": (
-        "El orden más corto calculado para todas tus paradas, aunque sean muchas — sin conexión incluido.",
-        "The shortest order computed for all your stops, however many — offline included.",
+    "Facturation PDF des trajets": (
+        "Facturación PDF de los trayectos",
+        "PDF invoicing of your trips",
     ),
-    "Tes trajets en CSV — dates, distances, durées — prêts pour la comptabilité.": (
-        "Tus trayectos en CSV — fechas, distancias, duraciones — listos para la contabilidad.",
-        "Your trips as CSV — dates, distances, durations — ready for bookkeeping.",
+    "%@ / mois": ("%@ / mes", "%@ / month"),
+    "Choisir": ("Elegir", "Choose"),
+    "Ta formule actuelle": ("Tu fórmula actual", "Your current plan"),
+    "Tout offert 🎁": ("Todo regalado 🎁", "Everything on the house 🎁"),
+    "MonCap Pro actif": ("MonCap Pro activo", "MonCap Pro active"),
+    "MonCap Plus actif": ("MonCap Plus activo", "MonCap Plus active"),
+    "Essai en cours — tout est ouvert": (
+        "Prueba en curso — todo está abierto",
+        "Trial running — everything is open",
     ),
-    "Une facture PDF par période, au taux kilométrique de ton choix.": (
-        "Una factura PDF por período, con la tarifa por kilómetro que elijas.",
-        "A PDF invoice per period, at the per-kilometre rate you choose.",
+    "Il reste %d jour(s), puis une formule.": (
+        "Quedan %d día(s), después una fórmula.",
+        "%d day(s) left, then a plan.",
     ),
-    "Une randonnée ou un parcours d'une autre app devient ton itinéraire, consignes comprises.": (
-        "Una caminata o una ruta de otra app se vuelve tu itinerario, indicaciones incluidas.",
-        "A hike or a route from another app becomes your route, instructions included.",
+    "Choisir ma formule": ("Elegir mi fórmula", "Choose my plan"),
+    "Plus %@ ou Pro %@ par mois.": (
+        "Plus %@ o Pro %@ al mes.",
+        "Plus %@ or Pro %@ per month.",
     ),
-    "14 jours d'essai gratuit": ("14 días de prueba gratis", "14-day free trial"),
-    "puis %@ par mois": ("después %@ al mes", "then %@ per month"),
-    "%@ par mois": ("%@ al mes", "%@ per month"),
+    "Tournées optimisées": ("Rutas de reparto optimizadas", "Optimized multi-stop runs"),
+    "Import de traces GPX": ("Importación de trazas GPX", "GPX track import"),
     "La boutique ne répond pas — réessaie avec du réseau.": (
         "La tienda no responde — reintenta con cobertura.",
         "The store isn't responding — try again with signal.",
     ),
     "Restaurer les achats": ("Restaurar compras", "Restore purchases"),
     "J'ai un code": ("Tengo un código", "I have a code"),
-    "Essai gratuit en cours": ("Prueba gratis en curso", "Free trial running"),
-    "Il reste %d jour(s) — puis %@ par mois.": (
-        "Quedan %d día(s) — después %@ al mes.",
-        "%d day(s) left — then %@ per month.",
-    ),
-    "MonCap Plus — offert 🎁": ("MonCap Plus — regalado 🎁", "MonCap Plus — on the house 🎁"),
-    "Abonnement actif": ("Suscripción activa", "Subscription active"),
     "Renouvellement le %@.": ("Renovación el %@.", "Renews on %@."),
     "Gérer l'abonnement": ("Gestionar la suscripción", "Manage subscription"),
-    "Découvrir MonCap Plus": ("Descubrir MonCap Plus", "Discover MonCap Plus"),
-    "14 jours d'essai, puis %@ par mois.": (
-        "14 días de prueba, después %@ al mes.",
-        "14-day trial, then %@ per month.",
-    ),
-    "%@ par mois, sans engagement.": (
-        "%@ al mes, sin permanencia.",
-        "%@ per month, cancel anytime.",
-    ),
     "Abonnement mensuel, renouvelé automatiquement, résiliable à tout moment dans les réglages iOS.": (
         "Suscripción mensual, renovada automáticamente, cancelable en cualquier momento en los ajustes de iOS.",
         "Monthly subscription, renews automatically, cancel anytime in iOS settings.",

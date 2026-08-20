@@ -366,7 +366,7 @@ struct OfflineMapScreen: View {
                     // Télécharger une nouvelle région est un atout Plus ;
                     // mettre à jour ce qu'on a déjà reste libre — on ne
                     // reprend pas ce qui a été donné.
-                    if !deja && !maj && !MonCapPlus.shared.actif {
+                    if !deja && !maj && !MonCapPlus.shared.accesPlus {
                         paywall = true
                         return
                     }
@@ -658,7 +658,7 @@ struct RegionButton: View {
         Button {
             // Nouvelle région = atout Plus ; la mise à jour d'une région
             // déjà installée reste libre.
-            if !deja && !maj && !MonCapPlus.shared.actif {
+            if !deja && !maj && !MonCapPlus.shared.accesPlus {
                 paywall = true
                 return
             }

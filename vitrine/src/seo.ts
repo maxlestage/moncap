@@ -79,8 +79,9 @@ export function robots(): string {
 
 /**
  * Les données structurées schema.org : une application iOS, son auteur, ses
- * deux prix — le gratuit et Plus à 3,99 €/mois. C'est ce que les moteurs
- * montrent en résultat enrichi, et le prix y est dit comme sur la page.
+ * deux prix — Plus à 3,99 €/mois et Pro à 9,99 €/mois. Pas d'offre à 0 € :
+ * l'essai de quatorze jours n'est pas une formule, et un prix gratuit ici
+ * serait un mensonge en résultat enrichi.
  */
 export function jsonLd(c: Contenu): string {
   return JSON.stringify({
@@ -95,14 +96,14 @@ export function jsonLd(c: Contenu): string {
     offers: [
       {
         "@type": "Offer",
-        name: "MonCap",
-        price: "0",
+        name: "MonCap Plus",
+        price: "3.99",
         priceCurrency: "EUR",
       },
       {
         "@type": "Offer",
-        name: "MonCap Plus",
-        price: "3.99",
+        name: "MonCap Pro",
+        price: "9.99",
         priceCurrency: "EUR",
       },
     ],

@@ -187,21 +187,25 @@ test("chaque langue garde la même matière", () => {
     expect(atouts, `${l.code}`).toContain("siri");
     expect(atouts, `${l.code}`).toContain("dynamic island");
 
-    // Le prix est dit, et le même partout : le bandeau de chiffres, la
-    // carte MonCap Plus ET la section tarifs annoncent 3,99 €/mois — la
-    // page a longtemps dit « 0 € — aucun abonnement », et ce genre de
-    // retard est un mensonge.
+    // Les prix sont dits, et les mêmes partout : le bandeau de chiffres, la
+    // carte MonCap Plus ET la section tarifs annoncent 3,99 €/mois et
+    // 9,99 €/mois — la page a longtemps dit « 0 € — aucun abonnement », et
+    // ce genre de retard est un mensonge.
     expect(valeurs.join(" "), `${l.code}`).toMatch(/3[.,]99/);
     expect(atouts, `${l.code}`).toMatch(/3[.,]99/);
+    expect(atouts, `${l.code}`).toMatch(/9[.,]99/);
     expect(atouts, `${l.code}`).toContain("moncap plus");
     expect(l.tarifs.plus.prix, `${l.code}`).toMatch(/3[.,]99/);
-    // La formule gratuite est vraiment gratuite, la payante porte l'essai,
-    // et chacune a de quoi comparer.
-    expect(l.tarifs.gratuit.prix, `${l.code}`).toContain("0");
-    expect(l.tarifs.plus.essai, `${l.code}`).toMatch(/14/);
-    expect(l.tarifs.gratuit.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
+    expect(l.tarifs.pro.prix, `${l.code}`).toMatch(/9[.,]99/);
+    // L'essai dit ses quatorze jours, aucune carte ne dit « gratuit » en
+    // prix — rien de gratuit passé l'essai, c'est la règle — et chacune a
+    // de quoi comparer.
+    expect(l.tarifs.essai.prix, `${l.code}`).toContain("14");
+    expect(l.tarifs.essai.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
     expect(l.tarifs.plus.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
-    for (const f of [l.tarifs.gratuit, l.tarifs.plus]) {
+    expect(l.tarifs.pro.points.length, `${l.code}`).toBeGreaterThanOrEqual(3);
+    for (const f of [l.tarifs.essai, l.tarifs.plus, l.tarifs.pro]) {
+      expect(f.prix, `${l.code}`).not.toContain("0 €");
       for (const p of f.points) expect(p.trim().length).toBeGreaterThan(0);
     }
     // Les nouveautés pro sont dites : journal, facturation, tournées.

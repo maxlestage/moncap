@@ -3900,6 +3900,10 @@ struct AccountInfo {
     /// MonCap Plus offert par la maison : le pseudo figure dans la liste
     /// d'invités (variable PLUS_OFFERT). Une vieille app ignore le champ.
     plus_offert: bool,
+    /// Secondes Unix de la création du compte : l'ancre de l'essai de
+    /// quatorze jours, tenue côté serveur — l'horloge d'un téléphone se
+    /// triche, pas la nôtre. Une vieille app ignore le champ.
+    created_at: i64,
 }
 
 /// Le pseudo figure-t-il dans une liste d'invités ? Pseudos séparés par des
@@ -3953,6 +3957,7 @@ async fn account_info(
     )?;
     Ok(Json(AccountInfo {
         plus_offert: plus_offert(&found.username),
+        created_at: found.created_at,
         username: found.username,
         points: score(alerts, trips, positions, searches),
         alerts,

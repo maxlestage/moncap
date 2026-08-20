@@ -45,12 +45,13 @@ export type Contenu = {
   readonly atoutsTitre: string;
   readonly atouts: readonly Atout[];
   readonly horsLigneCartes: readonly Atout[];
-  /** La section tarifs : gratuit et Plus côte à côte, prix mensuel en grand. */
+  /** La section tarifs : l'essai, Plus et Pro côte à côte, mensuel en grand. */
   readonly tarifs: {
     readonly titre: string;
     readonly intro: string;
-    readonly gratuit: Formule;
+    readonly essai: Formule;
     readonly plus: Formule;
+    readonly pro: Formule;
     readonly note: string;
   };
   readonly preuve: {
@@ -101,8 +102,6 @@ export type Formule = {
   readonly prix: string;
   /** Ce qui suit le prix (« par mois, sans engagement »). */
   readonly periode: string;
-  /** L'essai gratuit, dit sur la formule payante seulement. */
-  readonly essai?: string;
   readonly points: readonly string[];
 };
 
@@ -153,7 +152,7 @@ const FR: Contenu = {
     { valeur: "19", legende: "catégories de lieux" },
     { valeur: "212", legende: "régions téléchargeables" },
     { valeur: "49", legende: "pays d'Europe" },
-    { valeur: "3,99 €", legende: "par mois — l'essentiel gratuit" },
+    { valeur: "3,99 €", legende: "par mois après 14 jours d'essai" },
   ],
   comparateur: {
     titre: "Le trajet vous est présenté, pas imposé",
@@ -261,7 +260,7 @@ const FR: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "L'essentiel est gratuit : chercher, comparer, être guidé, les transports. Plus — 3,99 € par mois, 14 jours d'essai — déverrouille les régions hors ligne, l'import GPX, les tournées optimisées, le journal kilométrique exportable et la facturation.",
+        "Quatorze jours d'essai, tout ouvert — puis une formule : Plus, 3,99 € par mois, pour l'app entière (hors ligne, GPX, tournées) ; Pro, 9,99 € par mois, pour le journal kilométrique et la facturation. Rien de gratuit au-delà, c'est la règle.",
     },
     {
       emoji: "🧾",
@@ -305,34 +304,41 @@ const FR: Contenu = {
   tarifs: {
     titre: "Le prix, dit simplement",
     intro:
-      "Pas de pièges : l'essentiel est gratuit, et une seule formule déverrouille le reste.",
-    gratuit: {
-      nom: "MonCap",
-      prix: "0 €",
-      periode: "pour toujours",
+      "Pas de pièges : quatorze jours pour tout essayer, puis une formule au mois — Plus ou Pro, selon l'usage.",
+    essai: {
+      nom: "L'essai",
+      prix: "14 jours",
+      periode: "tout ouvert, pour tout le monde",
       points: [
-        "Jusqu'à 15 itinéraires comparés — durée, virages, dénivelé, coût",
-        "Guidage vocal, voies et limites de vitesse",
-        "Trams, bus et trains, aux heures réelles",
-        "Ce que la route rencontrera : feux, pluie, air",
-        "Siri, l'écran verrouillé, le partage de trajet",
+        "L'app entière, sans restriction",
+        "Jusqu'à 15 itinéraires comparés, guidage, transports",
+        "Hors ligne, GPX, tournées, journal, facturation",
+        "Aucune carte bancaire demandée pour essayer",
       ],
     },
     plus: {
       nom: "MonCap Plus",
       prix: "3,99 €",
       periode: "par mois, sans engagement",
-      essai: "14 jours d'essai gratuit",
       points: [
+        "L'app entière : guidage, comparateur, transports",
         "212 régions hors ligne — itinéraires, lieux, limites de vitesse",
         "Import de traces GPX",
         "Tournées optimisées, même à vingt arrêts",
+      ],
+    },
+    pro: {
+      nom: "MonCap Pro",
+      prix: "9,99 €",
+      periode: "par mois, pour ceux qui roulent pour travailler",
+      points: [
+        "Tout MonCap Plus",
         "Journal kilométrique exportable (CSV)",
-        "Facturation PDF des trajets",
+        "Facturation PDF au taux kilométrique choisi",
       ],
     },
     note:
-      "L'abonnement se prend dans l'application, se gère et se résilie dans les réglages iOS. Rien d'autre à payer, jamais.",
+      "Quatorze jours d'essai pour tout le monde, puis une formule — rien de gratuit au-delà, c'est la règle. L'abonnement se prend dans l'application, se gère et se résilie dans les réglages iOS.",
   },
   preuve: {
     titre: "Une mesure vaut mieux qu'une promesse",
@@ -491,7 +497,7 @@ const ES: Contenu = {
     { valeur: "19", legende: "categorías de lugares" },
     { valeur: "212", legende: "regiones descargables" },
     { valeur: "49", legende: "países de Europa" },
-    { valeur: "3,99 €", legende: "al mes — lo esencial gratis" },
+    { valeur: "3,99 €", legende: "al mes tras 14 días de prueba" },
   ],
   comparateur: {
     titre: "La ruta se te propone, no se te impone",
@@ -599,7 +605,7 @@ const ES: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Lo esencial es gratis: buscar, comparar, ser guiado, los transportes. Plus — 3,99 € al mes, 14 días de prueba — desbloquea las regiones sin conexión, la importación GPX, las rutas de reparto optimizadas, el registro de kilómetros exportable y la facturación.",
+        "Catorce días de prueba, todo abierto — después una fórmula: Plus, 3,99 € al mes, para la app entera (sin conexión, GPX, repartos); Pro, 9,99 € al mes, para el registro de kilómetros y la facturación. Nada gratis más allá, es la regla.",
     },
     {
       emoji: "🧾",
@@ -643,34 +649,41 @@ const ES: Contenu = {
   tarifs: {
     titre: "El precio, dicho claro",
     intro:
-      "Sin trampas: lo esencial es gratis, y una sola fórmula desbloquea el resto.",
-    gratuit: {
-      nom: "MonCap",
-      prix: "0 €",
-      periode: "para siempre",
+      "Sin trampas: catorce días para probarlo todo, luego una fórmula al mes — Plus o Pro, según el uso.",
+    essai: {
+      nom: "La prueba",
+      prix: "14 días",
+      periode: "todo abierto, para todo el mundo",
       points: [
-        "Hasta 15 rutas comparadas — duración, giros, desnivel, coste",
-        "Guía por voz, carriles y límites de velocidad",
-        "Tranvías, buses y trenes, con horas reales",
-        "Lo que la ruta va a encontrar: incendios, lluvia, aire",
-        "Siri, la pantalla bloqueada, la ruta que se comparte",
+        "La app entera, sin restricciones",
+        "Hasta 15 rutas comparadas, guía, transportes",
+        "Sin conexión, GPX, repartos, registro, facturación",
+        "Sin tarjeta bancaria para probar",
       ],
     },
     plus: {
       nom: "MonCap Plus",
       prix: "3,99 €",
       periode: "al mes, sin permanencia",
-      essai: "14 días de prueba gratis",
       points: [
+        "La app entera: guía, comparador, transportes",
         "212 regiones sin conexión — rutas, lugares, límites de velocidad",
         "Importación de trazas GPX",
         "Rutas de reparto optimizadas, incluso con veinte paradas",
+      ],
+    },
+    pro: {
+      nom: "MonCap Pro",
+      prix: "9,99 €",
+      periode: "al mes, para quienes conducen por trabajo",
+      points: [
+        "Todo MonCap Plus",
         "Registro de kilómetros exportable (CSV)",
-        "Facturación PDF de los trayectos",
+        "Facturación PDF con la tarifa por kilómetro elegida",
       ],
     },
     note:
-      "La suscripción se contrata en la aplicación, se gestiona y se cancela en los ajustes de iOS. Nada más que pagar, nunca.",
+      "Catorce días de prueba para todo el mundo, después una fórmula — nada gratis más allá, es la regla. La suscripción se contrata en la aplicación y se cancela en los ajustes de iOS.",
   },
   preuve: {
     titre: "Una medición vale más que una promesa",
@@ -829,7 +842,7 @@ const EN: Contenu = {
     { valeur: "19", legende: "place categories" },
     { valeur: "212", legende: "downloadable regions" },
     { valeur: "49", legende: "European countries" },
-    { valeur: "3.99 €", legende: "per month — essentials free" },
+    { valeur: "3.99 €", legende: "per month after a 14-day trial" },
   ],
   comparateur: {
     titre: "The route is offered, not imposed",
@@ -937,7 +950,7 @@ const EN: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "The essentials are free: search, compare, be guided, transit. Plus — €3.99 a month, 14-day trial — unlocks offline regions, GPX import, optimized multi-stop runs, the exportable mileage log and invoicing.",
+        "Fourteen days of trial, everything open — then a plan: Plus, €3.99 a month, for the whole app (offline, GPX, multi-stop); Pro, €9.99 a month, for the mileage log and invoicing. Nothing free beyond that — that's the rule.",
     },
     {
       emoji: "🧾",
@@ -981,34 +994,41 @@ const EN: Contenu = {
   tarifs: {
     titre: "The price, said plainly",
     intro:
-      "No tricks: the essentials are free, and a single plan unlocks the rest.",
-    gratuit: {
-      nom: "MonCap",
-      prix: "0 €",
-      periode: "forever",
+      "No tricks: fourteen days to try everything, then one monthly plan — Plus or Pro, depending on how you drive.",
+    essai: {
+      nom: "The trial",
+      prix: "14 days",
+      periode: "everything open, for everyone",
       points: [
-        "Up to 15 routes compared — time, turns, climb, cost",
-        "Voice guidance, lanes and speed limits",
-        "Trams, buses and trains, with real times",
-        "What the road will meet: wildfires, rain, air",
-        "Siri, the lock screen, trips shared as links",
+        "The whole app, no restrictions",
+        "Up to 15 routes compared, guidance, transit",
+        "Offline, GPX, multi-stop runs, log, invoicing",
+        "No card required to try",
       ],
     },
     plus: {
       nom: "MonCap Plus",
       prix: "3.99 €",
       periode: "per month, cancel anytime",
-      essai: "14-day free trial",
       points: [
+        "The whole app: guidance, comparison, transit",
         "212 offline regions — routes, places, speed limits",
         "GPX track import",
         "Optimized multi-stop runs, even with twenty stops",
+      ],
+    },
+    pro: {
+      nom: "MonCap Pro",
+      prix: "9.99 €",
+      periode: "per month, for people who drive for a living",
+      points: [
+        "Everything in MonCap Plus",
         "Exportable mileage log (CSV)",
-        "PDF invoicing of your trips",
+        "PDF invoicing at the per-kilometre rate you choose",
       ],
     },
     note:
-      "The subscription is taken out in the app, managed and cancelled in iOS settings. Nothing else to pay, ever.",
+      "Fourteen days of trial for everyone, then a plan — nothing free beyond that, that's the rule. The subscription is taken out in the app and cancelled in iOS settings.",
   },
   preuve: {
     titre: "A measurement beats a promise",
