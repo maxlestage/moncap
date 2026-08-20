@@ -3073,6 +3073,22 @@
         }
       }
     },
+    "Route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Road"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carretera"
+          }
+        }
+      }
+    },
     "Rue": {
       "localizations": {
         "en": {
@@ -3585,6 +3601,22 @@
         }
       }
     },
+    "Type de vélo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bike type"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo de bicicleta"
+          }
+        }
+      }
+    },
     "Téléchargement interrompu.": {
       "localizations": {
         "en": {
@@ -3629,6 +3661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una ruta hasta cada punto"
+          }
+        }
+      }
+    },
+    "VTT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MTB"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "BTT"
           }
         }
       }
@@ -4273,6 +4321,22 @@
         }
       }
     },
+    "Éviter les côtes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoid hills"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evitar las cuestas"
+          }
+        }
+      }
+    },
     "Éviter les péages": {
       "localizations": {
         "en": {
@@ -4417,6 +4481,22 @@
         }
       }
     },
+    "🌧️ Pluie en route (%@ · %d %%)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🌧️ Rain on the way (%@ · %d %%)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🌧️ Lluvia en el camino (%@ · %d %%)"
+          }
+        }
+      }
+    },
     "🌧️ Pluie probable à l'arrivée (%d %%)": {
       "localizations": {
         "en": {
@@ -4429,6 +4509,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "🌧️ Lluvia probable a la llegada (%d %%)"
+          }
+        }
+      }
+    },
+    "🌧️ Pluie vers %@ (%@ · %d %%)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🌧️ Rain near %@ (%@ · %d %%)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🌧️ Lluvia hacia %@ (%@ · %d %%)"
           }
         }
       }
