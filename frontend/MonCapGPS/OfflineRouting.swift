@@ -55,6 +55,8 @@ final class OfflineRouter: NSObject, ObservableObject {
         let nom: String
         /// Poids de l'archive, mesuré sur la pièce jointe.
         let octets: Int
+        /// Date de la dernière construction (ISO), absente d'un vieux serveur.
+        let construit: String?
 
         var archive: URL { URL(string: "\(Region.base)/\(id)/archive")! }
         var config: URL { URL(string: "\(Region.base)/\(id)/config")! }
@@ -94,6 +96,11 @@ final class OfflineRouter: NSObject, ObservableObject {
         let nom: String
         /// Poids de l'archive sur le disque, mesuré à l'installation.
         var octets: Int = 0
+        /// Date de construction de l'archive installée. Absente d'une
+        /// installation d'avant cette version : on ne propose alors pas de
+        /// mise à jour — mieux vaut manquer une fraîcheur que pousser un
+        /// retéléchargement de cinq cents mégaoctets pour rien.
+        var construit: String? = nil
 
         var poids: String { String(format: "%.0f Mo", Double(octets) / 1_000_000) }
     }
@@ -281,6 +288,18 @@ final class OfflineRouter: NSObject, ObservableObject {
         return String(format: "%.1f Go", Double(octets) / 1_000_000_000)
     }
 
+    /// Vrai si la région installée a une construction plus fraîche en ligne.
+    ///
+    /// Les deux dates doivent être connues : une installation d'avant cette
+    /// version n'a pas la sienne, et on ne pousse pas un retéléchargement de
+    /// cinq cents mégaoctets sur un doute.
+    func majDisponible(_ region: Region) -> Bool {
+        guard let publiee = region.construit,
+            let locale = installees.first(where: { $0.id == region.id })?.construit
+        else { return false }
+        return publiee != locale
+    }
+
     func estInstallee(_ region: Region) -> Bool {
         installees.contains { $0.id == region.id }
     }
@@ -363,13 +382,17 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// Le transfert est confié au système : deux gigaoctets ne descendent pas
     /// en gardant l'écran allumé sur l'app. iOS poursuit la session de fond
     /// app quittée, et réveille celle-ci quand le fichier est là.
-    func install(_ region: Region) async {
-        guard !downloading, !estInstallee(region) else { return }
+    /// `remplace` : réinstaller par-dessus une région déjà là — le geste de
+    /// la mise à jour. Les téléchargements écrasent les fichiers en place.
+    func install(_ region: Region, remplace: Bool = false) async {
+        guard !downloading, remplace || !estInstallee(region) else { return }
         downloading = true
         progress = 0
         message = nil
 
-        attentes[region.id] = region.nom
+        // La date voyage avec le nom, séparée par un caractère de contrôle :
+        // le téléchargement survit à la mort de l'app, l'attente aussi.
+        attentes[region.id] = region.nom + "\u{1F}" + (region.construit ?? "")
         enCoursRegion = EnCours(nom: region.nom, octets: region.octets)
         // Les deux fichiers passent par la session de fond, y compris la
         // configuration pourtant minuscule : une requête ordinaire serait
@@ -433,16 +456,23 @@ final class OfflineRouter: NSObject, ObservableObject {
         guard octets > 0, Self.poids(Self.configPath(id)) > 0 else { return }
 
         var restantes = attentes
-        let nom = restantes.removeValue(forKey: id) ?? id
+        let brut = restantes.removeValue(forKey: id) ?? id
         attentes = restantes
         downloading = !restantes.isEmpty
         if restantes.isEmpty { enCoursRegion = nil }
+        let morceaux = brut.components(separatedBy: "\u{1F}")
+        let nom = morceaux.first ?? id
+        let construit = morceaux.count > 1 && !morceaux[1].isEmpty ? morceaux[1] : nil
 
         moteurs[id] = nil
-        if !installees.contains(where: { $0.id == id }) {
-            installees.append(Installee(id: id, nom: nom, octets: octets))
-            enregistre()
+        let neuve = Installee(id: id, nom: nom, octets: octets, construit: construit)
+        if let deja = installees.firstIndex(where: { $0.id == id }) {
+            // Mise à jour : la même région, l'archive fraîche.
+            installees[deja] = neuve
+        } else {
+            installees.append(neuve)
         }
+        enregistre()
         progress = 1
     }
 

@@ -578,6 +578,12 @@ struct RegionPubliee {
     nom: String,
     /// Poids de l'archive, mesuré sur la pièce jointe.
     octets: u64,
+    /// Date de la dernière construction de l'archive (`updated_at` de la
+    /// pièce jointe, ISO 8601). C'est elle qui dit qu'un paquet installé a
+    /// une version plus fraîche en ligne : le poids seul peut rester
+    /// identique d'une construction à l'autre.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    construit: String,
 }
 
 struct PaquetsCache {
@@ -742,8 +748,10 @@ async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
                 continue;
             };
             let titre = release["name"].as_str().unwrap_or("").trim();
+            let construit = tar["updated_at"].as_str().unwrap_or("").to_string();
             trouvees.push(RegionPubliee {
                 id: tag.to_string(),
+                construit,
                 nom: if titre.is_empty() {
                     tag.to_string()
                 } else {

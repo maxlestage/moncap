@@ -106,6 +106,10 @@ T: dict[str, tuple[str, str]] = {
     "Toutes les régions": ("Todas las regiones", "All regions"),
     "Sur cet appareil": ("En este dispositivo", "On this device"),
     "Déjà installée": ("Ya instalada", "Already installed"),
+    "Mise à jour disponible · %@": (
+        "Actualización disponible · %@",
+        "Update available · %@",
+    ),
     "Calcul sur l'appareil · %@": (
         "Cálculo en el dispositivo · %@",
         "Computed on the device · %@",
