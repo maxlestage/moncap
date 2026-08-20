@@ -2783,6 +2783,10 @@ fn build_app(state: AppState) -> Router {
             "/en/privacy",
             ServeFile::new("vitrine/dist/en/privacy/index.html"),
         )
+        // Le référencement : les robots et le plan du site, engendrés par la
+        // construction de la vitrine (voir vitrine/src/seo.ts).
+        .route_service("/robots.txt", ServeFile::new("vitrine/dist/robots.txt"))
+        .route_service("/sitemap.xml", ServeFile::new("vitrine/dist/sitemap.xml"))
         .layer(middleware::from_fn(revalider));
 
     // Ses fichiers vivent sous `/vitrine`, nommés d'après leur contenu. Un
@@ -4504,6 +4508,8 @@ mod tests {
             "vitrine/dist/es/privacidad/index.html",
             "vitrine/dist/en/legal/index.html",
             "vitrine/dist/en/privacy/index.html",
+            "vitrine/dist/robots.txt",
+            "vitrine/dist/sitemap.xml",
         ] {
             assert!(
                 std::path::Path::new(chemin).exists(),

@@ -22,6 +22,7 @@ import { App } from "./src/App";
 import { Legale } from "./src/Legale";
 import { LANGUES } from "./src/langues";
 import type { Contenu, PageLegale } from "./src/langues";
+import { jsonLd, OG_LOCALES, PUBLIC, robots, sitemap } from "./src/seo";
 
 const SORTIE = "dist";
 /** Préfixe sous lequel le backend monte le dossier construit. */
@@ -78,27 +79,44 @@ function attr(s: string): string {
 }
 
 /**
- * Les balises de tête propres à une langue : titre, description, icône,
- * feuille, et les `alternate` qui disent aux moteurs que les trois pages
- * sont la même, dans trois langues.
+ * Les balises de tête propres à une langue : titre, description, la
+ * canonique et les `alternate` en adresses **absolues** (un hreflang relatif
+ * est invalide pour les moteurs), Open Graph et Twitter complets, les
+ * données structurées schema.org — prix compris —, l'icône et la feuille.
  */
 function tete(c: Contenu): string {
   const alternates = [
     ...LANGUES.map(
-      (l) => `<link rel="alternate" hreflang="${l.code}" href="${l.chemin}" />`,
+      (l) =>
+        `<link rel="alternate" hreflang="${l.code}" href="${PUBLIC}${l.chemin}" />`,
     ),
-    `<link rel="alternate" hreflang="x-default" href="/" />`,
+    `<link rel="alternate" hreflang="x-default" href="${PUBLIC}/" />`,
   ];
+  const autresLocales = LANGUES.filter((l) => l.code !== c.code).map(
+    (l) =>
+      `<meta property="og:locale:alternate" content="${OG_LOCALES[l.code]}" />`,
+  );
   return [
     `<title>${attr(c.titre)}</title>`,
     `<meta name="description" content="${attr(c.description)}" />`,
+    `<link rel="canonical" href="${PUBLIC}${c.chemin}" />`,
+    `<meta name="theme-color" content="#0e2a5e" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:site_name" content="MonCap GPS" />`,
+    `<meta property="og:url" content="${PUBLIC}${c.chemin}" />`,
     `<meta property="og:title" content="${attr(c.titre)}" />`,
     `<meta property="og:description" content="${attr(c.description)}" />`,
-    `<meta property="og:image" content="${logo}" />`,
-    `<meta property="og:locale" content="${c.code}" />`,
+    `<meta property="og:image" content="${PUBLIC}${logo}" />`,
+    `<meta property="og:locale" content="${OG_LOCALES[c.code]}" />`,
+    ...autresLocales,
+    `<meta name="twitter:card" content="summary" />`,
+    `<meta name="twitter:title" content="${attr(c.titre)}" />`,
+    `<meta name="twitter:description" content="${attr(c.description)}" />`,
+    `<meta name="twitter:image" content="${PUBLIC}${logo}" />`,
     `<link rel="icon" type="image/png" href="${favicon}" />`,
     `<link rel="apple-touch-icon" href="${logo}" />`,
     ...alternates,
+    `<script type="application/ld+json">${jsonLd(c)}</script>`,
     `<link rel="stylesheet" href="${BASE}/${nomFeuille}" />`,
   ]
     .map((l) => `    ${l}`)
@@ -115,6 +133,8 @@ function teteLegale(p: PageLegale): string {
   return [
     `<title>${attr(p.titre)} — MonCap GPS</title>`,
     `<meta name="description" content="${attr(p.description)}" />`,
+    `<link rel="canonical" href="${PUBLIC}${p.chemin}" />`,
+    `<meta name="theme-color" content="#0e2a5e" />`,
     `<link rel="icon" type="image/png" href="${favicon}" />`,
     `<link rel="stylesheet" href="${BASE}/${nomFeuille}" />`,
   ]
@@ -166,6 +186,11 @@ for (const c of LANGUES) {
     });
   }
 }
+
+// --- Robots et plan du site ----------------------------------------------
+
+await Bun.write(`${SORTIE}/robots.txt`, robots());
+await Bun.write(`${SORTIE}/sitemap.xml`, sitemap());
 
 // --- Récapitulatif -------------------------------------------------------
 

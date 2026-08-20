@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/</loc>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://moncap-c41a5aaf07e8.herokuapp.com/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://moncap-c41a5aaf07e8.herokuapp.com/es"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://moncap-c41a5aaf07e8.herokuapp.com/en"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://moncap-c41a5aaf07e8.herokuapp.com/"/>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/mentions-legales</loc>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/confidentialite</loc>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/es</loc>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://moncap-c41a5aaf07e8.herokuapp.com/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://moncap-c41a5aaf07e8.herokuapp.com/es"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://moncap-c41a5aaf07e8.herokuapp.com/en"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://moncap-c41a5aaf07e8.herokuapp.com/"/>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/es/aviso-legal</loc>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/es/privacidad</loc>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/en</loc>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://moncap-c41a5aaf07e8.herokuapp.com/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://moncap-c41a5aaf07e8.herokuapp.com/es"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://moncap-c41a5aaf07e8.herokuapp.com/en"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://moncap-c41a5aaf07e8.herokuapp.com/"/>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/en/legal</loc>
+  </url>
+  <url>
+    <loc>https://moncap-c41a5aaf07e8.herokuapp.com/en/privacy</loc>
+  </url>
+</urlset>
