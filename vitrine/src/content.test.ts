@@ -174,6 +174,20 @@ test("chaque langue garde la même matière", () => {
     expect(atouts, `${l.code}`).toMatch(/etape|parada|stop/);
     expect(atouts, `${l.code}`).toMatch(/lien|enlace|link/);
     expect(hl, `${l.code}`).toMatch(/pharma|farma/);
+
+    // Celles d'après : Siri, l'écran verrouillé (Dynamic Island) et CarPlay
+    // restent dits dans chaque langue. CarPlay est annoncé comme prêt, pas
+    // comme allumé — la carte doit garder l'agrément Apple dans sa phrase
+    // tant qu'il n'est pas accordé.
+    expect(atouts, `${l.code}`).toContain("siri");
+    expect(atouts, `${l.code}`).toContain("dynamic island");
+    const carplay = l.atouts.find((a) =>
+      sansAccents(`${a.titre} ${a.texte}`).includes("carplay"),
+    );
+    expect(carplay, `${l.code}`).toBeTruthy();
+    expect(sansAccents(carplay?.texte ?? ""), `${l.code}`).toMatch(
+      /agrement|aprobacion|approval/,
+    );
   }
 });
 
