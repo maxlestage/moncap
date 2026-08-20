@@ -460,6 +460,7 @@ struct MapHomeView: View {
     @StateObject private var speedLimit = SpeedLimitService()
     @StateObject private var fuel = FuelPriceService()
     @StateObject private var weather = WeatherService()
+    @StateObject private var airAutour = AirAutour()
     @StateObject private var fires = FireService()
     /// Calcul d'itinéraire sur l'appareil : observé pour suivre l'installation
     /// des tuiles depuis les réglages.
@@ -775,6 +776,8 @@ struct MapHomeView: View {
             fuel.refresh(near: c, type: fuelType)
             // Météo en temps réel (température + conditions).
             weather.update(c)
+            // Qualité de l'air autour de soi (throttle interne à 30 min).
+            airAutour.update(c)
             // Incendies actifs NASA FIRMS (throttle interne à 15 min).
             fires.refresh(key: firmsKey)
             // Partage de position en direct (throttle interne à 5 s).
@@ -2471,6 +2474,7 @@ struct MapHomeView: View {
             if !compare {
                 VStack(alignment: .leading, spacing: 8) {
                     weatherPill
+                    airPill
                     speedPill
                 }
             }
@@ -2567,6 +2571,37 @@ struct MapHomeView: View {
             .background(.regularMaterial, in: Capsule())
             .overlay(Capsule().stroke(.blue.opacity(0.35), lineWidth: 1.5))
             .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+        }
+    }
+
+    /// La qualité de l'air d'ici, en pastille sous la météo : le rond de la
+    /// couleur du niveau, le chiffre, le palier. Toucher la pastille ouvre la
+    /// carte dédiée — c'est la même donnée, en grand.
+    @ViewBuilder private var airPill: some View {
+        if let p = airAutour.point, let v = p.valeur {
+            Button {
+                showAirMap = true
+            } label: {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(AirCouleurs.couleur(p.niveau)))
+                        .frame(width: 10, height: 10)
+                    Text(verbatim: "\(Int(v))")
+                        .font(.subheadline.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                    Text(AirCouleurs.libelles[min(p.niveau, AirCouleurs.libelles.count - 1)])
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().stroke(.teal.opacity(0.35), lineWidth: 1.5))
+                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Qualité de l'air"))
         }
     }
 
