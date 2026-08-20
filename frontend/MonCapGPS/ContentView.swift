@@ -1762,10 +1762,20 @@ struct MapHomeView: View {
         // toutes les catégories.
         let searchRegion = Self.expandedRegion(region, factor: 3.0)
 
+        // Hors ligne assumé : l'annuaire embarqué répond seul, sans attendre
+        // qu'une requête réseau échoue.
+        if horsLigne {
+            await poisEmbarques(kind, dans: searchRegion, visible: region)
+            return
+        }
+
         // Baignade : plages, lacs, piscines… d'OpenStreetMap.
         if kind == .water {
-            // Échec réseau → on garde ce qui est affiché.
-            guard let found = await fetchSwimmingSpots(in: searchRegion) else { return }
+            // Échec réseau → l'annuaire embarqué, puis ce qui est affiché.
+            guard let found = await fetchSwimmingSpots(in: searchRegion) else {
+                await poisEmbarques(kind, dans: searchRegion, visible: region)
+                return
+            }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1775,7 +1785,10 @@ struct MapHomeView: View {
         // Essence : toutes les stations de la zone (open data français), avec
         // le prix du carburant choisi si disponible.
         if kind == .fuel {
-            guard let found = await fetchFuelStations(in: searchRegion, type: fuelType) else { return }
+            guard let found = await fetchFuelStations(in: searchRegion, type: fuelType) else {
+                await poisEmbarques(kind, dans: searchRegion, visible: region)
+                return
+            }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1784,7 +1797,10 @@ struct MapHomeView: View {
 
         // Places handicapé : stationnement PMR d'OpenStreetMap.
         if kind == .parking {
-            guard let found = await fetchDisabledParking(in: searchRegion) else { return }
+            guard let found = await fetchDisabledParking(in: searchRegion) else {
+                await poisEmbarques(kind, dans: searchRegion, visible: region)
+                return
+            }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1794,8 +1810,11 @@ struct MapHomeView: View {
         // Catégories OpenStreetMap.
         if [.parkingAll, .charging, .toilets, .surf, .skate,
             .pharmacy, .atm, .supermarket, .camping, .drinkingWater, .viewpoint].contains(kind) {
-            // Échec réseau → on garde ce qui est affiché.
-            guard let found = await fetchOSMCategory(kind, in: searchRegion) else { return }
+            // Échec réseau → l'annuaire embarqué, puis ce qui est affiché.
+            guard let found = await fetchOSMCategory(kind, in: searchRegion) else {
+                await poisEmbarques(kind, dans: searchRegion, visible: region)
+                return
+            }
             guard poiKind == kind else { return }
             pois = found
             lastPOIRegion = region
@@ -1806,14 +1825,30 @@ struct MapHomeView: View {
         req.naturalLanguageQuery = kind.query
         req.region = searchRegion
         req.resultTypes = .pointOfInterest
-        // Échec réseau → on garde ce qui est affiché.
-        guard let resp = try? await MKLocalSearch(request: req).start() else { return }
+        // Échec réseau → l'annuaire embarqué, puis ce qui est affiché.
+        guard let resp = try? await MKLocalSearch(request: req).start() else {
+            await poisEmbarques(kind, dans: searchRegion, visible: region)
+            return
+        }
         // La catégorie a pu changer pendant la recherche.
         guard poiKind == kind else { return }
         pois = resp.mapItems.prefix(50).map {
             POI(name: $0.name ?? "Lieu", coordinate: $0.placemark.coordinate)
         }
         lastPOIRegion = region
+    }
+
+    /// Le repli sans réseau : l'annuaire embarqué des régions installées.
+    /// S'il ne connaît rien ici — aucune région, ou annexe pas encore
+    /// téléchargée — l'affichage en place est conservé, comme pour un échec
+    /// réseau ordinaire.
+    private func poisEmbarques(
+        _ kind: POIKind, dans zone: MKCoordinateRegion, visible: MKCoordinateRegion
+    ) async {
+        let found = await LieuxHorsLigne.shared.lieux(kind, dans: zone)
+        guard poiKind == kind, !found.isEmpty else { return }
+        pois = found
+        lastPOIRegion = visible
     }
 
     /// Agrandit une région autour de son centre (recherche « agressive » : on

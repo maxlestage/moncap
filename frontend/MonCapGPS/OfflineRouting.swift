@@ -245,6 +245,13 @@ final class OfflineRouter: NSObject, ObservableObject {
             FileManager.default.fileExists(atPath: Self.archivePath($0.id).path)
         }
         if installees.count != lues.count { enregistre() }
+        // Rattrapage des annexes : une région installée avant que le workflow
+        // ne produise l'annuaire et les vitesses les reçoit dès que la région
+        // est reconstruite en ligne. Un essai par lancement, silencieux.
+        let ids = installees.map(\.id)
+        Task.detached(priority: .utility) {
+            for id in ids { await Self.rapatrieAnnexes(id) }
+        }
     }
 
     private static let key = "moncap.valhallaRegions"
@@ -269,6 +276,17 @@ final class OfflineRouter: NSObject, ObservableObject {
 
     nonisolated private static func configPath(_ id: String) -> URL {
         dossier.appendingPathComponent("\(id).json")
+    }
+
+    /// Les deux annexes hors ligne d'une région : l'annuaire de lieux et les
+    /// jalons de limites de vitesse, produits par le workflow des tuiles.
+    /// Lisibles par `LieuxHorsLigne`, d'où le niveau d'accès.
+    nonisolated static func lieuxPath(_ id: String) -> URL {
+        dossier.appendingPathComponent("\(id).lieux.zz")
+    }
+
+    nonisolated static func vitessesPath(_ id: String) -> URL {
+        dossier.appendingPathComponent("\(id).vitesses.zz")
     }
 
     /// Plafond d'itinéraires proposés, réseau ou non.
@@ -474,6 +492,31 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
         enregistre()
         progress = 1
+        // Les annexes suivent l'archive : celles d'une version précédente
+        // sont remplacées, et leur absence n'empêche rien — l'annuaire et
+        // les limites sont un plus, pas une condition.
+        try? FileManager.default.removeItem(at: Self.lieuxPath(id))
+        try? FileManager.default.removeItem(at: Self.vitessesPath(id))
+        Task { await Self.rapatrieAnnexes(id) }
+    }
+
+    /// Télécharge les annexes hors ligne d'une région installée — l'annuaire
+    /// de lieux et les jalons de vitesse — quand elles manquent encore.
+    ///
+    /// Best effort et hors session de fond : quelques mégaoctets par requête
+    /// ordinaire, un 404 pour les régions bâties avant que le workflow ne les
+    /// produise, et rien d'installé n'en dépend.
+    nonisolated static func rapatrieAnnexes(_ id: String) async {
+        for (nature, chemin) in [("lieux", lieuxPath(id)), ("vitesses", vitessesPath(id))] {
+            guard !FileManager.default.fileExists(atPath: chemin.path),
+                let url = URL(string: "\(Region.base)/\(id)/\(nature)")
+            else { continue }
+            guard let (data, resp) = try? await URLSession.shared.data(from: url),
+                (resp as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty
+            else { continue }
+            try? data.write(to: chemin, options: .atomic)
+        }
+        await LieuxHorsLigne.shared.oublie(id)
     }
 
     nonisolated static func poids(_ url: URL) -> Int {
@@ -498,9 +541,12 @@ final class OfflineRouter: NSObject, ObservableObject {
     func remove(_ id: String) {
         try? FileManager.default.removeItem(at: Self.archivePath(id))
         try? FileManager.default.removeItem(at: Self.configPath(id))
+        try? FileManager.default.removeItem(at: Self.lieuxPath(id))
+        try? FileManager.default.removeItem(at: Self.vitessesPath(id))
         moteurs[id] = nil
         installees.removeAll { $0.id == id }
         enregistre()
+        Task { await LieuxHorsLigne.shared.oublie(id) }
     }
 
     /// Efface toutes les régions gardées.
@@ -508,6 +554,9 @@ final class OfflineRouter: NSObject, ObservableObject {
         for r in installees {
             try? FileManager.default.removeItem(at: Self.archivePath(r.id))
             try? FileManager.default.removeItem(at: Self.configPath(r.id))
+            try? FileManager.default.removeItem(at: Self.lieuxPath(r.id))
+            try? FileManager.default.removeItem(at: Self.vitessesPath(r.id))
+            Task { [id = r.id] in await LieuxHorsLigne.shared.oublie(id) }
         }
         moteurs.removeAll()
         installees.removeAll()

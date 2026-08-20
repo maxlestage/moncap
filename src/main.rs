@@ -767,8 +767,24 @@ async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
     Ok(trouvees)
 }
 
+/// Suffixe de pièce jointe pour chaque nature de fichier servie. `lieux` et
+/// `vitesses` sont les annexes hors ligne — annuaire de lieux et jalons de
+/// limites de vitesse — produites par le workflow des tuiles depuis le même
+/// extrait OSM ; les régions bâties avant leur existence ne les portent pas,
+/// et l'app les traite comme optionnelles (un 404 n'est pas une panne).
+fn nature_suffixe(nature: &str) -> Option<&'static str> {
+    match nature {
+        "archive" => Some(".tar"),
+        "config" => Some(".json"),
+        "lieux" => Some(".lieux.zz"),
+        "vitesses" => Some(".vitesses.zz"),
+        _ => None,
+    }
+}
+
 /// GET /offline/regions/:tag/:nature — redirige vers l'adresse signée du
-/// fichier (`archive` pour les tuiles, `config` pour la configuration).
+/// fichier (`archive` pour les tuiles, `config` pour la configuration,
+/// `lieux` et `vitesses` pour les annexes hors ligne).
 ///
 /// GitHub répond à une demande de pièce jointe authentifiée par une redirection
 /// vers une adresse signée, valable quelques minutes et qui ne demande aucune
@@ -785,10 +801,8 @@ async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response
     if !etiquette_valide(&tag) {
         return (StatusCode::NOT_FOUND, "étiquette inconnue").into_response();
     }
-    let suffixe = match nature.as_str() {
-        "archive" => ".tar",
-        "config" => ".json",
-        _ => return (StatusCode::NOT_FOUND, "fichier inconnu").into_response(),
+    let Some(suffixe) = nature_suffixe(&nature) else {
+        return (StatusCode::NOT_FOUND, "fichier inconnu").into_response();
     };
 
     let depot = paquets_depot();
@@ -3975,6 +3989,18 @@ mod tests {
     #[test]
     fn distance_to_self_is_zero() {
         assert!(haversine_km(&PARIS, &PARIS) < 1e-9);
+    }
+
+    #[test]
+    fn natures_de_paquet_connues() {
+        // Les quatre fichiers d'une région, et rien d'autre : la nature est
+        // une porte, pas un chemin — un nom inconnu ne compose aucune URL.
+        assert_eq!(nature_suffixe("archive"), Some(".tar"));
+        assert_eq!(nature_suffixe("config"), Some(".json"));
+        assert_eq!(nature_suffixe("lieux"), Some(".lieux.zz"));
+        assert_eq!(nature_suffixe("vitesses"), Some(".vitesses.zz"));
+        assert_eq!(nature_suffixe("autre"), None);
+        assert_eq!(nature_suffixe("../secret"), None);
     }
 
     #[test]
