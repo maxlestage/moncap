@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import UIKit
+import UniformTypeIdentifiers
 
 private let alertTypes: [(category: String, emoji: String, label: String, color: Color)] = [
     ("police", "🚓", "Police", .blue),
@@ -684,6 +685,12 @@ struct MapHomeView: View {
     /// dans la durée affichée : un détour chez Paul, c'est le trajet plus le
     /// quart d'heure chez Paul.
     @State private var etapeArrets: [Int] = []
+    /// Vrai le temps de choisir un fichier GPX dans le sélecteur.
+    @State private var importeGPX = false
+    /// La trace GPX en cours de suivi, s'il y en a une. Elle change la règle
+    /// du recalcul : la trace est la route, on ne la remplace pas par un
+    /// itinéraire calculé quand on s'en écarte.
+    @State private var traceGPX: RouteOption?
     /// Vrai le temps de désigner la prochaine étape sur la carte.
     @State private var ajouteEtape = false
     /// Étapes déjà atteintes pendant le guidage (index dans `etapes`) : le
@@ -2712,6 +2719,7 @@ struct MapHomeView: View {
                     etapeArrets = []
                     etapesAtteintes = []
                     ajouteEtape = false
+                    traceGPX = nil
                 } label: {
                     Image(systemName: "xmark")
                         .font(.subheadline.weight(.semibold))
@@ -3063,6 +3071,30 @@ struct MapHomeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     }
+                }
+                // Une trace GPX venue d'ailleurs — Komoot, Strava, un ami —
+                // devient un itinéraire suivable. Tout est local : le fichier,
+                // le parseur, le guidage. C'est le trajet qui marche le mieux
+                // en mode avion, parce qu'il n'a jamais eu besoin de réseau.
+                Section("Trace GPX 🥾") {
+                    Button {
+                        importeGPX = true
+                    } label: {
+                        Label("Importer une trace GPX", systemImage: "square.and.arrow.down")
+                    }
+                    .fileImporter(
+                        isPresented: $importeGPX,
+                        allowedContentTypes: [
+                            UTType(filenameExtension: "gpx") ?? .xml, .xml,
+                        ]
+                    ) { resultat in
+                        chargeGPX(resultat)
+                    }
+                    Text(
+                        "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
                 // Trafic temps réel TomTom : clé optionnelle saisie sur
                 // l'appareil (sinon le serveur fournit le trafic si configuré).
@@ -3936,6 +3968,9 @@ struct MapHomeView: View {
         multiRoutes = []
         routeCoords = []
         routeInfo = nil
+        // Calculer un itinéraire, c'est quitter le suivi de trace : la règle
+        // du recalcul redevient la normale.
+        traceGPX = nil
 
         // Les transports ont leur propre chemin : le calcul vient du serveur,
         // pas de MapKit ni de Valhalla, et leurs cartes montrent des lignes et
@@ -4528,6 +4563,14 @@ struct MapHomeView: View {
             nav.rerouteFailed()
             return
         }
+        // Une trace importée est la route : s'en écarter n'appelle pas un
+        // nouvel itinéraire. Le guidage réaffirme la trace telle quelle et
+        // continue de viser son prochain virage.
+        if let t = traceGPX {
+            nav.applyReroute(
+                steps: t.steps, coords: t.coordinates, km: t.km, minutes: t.minutes)
+            return
+        }
         // Les étapes pas encore atteintes restent au programme : rater une
         // sortie n'annule pas le passage chez Paul — ni le temps qu'on
         // comptait y rester, encore devant nous lui aussi.
@@ -4788,5 +4831,52 @@ struct MapHomeView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             Sharer.present([url])
         }
+    }
+
+    /// Le fichier choisi dans le sélecteur devient une trace suivable —
+    /// ou une explication, si le fichier n'en est pas une.
+    private func chargeGPX(_ resultat: Result<URL, Error>) {
+        guard case .success(let url) = resultat, let trace = GPXImport.lit(url) else {
+            shareError = NSLocalizedString(
+                "Ce fichier GPX n'a pas pu être lu.", comment: "")
+            return
+        }
+        showSearch = false
+        presenteTrace(trace)
+    }
+
+    /// Affiche une trace importée comme unique itinéraire. Les consignes
+    /// sortent de la géométrie (les mêmes que pour BRouter), la durée d'une
+    /// vitesse moyenne selon le mode — une trace n'apporte ni l'une ni
+    /// l'autre. Le tout est promu « trace en cours » : le recalcul d'écart la
+    /// réaffirme au lieu de la remplacer.
+    private func presenteTrace(_ trace: GPXImport.Trace) {
+        let coords = trace.points
+        guard coords.count >= 2, let arrivee = coords.last else { return }
+        var km = 0.0
+        for i in 1..<coords.count {
+            km += metersBetween(coords[i - 1], coords[i])
+        }
+        km /= 1_000
+        let vitesse: Double =
+            travelMode == .car ? 50 : travelMode == .bike ? 16 : 4.5
+        let steps = turnSteps(from: coords)
+        var option = RouteOption(
+            coordinates: coords, steps: steps,
+            minutes: km / vitesse * 60, km: km,
+            turns: steps.count)
+        option.isSimplest = true
+        option.color = .green
+        traceGPX = option
+        etapes = []
+        etapeNoms = []
+        etapeArrets = []
+        etapesAtteintes = []
+        pendingDestination = arrivee
+        routeOptions = [option]
+        selectedRouteID = option.id
+        routesExpanded = false
+        fitCoordinates(coords)
+        Task { await chargeRisques(options: [option], dest: arrivee) }
     }
 }

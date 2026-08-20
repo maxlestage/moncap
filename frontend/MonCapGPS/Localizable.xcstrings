@@ -1057,6 +1057,22 @@
         }
       }
     },
+    "Ce fichier GPX n'a pas pu être lu.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This GPX file could not be read."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo GPX no se pudo leer."
+          }
+        }
+      }
+    },
     "Cet appareil ne peut pas envoyer de SMS. Copie ton message et envoie-le autrement.": {
       "localizations": {
         "en": {
@@ -1789,6 +1805,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hoteles"
+          }
+        }
+      }
+    },
+    "Importer une trace GPX": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import a GPX track"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importar una traza GPX"
           }
         }
       }
@@ -3553,6 +3585,22 @@
         }
       }
     },
+    "Trace GPX 🥾": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPX track 🥾"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traza GPX 🥾"
+          }
+        }
+      }
+    },
     "Trafic 🚦 (TomTom)": {
       "localizations": {
         "en": {
@@ -3709,6 +3757,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una ruta hasta cada punto"
+          }
+        }
+      }
+    },
+    "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A hike, a bike route exported from another app: the track shows on the map and can be followed step by step, even without network."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una caminata, una ruta en bici exportada de otra app: la traza se muestra en el mapa y se puede seguir paso a paso, incluso sin red."
           }
         }
       }
