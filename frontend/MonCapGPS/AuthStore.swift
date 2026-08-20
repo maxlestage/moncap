@@ -1,15 +1,13 @@
 import Foundation
 
-/// Erreurs de saisie détectées côté app, avant tout appel réseau. Les mêmes
-/// règles que le serveur (pseudo ≥ 3, mot de passe ≥ 6) : ce que l'app
-/// laisse passer, le serveur l'accepte.
+/// Erreurs de saisie détectées côté app, avant tout appel réseau.
 enum AuthError: LocalizedError {
-    case invalidUsername
+    case invalidEmail
     case weakPassword
 
     var errorDescription: String? {
         switch self {
-        case .invalidUsername: return "Pseudonyme : 3 caractères minimum."
+        case .invalidEmail: return "Adresse e-mail invalide."
         case .weakPassword: return "Mot de passe : 6 caractères minimum."
         }
     }
@@ -46,23 +44,23 @@ final class AuthStore: ObservableObject {
         isAuthenticated = false
     }
 
-    func login(_ identifiant: String, _ password: String) async throws {
-        let user = Self.normalize(identifiant)
-        guard !user.isEmpty, !password.isEmpty else { throw AuthError.invalidUsername }
+    func login(_ email: String, _ password: String) async throws {
+        let user = Self.normalize(email)
+        guard !user.isEmpty, !password.isEmpty else { throw AuthError.invalidEmail }
         let auth = try await api.login(username: user, password: password)
         username = auth.username
         isAuthenticated = true
     }
 
-    /// L'inscription demande un **pseudonyme**, pas un e-mail : le serveur
-    /// n'a jamais stocké d'adresse, et la politique de confidentialité le
-    /// promet noir sur blanc. Le formulaire exigeait pourtant un e-mail —
-    /// une validation de trop, qui contredisait la promesse. Les comptes
-    /// historiques créés avec un e-mail continuent de se connecter : la
-    /// connexion ne valide pas la forme de l'identifiant.
-    func signup(_ identifiant: String, _ password: String) async throws {
-        let user = Self.normalize(identifiant)
-        guard user.count >= 3 else { throw AuthError.invalidUsername }
+    /// L'inscription demande une **adresse e-mail** comme identifiant —
+    /// choix de produit assumé. Elle ne sert à rien d'autre : aucun envoi,
+    /// aucune revente — c'est exactement ce que dit la politique de
+    /// confidentialité, mise à jour avec ce choix. Les comptes historiques
+    /// créés avec un pseudonyme continuent de se connecter : la connexion
+    /// ne valide pas la forme de l'identifiant.
+    func signup(_ email: String, _ password: String) async throws {
+        let user = Self.normalize(email)
+        guard Self.isValidEmail(user) else { throw AuthError.invalidEmail }
         guard password.count >= 6 else { throw AuthError.weakPassword }
         let auth = try await api.signup(username: user, password: password)
         username = auth.username
@@ -79,5 +77,10 @@ final class AuthStore: ObservableObject {
     /// conservée car l'auth est sensible à la casse côté backend.
     static func normalize(_ s: String) -> String {
         s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Validation d'e-mail volontairement simple : `local@domaine.tld`.
+    static func isValidEmail(_ s: String) -> Bool {
+        s.range(of: #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#, options: .regularExpression) != nil
     }
 }
