@@ -89,6 +89,7 @@ test("aucun texte vide dans aucune langue", () => {
       ...l.h1,
       l.chapeau,
       l.seConnecter,
+      l.codeSource,
       l.comparateur.titre,
       l.comparateur.intro,
       l.comparateur.apres,
@@ -137,9 +138,13 @@ test("chaque langue garde la même matière", () => {
     const valeurs = l.chiffres.map((n) => n.valeur);
     expect(valeurs).toContain(String(ITINERAIRES_MAX));
     // 212 : le compte réel des Releases publiées, relevé sur le courtier
-    // (/offline/regions) le 19 août 2026.
+    // (/offline/regions) le 20 août 2026.
     expect(valeurs).toContain("212");
     expect(valeurs).toContain("49");
+    // Et l'intro du hors ligne doit dire LE MÊME compte que le bandeau :
+    // elle est restée à 206 pendant que le bandeau passait à 212, deux
+    // chiffres différents sur la même page.
+    expect(l.horsLigne.intro, `${l.code}`).toContain("212");
 
     // Le plafond doit se lire comme un plafond. « 15 itinéraires » seul
     // laisserait croire qu'il y en a toujours quinze : la légende doit dire

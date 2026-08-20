@@ -1,6 +1,7 @@
 import {
   AUTEUR,
   CONNEXION,
+  DEPOT,
   LIEUX,
   MAQUETTE_ITINERAIRES,
   MAQUETTE_REGIONS,
@@ -269,6 +270,11 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             <a className="bouton" href={CONNEXION}>
               {c.seConnecter}
             </a>
+            {/* Le dépôt est public depuis août 2026 : le lien peut revivre.
+                Discret, sous le bouton — c'est une invitation, pas l'action. */}
+            <a className="lien" href={DEPOT} rel="external noopener">
+              {c.codeSource}
+            </a>
           </div>
 
           <dl className="chiffres">
@@ -417,6 +423,9 @@ export function Pied({ c, res }: { c: Contenu; res: Ressources }) {
         <p className="pied-liens">
           <a className="bouton" href={CONNEXION}>
             {c.seConnecter}
+          </a>
+          <a className="lien" href={DEPOT} rel="external noopener">
+            {c.codeSource}
           </a>
         </p>
 

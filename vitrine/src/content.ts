@@ -164,6 +164,13 @@ export const AUTEUR = "Maxime Nathan Lestage";
 export const CONTACT = "maxlestage@icloud.com";
 
 /**
+ * Le dépôt du projet — lié depuis la page depuis qu'il est public. Il avait
+ * été retiré quand le dépôt était privé : le lien servait un 404 à tout
+ * visiteur (voir liens.test.tsx, qui garde la mémoire de l'épisode).
+ */
+export const DEPOT = "https://github.com/maxlestage/moncap";
+
+/**
  * Les sources de données et moteurs, avec l'adresse de chacun — le pied les
  * lie, la ligne de crédits les nomme. Pas de lien vers notre dépôt : il est
  * privé, un visiteur recevrait un 404 (voir liens.test.tsx).
