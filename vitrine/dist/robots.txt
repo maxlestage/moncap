@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /app
+Disallow: /t
+Disallow: /live
+Disallow: /reinitialisation
+Disallow: /auth/
+Disallow: /tiles/
+Disallow: /offline/
+
+Sitemap: https://moncap-c41a5aaf07e8.herokuapp.com/sitemap.xml
