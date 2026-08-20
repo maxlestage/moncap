@@ -46,6 +46,11 @@
 			</array>
 		</dict>
 	</array>
+	<!-- La Live Activity du guidage : consigne, distance et heure d'arrivée
+	     sur l'écran verrouillé et dans la Dynamic Island. Dessinée par
+	     l'extension Guidage, pilotée par NavigationManager. -->
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<!-- Pas un jeu : déclaré explicitement, sinon iOS 27 logge à chaque
 	     lancement « LSSupportsGameMode key not found in Info.plist ». -->
 	<key>LSSupportsGameMode</key>
