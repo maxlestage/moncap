@@ -610,6 +610,9 @@ final class OfflineRouter: NSObject, ObservableObject {
                 "language": Self.langueValhalla,
             ],
         ]
+        if let options = Self.optionsDeCout(costing) {
+            demande["costing_options"] = options
+        }
         // `alternates` compte les variantes **en plus** du principal.
         if nombre > 1 { demande["alternates"] = nombre - 1 }
 
@@ -681,7 +684,7 @@ final class OfflineRouter: NSObject, ObservableObject {
             for cote in [1.0, -1.0] {
                 guard routes.count < nombre else { return routes }
                 let via = Self.detour(from: from, to: to, fraction: fraction, cote: cote)
-                let demande: [String: Any] = [
+                var demande: [String: Any] = [
                     "locations": [
                         ["lat": from.latitude, "lon": from.longitude],
                         // « through » : un point de passage, pas un arrêt —
@@ -696,6 +699,9 @@ final class OfflineRouter: NSObject, ObservableObject {
                         "units": "kilometers", "language": Self.langueValhalla,
                     ],
                 ]
+                if let options = Self.optionsDeCout(costing) {
+                    demande["costing_options"] = options
+                }
                 guard let json = try? JSONSerialization.data(withJSONObject: demande) else {
                     continue
                 }
@@ -736,6 +742,26 @@ final class OfflineRouter: NSObject, ObservableObject {
         return CLLocationCoordinate2D(
             latitude: (my + py * decale) / mParLat,
             longitude: (mx + px * decale) / mParLon)
+    }
+
+    /// Les réglages de coût du profil, lus au moment du calcul.
+    ///
+    /// Le vélo n'est pas un : un vélo de route fuit les chemins, un VTT les
+    /// cherche, et l'électrique se moque des côtes. Valhalla sait tout cela
+    /// (`bicycle_type`, `use_hills`) — il suffisait de le lui dire. Lecture
+    /// directe des réglages persistés, comme les péages côté MapKit.
+    nonisolated static func optionsDeCout(_ costing: String) -> [String: Any]? {
+        guard costing == "bicycle" else { return nil }
+        let type = UserDefaults.standard.string(forKey: "moncap.veloType") ?? "Hybrid"
+        let eviteCotes = UserDefaults.standard.bool(forKey: "moncap.veloEviteCotes")
+        return [
+            "bicycle": [
+                "bicycle_type": type,
+                // 0,5 est le défaut de Valhalla ; 0,1 fuit franchement les
+                // côtes sans interdire la seule route qui monte.
+                "use_hills": eviteCotes ? 0.1 : 0.5,
+            ]
+        ]
     }
 
     /// Langue des consignes, accordée à celle que le paquet a retenue.
