@@ -261,7 +261,7 @@ const FR: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Quatorze jours d'essai, tout ouvert — puis une formule : Plus, 3,99 € par mois, pour l'app entière (hors ligne, GPX, tournées) ; Pro, 9,99 € par mois, pour le journal kilométrique et la facturation. Au-delà, l'app se verrouille : tout est payant, c'est la règle.",
+        "Quatorze jours d'essai, tout ouvert — puis une formule : Plus, 3,99 € par mois, pour l'app entière (hors ligne, GPX) ; Pro, 9,99 € par mois, pour les tournées optimisées, le journal kilométrique et la facturation. Au-delà, l'app se verrouille : tout est payant, c'est la règle.",
     },
     {
       emoji: "🧾",
@@ -314,7 +314,6 @@ const FR: Contenu = {
         "L'app entière : guidage, comparateur, transports",
         "212 régions hors ligne — itinéraires, lieux, limites de vitesse",
         "Import de traces GPX",
-        "Tournées optimisées, même à vingt arrêts",
       ],
     },
     pro: {
@@ -323,6 +322,7 @@ const FR: Contenu = {
       periode: "par mois, pour ceux qui roulent pour travailler",
       points: [
         "Tout MonCap Plus",
+        "Tournées optimisées, même à vingt arrêts",
         "Journal kilométrique exportable (CSV)",
         "Facturation PDF au taux kilométrique choisi",
       ],
@@ -595,7 +595,7 @@ const ES: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Catorce días de prueba, todo abierto — después una fórmula: Plus, 3,99 € al mes, para la app entera (sin conexión, GPX, repartos); Pro, 9,99 € al mes, para el registro de kilómetros y la facturación. Más allá, la app se bloquea: todo es de pago, es la regla.",
+        "Catorce días de prueba, todo abierto — después una fórmula: Plus, 3,99 € al mes, para la app entera (sin conexión, GPX); Pro, 9,99 € al mes, para los repartos optimizados, el registro de kilómetros y la facturación. Más allá, la app se bloquea: todo es de pago, es la regla.",
     },
     {
       emoji: "🧾",
@@ -648,7 +648,6 @@ const ES: Contenu = {
         "La app entera: guía, comparador, transportes",
         "212 regiones sin conexión — rutas, lugares, límites de velocidad",
         "Importación de trazas GPX",
-        "Rutas de reparto optimizadas, incluso con veinte paradas",
       ],
     },
     pro: {
@@ -657,6 +656,7 @@ const ES: Contenu = {
       periode: "al mes, para quienes conducen por trabajo",
       points: [
         "Todo MonCap Plus",
+        "Rutas de reparto optimizadas, incluso con veinte paradas",
         "Registro de kilómetros exportable (CSV)",
         "Facturación PDF con la tarifa por kilómetro elegida",
       ],
@@ -929,7 +929,7 @@ const EN: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Fourteen days of trial, everything open — then a plan: Plus, €3.99 a month, for the whole app (offline, GPX, multi-stop); Pro, €9.99 a month, for the mileage log and invoicing. Beyond that the app locks: everything is paid — that's the rule.",
+        "Fourteen days of trial, everything open — then a plan: Plus, €3.99 a month, for the whole app (offline, GPX); Pro, €9.99 a month, for optimized multi-stop runs, the mileage log and invoicing. Beyond that the app locks: everything is paid — that's the rule.",
     },
     {
       emoji: "🧾",
@@ -982,7 +982,6 @@ const EN: Contenu = {
         "The whole app: guidance, comparison, transit",
         "212 offline regions — routes, places, speed limits",
         "GPX track import",
-        "Optimized multi-stop runs, even with twenty stops",
       ],
     },
     pro: {
@@ -991,6 +990,7 @@ const EN: Contenu = {
       periode: "per month, for people who drive for a living",
       points: [
         "Everything in MonCap Plus",
+        "Optimized multi-stop runs, even with twenty stops",
         "Exportable mileage log (CSV)",
         "PDF invoicing at the per-kilometre rate you choose",
       ],

@@ -203,8 +203,20 @@ test("chaque langue garde la même matière", () => {
     expect(sansAccents(l.tarifs.note), `${l.code}`).toMatch(
       /quatorze|catorce|fourteen/,
     );
-    expect(l.tarifs.plus.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
-    expect(l.tarifs.pro.points.length, `${l.code}`).toBeGreaterThanOrEqual(3);
+    expect(l.tarifs.plus.points.length, `${l.code}`).toBeGreaterThanOrEqual(3);
+    expect(l.tarifs.pro.points.length, `${l.code}`).toBeGreaterThanOrEqual(4);
+    // Les tournées optimisées sont un outil Pro : la carte Pro les annonce,
+    // la carte Plus n'a pas le droit de les promettre — l'app les verrouille
+    // derrière la formule Pro.
+    const motTournees = /tournee|reparto|multi-stop/;
+    expect(
+      sansAccents(l.tarifs.pro.points.join(" ")),
+      `${l.code}`,
+    ).toMatch(motTournees);
+    expect(
+      sansAccents(l.tarifs.plus.points.join(" ")),
+      `${l.code}`,
+    ).not.toMatch(motTournees);
     for (const f of [l.tarifs.plus, l.tarifs.pro]) {
       expect(f.prix, `${l.code}`).not.toContain("0 €");
       for (const p of f.points) expect(p.trim().length).toBeGreaterThan(0);

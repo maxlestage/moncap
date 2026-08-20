@@ -2640,10 +2640,11 @@ struct MapHomeView: View {
                         if etapes.count >= 2 {
                             Button {
                                 // L'optimisation de tournées est un outil
-                                // Plus : sans abonnement, le bouton mène au
-                                // paywall — les étapes elles-mêmes restent
-                                // libres, dans l'ordre où on les pose.
-                                if plus.accesPlus {
+                                // Pro — celui de ceux qui roulent pour
+                                // travailler : sans la formule, le bouton
+                                // mène au paywall — les étapes elles-mêmes
+                                // restent posables, dans l'ordre où on veut.
+                                if plus.accesPro {
                                     ordonneAuPlusCourt()
                                 } else {
                                     showPaywall = true
