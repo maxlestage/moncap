@@ -2232,6 +2232,16 @@ struct MapHomeView: View {
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
+    /// L'âge d'une mesure, dès qu'il compte : rien avant deux heures — la
+    /// donnée est horaire, plus frais n'apprend rien — puis « il y a N h ».
+    /// C'est ce qui rend honnête une pastille resservie sans réseau.
+    private func ageTexte(_ date: Date?) -> String? {
+        guard let date else { return nil }
+        let heures = Int(Date().timeIntervalSince(date) / 3600)
+        guard heures >= 2 else { return nil }
+        return String(format: NSLocalizedString("il y a %d h", comment: ""), heures)
+    }
+
     /// Heure d'arrivée estimée (maintenant + durée).
     private func routeArrival(_ minutes: Double) -> String {
         let f = DateFormatter()
@@ -2799,6 +2809,9 @@ struct MapHomeView: View {
                 Text(w.emoji).font(.subheadline)
                 Text("\(temp)°").font(.subheadline.weight(.bold))
                 Text(LocalizedStringKey(w.label)).font(.caption2).foregroundStyle(.secondary)
+                if let age = ageTexte(weather.mesureA) {
+                    Text(age).font(.caption2).foregroundStyle(.tertiary)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -2827,6 +2840,9 @@ struct MapHomeView: View {
                     Text(AirCouleurs.libelles[min(p.niveau, AirCouleurs.libelles.count - 1)])
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                    if let age = ageTexte(airAutour.mesureA) {
+                        Text(age).font(.caption2).foregroundStyle(.tertiary)
+                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
