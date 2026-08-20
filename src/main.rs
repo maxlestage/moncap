@@ -1004,6 +1004,41 @@ struct TransitLeg {
     /// Tracé en polyligne encodée, précision sept — celle de MOTIS, qui
     /// l'annonce dans sa réponse.
     trace: String,
+    /// Retard temps réel en secondes, quand le réseau le publie : l'écart
+    /// entre le départ annoncé et l'horaire en papier. Absent quand le
+    /// passage n'est connu qu'à l'horaire — l'app distingue alors « à
+    /// l'heure, mesuré » de « théorique ».
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retard_s: Option<i64>,
+}
+
+/// L'écart en secondes entre deux horodatages ISO de MOTIS.
+///
+/// Sans bibliothèque de dates : les deux horodatages sortent du même
+/// générateur, même format, même fuseau — la différence se lit sur les
+/// secondes du jour, et un retard qui enjambe minuit se ramène dans
+/// ±12 heures. Un tram n'a pas douze heures de retard ; un écart pareil
+/// serait une donnée cassée, rendue comme telle.
+fn transit_ecart_s(reel: &str, prevu: &str) -> Option<i64> {
+    let secondes = |h: &str| -> Option<i64> {
+        let t = h.split('T').nth(1)?;
+        let mut morceaux = t.trim_end_matches('Z').split(':');
+        let heures: i64 = morceaux.next()?.parse().ok()?;
+        let minutes: i64 = morceaux.next()?.parse().ok()?;
+        let sec: i64 = morceaux
+            .next()
+            .and_then(|v| v.split('.').next())
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        Some(heures * 3600 + minutes * 60 + sec)
+    };
+    let mut ecart = secondes(reel)? - secondes(prevu)?;
+    if ecart > 43_200 {
+        ecart -= 86_400;
+    } else if ecart < -43_200 {
+        ecart += 86_400;
+    }
+    Some(ecart)
 }
 
 /// Un itinéraire complet.
@@ -1033,6 +1068,28 @@ const TRANSIT_MAX_ZONES: usize = 64;
 struct TransitQuery {
     from: Option<String>,
     to: Option<String>,
+    /// Heure de départ souhaitée (ou d'arrivée, cf. `arrive`), ISO 8601 UTC
+    /// terminé par « Z ». Absente : maintenant.
+    time: Option<String>,
+    /// « 1 » : `time` est une heure d'arrivée au plus tard, pas de départ.
+    arrive: Option<String>,
+}
+
+/// Valide l'heure venue du client, qui entre telle quelle dans l'URL amont.
+///
+/// Le charme est strict — chiffres, tirets, deux-points, « T », point, « Z » —
+/// parce qu'un « + » de fuseau serait mangé par l'encodage d'URL, et que tout
+/// le reste n'a rien à faire dans une heure. L'app envoie de l'UTC en « Z ».
+fn transit_heure(brut: Option<&str>) -> Option<String> {
+    let h = brut?.trim();
+    if h.len() < 16 || h.len() > 30 || !h.ends_with('Z') {
+        return None;
+    }
+    if h.chars().all(|c| c.is_ascii_digit() || "T:-.Z".contains(c)) {
+        Some(h.to_string())
+    } else {
+        None
+    }
 }
 
 /// « lat,lon » validé et arrondi au dix-millième — onze mètres, le même arrêt.
@@ -1086,6 +1143,23 @@ fn transit_taille(brut: &serde_json::Value) -> Vec<TransitItineraire> {
                                     .and_then(|p| p.as_str())
                                     .unwrap_or("")
                                     .to_string(),
+                                // Le retard n'a de sens que si le réseau
+                                // publie du temps réel pour ce passage.
+                                retard_s: if l.get("realTime").and_then(|v| v.as_bool())
+                                    == Some(true)
+                                {
+                                    match (
+                                        texte(l, "startTime"),
+                                        texte(l, "scheduledStartTime"),
+                                    ) {
+                                        (Some(reel), Some(prevu)) => {
+                                            transit_ecart_s(&reel, &prevu)
+                                        }
+                                        _ => None,
+                                    }
+                                } else {
+                                    None
+                                },
                             })
                         })
                         .collect::<Vec<_>>();
@@ -1117,7 +1191,17 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
         return (StatusCode::BAD_REQUEST, "from et to attendus : lat,lon").into_response();
     };
 
-    let zone = format!("{},{}|{},{}", de.0, de.1, vers.0, vers.1);
+    let heure = transit_heure(q.time.as_deref());
+    let arrivee = q.arrive.as_deref() == Some("1") && heure.is_some();
+    let zone = format!(
+        "{},{}|{},{}|{}|{}",
+        de.0,
+        de.1,
+        vers.0,
+        vers.1,
+        heure.as_deref().unwrap_or("-"),
+        if arrivee { "a" } else { "d" }
+    );
     let cache = TRANSIT_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
     if let Some(connu) = cache.lock().await.get(&zone) {
         if connu.fetched_at.elapsed() < TRANSIT_TTL {
@@ -1125,11 +1209,19 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
         }
     }
 
-    let url = format!(
+    let mut url = format!(
         "https://api.transitous.org/api/v1/plan\
          ?fromPlace={},{}&toPlace={},{}&numItineraries=15",
         de.0, de.1, vers.0, vers.1
     );
+    // « Partir à » et « arriver avant » : les deux mesurés contre l'API —
+    // `time` décale les départs, `arriveBy=true` borne les arrivées.
+    if let Some(h) = &heure {
+        url.push_str(&format!("&time={h}"));
+        if arrivee {
+            url.push_str("&arriveBy=true");
+        }
+    }
     let brut: Option<serde_json::Value> = async {
         let resp = http_client()
             .get(&url)
@@ -4912,6 +5004,19 @@ mod integration {
     /// Transitous : bornés, arrondis, ou refusés.
     #[test]
     fn le_point_de_transit_est_borne() {
+        // L'heure entre telle quelle dans l'URL amont : stricte ou refusée.
+        assert_eq!(
+            transit_heure(Some("2026-08-21T08:00:00Z")).as_deref(),
+            Some("2026-08-21T08:00:00Z")
+        );
+        for mauvaise in [
+            "2026-08-21T08:00:00+02:00", // un « + » serait mangé par l'URL
+            "hier", "", "2026-08-21", "javascript:Z",
+        ] {
+            assert!(transit_heure(Some(mauvaise)).is_none(), "{mauvaise:?}");
+        }
+        assert!(transit_heure(None).is_none());
+
         assert_eq!(transit_point(Some("44.8820,-0.6051")), Some((44.882, -0.6051)));
         // Arrondi au dix-millième : onze mètres, le même arrêt — et une clé
         // de cache que deux appuis voisins partagent.
@@ -4941,7 +5046,8 @@ mod integration {
                      "to": {"name": "Ausone", "lat": 44.8792, "lon": -0.6025},
                      "legGeometry": {"points": "abc", "precision": 7}},
                     {"mode": "TRAM", "routeShortName": "E", "routeColor": "967651",
-                     "headsign": "Quinconces",
+                     "headsign": "Quinconces", "realTime": true,
+                     "scheduledStartTime": "2026-08-19T18:44:00Z",
                      "startTime": "2026-08-19T18:47:00Z", "endTime": "2026-08-19T19:03:00Z",
                      "from": {"name": "Ausone"}, "to": {"name": "Quinconces"},
                      "legGeometry": {"points": "def", "precision": 7},
@@ -4960,6 +5066,16 @@ mod integration {
         assert_eq!(tram.direction.as_deref(), Some("Quinconces"));
         assert_eq!((tram.de.as_str(), tram.a.as_str()), ("Ausone", "Quinconces"));
         assert_eq!(tram.trace, "def");
+        // Temps réel publié : trois minutes de retard, mesurées entre le
+        // départ annoncé et l'horaire en papier.
+        assert_eq!(tram.retard_s, Some(180));
+        // La marche n'a pas de temps réel, et n'en invente pas.
+        assert!(it.legs[0].retard_s.is_none());
+        // L'écart sait enjamber minuit sans exploser.
+        assert_eq!(
+            transit_ecart_s("2026-08-20T00:02:00Z", "2026-08-19T23:58:00Z"),
+            Some(240)
+        );
         // La marche n'a ni ligne ni couleur, et ne les invente pas.
         assert!(it.legs[0].ligne.is_none() && it.legs[0].couleur.is_none());
         // Ce que l'écran ne montre pas n'est pas expédié.
