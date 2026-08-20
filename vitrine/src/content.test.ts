@@ -162,7 +162,28 @@ test("chaque langue garde la même matière", () => {
 
     // Quatre thèmes proposés, quatre libellés.
     expect(l.theme.noms.length).toBe(4);
+
+    // Les nouveautés d'août 2026 restent dites, dans chaque langue : les
+    // étapes réordonnables, les risques du trajet, la trace GPX, le partage
+    // par lien — et, côté hors ligne, l'annuaire embarqué (la pharmacie en
+    // est l'exemple dans les trois langues).
+    const atouts = sansAccents(
+      l.atouts.map((a) => `${a.titre} ${a.texte}`).join(" "),
+    );
+    expect(atouts, `${l.code}`).toContain("gpx");
+    expect(atouts, `${l.code}`).toMatch(/etape|parada|stop/);
+    expect(atouts, `${l.code}`).toMatch(/lien|enlace|link/);
+    expect(hl, `${l.code}`).toMatch(/pharma|farma/);
   }
+});
+
+/**
+ * Les langues avancent ensemble : une carte ajoutée en français seulement
+ * ferait trois pages qui ne racontent plus la même application.
+ */
+test("autant de cartes dans chaque langue", () => {
+  expect(new Set(LANGUES.map((l) => l.atouts.length)).size).toBe(1);
+  expect(new Set(LANGUES.map((l) => l.horsLigneCartes.length)).size).toBe(1);
 });
 
 /**
