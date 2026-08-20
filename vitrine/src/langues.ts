@@ -133,7 +133,7 @@ const FR: Contenu = {
     { valeur: "19", legende: "catégories de lieux" },
     { valeur: "212", legende: "régions téléchargeables" },
     { valeur: "49", legende: "pays d'Europe" },
-    { valeur: "0 €", legende: "aucun abonnement" },
+    { valeur: "3,99 €", legende: "par mois — l'essentiel gratuit" },
   ],
   comparateur: {
     titre: "Le trajet vous est présenté, pas imposé",
@@ -236,6 +236,12 @@ const FR: Contenu = {
       titre: "Prête pour CarPlay",
       texte:
         "L'écran voiture est écrit : la même carte, le tracé du guidage, la consigne du moment et sa distance. Il s'allumera dès l'agrément CarPlay d'Apple — brancher le téléphone suffira.",
+    },
+    {
+      emoji: "⭐",
+      titre: "MonCap Plus",
+      texte:
+        "L'essentiel est gratuit : chercher, comparer, être guidé, les transports. Plus — 3,99 € par mois, 14 jours d'essai — déverrouille les régions hors ligne, l'import GPX, les tournées optimisées, le journal kilométrique exportable et la facturation.",
     },
   ],
   horsLigneCartes: [
@@ -426,7 +432,7 @@ const ES: Contenu = {
     { valeur: "19", legende: "categorías de lugares" },
     { valeur: "212", legende: "regiones descargables" },
     { valeur: "49", legende: "países de Europa" },
-    { valeur: "0 €", legende: "sin suscripción" },
+    { valeur: "3,99 €", legende: "al mes — lo esencial gratis" },
   ],
   comparateur: {
     titre: "La ruta se te propone, no se te impone",
@@ -529,6 +535,12 @@ const ES: Contenu = {
       titre: "Lista para CarPlay",
       texte:
         "La pantalla del coche está escrita: el mismo mapa, el trazado de la guía, la indicación del momento y su distancia. Se encenderá con la aprobación CarPlay de Apple — bastará con conectar el teléfono.",
+    },
+    {
+      emoji: "⭐",
+      titre: "MonCap Plus",
+      texte:
+        "Lo esencial es gratis: buscar, comparar, ser guiado, los transportes. Plus — 3,99 € al mes, 14 días de prueba — desbloquea las regiones sin conexión, la importación GPX, las rutas de reparto optimizadas, el registro de kilómetros exportable y la facturación.",
     },
   ],
   horsLigneCartes: [
@@ -719,7 +731,7 @@ const EN: Contenu = {
     { valeur: "19", legende: "place categories" },
     { valeur: "212", legende: "downloadable regions" },
     { valeur: "49", legende: "European countries" },
-    { valeur: "0 €", legende: "no subscription" },
+    { valeur: "3.99 €", legende: "per month — essentials free" },
   ],
   comparateur: {
     titre: "The route is offered, not imposed",
@@ -822,6 +834,12 @@ const EN: Contenu = {
       titre: "Ready for CarPlay",
       texte:
         "The car screen is written: the same map, the route being driven, the current instruction and its distance. It lights up as soon as Apple grants the CarPlay approval — plugging in the phone will be enough.",
+    },
+    {
+      emoji: "⭐",
+      titre: "MonCap Plus",
+      texte:
+        "The essentials are free: search, compare, be guided, transit. Plus — €3.99 a month, 14-day trial — unlocks offline regions, GPX import, optimized multi-stop runs, the exportable mileage log and invoicing.",
     },
   ],
   horsLigneCartes: [
