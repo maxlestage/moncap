@@ -219,6 +219,24 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Restaurer les achats": ("Restaurar compras", "Restore purchases"),
     "J'ai un code": ("Tengo un código", "I have a code"),
+    "Essai gratuit en cours": ("Prueba gratis en curso", "Free trial running"),
+    "Il reste %d jour(s) — puis %@ par mois.": (
+        "Quedan %d día(s) — después %@ al mes.",
+        "%d day(s) left — then %@ per month.",
+    ),
+    "MonCap Plus — offert 🎁": ("MonCap Plus — regalado 🎁", "MonCap Plus — on the house 🎁"),
+    "Abonnement actif": ("Suscripción activa", "Subscription active"),
+    "Renouvellement le %@.": ("Renovación el %@.", "Renews on %@."),
+    "Gérer l'abonnement": ("Gestionar la suscripción", "Manage subscription"),
+    "Découvrir MonCap Plus": ("Descubrir MonCap Plus", "Discover MonCap Plus"),
+    "14 jours d'essai, puis %@ par mois.": (
+        "14 días de prueba, después %@ al mes.",
+        "14-day trial, then %@ per month.",
+    ),
+    "%@ par mois, sans engagement.": (
+        "%@ al mes, sin permanencia.",
+        "%@ per month, cancel anytime.",
+    ),
     "Abonnement mensuel, renouvelé automatiquement, résiliable à tout moment dans les réglages iOS.": (
         "Suscripción mensual, renovada automáticamente, cancelable en cualquier momento en los ajustes de iOS.",
         "Monthly subscription, renews automatically, cancel anytime in iOS settings.",

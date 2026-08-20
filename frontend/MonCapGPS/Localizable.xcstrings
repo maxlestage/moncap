@@ -129,6 +129,22 @@
         }
       }
     },
+    "%@ par mois, sans engagement.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ per month, cancel anytime."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ al mes, sin permanencia."
+          }
+        }
+      }
+    },
     "%@ sortie": {
       "localizations": {
         "en": {
@@ -321,6 +337,22 @@
         }
       }
     },
+    "14 jours d'essai, puis %@ par mois.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14-day trial, then %@ per month."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14 días de prueba, después %@ al mes."
+          }
+        }
+      }
+    },
     "1re": {
       "localizations": {
         "en": {
@@ -493,6 +525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abandonar"
+          }
+        }
+      }
+    },
+    "Abonnement actif": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subscription active"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suscripción activa"
           }
         }
       }
@@ -1697,6 +1745,22 @@
         }
       }
     },
+    "Découvrir MonCap Plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discover MonCap Plus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descubrir MonCap Plus"
+          }
+        }
+      }
+    },
     "Définir %@ sur ma position": {
       "localizations": {
         "en": {
@@ -1901,6 +1965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enviar el mensaje"
+          }
+        }
+      }
+    },
+    "Essai gratuit en cours": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Free trial running"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prueba gratis en curso"
           }
         }
       }
@@ -2145,6 +2225,22 @@
         }
       }
     },
+    "Gérer l'abonnement": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage subscription"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestionar la suscripción"
+          }
+        }
+      }
+    },
     "Handicapé": {
       "localizations": {
         "en": {
@@ -2189,6 +2285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hoteles"
+          }
+        }
+      }
+    },
+    "Il reste %d jour(s) — puis %@ par mois.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d day(s) left — then %@ per month."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quedan %d día(s) — después %@ al mes."
           }
         }
       }
@@ -3041,6 +3153,22 @@
         }
       }
     },
+    "MonCap Plus — offert 🎁": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap Plus — on the house 🎁"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap Plus — regalado 🎁"
+          }
+        }
+      }
+    },
     "Mot de passe : 6 caractères minimum.": {
       "localizations": {
         "en": {
@@ -3677,6 +3805,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fijar en mi posición"
+          }
+        }
+      }
+    },
+    "Renouvellement le %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renews on %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renovación el %@."
           }
         }
       }
