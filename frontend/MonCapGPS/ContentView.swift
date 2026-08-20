@@ -2343,7 +2343,12 @@ struct MapHomeView: View {
                         }
                     }
                     Spacer(minLength: 6)
-                    Image(systemName: routesExpanded ? "chevron.up" : "chevron.down")
+                    // Replié, la liste s'ouvre en remontant depuis le bas de
+                    // l'écran : la flèche pointe vers le haut, le sens du
+                    // geste. Dépliée, elle pointe vers le bas, où tout se
+                    // rabat. L'inverse — la convention des listes qui
+                    // s'ouvrent vers le bas — mentait ici sur les deux sens.
+                    Image(systemName: routesExpanded ? "chevron.down" : "chevron.up")
                         .font(.subheadline.weight(.bold)).foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
