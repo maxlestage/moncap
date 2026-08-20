@@ -47,10 +47,10 @@ T: dict[str, tuple[str, str]] = {
     "Prévenir un proche": ("Avisar a un allegado", "Let someone know"),
     "Naviguer hors ligne": ("Navegar sin conexión", "Navigate offline"),
     "Revenir au fond par défaut": ("Volver al fondo por defecto", "Back to the default background"),
-    "Obtenir une clé gratuite": ("Conseguir una clave gratuita", "Get a free key"),
-    "Obtenir une clé gratuite (2 500 req./jour)": (
-        "Conseguir una clave gratuita (2 500 pet./día)",
-        "Get a free key (2,500 req./day)",
+    "Obtenir une clé": ("Conseguir una clave", "Get a key"),
+    "Obtenir une clé (2 500 req./jour)": (
+        "Conseguir una clave (2 500 pet./día)",
+        "Get a key (2,500 req./day)",
     ),
     "Supprimer mon compte": ("Eliminar mi cuenta", "Delete my account"),
     "Tout supprimer définitivement": ("Eliminarlo todo definitivamente", "Delete everything permanently"),
@@ -100,7 +100,7 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription.": (
         "Los fondos de mapa y el cálculo de rutas se descargan juntos, sobre la zona que estás mirando. No hace falta ninguna clave: todo viene de OpenStreetMap, libre y sin registro.",
-        "Map backgrounds and route computation download together, for the area you are looking at. No key is needed: everything comes from OpenStreetMap, free and without signing up.",
+        "Map backgrounds and route computation download together, for the area you are looking at. No key is needed: everything comes from OpenStreetMap, open and without signing up.",
     ),
     "Itinéraires hors réseau": ("Rutas sin conexión", "Offline routes"),
     "Toutes les régions": ("Todas las regiones", "All regions"),
@@ -187,9 +187,9 @@ T: dict[str, tuple[str, str]] = {
         "Quedan %d día(s) de prueba — todo está abierto.",
         "%d trial day(s) left — everything is open.",
     ),
-    "Quatorze jours pour tout essayer, puis une formule — rien de gratuit, c'est la règle.": (
-        "Catorce días para probarlo todo, después una fórmula — nada gratis, es la regla.",
-        "Fourteen days to try everything, then a plan — nothing free, that's the rule.",
+    "Quatorze jours pour tout essayer, puis une formule — tout est payant, c'est la règle.": (
+        "Catorce días para probarlo todo, después una fórmula — todo es de pago, es la regla.",
+        "Fourteen days to try everything, then a plan — everything is paid, that's the rule.",
     ),
     "L'app entière : guidage, comparateur, transports": (
         "La app entera: guía, comparador, transportes",

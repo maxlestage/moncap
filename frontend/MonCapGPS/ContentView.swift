@@ -3139,7 +3139,7 @@ struct MapHomeView: View {
                         destination: URL(
                             string: "https://firms.modaps.eosdis.nasa.gov/api/map_key/")!
                     ) {
-                        Label("Obtenir une clé gratuite", systemImage: "link")
+                        Label("Obtenir une clé", systemImage: "link")
                     }
                     .font(.footnote)
                     Text(
@@ -3229,7 +3229,7 @@ struct MapHomeView: View {
                         .autocorrectionDisabled()
                         .font(.system(.body, design: .monospaced))
                     Link(destination: URL(string: "https://developer.tomtom.com/user/me/apps")!) {
-                        Label("Obtenir une clé gratuite (2 500 req./jour)", systemImage: "link")
+                        Label("Obtenir une clé (2 500 req./jour)", systemImage: "link")
                     }
                     .font(.footnote)
                     if tomtomKey.trimmingCharacters(in: .whitespaces).isEmpty {

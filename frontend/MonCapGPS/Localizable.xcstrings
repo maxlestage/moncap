@@ -2742,7 +2742,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Map backgrounds and route computation download together, for the area you are looking at. No key is needed: everything comes from OpenStreetMap, free and without signing up."
+            "value": "Map backgrounds and route computation download together, for the area you are looking at. No key is needed: everything comes from OpenStreetMap, open and without signing up."
           }
         },
         "es": {
@@ -3377,34 +3377,34 @@
         }
       }
     },
-    "Obtenir une clé gratuite": {
+    "Obtenir une clé": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Get a free key"
+            "value": "Get a key"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Conseguir una clave gratuita"
+            "value": "Conseguir una clave"
           }
         }
       }
     },
-    "Obtenir une clé gratuite (2 500 req./jour)": {
+    "Obtenir une clé (2 500 req./jour)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Get a free key (2,500 req./day)"
+            "value": "Get a key (2,500 req./day)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Conseguir una clave gratuita (2 500 pet./día)"
+            "value": "Conseguir una clave (2 500 pet./día)"
           }
         }
       }
@@ -3761,18 +3761,18 @@
         }
       }
     },
-    "Quatorze jours pour tout essayer, puis une formule — rien de gratuit, c'est la règle.": {
+    "Quatorze jours pour tout essayer, puis une formule — tout est payant, c'est la règle.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fourteen days to try everything, then a plan — nothing free, that's the rule."
+            "value": "Fourteen days to try everything, then a plan — everything is paid, that's the rule."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Catorce días para probarlo todo, después una fórmula — nada gratis, es la regla."
+            "value": "Catorce días para probarlo todo, después una fórmula — todo es de pago, es la regla."
           }
         }
       }

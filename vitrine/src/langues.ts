@@ -45,11 +45,12 @@ export type Contenu = {
   readonly atoutsTitre: string;
   readonly atouts: readonly Atout[];
   readonly horsLigneCartes: readonly Atout[];
-  /** La section tarifs : l'essai, Plus et Pro côte à côte, mensuel en grand. */
+  /** La section tarifs : Plus et Pro côte à côte, le mensuel en grand.
+   * Pas de carte « essai » : un délai avant paiement n'est pas une formule,
+   * et rien ici ne doit ressembler à du 0 €. */
   readonly tarifs: {
     readonly titre: string;
     readonly intro: string;
-    readonly essai: Formule;
     readonly plus: Formule;
     readonly pro: Formule;
     readonly note: string;
@@ -260,7 +261,7 @@ const FR: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Quatorze jours d'essai, tout ouvert — puis une formule : Plus, 3,99 € par mois, pour l'app entière (hors ligne, GPX, tournées) ; Pro, 9,99 € par mois, pour le journal kilométrique et la facturation. Rien de gratuit au-delà, c'est la règle.",
+        "Quatorze jours d'essai, tout ouvert — puis une formule : Plus, 3,99 € par mois, pour l'app entière (hors ligne, GPX, tournées) ; Pro, 9,99 € par mois, pour le journal kilométrique et la facturation. Au-delà, l'app se verrouille : tout est payant, c'est la règle.",
     },
     {
       emoji: "🧾",
@@ -305,17 +306,6 @@ const FR: Contenu = {
     titre: "Le prix, dit simplement",
     intro:
       "Pas de pièges : quatorze jours pour tout essayer, puis une formule au mois — Plus ou Pro, selon l'usage.",
-    essai: {
-      nom: "L'essai",
-      prix: "14 jours",
-      periode: "tout ouvert, pour tout le monde",
-      points: [
-        "L'app entière, sans restriction",
-        "Jusqu'à 15 itinéraires comparés, guidage, transports",
-        "Hors ligne, GPX, tournées, journal, facturation",
-        "Aucune carte bancaire demandée pour essayer",
-      ],
-    },
     plus: {
       nom: "MonCap Plus",
       prix: "3,99 €",
@@ -338,7 +328,7 @@ const FR: Contenu = {
       ],
     },
     note:
-      "Quatorze jours d'essai pour tout le monde, puis une formule — rien de gratuit au-delà, c'est la règle. L'abonnement se prend dans l'application, se gère et se résilie dans les réglages iOS.",
+      "Passé les quatorze jours d'essai, l'app se verrouille jusqu'à l'abonnement — tout est payant, c'est la règle de la maison. L'abonnement se prend dans l'application, se gère et se résilie dans les réglages iOS.",
   },
   preuve: {
     titre: "Une mesure vaut mieux qu'une promesse",
@@ -605,7 +595,7 @@ const ES: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Catorce días de prueba, todo abierto — después una fórmula: Plus, 3,99 € al mes, para la app entera (sin conexión, GPX, repartos); Pro, 9,99 € al mes, para el registro de kilómetros y la facturación. Nada gratis más allá, es la regla.",
+        "Catorce días de prueba, todo abierto — después una fórmula: Plus, 3,99 € al mes, para la app entera (sin conexión, GPX, repartos); Pro, 9,99 € al mes, para el registro de kilómetros y la facturación. Más allá, la app se bloquea: todo es de pago, es la regla.",
     },
     {
       emoji: "🧾",
@@ -650,17 +640,6 @@ const ES: Contenu = {
     titre: "El precio, dicho claro",
     intro:
       "Sin trampas: catorce días para probarlo todo, luego una fórmula al mes — Plus o Pro, según el uso.",
-    essai: {
-      nom: "La prueba",
-      prix: "14 días",
-      periode: "todo abierto, para todo el mundo",
-      points: [
-        "La app entera, sin restricciones",
-        "Hasta 15 rutas comparadas, guía, transportes",
-        "Sin conexión, GPX, repartos, registro, facturación",
-        "Sin tarjeta bancaria para probar",
-      ],
-    },
     plus: {
       nom: "MonCap Plus",
       prix: "3,99 €",
@@ -683,7 +662,7 @@ const ES: Contenu = {
       ],
     },
     note:
-      "Catorce días de prueba para todo el mundo, después una fórmula — nada gratis más allá, es la regla. La suscripción se contrata en la aplicación y se cancela en los ajustes de iOS.",
+      "Pasados los catorce días de prueba, la app se bloquea hasta la suscripción — todo es de pago, es la regla de la casa. La suscripción se contrata en la aplicación y se cancela en los ajustes de iOS.",
   },
   preuve: {
     titre: "Una medición vale más que una promesa",
@@ -950,7 +929,7 @@ const EN: Contenu = {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
-        "Fourteen days of trial, everything open — then a plan: Plus, €3.99 a month, for the whole app (offline, GPX, multi-stop); Pro, €9.99 a month, for the mileage log and invoicing. Nothing free beyond that — that's the rule.",
+        "Fourteen days of trial, everything open — then a plan: Plus, €3.99 a month, for the whole app (offline, GPX, multi-stop); Pro, €9.99 a month, for the mileage log and invoicing. Beyond that the app locks: everything is paid — that's the rule.",
     },
     {
       emoji: "🧾",
@@ -995,17 +974,6 @@ const EN: Contenu = {
     titre: "The price, said plainly",
     intro:
       "No tricks: fourteen days to try everything, then one monthly plan — Plus or Pro, depending on how you drive.",
-    essai: {
-      nom: "The trial",
-      prix: "14 days",
-      periode: "everything open, for everyone",
-      points: [
-        "The whole app, no restrictions",
-        "Up to 15 routes compared, guidance, transit",
-        "Offline, GPX, multi-stop runs, log, invoicing",
-        "No card required to try",
-      ],
-    },
     plus: {
       nom: "MonCap Plus",
       prix: "3.99 €",
@@ -1028,7 +996,7 @@ const EN: Contenu = {
       ],
     },
     note:
-      "Fourteen days of trial for everyone, then a plan — nothing free beyond that, that's the rule. The subscription is taken out in the app and cancelled in iOS settings.",
+      "After the fourteen-day trial the app locks until you subscribe — everything is paid, that's the house rule. The subscription is taken out in the app and cancelled in iOS settings.",
   },
   preuve: {
     titre: "A measurement beats a promise",

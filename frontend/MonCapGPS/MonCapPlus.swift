@@ -202,7 +202,7 @@ struct PaywallView: View {
                                         comment: ""), jours))
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Quatorze jours pour tout essayer, puis une formule — rien de gratuit, c'est la règle.")
+                            Text("Quatorze jours pour tout essayer, puis une formule — tout est payant, c'est la règle.")
                                 .foregroundStyle(.secondary)
                         }
                     }

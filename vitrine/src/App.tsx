@@ -344,15 +344,16 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
           </section>
 
           {/* Le prix a sa section, pas une ligne en petit : il compte autant
-              que les fonctions. Trois cartes côte à côte — l'essai de
-              quatorze jours, Plus mis en avant, Pro pour ceux qui roulent
-              pour travailler — le mensuel écrit en grand. */}
+              que les fonctions. Deux cartes côte à côte — Plus mis en avant,
+              Pro pour ceux qui roulent pour travailler — le mensuel écrit en
+              grand. L'essai n'a pas de carte : un délai avant paiement n'est
+              pas une formule, et rien ici ne doit ressembler à du 0 €. */}
           <section aria-labelledby="tarifs-titre" className="tarifs">
             <h2 id="tarifs-titre">{c.tarifs.titre}</h2>
             <p className="intro">{c.tarifs.intro}</p>
             <div className="formules">
-              {[c.tarifs.essai, c.tarifs.plus, c.tarifs.pro].map((f, i) => (
-                <div key={f.nom} className={i === 1 ? "formule vedette" : "formule"}>
+              {[c.tarifs.plus, c.tarifs.pro].map((f, i) => (
+                <div key={f.nom} className={i === 0 ? "formule vedette" : "formule"}>
                   <h3>{f.nom}</h3>
                   <p className="prix">
                     {f.prix} <span>{f.periode}</span>
