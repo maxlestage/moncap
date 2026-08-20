@@ -33,6 +33,8 @@ export type Contenu = {
   readonly h1: readonly [string, string];
   readonly chapeau: string;
   readonly seConnecter: string;
+  /** Libellé du lien vers le dépôt, public depuis août 2026. */
+  readonly codeSource: string;
   readonly theme: { readonly libelle: string; readonly noms: readonly string[] };
   readonly langueLibelle: string;
   readonly chiffres: readonly Chiffre[];
@@ -120,6 +122,7 @@ const FR: Contenu = {
   chapeau:
     "Un GPS pour iPhone qui met les itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — puis vous guide. Téléchargez votre région une fois, et il continue de calculer tout seul : vallées, tunnels, étranger.",
   seConnecter: "Se connecter",
+  codeSource: "Code source",
   theme: {
     libelle: "Thème",
     noms: ["Auto", "Clair", "Sombre", "Marine"],
@@ -152,7 +155,7 @@ const FR: Contenu = {
   horsLigne: {
     titre: "Quand le réseau tombe",
     intro:
-      "206 régions dans 49 pays d'Europe, téléchargeables une par une. Plusieurs peuvent cohabiter sur le téléphone, et le transfert d'un paquet ne demande pas de rester devant l'écran.",
+      "212 régions dans 49 pays d'Europe, téléchargeables une par une. Plusieurs peuvent cohabiter sur le téléphone, et le transfert d'un paquet ne demande pas de rester devant l'écran.",
   },
   atoutsTitre: "Et aussi",
   atouts: [
@@ -412,6 +415,7 @@ const ES: Contenu = {
   chapeau:
     "Un GPS para iPhone que pone las rutas una al lado de otra — duración, giros, desnivel, combustible, peajes — y luego te guía. Descarga tu región una vez y sigue calculando solo: valles, túneles, extranjero.",
   seConnecter: "Iniciar sesión",
+  codeSource: "Código fuente",
   theme: {
     libelle: "Tema",
     noms: ["Auto", "Claro", "Oscuro", "Marino"],
@@ -444,7 +448,7 @@ const ES: Contenu = {
   horsLigne: {
     titre: "Cuando se cae la cobertura",
     intro:
-      "206 regiones en 49 países de Europa, descargables una a una. Varias pueden convivir en el teléfono, y la transferencia de un paquete no exige quedarse delante de la pantalla.",
+      "212 regiones en 49 países de Europa, descargables una a una. Varias pueden convivir en el teléfono, y la transferencia de un paquete no exige quedarse delante de la pantalla.",
   },
   atoutsTitre: "Y además",
   atouts: [
@@ -704,6 +708,7 @@ const EN: Contenu = {
   chapeau:
     "An iPhone GPS that lays the routes side by side — time, turns, elevation, fuel, tolls — then guides you. Download your region once and it keeps computing on its own: valleys, tunnels, abroad.",
   seConnecter: "Sign in",
+  codeSource: "Source code",
   theme: {
     libelle: "Theme",
     noms: ["Auto", "Light", "Dark", "Navy"],
@@ -736,7 +741,7 @@ const EN: Contenu = {
   horsLigne: {
     titre: "When the signal drops",
     intro:
-      "206 regions across 49 European countries, downloadable one by one. Several can live on the phone at once, and transferring a pack doesn't mean sitting in front of the screen.",
+      "212 regions across 49 European countries, downloadable one by one. Several can live on the phone at once, and transferring a pack doesn't mean sitting in front of the screen.",
   },
   atoutsTitre: "And also",
   atouts: [

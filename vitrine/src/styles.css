@@ -307,6 +307,19 @@ a {
   max-width: 34rem;
 }
 
+/* Le lien discret sous le bouton principal (« Code source ») : même encre
+ * douce que le chapeau, souligné pour se dire lien sur le dégradé. */
+.lien {
+  color: #c3cfe2;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.lien:hover {
+  color: #ffffff;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -320,10 +333,10 @@ a {
  * contraste le plus franc — un bouton bleu sur un fond bleu ne ressort
  * jamais, quelle que soit la nuance.
  *
- * C'est désormais la **seule** action de la page : les deux liens vers le
- * dépôt menaient à un dépôt privé, donc à un 404 pour tout visiteur. Une
- * action unique peut se permettre d'occuper toute la largeur sur téléphone,
- * et vaut mieux atteinte sans viser qu'élégante.
+ * L'action reste unique — le bouton occupe toute la largeur sur téléphone,
+ * atteint sans viser. Le lien « Code source », revenu avec le dépôt devenu
+ * public (août 2026), est une invitation discrète dessous, pas une
+ * deuxième action.
  */
 .bouton {
   display: inline-flex;
