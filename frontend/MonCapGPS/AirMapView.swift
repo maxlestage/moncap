@@ -851,11 +851,21 @@ struct AirMapLibreView: UIViewRepresentable {
                 let image = AirNappe.image(g)
             else { return }
 
+            // Le tour complet du globe est un quadrilatère dégénéré : −180°
+            // et +180° sont le même méridien, si bien que la nappe mondiale
+            // avait ses deux bords au même endroit — et MapLibre ne dessinait
+            // rien. Un cheveu en retrait suffit, invisible à ce zoom.
+            var ouest = g.o
+            var est = g.e
+            if est - ouest >= 359.9 {
+                ouest = -179.95
+                est = 179.95
+            }
             let quad = MLNCoordinateQuadMake(
-                CLLocationCoordinate2D(latitude: g.no, longitude: g.o),
-                CLLocationCoordinate2D(latitude: g.su, longitude: g.o),
-                CLLocationCoordinate2D(latitude: g.su, longitude: g.e),
-                CLLocationCoordinate2D(latitude: g.no, longitude: g.e))
+                CLLocationCoordinate2D(latitude: g.no, longitude: ouest),
+                CLLocationCoordinate2D(latitude: g.su, longitude: ouest),
+                CLLocationCoordinate2D(latitude: g.su, longitude: est),
+                CLLocationCoordinate2D(latitude: g.no, longitude: est))
             let src = MLNImageSource(
                 identifier: Self.source, coordinateQuad: quad, image: image)
             style.addSource(src)
