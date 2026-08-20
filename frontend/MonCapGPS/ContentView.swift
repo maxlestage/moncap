@@ -732,6 +732,13 @@ struct MapHomeView: View {
             }
             .padding(.horizontal)
             .padding(.top, 8)
+            // Les cartes flottantes sur la carte sont denses par nature : aux
+            // tailles de texte d'accessibilité, leurs lignes débordaient et
+            // leurs boutons s'étiraient (le Démarrer en colonne verte pleine
+            // hauteur, constaté sur appareil). Le texte y est plafonné à
+            // xxLarge — comme le fait Plans — les feuilles (recherche,
+            // réglages…), défilantes, gardent elles la taille du réglage.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
 
             // Bas : cartes d'info + barre d'actions. Les bandeaux ETA et
             // comparateur sont calés tout en bas (sous les boutons) pour
@@ -753,6 +760,8 @@ struct MapHomeView: View {
             }
             .padding(.horizontal)
             .padding(.bottom, 6)
+            // Même plafond que la pile du haut, même raison.
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         }
         .sheet(isPresented: $showPlaces) { placesSheet }
         .sheet(isPresented: $showSearch) { searchSheet }
@@ -2735,9 +2744,15 @@ struct MapHomeView: View {
                 Button {
                     if let o = selected { startNavigation(option: o) }
                 } label: {
+                    // Hauteur bornée et texte qui se serre : sans elles, une
+                    // grande taille de texte étirait ce bouton en colonne
+                    // pleine hauteur (constaté sur appareil).
                     Label("Démarrer", systemImage: "location.north.line.fill")
                         .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity)
+                        .frame(height: 34)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
