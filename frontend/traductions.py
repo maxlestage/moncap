@@ -161,6 +161,14 @@ T: dict[str, tuple[str, str]] = {
         "🔥 Crosses a wildfire area around km %d",
     ),
     "🫁 Air %@ à l'arrivée": ("🫁 Aire %@ a la llegada", "🫁 %@ air at arrival"),
+    "🌧️ Pluie vers %@ (%@ · %d %%)": (
+        "🌧️ Lluvia hacia %@ (%@ · %d %%)",
+        "🌧️ Rain near %@ (%@ · %d %%)",
+    ),
+    "🌧️ Pluie en route (%@ · %d %%)": (
+        "🌧️ Lluvia en el camino (%@ · %d %%)",
+        "🌧️ Rain on the way (%@ · %d %%)",
+    ),
     "🌧️ Pluie probable à l'arrivée (%d %%)": (
         "🌧️ Lluvia probable a la llegada (%d %%)",
         "🌧️ Rain likely at arrival (%d %%)",
@@ -276,6 +284,11 @@ T: dict[str, tuple[str, str]] = {
     "mot de passe": ("contraseña", "password"),
     "Clé API TomTom": ("Clave de API TomTom", "TomTom API key"),
     "Clé FIRMS (MAP_KEY)": ("Clave FIRMS (MAP_KEY)", "FIRMS key (MAP_KEY)"),
+    "Type de vélo": ("Tipo de bicicleta", "Bike type"),
+    "Route": ("Carretera", "Road"),
+    "Ville": ("Ciudad", "City"),
+    "VTT": ("BTT", "MTB"),
+    "Éviter les côtes": ("Evitar las cuestas", "Avoid hills"),
     "Éviter les péages": ("Evitar peajes", "Avoid tolls"),
     "Éviter les autoroutes": ("Evitar autopistas", "Avoid motorways"),
     "Un trajet vers chaque point": ("Una ruta hasta cada punto", "One route to each point"),
@@ -406,6 +419,7 @@ T: dict[str, tuple[str, str]] = {
     # Niveaux de détail du téléchargement de carte.
     "Région": ("Región", "Region"),
     "Ville": ("Ciudad", "City"),
+    "VTT": ("BTT", "MTB"),
     "Rue": ("Calle", "Street"),
     # --- Consignes de navigation ------------------------------------------
     # L'application ne montre pas la consigne du moteur d'itinéraire : elle la

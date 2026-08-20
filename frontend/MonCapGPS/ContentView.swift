@@ -667,6 +667,9 @@ struct MapHomeView: View {
     /// Carte des feux de forêt (contours sur satellite, écran dédié).
     @State private var showFireMap = false
     @State private var showAirMap = false
+    /// Profil du vélo pour le calcul local (Road / Hybrid / Mountain).
+    @AppStorage("moncap.veloType") private var veloType = "Hybrid"
+    @AppStorage("moncap.veloEviteCotes") private var veloEviteCotes = false
     /// Le moment du trajet en transports : maintenant, partir à, ou arriver
     /// avant. Les horaires sont toute la donnée d'un tram — les figer sur
     /// « maintenant » interdisait de préparer le bus de demain matin.
@@ -680,8 +683,9 @@ struct MapHomeView: View {
     /// Étapes déjà atteintes pendant le guidage (index dans `etapes`) : le
     /// recalcul d'écart ne repasse pas par elles.
     @State private var etapesAtteintes: Set<Int> = []
-    /// Ce que chaque variante rencontre en chemin (feux), par identifiant.
-    @State private var risquesParOption: [UUID: String] = [:]
+    /// Ce que chaque variante rencontre en chemin — feux, pluie — par
+    /// identifiant.
+    @State private var risquesParOption: [UUID: [String]] = [:]
     /// Ce qui attend à l'arrivée, commun à toutes les variantes : air, pluie.
     @State private var risquesArrivee: [String] = []
     /// Clé NASA FIRMS optionnelle (sinon backend). Vide = via serveur.
@@ -2415,12 +2419,13 @@ struct MapHomeView: View {
             Text(routeCoreText(o))
                 .lineLimit(compact || o.transit != nil ? 1 : 2)
                 .minimumScaleFactor(compact || o.transit != nil ? 0.6 : 0.85)
-            // Ce que cette variante-là rencontre : un feu sur son tracé.
-            // Propre à chacune — c'est parfois précisément ce qui les départage.
-            if let feu = risquesParOption[o.id] {
-                Text(feu)
+            // Ce que cette variante-là rencontre : un feu sur son tracé, la
+            // pluie à mi-chemin. Propre à chacune — c'est parfois précisément
+            // ce qui les départage.
+            ForEach(risquesParOption[o.id] ?? [], id: \.self) { risque in
+                Text(risque)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(risque.hasPrefix("🔥") ? .red : .orange)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -2928,6 +2933,22 @@ struct MapHomeView: View {
                         }
                         Toggle(isOn: $avoidHighways) {
                             Label("Éviter les autoroutes", systemImage: "road.lanes")
+                        }
+                    }
+                    // Le vélo a son profil : Valhalla distingue le vélo de
+                    // route, celui de ville et le VTT, et sait fuir les côtes.
+                    // Ces réglages ne portent que sur le calcul local — MapKit
+                    // n'a pas de profil vélo, c'est même pour ça qu'on lui a
+                    // ajouté Valhalla.
+                    if travelMode == .bike {
+                        Picker("Type de vélo", selection: $veloType) {
+                            Text("Route").tag("Road")
+                            Text("Ville").tag("Hybrid")
+                            Text("VTT").tag("Mountain")
+                        }
+                        .pickerStyle(.segmented)
+                        Toggle(isOn: $veloEviteCotes) {
+                            Label("Éviter les côtes", systemImage: "mountain.2")
                         }
                     }
                 }
@@ -4274,11 +4295,36 @@ struct MapHomeView: View {
         if !feux.isEmpty {
             for o in options {
                 if let km = RouteRisques.kmDuPremierFeu(trace: o.coordinates, feux: feux) {
-                    risquesParOption[o.id] = String(
-                        format: NSLocalizedString(
-                            "🔥 Traverse une zone de feux vers le km %d", comment: ""),
-                        km)
+                    risquesParOption[o.id, default: []].append(
+                        String(
+                            format: NSLocalizedString(
+                                "🔥 Traverse une zone de feux vers le km %d", comment: ""),
+                            km))
                 }
+            }
+        }
+
+        // La pluie à mi-chemin, sur les trois variantes de tête : chaque point
+        // sondé coûte une requête, et au-delà des étiquettes « simple, rapide,
+        // court », les tracés se recouvrent trop pour que la météo diffère.
+        let formatHeure = DateFormatter()
+        formatHeure.dateFormat = "HH:mm"
+        for o in options.prefix(3) {
+            for pluie in await RouteRisques.pluieEnRoute(
+                trace: o.coordinates, dureeMinutes: o.minutes)
+            {
+                let heure = formatHeure.string(from: pluie.heure)
+                let texte: String
+                if let lieu = pluie.lieu {
+                    texte = String(
+                        format: NSLocalizedString("🌧️ Pluie vers %@ (%@ · %d %%)", comment: ""),
+                        lieu, heure, pluie.proba)
+                } else {
+                    texte = String(
+                        format: NSLocalizedString("🌧️ Pluie en route (%@ · %d %%)", comment: ""),
+                        heure, pluie.proba)
+                }
+                risquesParOption[o.id, default: []].append(texte)
             }
         }
 

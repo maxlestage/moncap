@@ -101,6 +101,35 @@ enum RouteRisques {
         return point.niveau
     }
 
+    /// La pluie sur le parcours : les points du tiers et des deux tiers du
+    /// tracé, chacun à son heure de passage.
+    ///
+    /// Deux points suffisent — départ et arrivée sont déjà couverts — et
+    /// chacun coûte une requête : en sonder dix ne dirait rien de plus que
+    /// « il pleut dans la région ». Le lieu est nommé par géocodage inverse,
+    /// qui demande le réseau comme la prévision elle-même : hors ligne,
+    /// l'alerte n'existe simplement pas.
+    static func pluieEnRoute(
+        trace: [CLLocationCoordinate2D], dureeMinutes: Double
+    ) async -> [(lieu: String?, heure: Date, proba: Int)] {
+        guard trace.count >= 4, dureeMinutes > 30 else { return [] }
+        var trouvees: [(String?, Date, Int)] = []
+        for fraction in [1.0 / 3.0, 2.0 / 3.0] {
+            let point = trace[Int(Double(trace.count - 1) * fraction)]
+            let passage = dureeMinutes * fraction
+            guard let proba = await pluieArrivee(point, dans: passage), proba >= 50 else {
+                continue
+            }
+            let lieu = try? await CLGeocoder()
+                .reverseGeocodeLocation(
+                    CLLocation(latitude: point.latitude, longitude: point.longitude)
+                ).first?.locality
+            trouvees.append(
+                (lieu ?? nil, Date().addingTimeInterval(passage * 60), proba))
+        }
+        return trouvees
+    }
+
     /// Probabilité de pluie (%) à l'arrivée, ou nil si la prévision manque.
     ///
     /// Open-Meteo, sans clé, comme la météo du bandeau. La prévision est
