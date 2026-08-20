@@ -117,7 +117,12 @@ struct OfflineMapScreen: View {
         // produit des dizaines par seconde, et le géocodeur du système est
         // limité en cadence.
         .task(id: caseRegardee) { await chercheRegion() }
-        .sheet(isPresented: $showRegions) { listeRegions }
+        .sheet(isPresented: $showRegions) {
+            listeRegions
+                // Opaque : le verre d'iOS 26+ laisse la carte saigner à
+                // travers, texte illisible (constaté sur les feuilles).
+                .presentationBackground(Color(.systemBackground))
+        }
         .onAppear {
             route = RouteStore.load()?.coordinates ?? []
             packs.refresh()
