@@ -609,6 +609,22 @@
         }
       }
     },
+    "Au plus court": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortest order"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El más corto"
+          }
+        }
+      }
+    },
     "Aucun itinéraire": {
       "localizations": {
         "en": {
@@ -3153,6 +3169,22 @@
         }
       }
     },
+    "Sans arrêt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No stop"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin parada"
+          }
+        }
+      }
+    },
     "Sans réseau": {
       "localizations": {
         "en": {
@@ -3373,6 +3405,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Escribe una dirección o un lugar y elige un destino."
+          }
+        }
+      }
+    },
+    "Temps d'arrêt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop time"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiempo de parada"
           }
         }
       }
