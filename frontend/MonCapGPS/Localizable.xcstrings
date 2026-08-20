@@ -3393,6 +3393,22 @@
         }
       }
     },
+    "Touche la carte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap the map"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toca el mapa"
+          }
+        }
+      }
+    },
     "Tourisme": {
       "localizations": {
         "en": {
@@ -4173,6 +4189,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claros"
+          }
+        }
+      }
+    },
+    "Étape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parada"
+          }
+        }
+      }
+    },
+    "Étape %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop %d"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parada %d"
+          }
+        }
+      }
+    },
+    "Étape : %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parada: %@"
           }
         }
       }
