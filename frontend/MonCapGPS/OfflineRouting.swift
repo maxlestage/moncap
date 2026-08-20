@@ -557,9 +557,9 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// trajet : l'appelant garde alors son itinéraire précédent.
     func route(
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
-        costing: String = "auto"
+        costing: String = "auto", vias: [CLLocationCoordinate2D] = []
     ) -> OfflineRoute? {
-        routes(from: from, to: to, max: 1, costing: costing).first
+        routes(from: from, to: to, max: 1, costing: costing, vias: vias).first
     }
 
     /// Plusieurs itinéraires entre deux points, calculés sur l'appareil.
@@ -579,16 +579,25 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// de coût choisit lesquels emprunter. Le brider à la voiture, comme
     /// c'était le cas, envoyait le vélo et la marche sur le réseau en plein
     /// mode avion, pour un calcul que le paquet installé savait faire.
+    /// `vias` : les étapes intermédiaires, dans l'ordre. Chacune est un
+    /// arrêt (« break ») : le trajet s'y pose vraiment, contrairement au
+    /// point de passage des détours. Avec des étapes, ni variantes ni
+    /// éventail — Valhalla refuse les alternatives dès trois points, et un
+    /// trajet à étapes est déjà le trajet qu'on a voulu.
     func routes(
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
         max nombre: Int = OfflineRouter.maxItineraires,
-        costing: String = "auto"
+        costing: String = "auto",
+        vias: [CLLocationCoordinate2D] = []
     ) -> [OfflineRoute] {
+        var lieux: [[String: Any]] = [["lat": from.latitude, "lon": from.longitude]]
+        for v in vias {
+            lieux.append(["lat": v.latitude, "lon": v.longitude, "type": "break"])
+        }
+        lieux.append(["lat": to.latitude, "lon": to.longitude])
+        let nombre = vias.isEmpty ? nombre : 1
         var demande: [String: Any] = [
-            "locations": [
-                ["lat": from.latitude, "lon": from.longitude],
-                ["lat": to.latitude, "lon": to.longitude],
-            ],
+            "locations": lieux,
             "costing": costing,
             // Les voies à l'approche de chaque manœuvre — « serrez à
             // droite, deuxième file ». Le sérialiseur ne les écrit que sur
@@ -632,6 +641,9 @@ final class OfflineRouter: NSObject, ObservableObject {
             let trouves = OfflineRoute.toutes(json: brut)
             if !trouves.isEmpty {
                 dernierEchec = nil
+                // Pas d'éventail sur un trajet à étapes : il est déjà celui
+                // qu'on a voulu.
+                if !vias.isEmpty { return trouves }
                 return complete(
                     trouves, moteur: moteur, from: from, to: to,
                     max: nombre, costing: costing)
