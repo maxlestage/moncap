@@ -19,6 +19,10 @@ final class SpeedLimitService: ObservableObject {
         let limit: Int
     }
     private var cache: [CachedWay] = []
+    /// Jalons de vitesse hors ligne près de l'itinéraire (annexe de région
+    /// installée) : le repli quand Overpass est hors de portée — mode avion,
+    /// zone blanche — précisément là où la navigation locale opère.
+    private var jalons: [(lat: Double, lon: Double, v: Int)] = []
     /// Itinéraire courant (pour re-précharger périodiquement).
     private var routeCoords: [CLLocationCoordinate2D] = []
     private var lastPreload = Date.distantPast
@@ -33,6 +37,12 @@ final class SpeedLimitService: ObservableObject {
         }
         if let cached = nearestWayLimit(c, within: 35) {
             limitKmh = cached
+            return
+        }
+        // Les voies Overpass d'abord (géométrie complète, plus précises),
+        // les jalons embarqués ensuite : eux répondent aussi sans réseau.
+        if let local = jalonProche(c, within: 90) {
+            limitKmh = local
             return
         }
         guard !inFlight, Date().timeIntervalSince(lastQuery) > 12 else { return }
@@ -80,6 +90,30 @@ final class SpeedLimitService: ObservableObject {
                 cache = ways
             }
         }
+        // En parallèle, les jalons embarqués le long du tracé : une lecture
+        // de disque, aucun réseau.
+        Task {
+            jalons = await LieuxHorsLigne.shared.vitesses(pres: coords)
+        }
+    }
+
+    /// Limite du jalon embarqué le plus proche, s'il passe assez près. Les
+    /// jalons sont posés tous les ~120 m le long des voies à limite
+    /// explicite : à 90 m de rayon, on en croise toujours un sur sa voie.
+    private func jalonProche(_ c: CLLocationCoordinate2D, within meters: Double) -> Int? {
+        guard !jalons.isEmpty else { return nil }
+        let mLat = 111_320.0
+        let mLon = 111_320.0 * cos(c.latitude * .pi / 180)
+        var best: (d: Double, v: Int)?
+        for j in jalons {
+            let dx = (j.lon - c.longitude) * mLon
+            let dy = (j.lat - c.latitude) * mLat
+            let d = (dx * dx + dy * dy).squareRoot()
+            if d <= meters, best == nil || d < best!.d {
+                best = (d, j.v)
+            }
+        }
+        return best?.v
     }
 
     func reset() {
@@ -87,6 +121,7 @@ final class SpeedLimitService: ObservableObject {
         lastCoord = nil
         lastQuery = .distantPast
         cache = []
+        jalons = []
         routeCoords = []
         lastPreload = .distantPast
     }
@@ -95,6 +130,7 @@ final class SpeedLimitService: ObservableObject {
     /// courante affichée.
     func clearRoute() {
         cache = []
+        jalons = []
         routeCoords = []
         lastPreload = .distantPast
     }

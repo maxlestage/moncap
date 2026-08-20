@@ -332,6 +332,192 @@ jobs:
             exit 1
           fi
 
+      - name: Annuaire de lieux et limites de vitesse
+        # Le même extrait OSM qui a donné les tuiles donne aussi, en un
+        # passage : l'annuaire des lieux (les dix-neuf catégories de l'app —
+        # pharmacies, campings, restaurants…) et les limites de vitesse
+        # explicites, échantillonnées le long des voies. L'app les télécharge
+        # avec la région : chercher une pharmacie ou afficher la limite
+        # fonctionne alors en mode avion.
+        #
+        # Best effort : si cette étape échoue, les tuiles partent quand même —
+        # l'app sait vivre sans ces deux fichiers, qui sont optionnels.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool
+          # Un premier filtre réduit l'extrait aux objets utiles : sans lui,
+          # l'export GeoJSON d'une région entière pèserait des dizaines de Go.
+          osmium tags-filter data/fusionne.osm.pbf -o data/filtre.osm.pbf \
+            nwr/amenity=fuel,parking,charging_station,toilets,pharmacy,atm,drinking_water,fast_food,restaurant,bar,cafe,pub,nightclub \
+            nwr/shop=supermarket \
+            nwr/tourism=camp_site,caravan_site,viewpoint,hotel,guest_house,hostel,attraction,museum \
+            nwr/leisure=skatepark,swimming_area,beach_resort,water_park \
+            nwr/sport=surfing,skateboard \
+            nwr/natural=beach \
+            w/maxspeed
+          osmium export data/filtre.osm.pbf -f geojsonseq -o data/filtre.geojsonseq
+          python3 - <<'PY'
+          import json, math, re, struct, zlib
+
+          # Mêmes catégories que POIKind côté app : la clé écrite ici est le
+          # rawValue Swift, c'est le contrat entre le fichier et l'app.
+          def categorie(t):
+              a = t.get("amenity")
+              if a == "fuel":
+                  return "fuel"
+              if a == "parking":
+                  cap = t.get("capacity:disabled")
+                  if cap and cap not in ("0", "no"):
+                      return "parking"
+                  return "parkingAll"
+              if a == "charging_station":
+                  return "charging"
+              if a == "toilets":
+                  return "toilets"
+              if a == "pharmacy":
+                  return "pharmacy"
+              if a == "atm":
+                  return "atm"
+              if a == "drinking_water":
+                  return "drinkingWater"
+              if a == "fast_food":
+                  return "fastFood"
+              if a == "restaurant":
+                  return "restaurant"
+              if a in ("bar", "cafe", "pub", "nightclub"):
+                  return "hangout"
+              if t.get("shop") == "supermarket":
+                  return "supermarket"
+              to = t.get("tourism")
+              if to in ("camp_site", "caravan_site"):
+                  return "camping"
+              if to == "viewpoint":
+                  return "viewpoint"
+              if to in ("hotel", "guest_house", "hostel"):
+                  return "hotel"
+              if to in ("attraction", "museum"):
+                  return "tourism"
+              if t.get("sport") == "surfing" and not t.get("shop"):
+                  return "surf"
+              if t.get("surfing") == "yes":
+                  return "surf"
+              if t.get("leisure") == "skatepark" or t.get("sport") == "skateboard":
+                  return "skate"
+              if t.get("natural") == "beach" or t.get("leisure") in (
+                  "swimming_area", "beach_resort", "water_park"):
+                  return "water"
+              return None
+
+          def represente(geom):
+              # Un point représentatif : le point lui-même, le milieu d'une
+              # ligne, la moyenne du contour d'un polygone.
+              t, c = geom.get("type"), geom.get("coordinates")
+              if t == "Point":
+                  return c[1], c[0]
+              if t == "LineString":
+                  p = c[len(c) // 2]
+                  return p[1], p[0]
+              ring = None
+              if t == "Polygon" and c:
+                  ring = c[0]
+              elif t == "MultiPolygon" and c and c[0]:
+                  ring = c[0][0]
+              if ring:
+                  return (sum(p[1] for p in ring) / len(ring),
+                          sum(p[0] for p in ring) / len(ring))
+              return None
+
+          CODES = {"FR:urban": 50, "FR:rural": 80, "FR:motorway": 130,
+                   "FR:zone30": 30, "zone30": 30, "FR:walk": 20, "walk": 20}
+
+          def vitesse(brut):
+              if brut in CODES:
+                  return CODES[brut]
+              try:
+                  return int(brut)
+              except ValueError:
+                  pass
+              if brut.endswith(" km/h"):
+                  try:
+                      return int(brut[:-5])
+                  except ValueError:
+                      return None
+              if brut.endswith(" mph"):
+                  try:
+                      return round(int(brut[:-4]) * 1.609)
+                  except ValueError:
+                      return None
+              return None
+
+          def jalons(coords, pas=120.0):
+              # Des points tous les ~120 m le long de la voie : assez denses
+              # pour que la position en croise toujours un, assez rares pour
+              # que le fichier reste portable.
+              out = [coords[0]]
+              du = 0.0
+              for i in range(1, len(coords)):
+                  x0, y0 = coords[i - 1][0], coords[i - 1][1]
+                  x1, y1 = coords[i][0], coords[i][1]
+                  mlon = 111320.0 * math.cos(math.radians((y0 + y1) / 2))
+                  d = math.hypot((x1 - x0) * mlon, (y1 - y0) * 111320.0)
+                  while d > 0 and du + d >= pas:
+                      f = (pas - du) / d
+                      x0, y0 = x0 + (x1 - x0) * f, y0 + (y1 - y0) * f
+                      out.append([x0, y0])
+                      d -= pas - du
+                      du = 0.0
+                  du += d
+              return out
+
+          lieux, vitesses, nb_v = [], [], 0
+          with open("data/filtre.geojsonseq", encoding="utf-8") as f:
+              for ligne in f:
+                  ligne = ligne.lstrip("\x1e").strip()
+                  if not ligne:
+                      continue
+                  try:
+                      feat = json.loads(ligne)
+                  except ValueError:
+                      continue
+                  tags = feat.get("properties") or {}
+                  geom = feat.get("geometry") or {}
+                  brut = tags.get("maxspeed")
+                  if brut and tags.get("highway") and geom.get("type") == "LineString":
+                      v = vitesse(brut)
+                      if v and 5 <= v <= 200:
+                          for x, y in jalons(geom["coordinates"]):
+                              vitesses.append(struct.pack(
+                                  "<iiB", round(y * 1e5), round(x * 1e5), v))
+                              nb_v += 1
+                      continue
+                  cat = categorie(tags)
+                  if not cat:
+                      continue
+                  p = represente(geom)
+                  if not p:
+                      continue
+                  nom = re.sub(r"\s+", " ", tags.get("name", "")).strip()[:80]
+                  lieux.append("%s\t%.5f\t%.5f\t%s" % (cat, p[0], p[1], nom))
+
+          def deflate(donnees):
+              # DEFLATE brut (wbits -15) : exactement ce que le cadre
+              # Compression d'iOS décode sous le nom COMPRESSION_ZLIB.
+              c = zlib.compressobj(9, zlib.DEFLATED, -15)
+              return c.compress(donnees) + c.flush()
+
+          if lieux:
+              with open("data/lieux.zz", "wb") as f:
+                  f.write(deflate("\n".join(lieux).encode("utf-8")))
+          if vitesses:
+              with open("data/vitesses.zz", "wb") as f:
+                  f.write(deflate(b"".join(vitesses)))
+          print(f"{len(lieux)} lieux, {nb_v} jalons de vitesse")
+          PY
+          ls -lh data/lieux.zz data/vitesses.zz || true
+          rm -f data/filtre.osm.pbf data/filtre.geojsonseq
+
       - name: Publie la Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -357,9 +543,20 @@ jobs:
           # `gh` le déduit sinon du dossier courant, qui n'est pas un dépôt.
           gh release create "$TAG" -R "$DEPOT" --title "$NOM" --notes "$notes" \
             || gh release edit "$TAG" -R "$DEPOT" --title "$NOM" --notes "$notes"
+          # L'annuaire et les vitesses accompagnent les tuiles quand l'étape
+          # qui les produit a abouti — l'app les traite comme optionnels.
+          fichiers=("data/$TAG.tar" "data/$TAG.json")
+          if [ -s data/lieux.zz ]; then
+            mv data/lieux.zz "data/$TAG.lieux.zz"
+            fichiers+=("data/$TAG.lieux.zz")
+          fi
+          if [ -s data/vitesses.zz ]; then
+            mv data/vitesses.zz "data/$TAG.vitesses.zz"
+            fichiers+=("data/$TAG.vitesses.zz")
+          fi
           # `--clobber` : reconstruire une région remplace ses tuiles au lieu
           # d'échouer, l'adresse de téléchargement reste donc la même.
-          gh release upload "$TAG" "data/$TAG.tar" "data/$TAG.json" -R "$DEPOT" --clobber
+          gh release upload "$TAG" "${fichiers[@]}" -R "$DEPOT" --clobber
 
       - name: Récapitulatif
         env:
