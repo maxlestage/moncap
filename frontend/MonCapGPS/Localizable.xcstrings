@@ -2641,6 +2641,22 @@
         }
       }
     },
+    "La réinitialisation n'est pas encore configurée.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password recovery isn't configured yet."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La recuperación aún no está configurada."
+          }
+        }
+      }
+    },
     "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut.": {
       "localizations": {
         "en": {
@@ -3213,6 +3229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Contraseña: 6 caracteres como mínimo."
+          }
+        }
+      }
+    },
+    "Mot de passe oublié ?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forgot your password?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Contraseña olvidada?"
           }
         }
       }
@@ -4177,6 +4209,22 @@
         }
       }
     },
+    "Si un compte existe avec cette adresse, un lien vient d'être envoyé. Regarde ta boîte (et les indésirables).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If an account exists for that address, a link was just sent. Check your inbox (and spam)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si existe una cuenta con esa dirección, se acaba de enviar un enlace. Mira tu buzón (y el correo no deseado)."
+          }
+        }
+      }
+    },
     "Signaler": {
       "localizations": {
         "en": {
@@ -4433,18 +4481,18 @@
         }
       }
     },
-    "Ton e-mail sert d'identifiant — rien ne t'y sera envoyé.": {
+    "Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your email is your login — nothing will be sent to it."
+            "value": "Your email is your login — used only for that, and to recover your password."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tu correo sirve de identificador — no se te enviará nada."
+            "value": "Tu correo sirve de identificador — solo para eso, y para recuperar tu contraseña."
           }
         }
       }

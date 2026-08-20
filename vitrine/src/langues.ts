@@ -438,7 +438,7 @@ const FR: Contenu = {
       {
         titre: "Le compte",
         corps: [
-          "L'application fonctionne avec un compte : votre adresse e-mail sert d'identifiant, accompagnée d'un mot de passe (conservé haché) et de vos recherches récentes de destination. L'adresse ne sert à rien d'autre : aucun envoi, aucune lettre d'information, aucune revente. Supprimer le compte supprime tout, l'adresse comprise.",
+          "L'application fonctionne avec un compte : votre adresse e-mail sert d'identifiant, accompagnée d'un mot de passe (conservé haché) et de vos recherches récentes de destination. L'adresse ne sert à rien d'autre : aucun courriel en dehors de la réinitialisation de mot de passe que vous demandez, aucune lettre d'information, aucune revente. Supprimer le compte supprime tout, l'adresse comprise.",
         ],
       },
       {
@@ -776,7 +776,7 @@ const ES: Contenu = {
       {
         titre: "La cuenta",
         corps: [
-          "La aplicación funciona con una cuenta: tu dirección de correo sirve de identificador, junto con una contraseña (guardada con hash) y tus búsquedas recientes de destino. La dirección no sirve para nada más: ningún envío, ningún boletín, ninguna reventa. Eliminar la cuenta lo elimina todo, dirección incluida.",
+          "La aplicación funciona con una cuenta: tu dirección de correo sirve de identificador, junto con una contraseña (guardada con hash) y tus búsquedas recientes de destino. La dirección no sirve para nada más: ningún correo salvo la recuperación de contraseña que tú pidas, ningún boletín, ninguna reventa. Eliminar la cuenta lo elimina todo, dirección incluida.",
         ],
       },
       {
@@ -1114,7 +1114,7 @@ const EN: Contenu = {
       {
         titre: "The account",
         corps: [
-          "The app works with an account: your email address is your login, along with a password (stored hashed) and your recent destination searches. The address is used for nothing else: no mail-outs, no newsletter, no resale. Deleting the account deletes everything, address included.",
+          "The app works with an account: your email address is your login, along with a password (stored hashed) and your recent destination searches. The address is used for nothing else: no mail apart from the password reset you ask for, no newsletter, no resale. Deleting the account deletes everything, address included.",
         ],
       },
       {
