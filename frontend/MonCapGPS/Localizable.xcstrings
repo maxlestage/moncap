@@ -161,6 +161,22 @@
         }
       }
     },
+    "%d trajet(s) au journal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d trip(s) in the log"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d viaje(s) en el registro"
+          }
+        }
+      }
+    },
     "%d trajet(s) sur la période": {
       "localizations": {
         "en": {
@@ -305,6 +321,22 @@
         }
       }
     },
+    ", électrique (+20 %)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", electric (+20%)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", eléctrico (+20 %)"
+          }
+        }
+      }
+    },
     "1re": {
       "localizations": {
         "en": {
@@ -349,6 +381,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "2.ª"
+          }
+        }
+      }
+    },
+    "3 CV et moins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 CV or less"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 CV o menos"
           }
         }
       }
@@ -417,6 +465,22 @@
         }
       }
     },
+    "7 CV et plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7 CV or more"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7 CV o más"
+          }
+        }
+      }
+    },
     "7e": {
       "localizations": {
         "en": {
@@ -461,6 +525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "9.ª"
+          }
+        }
+      }
+    },
+    "ATTESTATION DE FRAIS KILOMÉTRIQUES": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MILEAGE EXPENSE STATEMENT"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CERTIFICADO DE GASTOS KILOMÉTRICOS"
           }
         }
       }
@@ -641,6 +721,38 @@
         }
       }
     },
+    "Année": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Year"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Año"
+          }
+        }
+      }
+    },
+    "Année %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Year %d"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Año %d"
+          }
+        }
+      }
+    },
     "Arriver avant": {
       "localizations": {
         "en": {
@@ -701,6 +813,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dejar de compartir en directo"
+          }
+        }
+      }
+    },
+    "Attestation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statement"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado"
+          }
+        }
+      }
+    },
+    "Attestation fiscale": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tax mileage statement"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certificado fiscal"
           }
         }
       }
@@ -957,6 +1101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baño"
+          }
+        }
+      }
+    },
+    "Barème kilométrique de l'administration fiscale, majoration électrique comprise le cas échéant. Le document se reporte dans la déclaration selon ta situation — ce n'est pas un conseil fiscal.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "French tax authority mileage scale, including the electric-vehicle uplift where it applies. Report it in your tax return according to your situation — this is not tax advice."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baremo kilométrico de la administración fiscal francesa, con la mayoración eléctrica cuando corresponde. El documento se traslada a la declaración según tu situación — no es asesoría fiscal."
           }
         }
       }
@@ -2209,6 +2369,22 @@
         }
       }
     },
+    "Générer l'attestation PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate the PDF statement"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generar el certificado PDF"
+          }
+        }
+      }
+    },
     "Générer la facture PDF": {
       "localizations": {
         "en": {
@@ -2573,6 +2749,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Registro de kilómetros exportable (CSV)"
+          }
+        }
+      }
+    },
+    "Kilomètres relevés par l'application MonCap GPS, barème kilométrique en vigueur. Ne vaut pas conseil fiscal.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mileage recorded by the MonCap GPS app, current official mileage scale. This is not tax advice."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilómetros registrados por la aplicación MonCap GPS, baremo kilométrico vigente. No constituye asesoría fiscal."
           }
         }
       }
@@ -3105,6 +3297,22 @@
         }
       }
     },
+    "Mois": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Month"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mes"
+          }
+        }
+      }
+    },
     "Mois facturé": {
       "localizations": {
         "en": {
@@ -3489,6 +3697,22 @@
         }
       }
     },
+    "Partager l'attestation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share the statement"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartir el certificado"
+          }
+        }
+      }
+    },
     "Partager l'itinéraire": {
       "localizations": {
         "en": {
@@ -3757,6 +3981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Avisar a un allegado"
+          }
+        }
+      }
+    },
+    "Puissance fiscale": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tax horsepower"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Potencia fiscal"
           }
         }
       }
@@ -4561,6 +4801,22 @@
         }
       }
     },
+    "Total : %.1f km · barème %@%@ = %.2f €": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total: %.1f km · scale %@%@ = %.2f €"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total: %.1f km · baremo %@%@ = %.2f €"
+          }
+        }
+      }
+    },
     "Total : %.1f km × %.2f €/km = %.2f €": {
       "localizations": {
         "en": {
@@ -5041,6 +5297,22 @@
         }
       }
     },
+    "Véhicule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicle"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehículo"
+          }
+        }
+      }
+    },
     "Véhicule arrêté": {
       "localizations": {
         "en": {
@@ -5053,6 +5325,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vehículo parado"
+          }
+        }
+      }
+    },
+    "Véhicule électrique (+20 %)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Electric vehicle (+20%)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehículo eléctrico (+20 %)"
           }
         }
       }

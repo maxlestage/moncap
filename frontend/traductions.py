@@ -262,6 +262,46 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- L'attestation fiscale (barème kilométrique) ---
+    "Attestation fiscale": ("Certificado fiscal", "Tax mileage statement"),
+    "Attestation": ("Certificado", "Statement"),
+    "Véhicule": ("Vehículo", "Vehicle"),
+    "Puissance fiscale": ("Potencia fiscal", "Tax horsepower"),
+    "3 CV et moins": ("3 CV o menos", "3 CV or less"),
+    "7 CV et plus": ("7 CV o más", "7 CV or more"),
+    "Véhicule électrique (+20 %)": (
+        "Vehículo eléctrico (+20 %)",
+        "Electric vehicle (+20%)",
+    ),
+    "Année": ("Año", "Year"),
+    "%d trajet(s) au journal": (
+        "%d viaje(s) en el registro",
+        "%d trip(s) in the log",
+    ),
+    "Générer l'attestation PDF": (
+        "Generar el certificado PDF",
+        "Generate the PDF statement",
+    ),
+    "Partager l'attestation": ("Compartir el certificado", "Share the statement"),
+    "Barème kilométrique de l'administration fiscale, majoration électrique comprise le cas échéant. Le document se reporte dans la déclaration selon ta situation — ce n'est pas un conseil fiscal.": (
+        "Baremo kilométrico de la administración fiscal francesa, con la mayoración eléctrica cuando corresponde. El documento se traslada a la declaración según tu situación — no es asesoría fiscal.",
+        "French tax authority mileage scale, including the electric-vehicle uplift where it applies. Report it in your tax return according to your situation — this is not tax advice.",
+    ),
+    "ATTESTATION DE FRAIS KILOMÉTRIQUES": (
+        "CERTIFICADO DE GASTOS KILOMÉTRICOS",
+        "MILEAGE EXPENSE STATEMENT",
+    ),
+    "Année %d": ("Año %d", "Year %d"),
+    "Mois": ("Mes", "Month"),
+    "Total : %.1f km · barème %@%@ = %.2f €": (
+        "Total: %.1f km · baremo %@%@ = %.2f €",
+        "Total: %.1f km · scale %@%@ = %.2f €",
+    ),
+    ", électrique (+20 %)": (", eléctrico (+20 %)", ", electric (+20%)"),
+    "Kilomètres relevés par l'application MonCap GPS, barème kilométrique en vigueur. Ne vaut pas conseil fiscal.": (
+        "Kilómetros registrados por la aplicación MonCap GPS, baremo kilométrico vigente. No constituye asesoría fiscal.",
+        "Mileage recorded by the MonCap GPS app, current official mileage scale. This is not tax advice.",
+    ),
     "Partager la facture": ("Compartir la factura", "Share the invoice"),
     "FACTURE": ("FACTURA", "INVOICE"),
     "N° %@ · %@": ("N.º %@ · %@", "No. %@ · %@"),
@@ -806,9 +846,10 @@ def verbatim(fichiers: list[tuple[str, str]]) -> list[str]:
         "gardee.poids", "region.nom", "couvrante.nom",
         "r.label", "r.name", "r.subtitle",
         "place.label", "p.label", "e.name", "t.label",
-        # Déjà typés LocalizedStringKey à la source (PlusAtout, MonCapPlus) :
-        # la traduction se fait bien, le contrôleur ne voit que la surface.
-        "a.titre", "a.detail",
+        # Déjà typés LocalizedStringKey à la source (PlusAtout, MonCapPlus,
+        # BaremeFiscal.Puissance) : la traduction se fait bien, le contrôleur
+        # ne voit que la surface.
+        "a.titre", "a.detail", "p.libelle",
     }
     # Limite assumée : la liste est indexée par expression, non par site.
     # « t.label » désigne ici le nom d'un trajet — donnée d'utilisateur — mais
