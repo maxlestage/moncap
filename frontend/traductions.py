@@ -262,6 +262,25 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- La station la moins chère sur la route ---
+    # (« Carburant » est déjà au catalogue, côté réglages du véhicule.)
+    "La moins chère sur la route": (
+        "La más barata en la ruta",
+        "Cheapest along the route",
+    ),
+    "On regarde les pompes le long du trajet…": (
+        "Miramos los surtidores a lo largo del trayecto…",
+        "Checking the pumps along the route…",
+    ),
+    "Aucune station le long de ce trajet — les prix ne couvrent que la France.": (
+        "Ninguna estación a lo largo de este trayecto — los precios solo cubren Francia.",
+        "No station along this route — prices only cover France.",
+    ),
+    "≈ %.2f € gagnés sur un plein": (
+        "≈ %.2f € ahorrados en un depósito",
+        "≈ €%.2f saved on a full tank",
+    ),
+    "En étape": ("Como parada", "As a stop"),
     # --- La tournée collée (une adresse par ligne) ---
     "Coller des adresses": ("Pegar direcciones", "Paste addresses"),
     "Une adresse par ligne": ("Una dirección por línea", "One address per line"),

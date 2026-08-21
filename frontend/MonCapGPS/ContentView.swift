@@ -717,6 +717,7 @@ struct MapHomeView: View {
     @State private var showFacturation = false
     @State private var showAttestation = false
     @State private var showCollerAdresses = false
+    @State private var showStationsCarburant = false
     /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
     @State private var showPaywallMenu = false
     @State private var gereAbonnement = false
@@ -799,6 +800,22 @@ struct MapHomeView: View {
                 .presentationBackground(Color(.systemBackground))
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        .sheet(isPresented: $showStationsCarburant) {
+            StationsCarburantView(
+                itineraire: routeOptions.first { $0.id == selectedRouteID }?.coordinates
+                    ?? routeOptions.first?.coordinates ?? [],
+                type: fuelType,
+                prixMoyen: fuel.effectivePrice(type: fuelType)
+            ) { station in
+                etapes.append(station.coord)
+                // Cinq minutes d'arrêt : le temps du plein.
+                etapeArrets.append(5)
+                etapeNoms.append(station.nom)
+                if let dest = pendingDestination {
+                    Task { await presentRouteOptions(to: dest) }
+                }
+            }
+        }
         .sheet(isPresented: $showCollerAdresses) {
             CollerAdressesView { arrets in
                 for a in arrets {
@@ -2649,6 +2666,23 @@ struct MapHomeView: View {
                         .buttonStyle(.bordered)
                         .tint(ajouteEtape ? .orange : .indigo)
                         .controlSize(.mini)
+                        // La station la moins chère le long du trajet — en
+                        // voiture seulement : un vélo ne fait pas le plein.
+                        if travelMode == .car, !routeOptions.isEmpty {
+                            Button {
+                                if plus.accesPlus {
+                                    showStationsCarburant = true
+                                } else {
+                                    showPaywall = true
+                                }
+                            } label: {
+                                Label("Carburant", systemImage: "fuelpump.fill")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.green)
+                            .controlSize(.mini)
+                        }
                         // La tournée collée d'un bloc — l'outil Pro du
                         // livreur : une adresse par ligne, chaque ligne
                         // devient un arrêt.
