@@ -720,6 +720,9 @@ struct MapHomeView: View {
     @State private var showStationsCarburant = false
     @State private var showRecapAnnuel = false
     @State private var showEntretien = false
+    /// Proposition « j'arrive » : visible, et déjà faite pour ce trajet.
+    @State private var proposeArrivee = false
+    @State private var arriveeProposee = false
     /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
     @State private var showPaywallMenu = false
     @State private var gereAbonnement = false
@@ -776,6 +779,9 @@ struct MapHomeView: View {
                 }
                 bottomBar
                 if nav.active {
+                    if proposeArrivee {
+                        arriveeBanner
+                    }
                     etaCard
                 } else if !routeOptions.isEmpty {
                     routeOptionsCard
@@ -1004,6 +1010,14 @@ struct MapHomeView: View {
                 }
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
+                // À dix minutes de l'arrivée, on propose une fois de
+                // prévenir — l'outil Pro de celui qu'on attend.
+                if plus.accesPro, !arriveeProposee, nav.etaMinutes > 0,
+                    nav.etaMinutes <= 10
+                {
+                    arriveeProposee = true
+                    proposeArrivee = true
+                }
                 maybeCheckFasterRoute(from: c)
                 // « Toujours avancer » : évite en amont les bouchons connus
                 // (trafic réel + signalements) et contourne si on est bloqué.
@@ -1077,6 +1091,9 @@ struct MapHomeView: View {
                 avoidedJamIDs = []
                 stuckSince = nil
             }
+            // Chaque navigation a droit à sa proposition « j'arrive ».
+            arriveeProposee = false
+            proposeArrivee = false
             // Fin de navigation (arrivée ou « Quitter ») → on enregistre le trajet.
             if wasActive && !isActive {
                 Task { await saveRecordedTrip() }
@@ -2336,6 +2353,51 @@ struct MapHomeView: View {
         .padding(16)
         .background((nav.rerouting ? Color.orange : Color.green).gradient, in: RoundedRectangle(cornerRadius: 18))
         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+    }
+
+    /// À l'approche : un mot prêt à envoyer, avec le lien live si le partage
+    /// tourne — celui qui attend n'a plus à demander « t'es où ? ».
+    private var arriveeBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hand.wave.fill").foregroundStyle(.orange)
+            Button {
+                shareArrivee()
+            } label: {
+                Text(
+                    String(
+                        format: NSLocalizedString(
+                            "J'arrive dans ~%d min — prévenir ?", comment: ""),
+                        max(1, Int(nav.etaMinutes.rounded()))))
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer()
+            Button {
+                proposeArrivee = false
+            } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+    }
+
+    /// Le message d'approche : minutes restantes, et le lien de suivi en
+    /// direct quand il existe.
+    private func shareArrivee() {
+        proposeArrivee = false
+        let mins = max(1, Int(nav.etaMinutes.rounded()))
+        var texte = String(
+            format: NSLocalizedString("J'arrive dans %d min.", comment: ""), mins)
+        if liveShare.active, let url = liveShare.shareURL {
+            texte +=
+                " "
+                + String(
+                    format: NSLocalizedString("Suis-moi en direct : %@", comment: ""),
+                    url.absoluteString)
+        }
+        Sharer.present([texte])
     }
 
     private var etaCard: some View {

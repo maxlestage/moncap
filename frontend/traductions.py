@@ -262,6 +262,16 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- Le message d'approche « j'arrive » ---
+    "J'arrive dans ~%d min — prévenir ?": (
+        "Llego en ~%d min — ¿aviso?",
+        "Arriving in ~%d min — send a heads-up?",
+    ),
+    "J'arrive dans %d min.": ("Llego en %d min.", "Arriving in %d min."),
+    "Suis-moi en direct : %@": (
+        "Sígueme en directo: %@",
+        "Follow me live: %@",
+    ),
     # --- L'entretien du véhicule ---
     "Entretien": ("Mantenimiento", "Maintenance"),
     "Entretien du véhicule": ("Mantenimiento del vehículo", "Vehicle maintenance"),
