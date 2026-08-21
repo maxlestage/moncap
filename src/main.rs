@@ -2853,6 +2853,7 @@ fn build_app(state: AppState) -> Router {
         .route("/alerts", get(list_alerts))
         .route("/alerts/:id/vote", post(vote_alert))
         .route("/account", get(account_info).delete(delete_account))
+        .route("/diagnostics", post(diagnostics))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
         .route("/air", get(list_air))
@@ -4028,6 +4029,19 @@ fn public_name(username: &str) -> String {
     } else {
         prefix
     }
+}
+
+/// POST /diagnostics — les rapports de plantage MetricKit de l'app.
+///
+/// Anonymes et bornés : pas d'identifiant, pas de position — la pile
+/// d'appels que le système a relevée, journalisée telle quelle. `heroku
+/// logs` devient le tableau de bord des plantages, sans service tiers.
+/// Un plantage arrive volontiers avant la connexion : pas d'auth ici.
+async fn diagnostics(body: String) -> StatusCode {
+    // Seize kilooctets suffisent à lire une pile ; le reste est du lest.
+    let extrait: String = body.chars().take(16_000).collect();
+    tracing::warn!(octets = body.len(), "diagnostic app : {extrait}");
+    StatusCode::NO_CONTENT
 }
 
 /// GET /leaderboard — top 10 des contributeurs (noms pseudonymisés).
