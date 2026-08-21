@@ -17,9 +17,12 @@ private func heureArrivee(_ minutes: Double) -> String {
 
 /// L'écran unique de la montre : la manœuvre en grand quand un guidage
 /// tourne sur l'iPhone, l'écran d'attente sinon. Le fond est une nuit
-/// orangée — la lueur MonCap en haut, le noir de l'OLED en bas.
+/// marine — la lueur bleue en haut, le noir de l'OLED en bas.
 struct MontreVue: View {
     @ObservedObject private var lien = LienTelephone.partage
+
+    /// Le bleu de la pastille et des halos : celui des tracés de la carte.
+    private static let bleu = Color(red: 0.29, green: 0.61, blue: 1.0)
 
     var body: some View {
         ZStack {
@@ -35,7 +38,7 @@ struct MontreVue: View {
 
     private var fond: some View {
         LinearGradient(
-            colors: [Color.orange.opacity(0.35), .black],
+            colors: [Color(red: 0.10, green: 0.15, blue: 0.25), .black],
             startPoint: .top, endPoint: .init(x: 0.5, y: 0.72)
         )
         .ignoresSafeArea()
@@ -48,14 +51,14 @@ struct MontreVue: View {
             ZStack {
                 Circle().fill(
                     LinearGradient(
-                        colors: [.orange, Color(red: 0.85, green: 0.32, blue: 0.1)],
+                        colors: [Self.bleu, Color(red: 0.09, green: 0.16, blue: 0.38)],
                         startPoint: .topLeading, endPoint: .bottomTrailing))
                 Image(systemName: lien.etat.symbole)
                     .font(.system(size: 25, weight: .heavy))
                     .foregroundStyle(.white)
             }
             .frame(width: 50, height: 50)
-            .shadow(color: .orange.opacity(0.55), radius: 9)
+            .shadow(color: Self.bleu.opacity(0.55), radius: 9)
 
             Text(distanceCourte(lien.etat.distanceM))
                 .font(.system(size: 30, weight: .black, design: .rounded))
@@ -103,8 +106,8 @@ struct MontreVue: View {
         VStack(spacing: 8) {
             Image(systemName: "location.north.circle.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(.orange)
-                .shadow(color: .orange.opacity(0.45), radius: 8)
+                .foregroundStyle(Self.bleu)
+                .shadow(color: Self.bleu.opacity(0.45), radius: 8)
             Text("MonCap")
                 .font(.system(.headline, design: .rounded).weight(.heavy))
             Text("Lancez un guidage sur l'iPhone : la consigne s'affiche ici.")
