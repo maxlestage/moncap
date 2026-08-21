@@ -792,13 +792,13 @@ h2 {
   flex: none;
 }
 
-/* La montre : le cadran de l'app Apple Watch — la nuit orangée de la
+/* La montre : le cadran de l'app Apple Watch — la nuit marine de la
    1.2.2, la couronne dessinée par ::after. */
 .montre .cadran {
   width: 195px;
   margin: 0 auto;
   position: relative;
-  background: linear-gradient(180deg, rgba(248, 168, 56, 0.38), #05070d 68%);
+  background: linear-gradient(180deg, #1a2740, #05070d 68%);
   border: 6px solid #1c1f26;
   border-radius: 44px;
   padding: 1.1rem 0.8rem 0.8rem;
@@ -825,11 +825,11 @@ h2 {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f8a838, #d9541a);
+  background: linear-gradient(135deg, #4a9bff, #173061);
   color: #fff;
   font-size: 1.5rem;
   font-weight: 800;
-  box-shadow: 0 0 18px rgba(248, 168, 56, 0.55);
+  box-shadow: 0 0 18px rgba(74, 155, 255, 0.55);
 }
 
 .distance-poignet {
