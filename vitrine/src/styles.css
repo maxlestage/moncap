@@ -723,6 +723,153 @@ h2 {
   justify-content: center;
 }
 
+/* Le panneau de commandes (1.2.2) : un seul bloc arrondi à droite de la
+   carte — en guidage, seuls la 3D et le recentrage y restent. */
+.panneau {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.13);
+  border-radius: 15px;
+  overflow: hidden;
+}
+
+.panneau span {
+  padding: 0.42rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #8dc0ff;
+  text-align: center;
+}
+
+.panneau span + span {
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.panneau .loc {
+  transform: rotate(-45deg);
+}
+
+/* La barre d'arrivée : minutes, heure en orange, Quitter. */
+.eta-barre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+  background: rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  color: #eef2f8;
+}
+
+.eta-barre p {
+  margin: 0;
+}
+
+.eta-min {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.eta-min em {
+  font-style: normal;
+  color: #ffb04f;
+}
+
+.eta-km {
+  font-size: 0.75rem;
+  color: #a9b7cd;
+}
+
+.eta-quitter {
+  background: #e5484d;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  flex: none;
+}
+
+/* La montre : le cadran de l'app Apple Watch — la nuit orangée de la
+   1.2.2, la couronne dessinée par ::after. */
+.montre .cadran {
+  width: 195px;
+  margin: 0 auto;
+  position: relative;
+  background: linear-gradient(180deg, rgba(248, 168, 56, 0.38), #05070d 68%);
+  border: 6px solid #1c1f26;
+  border-radius: 44px;
+  padding: 1.1rem 0.8rem 0.8rem;
+  color: #f4f7fc;
+  text-align: center;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
+.montre .cadran::after {
+  content: "";
+  position: absolute;
+  right: -11px;
+  top: 54px;
+  width: 5px;
+  height: 26px;
+  border-radius: 3px;
+  background: #1c1f26;
+}
+
+.fleche-poignet {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f8a838, #d9541a);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  box-shadow: 0 0 18px rgba(248, 168, 56, 0.55);
+}
+
+.distance-poignet {
+  margin: 0.45rem 0 0;
+  font-size: 1.55rem;
+  font-weight: 900;
+}
+
+.consigne-poignet {
+  margin: 0.1rem 0 0.75rem;
+  font-size: 0.8rem;
+  color: #c3cfe2;
+}
+
+.pied-poignet {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0.4rem 0;
+}
+
+.pied-poignet span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.pied-poignet span + span {
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.pied-poignet strong {
+  font-size: 0.82rem;
+}
+
+.pied-poignet small {
+  font-size: 0.62rem;
+  color: #a9b7cd;
+}
+
 /* Dans l'application le bandeau défile horizontalement ; ici il s'enroule.
    Un ruban tronqué au bord de l'écran cacherait seize catégories sur
    dix-neuf — c'est-à-dire l'argument lui-même. */

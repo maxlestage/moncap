@@ -148,7 +148,7 @@ export const MAQUETTE_REGIONS: readonly Region[] = [
  * `package.json`, où elle est tenue à jour par construction.
  */
 export const OUTILS: readonly (readonly string[])[] = [
-  ["Swift", "SwiftUI", "MapKit", "MapLibre", "Core Location", "AVFoundation"],
+  ["Swift", "SwiftUI", "MapKit", "MapLibre", "Core Location", "AVFoundation", "WatchConnectivity"],
   ["Rust", "Axum", "Tokio", "SeaORM", "PostgreSQL", "Redis"],
   ["Valhalla", "OpenStreetMap", "Overpass", "Osmium", "PMTiles", "IGN"],
   ["TomTom", "open-meteo", "NASA FIRMS", "data.economie.gouv.fr"],

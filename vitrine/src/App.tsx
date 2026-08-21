@@ -127,9 +127,59 @@ function MaquetteGuidage({ c }: { c: Contenu }) {
             <small>km/h</small>
             <em>90</em>
           </span>
+          {/* Le panneau de commandes : depuis la 1.2.2, un seul bloc
+              arrondi remplace les ronds éparpillés. En guidage il ne
+              montre que la 3D et le recentrage — comme ici. */}
+          <span className="panneau">
+            <span>3D</span>
+            <span className="loc">➤</span>
+          </span>
+        </div>
+
+        {/* La barre d'arrivée : les minutes, l'heure en orange — l'une
+            répond à « c'est encore long ? », l'autre à « j'y suis
+            quand ? » — et le bouton pour quitter. */}
+        <div className="eta-barre" aria-hidden="true">
+          <div>
+            <p className="eta-min">
+              12 min <em>18:42</em>
+            </p>
+            <p className="eta-km">
+              {appFormat(c.code, "%.1f km restants", [8.4])}
+            </p>
+          </div>
+          <span className="eta-quitter">{app(c.code, "Quitter")}</span>
         </div>
       </div>
       <Legende texte={c.legendes.guidage} />
+    </figure>
+  );
+}
+
+/**
+ * L'app Apple Watch : le cadran reçu pendant un guidage. Les libellés
+ * « restant » et « arrivée » sont bien ceux de l'app montre, qui parle
+ * français comme le widget — d'où les littéraux.
+ */
+function MaquetteMontre({ c }: { c: Contenu }) {
+  return (
+    <figure className="maquette montre">
+      <div className="cadran" aria-hidden="true">
+        <span className="fleche-poignet">↱</span>
+        <p className="distance-poignet">400 m</p>
+        <p className="consigne-poignet">{app(c.code, "Droite")}</p>
+        <div className="pied-poignet">
+          <span>
+            <strong>8.4 km</strong>
+            <small>restant</small>
+          </span>
+          <span>
+            <strong>18:42</strong>
+            <small>arrivée</small>
+          </span>
+        </div>
+      </div>
+      <Legende texte={c.legendes.montre} />
     </figure>
   );
 }
@@ -352,6 +402,12 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             <h2 id="guidage-titre">{c.guidage.titre}</h2>
             <p className="intro">{c.guidage.intro}</p>
             <MaquetteGuidage c={c} />
+          </section>
+
+          <section aria-labelledby="montre-titre">
+            <h2 id="montre-titre">{c.montre.titre}</h2>
+            <p className="intro">{c.montre.intro}</p>
+            <MaquetteMontre c={c} />
           </section>
 
           <section aria-labelledby="lieux-titre">

@@ -938,6 +938,8 @@ VITRINE = [
     "Tourisme", "Sorties", "Éclaircies",
     # Le bandeau de manœuvre : un mot et sa précision, pas une phrase.
     "Sortie %@", "sortie",
+    # La consigne de la maquette montre, et la barre d'arrivée du guidage.
+    "Droite", "Quitter", "%.1f km restants",
     # Les formats de `String(format:)` : la vitrine les remplit avec des
     # valeurs d'exemple plutôt que de recopier des phrases toutes faites.
     "%.0f min · %.1f km · %d virages · arr. %@",
