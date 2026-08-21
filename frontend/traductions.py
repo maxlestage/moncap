@@ -262,6 +262,15 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- Le gabarit utilitaire ---
+    "Utilitaire": ("Furgoneta", "Van"),
+    "Hauteur": ("Altura", "Height"),
+    "Largeur": ("Anchura", "Width"),
+    "Poids": ("Peso", "Weight"),
+    "Dis les dimensions vraies, carte grise en main : c'est elles qui écartent les ponts bas et les rues interdites.": (
+        "Di las dimensiones verdaderas, con el permiso de circulación en la mano: son ellas las que apartan los puentes bajos y las calles prohibidas.",
+        "Give the true dimensions, registration card in hand: they are what keeps low bridges and restricted streets away.",
+    ),
     # --- Le mode moto ---
     "Moto": ("Moto", "Motorbike"),
     "Routes plaisir": ("Rutas de placer", "Fun roads"),
