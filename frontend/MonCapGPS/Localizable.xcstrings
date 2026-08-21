@@ -6385,6 +6385,38 @@
         }
       }
     },
+    "coordonnées invalides": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invalid coordinates"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "coordenadas no válidas"
+          }
+        }
+      }
+    },
+    "destination invalide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invalid destination"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "destino no válido"
+          }
+        }
+      }
+    },
     "détections satellite · %@": {
       "localizations": {
         "en": {
@@ -6413,6 +6445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "correo electrónico"
+          }
+        }
+      }
+    },
+    "erreur interne": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "internal error"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "error interno"
           }
         }
       }
@@ -6557,6 +6605,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "nombre de usuario ya en uso"
+          }
+        }
+      }
+    },
+    "nom de recherche vide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "empty search name"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nombre de búsqueda vacío"
+          }
+        }
+      }
+    },
+    "non autorisé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "not authorized"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no autorizado"
           }
         }
       }
@@ -7021,6 +7101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "a la izquierda"
+          }
+        }
+      }
+    },
+    "étape invalide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "invalid stop"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "parada no válida"
           }
         }
       }

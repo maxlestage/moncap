@@ -634,6 +634,12 @@ T: dict[str, tuple[str, str]] = {
         "nombre (≥3) y contraseña (≥6) requeridos",
         "name (≥3) and password (≥6) required",
     ),
+    "coordonnées invalides": ("coordenadas no válidas", "invalid coordinates"),
+    "nom de recherche vide": ("nombre de búsqueda vacío", "empty search name"),
+    "destination invalide": ("destino no válido", "invalid destination"),
+    "étape invalide": ("parada no válida", "invalid stop"),
+    "non autorisé": ("no autorizado", "not authorized"),
+    "erreur interne": ("error interno", "internal error"),
     "Clé API TomTom": ("Clave de API TomTom", "TomTom API key"),
     "Clé FIRMS (MAP_KEY)": ("Clave FIRMS (MAP_KEY)", "FIRMS key (MAP_KEY)"),
     "Type de vélo": ("Tipo de bicicleta", "Bike type"),
@@ -1021,6 +1027,12 @@ def cles_orphelines(fichiers: list[tuple[str, str]]) -> list[str]:
     serveur = {
         "nom d'utilisateur déjà pris",
         "nom (≥3) et mot de passe (≥6) requis",
+        "coordonnées invalides",
+        "nom de recherche vide",
+        "destination invalide",
+        "étape invalide",
+        "non autorisé",
+        "erreur interne",
     }
     return [
         k for k in T
