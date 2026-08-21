@@ -342,6 +342,7 @@ final class NavigationManager: ObservableObject {
         // La Live Activity suit le guidage : écran verrouillé et Dynamic
         // Island montrent la consigne sans un déverrouillage.
         GuidageActivite.demarre(etatActivite())
+        MontreLien.partage.maj(etatActivite())
     }
 
     /// L'état courant du guidage, dans la forme que la Live Activity affiche.
@@ -423,6 +424,7 @@ final class NavigationManager: ObservableObject {
         rerouteFailures = 0
         toldOffline = false
         GuidageActivite.termine()
+        MontreLien.partage.termine()
         RouteStore.clear()
         synth.stopSpeaking(at: .immediate)
         steps = []
@@ -485,8 +487,10 @@ final class NavigationManager: ObservableObject {
         }
 
         // L'écran verrouillé suit : la Live Activity reçoit le même état que
-        // le bandeau — elle filtre elle-même ce qui ne se voit pas.
+        // le bandeau — elle filtre elle-même ce qui ne se voit pas. La montre
+        // reçoit le même flux, avec son propre throttle.
         GuidageActivite.maj(etatActivite())
+        MontreLien.partage.maj(etatActivite())
     }
 
     /// Heure d'arrivée estimée (« 18:32 »).
