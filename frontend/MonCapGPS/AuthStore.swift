@@ -42,6 +42,7 @@ final class AuthStore: ObservableObject {
     private func handleExpired() {
         username = ""
         isAuthenticated = false
+        MonCapPlus.shared.oublieCompte()
     }
 
     func login(_ email: String, _ password: String) async throws {
@@ -71,6 +72,8 @@ final class AuthStore: ObservableObject {
         Session.clear()
         username = ""
         isAuthenticated = false
+        // L'essai et l'invitation suivent le compte, pas l'appareil.
+        MonCapPlus.shared.oublieCompte()
     }
 
     /// Nettoie un identifiant : espaces superflus retirés. La casse est

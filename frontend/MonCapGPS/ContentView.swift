@@ -804,7 +804,7 @@ struct MapHomeView: View {
         .fullScreenCover(
             isPresented: Binding(get: { !plus.accesPlus }, set: { _ in })
         ) {
-            PaywallView(bloquant: true)
+            PaywallView(bloquant: true, surChangeCompte: { auth.logout() })
         }
         .alert(
             "Aucun itinéraire", isPresented: Binding(
