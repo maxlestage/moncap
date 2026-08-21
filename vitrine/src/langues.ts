@@ -148,7 +148,7 @@ const FR: Contenu = {
   chevrons: { descendre: "Section suivante", remonter: "Remonter en haut" },
   theme: {
     libelle: "Thème",
-    noms: ["Auto", "Clair", "Sombre", "Marine"],
+    noms: ["Auto", "Clair", "Sombre", "Orange"],
   },
   langueLibelle: "Langue",
   chiffres: [
@@ -538,7 +538,7 @@ const ES: Contenu = {
   chevrons: { descendre: "Sección siguiente", remonter: "Volver arriba" },
   theme: {
     libelle: "Tema",
-    noms: ["Auto", "Claro", "Oscuro", "Marino"],
+    noms: ["Auto", "Claro", "Oscuro", "Naranja"],
   },
   langueLibelle: "Idioma",
   chiffres: [
@@ -928,7 +928,7 @@ const EN: Contenu = {
   chevrons: { descendre: "Next section", remonter: "Back to top" },
   theme: {
     libelle: "Theme",
-    noms: ["Auto", "Light", "Dark", "Navy"],
+    noms: ["Auto", "Light", "Dark", "Orange"],
   },
   langueLibelle: "Language",
   chiffres: [
