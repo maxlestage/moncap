@@ -1514,6 +1514,15 @@ struct MapHomeView: View {
         await loadTrips()
     }
 
+    /// Pousse Domicile et Travail au compte, en silence : un échec réseau
+    /// se rattrapera au prochain rafraîchissement.
+    private func pousseFavoris() {
+        Task {
+            try? await api.savePrefs(
+                APIClient.Prefs(home: Session.home, work: Session.work))
+        }
+    }
+
     private func loadTrips() async {
         trips = (try? await api.trips()) ?? trips
         // Le journal vient de parler : les rappels d'entretien écoutent.
@@ -3422,15 +3431,18 @@ struct MapHomeView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // Raccourcis Domicile / Travail.
+                // Raccourcis Domicile / Travail — poussés au compte à chaque
+                // changement : ils suivent l'utilisateur, pas l'appareil.
                 Section("Favoris") {
                     favoriteRow(icon: "house.fill", title: "Domicile", place: homePlace) {
                         homePlace = $0
                         Session.home = $0
+                        pousseFavoris()
                     }
                     favoriteRow(icon: "briefcase.fill", title: "Travail", place: workPlace) {
                         workPlace = $0
                         Session.work = $0
+                        pousseFavoris()
                     }
                 }
                 // Sans réseau, la recherche d'adresse ne rendra jamais rien :
@@ -4334,6 +4346,24 @@ struct MapHomeView: View {
             // l'état ne bouge que quand le serveur a vraiment répondu.
             if let info = accountInfo {
                 plus.majCompte(creeLe: info.created_at, offert: info.plus_offert ?? false)
+            }
+            // Les favoris suivent le compte : ce qui manque ici s'adopte,
+            // ce que l'appareil a en plus se pousse — l'appareil reste
+            // maître en cas de désaccord, c'est lui qu'on a sous les yeux.
+            if let distant = try? await api.prefs() {
+                if homePlace == nil, let h = distant.home {
+                    Session.home = h
+                    homePlace = h
+                }
+                if workPlace == nil, let w = distant.work {
+                    Session.work = w
+                    workPlace = w
+                }
+                if (homePlace != nil && distant.home == nil)
+                    || (workPlace != nil && distant.work == nil)
+                {
+                    pousseFavoris()
+                }
             }
             leaders = (try? await api.leaderboard()) ?? leaders
             await updateRoute()

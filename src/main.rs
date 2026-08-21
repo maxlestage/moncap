@@ -2853,6 +2853,7 @@ fn build_app(state: AppState) -> Router {
         .route("/alerts", get(list_alerts))
         .route("/alerts/:id/vote", post(vote_alert))
         .route("/account", get(account_info).delete(delete_account))
+        .route("/prefs", get(get_prefs).put(put_prefs))
         .route("/diagnostics", post(diagnostics))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
@@ -4029,6 +4030,47 @@ fn public_name(username: &str) -> String {
     } else {
         prefix
     }
+}
+
+/// GET /prefs — les préférences du compte (Domicile, Travail…), telles que
+/// l'app les a poussées. Un objet vide tant que rien n'a été poussé.
+async fn get_prefs(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<impl IntoResponse, AppError> {
+    let u = user::Entity::find_by_id(uid)
+        .one(&db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        u.prefs.unwrap_or_else(|| "{}".into()),
+    ))
+}
+
+/// PUT /prefs — remplace les préférences du compte. Un objet JSON borné :
+/// le serveur garde le blob tel quel, c'est l'app qui sait le lire — les
+/// favoris appartiennent au compte, pas à l'appareil.
+async fn put_prefs(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+    body: String,
+) -> Result<StatusCode, AppError> {
+    if body.len() > 4096 {
+        return Err(AppError::BadRequest("préférences trop longues".into()));
+    }
+    let valide: Result<serde_json::Value, _> = serde_json::from_str(&body);
+    if !matches!(valide, Ok(serde_json::Value::Object(_))) {
+        return Err(AppError::BadRequest("préférences invalides".into()));
+    }
+    let u = user::Entity::find_by_id(uid)
+        .one(&db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    let mut compte: user::ActiveModel = u.into();
+    compte.prefs = Set(Some(body));
+    compte.update(&db).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// POST /diagnostics — les rapports de plantage MetricKit de l'app.
@@ -5597,6 +5639,49 @@ mod integration {
         // La base de test répond → 200 (sonde de disponibilité, sans auth).
         let resp = app.oneshot(get_req("/health", None)).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn prefs_aller_retour() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("prefs")).await;
+
+        // Vide au départ : un objet, pas une erreur.
+        let resp = app
+            .clone()
+            .oneshot(get_req("/prefs", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(body_json(resp).await, serde_json::json!({}));
+
+        // On pousse Domicile, on le relit tel quel.
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "PUT",
+                "/prefs",
+                Some(&token),
+                serde_json::json!({"home": {"lat": 48.1, "lon": -1.6, "label": "Maison"}}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let resp = app
+            .clone()
+            .oneshot(get_req("/prefs", Some(&token)))
+            .await
+            .unwrap();
+        let lu = body_json(resp).await;
+        assert_eq!(lu["home"]["label"].as_str(), Some("Maison"));
+
+        // Un tableau n'est pas un objet de préférences.
+        let resp = app
+            .clone()
+            .oneshot(json_req("PUT", "/prefs", Some(&token), serde_json::json!([1, 2])))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
