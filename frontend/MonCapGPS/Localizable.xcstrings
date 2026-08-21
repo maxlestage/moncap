@@ -2049,6 +2049,22 @@
         }
       }
     },
+    "Dis les dimensions vraies, carte grise en main : c'est elles qui écartent les ponts bas et les rues interdites.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Give the true dimensions, registration card in hand: they are what keeps low bridges and restricted streets away."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Di las dimensiones verdaderas, con el permiso de circulación en la mano: son ellas las que apartan los puentes bajos y las calles prohibidas."
+          }
+        }
+      }
+    },
     "Distributeur": {
       "localizations": {
         "en": {
@@ -2753,6 +2769,22 @@
         }
       }
     },
+    "Hauteur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Height"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Altura"
+          }
+        }
+      }
+    },
     "Hors ligne 🗺️": {
       "localizations": {
         "en": {
@@ -3213,6 +3245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Déjalo vacío si no alojas nada. Una dirección que no responde se ignora: el mapa sigue mostrándose con el fondo por defecto."
+          }
+        }
+      }
+    },
+    "Largeur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Width"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anchura"
           }
         }
       }
@@ -4397,6 +4445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neumáticos"
+          }
+        }
+      }
+    },
+    "Poids": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weight"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peso"
           }
         }
       }
@@ -5901,6 +5965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una caminata, una ruta en bici exportada de otra app: la traza se muestra en el mapa y se puede seguir paso a paso, incluso sin red."
+          }
+        }
+      }
+    },
+    "Utilitaire": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Van"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Furgoneta"
           }
         }
       }

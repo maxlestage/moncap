@@ -800,6 +800,23 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// (`bicycle_type`, `use_hills`) — il suffisait de le lui dire. Lecture
     /// directe des réglages persistés, comme les péages côté MapKit.
     nonisolated static func optionsDeCout(_ costing: String) -> [String: Any]? {
+        if costing == "truck" {
+            // Le gabarit déclaré du fourgon : hauteur, largeur, poids —
+            // c'est lui qui écarte les ponts bas et les rues interdites.
+            // Les valeurs de secours sont celles d'un grand fourgon (L3H2),
+            // au cas où le réglage n'aurait jamais été touché.
+            let d = UserDefaults.standard
+            let hauteur = d.double(forKey: "moncap.util.hauteur")
+            let largeur = d.double(forKey: "moncap.util.largeur")
+            let poids = d.double(forKey: "moncap.util.poids")
+            return [
+                "truck": [
+                    "height": hauteur > 0 ? hauteur : 2.7,
+                    "width": largeur > 0 ? largeur : 2.05,
+                    "weight": poids > 0 ? poids : 3.5,
+                ]
+            ]
+        }
         if costing == "motorcycle" {
             // « Routes plaisir » : la moto fuit l'autoroute et cherche les
             // petites routes qui tournent — c'est un choix de balade, pas
