@@ -262,6 +262,25 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- La tournée collée (une adresse par ligne) ---
+    "Coller des adresses": ("Pegar direcciones", "Paste addresses"),
+    "Une adresse par ligne": ("Una dirección por línea", "One address per line"),
+    "Choisis d'abord la destination finale, puis colle les arrêts — ville comprise, jusqu'à trente lignes. « Au plus court » les remettra dans le bon ordre.": (
+        "Elige primero el destino final y pega las paradas — con la ciudad, hasta treinta líneas. « La más corta » las pondrá en el buen orden.",
+        "Pick the final destination first, then paste the stops — city included, up to thirty lines. “Shortest order” will sort them out.",
+    ),
+    "Adresses trouvées": ("Direcciones encontradas", "Addresses found"),
+    "%d adresse(s) introuvable(s) — précise la ville et recommence.": (
+        "%d dirección(es) no encontrada(s) — precisa la ciudad y vuelve a intentarlo.",
+        "%d address(es) not found — add the city and try again.",
+    ),
+    "Recherche des adresses…": ("Buscando las direcciones…", "Looking up addresses…"),
+    "Chercher les adresses": ("Buscar las direcciones", "Look up the addresses"),
+    "Ajouter %d arrêt(s) à la tournée": (
+        "Añadir %d parada(s) al reparto",
+        "Add %d stop(s) to the run",
+    ),
+    "Recommencer": ("Empezar de nuevo", "Start over"),
     # --- L'attestation fiscale (barème kilométrique) ---
     "Attestation fiscale": ("Certificado fiscal", "Tax mileage statement"),
     "Attestation": ("Certificado", "Statement"),
