@@ -3473,6 +3473,54 @@
         }
       }
     },
+    "Mois le plus roulé : %@ (%.0f km)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Busiest month: %@ (%.0f km)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El mes con más ruta: %@ (%.0f km)"
+          }
+        }
+      }
+    },
+    "Mon année": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My year"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mi año"
+          }
+        }
+      }
+    },
+    "Mon année %d": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My year %d"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mi año %d"
+          }
+        }
+      }
+    },
     "Mon avatar": {
       "localizations": {
         "en": {
@@ -3921,6 +3969,22 @@
         }
       }
     },
+    "Partager mon année": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share my year"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartir mi año"
+          }
+        }
+      }
+    },
     "Particules fines : %.0f µg/m³": {
       "localizations": {
         "en": {
@@ -4017,6 +4081,22 @@
         }
       }
     },
+    "Plus long : %@ — %.0f km": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Longest: %@ — %.0f km"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El más largo: %@ — %.0f km"
+          }
+        }
+      }
+    },
     "Point de vue": {
       "localizations": {
         "en": {
@@ -4093,6 +4173,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Precio del combustible"
+          }
+        }
+      }
+    },
+    "Préparer l'image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepare the image"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparar la imagen"
           }
         }
       }
@@ -4477,6 +4573,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recibe un aviso cuando un reporte (policía, accidente, peligro…) esté a menos de 600 m, incluso con la pantalla bloqueada."
+          }
+        }
+      }
+    },
+    "Rien au journal cette année-là — roule, on recompte.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing in the log that year — drive, and we'll count again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nada en el registro ese año — conduce, y volvemos a contar."
           }
         }
       }
@@ -5713,6 +5825,22 @@
         }
       }
     },
+    "heures de route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hours on the road"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "horas de carretera"
+          }
+        }
+      }
+    },
     "il y a %d h": {
       "localizations": {
         "en": {
@@ -5725,6 +5853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "hace %d h"
+          }
+        }
+      }
+    },
+    "jours au volant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "days behind the wheel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "días al volante"
           }
         }
       }
@@ -5933,6 +6077,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "recto"
+          }
+        }
+      }
+    },
+    "trajets": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trips"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "viajes"
           }
         }
       }
