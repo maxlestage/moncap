@@ -716,6 +716,7 @@ struct MapHomeView: View {
     @State private var showPaywallRecherche = false
     @State private var showFacturation = false
     @State private var showAttestation = false
+    @State private var showCollerAdresses = false
     /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
     @State private var showPaywallMenu = false
     @State private var gereAbonnement = false
@@ -798,6 +799,18 @@ struct MapHomeView: View {
                 .presentationBackground(Color(.systemBackground))
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        .sheet(isPresented: $showCollerAdresses) {
+            CollerAdressesView { arrets in
+                for a in arrets {
+                    etapes.append(a.coord)
+                    etapeArrets.append(0)
+                    etapeNoms.append(a.nom)
+                }
+                if let dest = pendingDestination {
+                    Task { await presentRouteOptions(to: dest) }
+                }
+            }
+        }
         // Le verrou de la maison : l'essai fini et rien de payé, l'app se
         // ferme derrière le paywall — rien de gratuit passé quatorze jours,
         // pour personne. Le lien est calculé : dès qu'un achat (ou une
@@ -2635,6 +2648,22 @@ struct MapHomeView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(ajouteEtape ? .orange : .indigo)
+                        .controlSize(.mini)
+                        // La tournée collée d'un bloc — l'outil Pro du
+                        // livreur : une adresse par ligne, chaque ligne
+                        // devient un arrêt.
+                        Button {
+                            if plus.accesPro {
+                                showCollerAdresses = true
+                            } else {
+                                showPaywall = true
+                            }
+                        } label: {
+                            Label("Coller des adresses", systemImage: "list.clipboard")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.indigo)
                         .controlSize(.mini)
                         // À partir de deux étapes, l'ordre devient un choix —
                         // et la géométrie sait le faire mieux que la mémoire.
