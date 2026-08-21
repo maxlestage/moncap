@@ -2477,7 +2477,14 @@ struct MapHomeView: View {
     private var etaCard: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(String(format: "%.0f min", nav.etaMinutes)).font(.title3.weight(.bold))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(String(format: "%.0f min", nav.etaMinutes)).font(.title3.weight(.bold))
+                    // L'heure à côté des minutes : l'une répond à « c'est
+                    // encore long ? », l'autre à « j'y suis quand ? ».
+                    Text(verbatim: heureArriveeCourte)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
                 Text(String(format: NSLocalizedString("%.1f km restants", comment: ""), nav.remainingKm))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -2501,6 +2508,14 @@ struct MapHomeView: View {
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+    }
+
+    /// « 18:42 » : l'heure d'arrivée, dans le format de la langue de l'app.
+    private var heureArriveeCourte: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "fr")
+        f.setLocalizedDateFormatFromTemplate("Hm")
+        return f.string(from: Date().addingTimeInterval(nav.etaMinutes * 60))
     }
 
     private func routeCard(_ info: String) -> some View {
@@ -3140,81 +3155,80 @@ struct MapHomeView: View {
             }
             Spacer()
             VStack(spacing: 14) {
-                // Au volant, l'écran se dégage. La carte des feux et le
-                // téléchargement des fonds se consultent à l'arrêt : les
-                // garder pendant le guidage, c'est deux cibles de plus entre
-                // le pouce et le bouton « recentrer », au moment où l'on
-                // regarde le moins l'écran.
-                if !nav.active, !compare {
-                    fireMapButton
-                    airMapButton
-                    offlineMapButton
+                if compare {
+                    circleButton(system: "location.fill", tint: .blue) { recenter() }
+                } else {
+                    mapPanel
+                    reportButton
                 }
-                if !compare { map3DButton }
-                circleButton(system: "location.fill", tint: .blue) { recenter() }
-                if !compare { reportButton }
             }
         }
     }
 
-    /// Ouvre la carte dédiée à la qualité de l'air en plein écran.
-    private var airMapButton: some View {
-        Button {
-            showAirMap = true
-        } label: {
-            Image(systemName: "aqi.medium")
-                .font(.title3)
-                .foregroundStyle(.teal)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(.regularMaterial))
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+    /// Les commandes de la carte rassemblées en un seul panneau arrondi :
+    /// mêmes gestes qu'avant, sans l'éparpillement de six ronds flottants.
+    /// Les cartes thématiques (feux, air, hors ligne) se replient dans un
+    /// menu — elles se consultent à l'arrêt, pas entre deux coups d'œil à la
+    /// route, et pendant le guidage le menu disparaît entièrement.
+    private var mapPanel: some View {
+        VStack(spacing: 0) {
+            if !nav.active {
+                cartesMenu
+                Divider().frame(width: 26)
+            }
+            panelButton(system: "view.3d", tint: is3D ? .white : .blue,
+                        actif: is3D, libelle: "Vue 3D") { toggle3D() }
+            Divider().frame(width: 26)
+            panelButton(system: "location.fill", tint: .blue,
+                        libelle: "Recentrer sur ma position") { recenter() }
         }
-        .accessibilityLabel(Text("Qualité de l'air"))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
-    /// Ouvre la carte dédiée aux incendies (contours sur satellite) en plein écran.
-    private var fireMapButton: some View {
-        Button {
-            fires.refresh(key: firmsKey)
-            showFireMap = true
-        } label: {
-            Image(systemName: "flame.fill")
+    /// Une commande du panneau : glyphe seul, cible pleine largeur. L'état
+    /// actif (3D enclenchée) se signale par un disque bleu sous le glyphe.
+    private func panelButton(system: String, tint: Color, actif: Bool = false,
+                             libelle: LocalizedStringKey,
+                             action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
                 .font(.title3)
-                .foregroundStyle(.orange)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(.regularMaterial))
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+                .foregroundStyle(tint)
+                .frame(width: 52, height: 50)
+                .background {
+                    if actif { Circle().fill(Color.blue).padding(5) }
+                }
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel(Text(libelle))
     }
 
-    /// Ouvre la carte hors ligne (tuiles téléchargées) en plein écran.
-    private var offlineMapButton: some View {
-        Button { showOfflineMap = true } label: {
-            Image(systemName: "square.and.arrow.down.on.square")
+    /// Le menu des cartes thématiques : feux de forêt, qualité de l'air,
+    /// fonds hors ligne — trois écrans plein format derrière une seule
+    /// entrée.
+    private var cartesMenu: some View {
+        Menu {
+            Button {
+                fires.refresh(key: firmsKey)
+                showFireMap = true
+            } label: {
+                Label("Carte des feux de forêt", systemImage: "flame.fill")
+            }
+            Button { showAirMap = true } label: {
+                Label("Qualité de l'air", systemImage: "aqi.medium")
+            }
+            Button { showOfflineMap = true } label: {
+                Label("Carte hors ligne", systemImage: "square.and.arrow.down.on.square")
+            }
+        } label: {
+            Image(systemName: "square.3.layers.3d.top.filled")
                 .font(.title3)
                 .foregroundStyle(.blue)
-                .frame(width: 48, height: 48)
-                .background(Circle().fill(.regularMaterial))
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
+                .frame(width: 52, height: 50)
+                .contentShape(Rectangle())
         }
-    }
-
-    /// Bascule 2D / 3D de la carte.
-    private var map3DButton: some View {
-        Button { toggle3D() } label: {
-            Image(systemName: "view.3d")
-                .font(.title3)
-                .foregroundStyle(is3D ? Color.white : .blue)
-                .frame(width: 48, height: 48)
-                .background {
-                    if is3D {
-                        Circle().fill(Color.blue)
-                    } else {
-                        Circle().fill(.regularMaterial)
-                    }
-                }
-                .shadow(color: .black.opacity(0.15), radius: 5, y: 2)
-        }
+        .accessibilityLabel(Text("Cartes"))
     }
 
     /// Météo en temps réel (température + conditions), tout en haut des pastilles.

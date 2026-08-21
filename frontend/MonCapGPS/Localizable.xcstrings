@@ -1489,6 +1489,22 @@
         }
       }
     },
+    "Cartes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maps"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mapas"
+          }
+        }
+      }
+    },
     "Ce fichier GPX n'a pas pu être lu.": {
       "localizations": {
         "en": {
@@ -6413,6 +6429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Has llegado a tu destino."
+          }
+        }
+      }
+    },
+    "Vue 3D": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3D view"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista 3D"
           }
         }
       }

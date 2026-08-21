@@ -79,6 +79,8 @@ T: dict[str, tuple[str, str]] = {
     "Prix carburant": ("Precio del combustible", "Fuel price"),
     "Carte hors ligne": ("Mapa sin conexión", "Offline map"),
     "Carte des feux de forêt": ("Mapa de incendios forestales", "Wildfire map"),
+    "Cartes": ("Mapas", "Maps"),
+    "Vue 3D": ("Vista 3D", "3D view"),
     "Trafic 🚦 (TomTom)": ("Tráfico 🚦 (TomTom)", "Traffic 🚦 (TomTom)"),
     "Incendies 🔥 (NASA FIRMS)": ("Incendios 🔥 (NASA FIRMS)", "Wildfires 🔥 (NASA FIRMS)"),
     "Serveur de cartes personnel": ("Servidor de mapas propio", "Personal map server"),
