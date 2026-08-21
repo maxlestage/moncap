@@ -28,7 +28,7 @@ test("aucune couleur hexadécimale invalide", () => {
  * page reste valide, le bouton ne fait simplement plus rien.
  */
 test("les quatre thèmes sont câblés", () => {
-  for (const t of ["auto", "clair", "sombre", "marine"]) {
+  for (const t of ["auto", "clair", "sombre", "orange"]) {
     expect(FEUILLE, t).toContain(`#th-${t}:checked`);
   }
 });
@@ -89,7 +89,7 @@ test("rien ne sépare le contenu du pied", () => {
  * qu'un thème.
  */
 test("les thèmes explicites redéfinissent fond et texte", () => {
-  for (const t of ["sombre", "marine"]) {
+  for (const t of ["sombre", "orange"]) {
     const bloc = FEUILLE.split(`#th-${t}:checked)`)[1]?.split("}")[0] ?? "";
     for (const jeton of ["--papier", "--texte", "--doux", "--accent"]) {
       expect(bloc, `${t} / ${jeton}`).toContain(jeton);

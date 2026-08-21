@@ -72,18 +72,18 @@
   --sur-accent: #0a1730;
 }
 
-/* Le thème de marque : le papier prend le bleu profond du lancement, comme
-   l'écran de garde de l'application. */
-:root:has(#th-marine:checked) {
+/* Le thème orange : l'autre couleur de l'icône — celle des routes qu'elle
+   dessine. Papier brun chauffé, accent à l'orange de la maison. */
+:root:has(#th-orange:checked) {
   color-scheme: dark;
-  --encre: #081a3c;
-  --papier: #0b2049;
-  --texte: #eaf1ff;
-  --doux: #9fb6da;
-  --trait: #1b3a66;
-  --accent: #7fb0ff;
-  --accent-doux: #10306a;
-  --sur-accent: #08203f;
+  --encre: #1c0f02;
+  --papier: #241504;
+  --texte: #f8eedd;
+  --doux: #cfa878;
+  --trait: #45301a;
+  --accent: #f8a838;
+  --accent-doux: #3a2506;
+  --sur-accent: #2a1600;
 }
 
 * {

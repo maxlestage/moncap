@@ -30,7 +30,7 @@ import { app, appFormat } from "./traduire";
 export type Ressources = { readonly logo: string };
 
 /** Les quatre thèmes, dans l'ordre des libellés fournis par la langue. */
-const THEMES = ["auto", "clair", "sombre", "marine"] as const;
+const THEMES = ["auto", "clair", "sombre", "orange"] as const;
 
 /** L'écran de comparaison : le cœur de l'app quand le réseau est là. */
 function MaquetteComparateur({ c }: { c: Contenu }) {
