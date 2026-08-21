@@ -1,9 +1,9 @@
 /**
  * Construit les pages une fois pour toutes, à la place du navigateur.
  *
- * La vitrine n'a aucune interactivité scriptée : rien n'y change après
- * l'affichage, pas même le choix du thème — il passe par des boutons radio
- * et `:has()`. Expédier React pour peindre du texte immobile coûterait
+ * La vitrine n'a presque aucune interactivité scriptée : le choix du thème
+ * passe par des boutons radio et `:has()`, et seule la flèche de défilement
+ * embarque un script inline d'un demi-kilooctet. Expédier React pour peindre du texte immobile coûterait
  * quatre cents kilooctets de JavaScript ; sur un forfait mobile, c'est la
  * seconde d'attente qu'on cherchait à éviter. Le rendu se fait donc ici, et
  * les pages livrées ne contiennent que du HTML, une feuille de style et une
@@ -200,4 +200,4 @@ console.log(`${nomFeuille}   ${ko(feuille.size)}`);
 console.log(
   `${logo.split("/").pop()}   ${ko((await Bun.file("assets/logo.webp").arrayBuffer()).byteLength)}`,
 );
-console.log("aucun JavaScript expédié");
+console.log("un seul script : la flèche de défilement (inline, ~0,5 Ko)");

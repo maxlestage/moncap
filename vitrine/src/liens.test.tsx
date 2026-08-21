@@ -27,11 +27,9 @@ const AUTORISEES = new Set<string>([
   ...LANGUES.map((l) => l.confidentialite.chemin),
   // Les ancres du pied visent la page principale de la langue courante.
   ...LANGUES.flatMap((l) => l.pied.ancres.map((a) => `${l.chemin}#${a.id}`)),
-  // Les chevrons restent sur la page : un fragment nu par section connue,
-  // plus le retour au bandeau.
+  // La flèche de défilement reste sur la page : son ancre de repli vise le
+  // bandeau — le reste de son intelligence est dans son script.
   "#haut",
-  ...LANGUES.flatMap((l) => l.pied.ancres.map((a) => `#${a.id}`)),
-  "#franchise-titre",
   ...SOURCES.map((s) => s.url),
 ]);
 

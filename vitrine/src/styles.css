@@ -1189,49 +1189,18 @@ footer .signature {
   }
 }
 
-/* --- Les chevrons de navigation -------------------------------------------
- * Descendre section par section, remonter d'un geste — des ancres et du CSS,
- * pas une ligne de script. Le chevron clôt une section et mène au titre de
- * la suivante ; la flèche flottante ramène au bandeau. */
+/* --- La flèche de défilement ----------------------------------------------
+ * Une seule flèche flottante, qui lit le sens du défilement (le seul script
+ * de la page) : on descend, elle mène à la section suivante ; on remonte —
+ * ou on touche le bas — elle ramène au bandeau. Sans script, c'est une
+ * ancre qui remonte, simplement. */
 
 /* Les titres visés respirent : l'ancre ne colle pas le titre au bord. */
 h2[id] {
   scroll-margin-top: 1rem;
 }
 
-.suivant {
-  display: block;
-  width: fit-content;
-  margin: 1.6rem auto 0;
-  padding: 0 0.95rem 0.2rem;
-  font-size: 1.25rem;
-  line-height: 1.3;
-  text-decoration: none;
-  color: var(--doux);
-  border: 1px solid var(--trait);
-  border-radius: 999px;
-}
-
-.suivant:hover,
-.suivant:focus-visible {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* Dans le bandeau, le chevron vit sur le dégradé sombre. */
-.hero .suivant {
-  margin-top: 2rem;
-  color: #cfe0fb;
-  border-color: rgb(255 255 255 / 0.28);
-}
-
-.hero .suivant:hover,
-.hero .suivant:focus-visible {
-  color: #ffffff;
-  border-color: #ffffff;
-}
-
-.remonte {
+.fleche-nav {
   position: fixed;
   right: max(0.9rem, env(safe-area-inset-right));
   bottom: max(0.9rem, env(safe-area-inset-bottom));
@@ -1242,16 +1211,17 @@ h2[id] {
   place-items: center;
   border-radius: 999px;
   text-decoration: none;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
+  line-height: 1;
   color: var(--accent);
   background: var(--papier);
   border: 1px solid var(--trait);
   box-shadow: 0 3px 10px rgb(0 0 0 / 0.18);
 }
 
-.remonte:hover,
-.remonte:focus-visible {
+.fleche-nav:hover,
+.fleche-nav:focus-visible {
   color: var(--sur-accent);
   background: var(--accent);
   border-color: var(--accent);
