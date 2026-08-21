@@ -2897,6 +2897,22 @@
         }
       }
     },
+    "Il est l'heure de partir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time to leave"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es hora de salir"
+          }
+        }
+      }
+    },
     "Il reste %d jour(s) d'essai — tout est ouvert.": {
       "localizations": {
         "en": {
@@ -3265,6 +3281,22 @@
         }
       }
     },
+    "L'estimation est celle du moment : si ça bouchonne d'ici là, pars un peu avant. L'app ne recalcule pas en arrière-plan.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The estimate is as of now: if traffic builds up, leave a little earlier. The app does not recompute in the background."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La estimación es la del momento: si se atasca de aquí a entonces, sal un poco antes. La app no recalcula en segundo plano."
+          }
+        }
+      }
+    },
     "La boutique ne répond pas — réessaie avec du réseau.": {
       "localizations": {
         "en": {
@@ -3629,6 +3661,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Malo"
+          }
+        }
+      }
+    },
+    "Me prévenir à %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remind me at %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avisarme a las %@"
           }
         }
       }
@@ -4321,6 +4369,38 @@
         }
       }
     },
+    "Pars maintenant pour arriver vers %@ (~%.0f min de route).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave now to arrive around %@ (~%.0f min drive)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sal ahora para llegar hacia las %@ (~%.0f min de ruta)."
+          }
+        }
+      }
+    },
+    "Pars maintenant — il est déjà l'heure.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave now — it's already time."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sal ahora — ya es la hora."
+          }
+        }
+      }
+    },
     "Partage impossible": {
       "localizations": {
         "en": {
@@ -4445,6 +4525,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salir a las"
+          }
+        }
+      }
+    },
+    "Partir à l'heure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave on time"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salir a tiempo"
           }
         }
       }
@@ -4829,6 +4925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "¿Qué?"
+          }
+        }
+      }
+    },
+    "Rappel posé pour %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminder set for %@."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recordatorio puesto para las %@."
           }
         }
       }
@@ -5965,6 +6077,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trayecto"
+          }
+        }
+      }
+    },
+    "Trajet estimé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated trip"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trayecto estimado"
           }
         }
       }

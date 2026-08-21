@@ -388,6 +388,25 @@ T: dict[str, tuple[str, str]] = {
         "≈ €%.2f saved on a full tank",
     ),
     "En étape": ("Como parada", "As a stop"),
+    # --- Partir à l'heure ---
+    "Partir à l'heure": ("Salir a tiempo", "Leave on time"),
+    "Arriver avant": ("Llegar antes de", "Arrive before"),
+    "Trajet estimé": ("Trayecto estimado", "Estimated trip"),
+    "L'estimation est celle du moment : si ça bouchonne d'ici là, pars un peu avant. L'app ne recalcule pas en arrière-plan.": (
+        "La estimación es la del momento: si se atasca de aquí a entonces, sal un poco antes. La app no recalcula en segundo plano.",
+        "The estimate is as of now: if traffic builds up, leave a little earlier. The app does not recompute in the background.",
+    ),
+    "Pars maintenant — il est déjà l'heure.": (
+        "Sal ahora — ya es la hora.",
+        "Leave now — it's already time.",
+    ),
+    "Rappel posé pour %@.": ("Recordatorio puesto para las %@.", "Reminder set for %@."),
+    "Me prévenir à %@": ("Avisarme a las %@", "Remind me at %@"),
+    "Il est l'heure de partir": ("Es hora de salir", "Time to leave"),
+    "Pars maintenant pour arriver vers %@ (~%.0f min de route).": (
+        "Sal ahora para llegar hacia las %@ (~%.0f min de ruta).",
+        "Leave now to arrive around %@ (~%.0f min drive).",
+    ),
     # --- Les créneaux d'étape ---
     "Avant": ("Antes de", "Before"),
     "Sans créneau": ("Sin franja", "No time slot"),
