@@ -7,7 +7,8 @@ import MapKit
 ///
 /// Le workflow des tuiles produit, du même extrait OpenStreetMap que le graphe
 /// routier, deux fichiers par région : `<id>.lieux.zz` — les dix-neuf
-/// catégories de lieux de l'app, une ligne tabulée par lieu — et
+/// catégories d'origine de l'app, une ligne tabulée par lieu (les catégories
+/// ajoutées depuis rejoindront les annexes à leur prochaine génération) — et
 /// `<id>.vitesses.zz` — des jalons tous les ~120 m le long des voies à limite
 /// explicite, neuf octets par jalon. Les deux sont en DEFLATE brut, ce que le
 /// cadre Compression décode sous le nom `.zlib`.

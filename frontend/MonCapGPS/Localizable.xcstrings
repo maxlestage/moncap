@@ -689,6 +689,38 @@
         }
       }
     },
+    "Aire de jeux": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playground"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parque infantil"
+          }
+        }
+      }
+    },
+    "Aire de repos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rest area"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Área de descanso"
+          }
+        }
+      }
+    },
     "Ajouter %d arrêt(s) à la tournée": {
       "localizations": {
         "en": {
@@ -1217,6 +1249,38 @@
         }
       }
     },
+    "Banque": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bank"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Banco"
+          }
+        }
+      }
+    },
+    "Bars": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bars"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bares"
+          }
+        }
+      }
+    },
     "Barème kilométrique de l'administration fiscale, majoration électrique comprise le cas échéant. Le document se reporte dans la déclaration selon ta situation — ce n'est pas un conseil fiscal.": {
       "localizations": {
         "en": {
@@ -1229,6 +1293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baremo kilométrico de la administración fiscal francesa, con la mayoración eléctrica cuando corresponde. El documento se traslada a la declaración según tu situación — no es asesoría fiscal."
+          }
+        }
+      }
+    },
+    "Bibliothèque": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Library"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biblioteca"
           }
         }
       }
@@ -1277,6 +1357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Atasco avisado delante. Ruta para evitarlo."
+          }
+        }
+      }
+    },
+    "Boulangerie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bakery"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panadería"
           }
         }
       }
@@ -1389,6 +1485,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "En marcha hacia el trabajo."
+          }
+        }
+      }
+    },
+    "Café": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coffee"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cafetería"
           }
         }
       }
@@ -1665,6 +1777,22 @@
         }
       }
     },
+    "Cinéma": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cinema"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cine"
+          }
+        }
+      }
+    },
     "Classement des contributeurs": {
       "localizations": {
         "en": {
@@ -1741,6 +1869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marca puntos para trazar varias rutas a la vez."
+          }
+        }
+      }
+    },
+    "Coiffeur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hairdresser"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Peluquería"
           }
         }
       }
@@ -2769,6 +2913,38 @@
         }
       }
     },
+    "Garage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garage"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taller"
+          }
+        }
+      }
+    },
+    "Gares": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Train stations"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estaciones"
+          }
+        }
+      }
+    },
     "Gauche": {
       "localizations": {
         "en": {
@@ -2893,6 +3069,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sin conexión 🗺️"
+          }
+        }
+      }
+    },
+    "Hôpital": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hospital"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hospital"
           }
         }
       }
@@ -3409,6 +3601,22 @@
         }
       }
     },
+    "Lavage auto": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Car wash"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lavado de coches"
+          }
+        }
+      }
+    },
     "Le paquet « %@ » ne s'ouvre pas. Supprime-le et réinstalle-le depuis l'écran hors ligne.": {
       "localizations": {
         "en": {
@@ -3661,6 +3869,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Caminar hasta %@"
+          }
+        }
+      }
+    },
+    "Marché": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Market"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mercado"
           }
         }
       }
@@ -4113,6 +4337,22 @@
         }
       }
     },
+    "Médecin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doctor"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Médico"
+          }
+        }
+      }
+    },
     "Métro": {
       "localizations": {
         "en": {
@@ -4369,6 +4609,22 @@
         }
       }
     },
+    "Parcs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parks"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parques"
+          }
+        }
+      }
+    },
     "Parking": {
       "localizations": {
         "en": {
@@ -4609,6 +4865,22 @@
         }
       }
     },
+    "Pique-nique": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picnic"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pícnic"
+          }
+        }
+      }
+    },
     "Pluie": {
       "localizations": {
         "en": {
@@ -4765,6 +5037,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Crear el recordatorio"
+          }
+        }
+      }
+    },
+    "Poste": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post office"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correos"
           }
         }
       }
@@ -5085,6 +5373,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Empezar de nuevo"
+          }
+        }
+      }
+    },
+    "Recyclage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recycling"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reciclaje"
           }
         }
       }
@@ -5421,6 +5725,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entrada no válida."
+          }
+        }
+      }
+    },
+    "Salle de sport": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gym"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gimnasio"
           }
         }
       }
@@ -6513,6 +6833,38 @@
         }
       }
     },
+    "Vélos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bikes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bicis"
+          }
+        }
+      }
+    },
+    "Vétérinaire": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vet"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Veterinario"
+          }
+        }
+      }
+    },
     "Y aller": {
       "localizations": {
         "en": {
@@ -7181,6 +7533,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Emisor"
+          }
+        }
+      }
+    },
+    "Épicerie": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Convenience store"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tienda de barrio"
           }
         }
       }
