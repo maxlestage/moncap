@@ -250,6 +250,7 @@ test("le pied et les pages légales tiennent dans chaque langue", () => {
   const IDS = [
     "comparateur-titre",
     "guidage-titre",
+    "montre-titre",
     "lieux-titre",
     "atouts-titre",
     "hors-ligne-titre",

@@ -43,6 +43,7 @@ export type Contenu = {
   readonly chiffres: readonly Chiffre[];
   readonly comparateur: Section & { readonly apres: string };
   readonly guidage: Section;
+  readonly montre: Section;
   readonly lieux: Section;
   readonly horsLigne: Section;
   readonly atoutsTitre: string;
@@ -71,6 +72,7 @@ export type Contenu = {
   readonly legendes: {
     readonly itineraires: string;
     readonly guidage: string;
+    readonly montre: string;
     readonly lieux: string;
     readonly regions: string;
 
@@ -168,7 +170,12 @@ const FR: Contenu = {
   guidage: {
     titre: "Puis il vous emmène",
     intro:
-      "La flèche suit la manœuvre réelle, la distance au prochain virage se met à jour, et le numéro de sortie s'affiche sous la consigne. À l'approche d'une intersection, les voies à prendre s'allument. La vitesse du moment est comparée à la limite de la route, lue sur OpenStreetMap : elle passe au rouge quand vous la dépassez.",
+      "La flèche suit la manœuvre réelle, la distance au prochain virage se met à jour, et le numéro de sortie s'affiche sous la consigne. À l'approche d'une intersection, les voies à prendre s'allument. La vitesse du moment est comparée à la limite de la route, lue sur OpenStreetMap : elle passe au rouge quand vous la dépassez. En bas, l'heure d'arrivée vit à côté des minutes restantes, et les commandes de la carte tiennent dans un seul panneau — dégagé de tout ce qui ne sert pas au volant.",
+  },
+  montre: {
+    titre: "Et au poignet",
+    intro:
+      "L'app Apple Watch reçoit le guidage de l'iPhone : la manœuvre en grand, la distance, le restant et l'heure d'arrivée. Un tapotement à chaque nouvelle consigne — on sent le virage venir sans regarder l'écran. Le dernier état envoyé survit à la fermeture : on lève le poignet, la consigne est déjà là.",
   },
   lieux: {
     titre: "Ce qu'il y a autour",
@@ -326,6 +333,30 @@ const FR: Contenu = {
       texte:
         "Pour ceux qui roulent pour travailler : le journal des trajets s'exporte en CSV, une facture PDF se génère par mois au taux kilométrique choisi, et l'attestation fiscale annuelle s'établit au barème officiel, majoration électrique comprise — même sans réseau.",
     },
+    {
+      emoji: "🔁",
+      titre: "Domicile et travail suivent le compte",
+      texte:
+        "Les favoris se rangent dans le compte : un nouvel iPhone les retrouve à la première connexion. En cas de désaccord, l'appareil qu'on a sous les yeux reste maître — c'est lui qu'on vient de modifier.",
+    },
+    {
+      emoji: "📦",
+      titre: "Ses données, en un fichier",
+      texte:
+        "Un bouton exporte tout ce que le compte connaît — trajets, recherches, signalements, préférences — en un fichier remis par la feuille de partage. Sans le mot de passe, même haché : un secret dérivé n'appartient à personne.",
+    },
+    {
+      emoji: "⏰",
+      titre: "Partir à l'heure",
+      texte:
+        "On donne l'heure d'arrivée voulue : l'app soustrait le trajet estimé et cinq minutes de marge, puis pose la notification « Pars maintenant ». L'estimation est celle du moment, et la feuille le dit — promettre un recalcul en arrière-plan serait mentir.",
+    },
+    {
+      emoji: "🕙",
+      titre: "Les créneaux de livraison",
+      texte:
+        "« Avant 10 h » se pose sur une étape, dans le même menu que le temps d'arrêt. L'heure de passage est estimée, et le chip s'alarme en orange dès qu'elle dépasse. Ancré sur l'étape elle-même : il survit au réordonnancement. L'outil Pro du livreur.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -358,6 +389,12 @@ const FR: Contenu = {
       texte:
         "L'annuaire des 19 catégories et les limites de vitesse descendent avec la région, tirés du même extrait OpenStreetMap que les routes. Chercher une pharmacie ou lire la limite du moment marche en mode avion.",
     },
+    {
+      emoji: "🔎",
+      titre: "La recherche qui trouve en mode avion",
+      texte:
+        "Quand la recherche en ligne ne rend rien, l'annuaire des régions installées prend le relais : les lieux nommés se cherchent par nom, plis et accents ignorés, les plus proches d'abord. Les adresses, elles, restent l'affaire du réseau — l'annuaire ne porte que des lieux nommés.",
+    },
   ],
   tarifs: {
     titre: "Le prix, dit simplement",
@@ -372,6 +409,7 @@ const FR: Contenu = {
         "212 régions hors ligne — itinéraires, lieux, limites de vitesse",
         "Import de traces GPX",
         "La station-service la moins chère sur ta route",
+        "La consigne au poignet, sur Apple Watch",
       ],
     },
     pro: {
@@ -381,6 +419,7 @@ const FR: Contenu = {
       points: [
         "Tout MonCap Plus",
         "Tournées optimisées — collées d'un bloc, une adresse par ligne",
+        "Créneaux de livraison : le chip s'alarme avant l'heure",
         "Journal kilométrique (CSV) et attestation fiscale au barème",
         "Facturation PDF au taux kilométrique choisi",
         "Gabarit utilitaire : les ponts bas s'écartent du trajet",
@@ -411,13 +450,16 @@ const FR: Contenu = {
     "Hors ligne, le calcul propose les variantes qu'il trouve : sur un trajet court elles sont moins nombreuses qu'en ligne. Ni le trafic en direct ni les signalements ne sont disponibles.",
     "Un trajet hors réseau doit tenir entier dans un même paquet : c'est à cela que servent les zones, qui se chevauchent.",
     "L'application suit la langue du téléphone parmi le français, l'espagnol et l'anglais ; ailleurs, elle reste en français.",
+    "L'app montre affiche ce que l'iPhone lui envoie : sans guidage en cours sur le téléphone, elle attend.",
     "L'application est en test sur TestFlight, pas encore sur l'App Store.",
   ],
   legendes: {
     itineraires:
       "Dessin de l'écran de comparaison — mise en page et étiquettes réelles, valeurs d'exemple.",
     guidage:
-      "Le bandeau de manœuvre, la vitesse et la limite du moment, la météo — dessin d'écran, valeurs d'exemple.",
+      "Le bandeau de manœuvre, la vitesse et la limite, la météo, le panneau de commandes et la barre d'arrivée — dessin d'écran, valeurs d'exemple.",
+    montre:
+      "Dessin de l'app Apple Watch pendant un guidage — mise en page réelle, valeurs d'exemple.",
     lieux:
       "Les 19 catégories, avec les libellés de l'application — montrées ici d'un seul tenant, alors que le bandeau défile sur le téléphone.",
     regions:
@@ -436,6 +478,7 @@ const FR: Contenu = {
     ancres: [
       { id: "comparateur-titre", nom: "Le comparateur" },
       { id: "guidage-titre", nom: "Le guidage" },
+      { id: "montre-titre", nom: "Au poignet" },
       { id: "lieux-titre", nom: "Autour de vous" },
       { id: "atouts-titre", nom: "Et aussi" },
       { id: "hors-ligne-titre", nom: "Hors ligne" },
@@ -558,7 +601,12 @@ const ES: Contenu = {
   guidage: {
     titre: "Y luego te lleva",
     intro:
-      "La flecha sigue la maniobra real, la distancia al siguiente giro se actualiza, y el número de salida aparece bajo la indicación. Al acercarse a un cruce, los carriles a tomar se iluminan. La velocidad del momento se compara con el límite de la vía, leído en OpenStreetMap: se pone en rojo cuando lo superas.",
+      "La flecha sigue la maniobra real, la distancia al siguiente giro se actualiza, y el número de salida aparece bajo la indicación. Al acercarse a un cruce, los carriles a tomar se iluminan. La velocidad del momento se compara con el límite de la vía, leído en OpenStreetMap: se pone en rojo cuando lo superas. Abajo, la hora de llegada vive junto a los minutos restantes, y los mandos del mapa caben en un solo panel — despejado de todo lo que no sirve al volante.",
+  },
+  montre: {
+    titre: "Y en la muñeca",
+    intro:
+      "La app para Apple Watch recibe la guía del iPhone: la maniobra en grande, la distancia, lo que queda y la hora de llegada. Un toque en la muñeca con cada nueva indicación — la curva se siente venir sin mirar la pantalla. El último estado enviado sobrevive al cierre: levantas la muñeca y la indicación ya está ahí.",
   },
   lieux: {
     titre: "Lo que hay alrededor",
@@ -716,6 +764,30 @@ const ES: Contenu = {
       texte:
         "Para quienes conducen por trabajo: el registro de trayectos se exporta en CSV, una factura PDF se genera por mes con la tarifa por kilómetro elegida, y el certificado fiscal anual se establece al baremo oficial, con la mayoración eléctrica — incluso sin cobertura.",
     },
+    {
+      emoji: "🔁",
+      titre: "Casa y trabajo siguen a la cuenta",
+      texte:
+        "Los favoritos se guardan en la cuenta: un iPhone nuevo los recupera en la primera conexión. Si hay desacuerdo, manda el dispositivo que tienes delante — es el que acabas de tocar.",
+    },
+    {
+      emoji: "📦",
+      titre: "Tus datos, en un archivo",
+      texte:
+        "Un botón exporta todo lo que la cuenta conoce — trayectos, búsquedas, avisos, preferencias — en un archivo entregado por la hoja de compartir. Sin la contraseña, ni siquiera con hash: un secreto derivado no pertenece a nadie.",
+    },
+    {
+      emoji: "⏰",
+      titre: "Salir a tiempo",
+      texte:
+        "Das la hora de llegada deseada: la app resta el trayecto estimado y cinco minutos de margen, y pone la notificación « Sal ahora ». La estimación es la del momento, y la hoja lo dice — prometer un recálculo en segundo plano sería mentir.",
+    },
+    {
+      emoji: "🕙",
+      titre: "Las franjas de entrega",
+      texte:
+        "« Antes de las 10 » se pone en una parada, en el mismo menú que el tiempo de alto. La hora de paso se estima, y el aviso se enciende en naranja en cuanto se pasa. Anclado a la parada misma: sobrevive al reordenamiento. La herramienta Pro del repartidor.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -748,6 +820,12 @@ const ES: Contenu = {
       texte:
         "El directorio de las 19 categorías y los límites de velocidad bajan con la región, sacados del mismo extracto de OpenStreetMap que las carreteras. Buscar una farmacia o leer el límite del momento funciona en modo avión.",
     },
+    {
+      emoji: "🔎",
+      titre: "La búsqueda que encuentra en modo avión",
+      texte:
+        "Cuando la búsqueda en línea no devuelve nada, el directorio de las regiones instaladas toma el relevo: los lugares con nombre se buscan por nombre, sin acentos ni mayúsculas, los más cercanos primero. Las direcciones siguen siendo cosa de la red — el directorio solo lleva lugares con nombre.",
+    },
   ],
   tarifs: {
     titre: "El precio, dicho claro",
@@ -762,6 +840,7 @@ const ES: Contenu = {
         "212 regiones sin conexión — rutas, lugares, límites de velocidad",
         "Importación de trazas GPX",
         "La gasolinera más barata en tu ruta",
+        "La indicación en la muñeca, en el Apple Watch",
       ],
     },
     pro: {
@@ -771,6 +850,7 @@ const ES: Contenu = {
       points: [
         "Todo MonCap Plus",
         "Repartos optimizados — pegados de un bloque, una dirección por línea",
+        "Franjas de entrega: el aviso salta antes de la hora",
         "Registro de kilómetros (CSV) y certificado fiscal al baremo",
         "Facturación PDF con la tarifa por kilómetro elegida",
         "Gálibo de furgoneta: los puentes bajos se apartan del trayecto",
@@ -801,13 +881,16 @@ const ES: Contenu = {
     "Sin cobertura el cálculo propone las variantes que encuentra: en un trayecto corto son menos que en línea. No hay ni tráfico en directo ni avisos.",
     "Un trayecto sin cobertura debe caber entero en un mismo paquete: para eso sirven las zonas, que se solapan.",
     "La aplicación sigue el idioma del teléfono entre francés, español e inglés; en cualquier otro, se queda en francés.",
+    "La app del reloj muestra lo que el iPhone le envía: sin una guía en curso en el teléfono, espera.",
     "La aplicación está en pruebas en TestFlight, todavía no en la App Store.",
   ],
   legendes: {
     itineraires:
       "Dibujo de la pantalla de comparación — maquetación y etiquetas reales, valores de ejemplo.",
     guidage:
-      "La banda de maniobra, la velocidad y el límite del momento, el tiempo — dibujo de pantalla, valores de ejemplo.",
+      "La banda de maniobra, la velocidad y el límite, el tiempo, el panel de mandos y la barra de llegada — dibujo de pantalla, valores de ejemplo.",
+    montre:
+      "Dibujo de la app para Apple Watch durante una guía — maquetación real, valores de ejemplo.",
     lieux:
       "Las 19 categorías, con los rótulos de la aplicación — mostradas aquí de una sola vez, mientras que en el teléfono la barra se desplaza.",
     regions:
@@ -826,6 +909,7 @@ const ES: Contenu = {
     ancres: [
       { id: "comparateur-titre", nom: "El comparador" },
       { id: "guidage-titre", nom: "La guía" },
+      { id: "montre-titre", nom: "En la muñeca" },
       { id: "lieux-titre", nom: "A tu alrededor" },
       { id: "atouts-titre", nom: "Y además" },
       { id: "hors-ligne-titre", nom: "Sin conexión" },
@@ -948,7 +1032,12 @@ const EN: Contenu = {
   guidage: {
     titre: "Then it takes you there",
     intro:
-      "The arrow follows the actual manoeuvre, the distance to the next turn updates, and the exit number appears under the instruction. Coming up to a junction, the lanes to take light up. Your current speed is compared with the road's limit, read from OpenStreetMap: it turns red when you go over.",
+      "The arrow follows the actual manoeuvre, the distance to the next turn updates, and the exit number appears under the instruction. Coming up to a junction, the lanes to take light up. Your current speed is compared with the road's limit, read from OpenStreetMap: it turns red when you go over. At the bottom, the arrival time lives next to the minutes left, and the map controls fit in a single panel — cleared of everything that's no use at the wheel.",
+  },
+  montre: {
+    titre: "And on your wrist",
+    intro:
+      "The Apple Watch app receives the guidance from the iPhone: the manoeuvre writ large, the distance, what's left and the arrival time. A tap on the wrist with each new instruction — you feel the turn coming without looking at the screen. The last state sent survives the app closing: raise your wrist and the instruction is already there.",
   },
   lieux: {
     titre: "What's around you",
@@ -1106,6 +1195,30 @@ const EN: Contenu = {
       texte:
         "For people who drive for a living: the trip log exports as CSV, a PDF invoice is generated per month at the per-kilometre rate you choose, and the yearly tax mileage statement is drawn up at the official scale, electric uplift included — even with no signal.",
     },
+    {
+      emoji: "🔁",
+      titre: "Home and work follow the account",
+      texte:
+        "The favourites live in the account: a new iPhone gets them back on first sign-in. When they disagree, the device in your hands wins — it's the one you just changed.",
+    },
+    {
+      emoji: "📦",
+      titre: "Your data, in one file",
+      texte:
+        "One button exports everything the account knows — trips, searches, reports, preferences — as one file handed over by the share sheet. Without the password, not even hashed: a derived secret belongs to no one.",
+    },
+    {
+      emoji: "⏰",
+      titre: "Leave on time",
+      texte:
+        "Give the arrival time you want: the app subtracts the estimated trip and a five-minute margin, then sets the “Leave now” notification. The estimate is the one from that moment, and the sheet says so — promising a background recalculation would be lying.",
+    },
+    {
+      emoji: "🕙",
+      titre: "Delivery time windows",
+      texte:
+        "“Before 10 am” goes on a stop, in the same menu as the dwell time. The passing time is estimated, and the chip turns orange the moment it slips. Anchored to the stop itself: it survives reordering. The Pro tool for couriers.",
+    },
   ],
   horsLigneCartes: [
     {
@@ -1138,6 +1251,12 @@ const EN: Contenu = {
       texte:
         "The directory of all 19 categories and the speed limits come down with the region, drawn from the same OpenStreetMap extract as the roads. Finding a pharmacy or reading the current limit works in airplane mode.",
     },
+    {
+      emoji: "🔎",
+      titre: "Search that finds in airplane mode",
+      texte:
+        "When the online search returns nothing, the directory of installed regions takes over: named places are searched by name, accents and case ignored, nearest first. Addresses remain the network's business — the directory only carries named places.",
+    },
   ],
   tarifs: {
     titre: "The price, said plainly",
@@ -1152,6 +1271,7 @@ const EN: Contenu = {
         "212 offline regions — routes, places, speed limits",
         "GPX track import",
         "The cheapest fuel station along your route",
+        "The instruction on your wrist, on Apple Watch",
       ],
     },
     pro: {
@@ -1161,6 +1281,7 @@ const EN: Contenu = {
       points: [
         "Everything in MonCap Plus",
         "Optimized multi-stop runs — pasted in one block, one address per line",
+        "Delivery time windows: the chip warns before it's late",
         "Mileage log (CSV) and tax mileage statement",
         "PDF invoicing at the per-kilometre rate you choose",
         "Van dimensions: low bridges stay out of the route",
@@ -1191,13 +1312,16 @@ const EN: Contenu = {
     "Offline, the computation offers the variants it finds: on a short trip there are fewer than online. Neither live traffic nor reports are available.",
     "An offline trip must fit entirely within one pack: that is what the overlapping zones are for.",
     "The app follows the phone's language among French, Spanish and English; anywhere else it stays in French.",
+    "The watch app shows what the iPhone sends it: with no guidance running on the phone, it waits.",
     "The app is in testing on TestFlight, not yet on the App Store.",
   ],
   legendes: {
     itineraires:
       "A drawing of the comparison screen — real layout and labels, example values.",
     guidage:
-      "The manoeuvre banner, current speed and limit, the weather — screen drawing, example values.",
+      "The manoeuvre banner, speed and limit, the weather, the control panel and the arrival bar — screen drawing, example values.",
+    montre:
+      "A drawing of the Apple Watch app during guidance — real layout, example values.",
     lieux:
       "All 19 categories, with the app's own labels — shown here in one go, whereas the strip scrolls on the phone.",
     regions:
@@ -1216,6 +1340,7 @@ const EN: Contenu = {
     ancres: [
       { id: "comparateur-titre", nom: "The comparator" },
       { id: "guidage-titre", nom: "Guidance" },
+      { id: "montre-titre", nom: "On your wrist" },
       { id: "lieux-titre", nom: "Around you" },
       { id: "atouts-titre", nom: "And also" },
       { id: "hors-ligne-titre", nom: "Offline" },
