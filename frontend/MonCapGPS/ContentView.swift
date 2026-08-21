@@ -719,6 +719,7 @@ struct MapHomeView: View {
     @State private var showCollerAdresses = false
     @State private var showStationsCarburant = false
     @State private var showRecapAnnuel = false
+    @State private var showEntretien = false
     /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
     @State private var showPaywallMenu = false
     @State private var gereAbonnement = false
@@ -801,6 +802,9 @@ struct MapHomeView: View {
                 .presentationBackground(Color(.systemBackground))
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        .sheet(isPresented: $showEntretien) {
+            EntretienView(kmJournal: trips.reduce(0) { $0 + $1.distance_km })
+        }
         .sheet(isPresented: $showStationsCarburant) {
             StationsCarburantView(
                 itineraire: routeOptions.first { $0.id == selectedRouteID }?.coordinates
@@ -1451,6 +1455,8 @@ struct MapHomeView: View {
 
     private func loadTrips() async {
         trips = (try? await api.trips()) ?? trips
+        // Le journal vient de parler : les rappels d'entretien écoutent.
+        Entretien.shared.verifie(kmJournal: trips.reduce(0) { $0 + $1.distance_km })
     }
 
     /// Itinéraire affiché : celui de la navigation en cours, sinon le calcul multi-points.
@@ -3835,6 +3841,14 @@ struct MapHomeView: View {
                         Text(fuel.stationCount > 0
                             ? "(\(fuel.stationCount) stations)" : "(estimation)")
                             .font(.caption).foregroundStyle(.secondary)
+                    }
+                    // L'entretien suit les kilomètres du journal : la
+                    // vidange se rappelle toute seule.
+                    Button {
+                        apresMenu = { showEntretien = true }
+                        showPlaces = false
+                    } label: {
+                        Label("Entretien", systemImage: "wrench.and.screwdriver")
                     }
                 }
                 if !leaders.isEmpty {

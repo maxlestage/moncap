@@ -113,6 +113,22 @@
         }
       }
     },
+    "%@ : les kilomètres y sont — c'est le moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: the mileage is there — time to do it."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: los kilómetros ya están — es el momento."
+          }
+        }
+      }
+    },
     "%@ direction %@ — descendre à %@": {
       "localizations": {
         "en": {
@@ -1105,6 +1121,22 @@
         }
       }
     },
+    "Autre": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otro"
+          }
+        }
+      }
+    },
     "Avatar actuel": {
       "localizations": {
         "en": {
@@ -1277,6 +1309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bus"
+          }
+        }
+      }
+    },
+    "C'est le moment !": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time to do it!"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¡Es el momento!"
           }
         }
       }
@@ -1697,6 +1745,22 @@
         }
       }
     },
+    "Compteur du journal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log odometer"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contador del registro"
+          }
+        }
+      }
+    },
     "Conditions": {
       "localizations": {
         "en": {
@@ -1777,6 +1841,22 @@
         }
       }
     },
+    "Contrôle technique": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicle inspection"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspección técnica"
+          }
+        }
+      }
+    },
     "Correct": {
       "localizations": {
         "en": {
@@ -1837,6 +1917,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Peligro"
+          }
+        }
+      }
+    },
+    "Dans %d km": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %d km"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dentro de %d km"
           }
         }
       }
@@ -2209,6 +2305,22 @@
         }
       }
     },
+    "Encore %.0f km": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f km to go"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quedan %.0f km"
+          }
+        }
+      }
+    },
     "Enregistrer ma position": {
       "localizations": {
         "en": {
@@ -2237,6 +2349,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Soleado"
+          }
+        }
+      }
+    },
+    "Entretien": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maintenance"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantenimiento"
+          }
+        }
+      }
+    },
+    "Entretien du véhicule": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vehicle maintenance"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantenimiento del vehículo"
           }
         }
       }
@@ -3137,6 +3281,22 @@
         }
       }
     },
+    "Les kilomètres comptés sont ceux des trajets enregistrés : garde le journal vivant pour que les rappels le soient aussi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The kilometres counted are those of recorded trips: keep the log alive so the reminders stay alive too."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los kilómetros contados son los de los viajes registrados: mantén vivo el registro para que los recordatorios también lo estén."
+          }
+        }
+      }
+    },
     "Les transports en commun ont besoin du réseau.": {
       "localizations": {
         "en": {
@@ -3761,6 +3921,22 @@
         }
       }
     },
+    "Nom du rappel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminder name"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del recordatorio"
+          }
+        }
+      }
+    },
     "Nom ou entreprise": {
       "localizations": {
         "en": {
@@ -3773,6 +3949,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nombre o empresa"
+          }
+        }
+      }
+    },
+    "Nouveau rappel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New reminder"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuevo recordatorio"
           }
         }
       }
@@ -4129,6 +4321,22 @@
         }
       }
     },
+    "Pneus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tyres"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neumáticos"
+          }
+        }
+      }
+    },
     "Point de vue": {
       "localizations": {
         "en": {
@@ -4189,6 +4397,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Política de privacidad"
+          }
+        }
+      }
+    },
+    "Poser le rappel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set the reminder"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crear el recordatorio"
           }
         }
       }
@@ -4333,6 +4557,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salir"
+          }
+        }
+      }
+    },
+    "Quoi ?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Qué?"
+          }
+        }
+      }
+    },
+    "Rappels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recordatorios"
           }
         }
       }
@@ -5565,6 +5821,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "BTT"
+          }
+        }
+      }
+    },
+    "Vidange": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oil change"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambio de aceite"
           }
         }
       }
