@@ -465,10 +465,14 @@ enum TravelMode: String, CaseIterable, Identifiable {
         switch self {
         case .walk: return "pedestrian"
         case .bike: return "bicycle"
-        // En mode moto (réglage Mon véhicule), la voiture devient un
-        // deux-roues : même graphe, autre fonction de coût — Valhalla sait
-        // pencher pour les routes qui tournent.
+        // Réglages Mon véhicule : la « voiture » peut être un fourgon au
+        // gabarit déclaré (truck), ou une moto (motorcycle) — même graphe,
+        // autre fonction de coût. L'utilitaire gagne : on ne coche pas les
+        // deux, et les ponts bas n'attendent pas.
         case .car:
+            if UserDefaults.standard.bool(forKey: "moncap.utilitaire") {
+                return "truck"
+            }
             return UserDefaults.standard.bool(forKey: "moncap.moto")
                 ? "motorcycle" : "auto"
         // Jamais employé : le transit est calculé par le serveur, et les
@@ -627,6 +631,27 @@ struct MapHomeView: View {
     /// Mode moto : la « voiture » devient un deux-roues (costing Valhalla).
     @AppStorage("moncap.moto") private var modeMoto = false
     @AppStorage("moncap.motoPlaisir") private var motoPlaisir = false
+    /// Gabarit utilitaire (Pro) : costing truck aux dimensions déclarées.
+    @AppStorage("moncap.utilitaire") private var modeUtilitaire = false
+    @AppStorage("moncap.util.hauteur") private var utilHauteur = 2.7
+    @AppStorage("moncap.util.largeur") private var utilLargeur = 2.05
+    @AppStorage("moncap.util.poids") private var utilPoids = 3.5
+
+    /// L'interrupteur Utilitaire, gardé par Pro : sans la formule, il mène
+    /// au paywall au lieu de s'allumer — et il éteint le mode moto.
+    private var lienUtilitaire: Binding<Bool> {
+        Binding(
+            get: { modeUtilitaire },
+            set: { veut in
+                if veut, !plus.accesPro {
+                    apresMenu = { showPaywall = true }
+                    showPlaces = false
+                    return
+                }
+                modeUtilitaire = veut
+                if veut { modeMoto = false }
+            })
+    }
     @AppStorage("moncap.consumption") private var consumption = 6.5
     /// Signalements déjà annoncés vocalement pendant cette navigation.
     @State private var announcedAlertIDs: Set<Int> = []
@@ -3924,6 +3949,9 @@ struct MapHomeView: View {
                     Toggle(isOn: $modeMoto) {
                         Label("Moto", systemImage: "motorcycle")
                     }
+                    .onChange(of: modeMoto) {
+                        if modeMoto { modeUtilitaire = false }
+                    }
                     if modeMoto {
                         Toggle(isOn: $motoPlaisir) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -3933,6 +3961,41 @@ struct MapHomeView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
+                    // Le gabarit utilitaire — l'outil Pro du fourgon : les
+                    // ponts bas et les rues interdites au gabarit déclaré
+                    // sont évités (costing truck de Valhalla).
+                    Toggle(isOn: lienUtilitaire) {
+                        Label("Utilitaire", systemImage: "box.truck")
+                    }
+                    if modeUtilitaire {
+                        Stepper(value: $utilHauteur, in: 1.8...4.5, step: 0.05) {
+                            HStack {
+                                Text("Hauteur")
+                                Spacer()
+                                Text(verbatim: String(format: "%.2f m", utilHauteur))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Stepper(value: $utilLargeur, in: 1.8...2.6, step: 0.05) {
+                            HStack {
+                                Text("Largeur")
+                                Spacer()
+                                Text(verbatim: String(format: "%.2f m", utilLargeur))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Stepper(value: $utilPoids, in: 1.5...19, step: 0.5) {
+                            HStack {
+                                Text("Poids")
+                                Spacer()
+                                Text(verbatim: String(format: "%.1f t", utilPoids))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text("Dis les dimensions vraies, carte grise en main : c'est elles qui écartent les ponts bas et les rues interdites.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 if !leaders.isEmpty {
