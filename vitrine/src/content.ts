@@ -94,7 +94,7 @@ export const MODE_ACTIF = "Voiture";
 
 export type Lieu = { readonly emoji: string; readonly nom: string };
 
-/** Les 19 catégories du bandeau, dans l'ordre et avec les libellés de l'app. */
+/** Les 42 catégories du bandeau, avec les libellés de l'app. */
 export const LIEUX: readonly Lieu[] = [
   { emoji: "⛽", nom: "Essence" },
   { emoji: "🅿️", nom: "Parking" },
@@ -115,6 +115,29 @@ export const LIEUX: readonly Lieu[] = [
   { emoji: "🍔", nom: "Fast-food" },
   { emoji: "🏛️", nom: "Tourisme" },
   { emoji: "🎉", nom: "Sorties" },
+  { emoji: "🥖", nom: "Boulangerie" },
+  { emoji: "☕", nom: "Café" },
+  { emoji: "🍺", nom: "Bars" },
+  { emoji: "🏦", nom: "Banque" },
+  { emoji: "📮", nom: "Poste" },
+  { emoji: "🏥", nom: "Hôpital" },
+  { emoji: "🩺", nom: "Médecin" },
+  { emoji: "🐾", nom: "Vétérinaire" },
+  { emoji: "🔧", nom: "Garage" },
+  { emoji: "🧽", nom: "Lavage auto" },
+  { emoji: "🧺", nom: "Pique-nique" },
+  { emoji: "🌳", nom: "Parcs" },
+  { emoji: "🛝", nom: "Aire de jeux" },
+  { emoji: "🚉", nom: "Gares" },
+  { emoji: "🚲", nom: "Vélos" },
+  { emoji: "🍅", nom: "Marché" },
+  { emoji: "🎬", nom: "Cinéma" },
+  { emoji: "📚", nom: "Bibliothèque" },
+  { emoji: "🏋️", nom: "Salle de sport" },
+  { emoji: "🏪", nom: "Épicerie" },
+  { emoji: "💇", nom: "Coiffeur" },
+  { emoji: "♻️", nom: "Recyclage" },
+  { emoji: "💤", nom: "Aire de repos" },
 ];
 
 // --- Régions hors ligne --------------------------------------------------

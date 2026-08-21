@@ -334,6 +334,14 @@ enum POIKind: String, CaseIterable, Identifiable {
     case fuel, parking, parkingAll, charging, toilets, water, surf, skate
     case pharmacy, atm, supermarket, camping, drinkingWater, viewpoint
     case fastFood, restaurant, hotel, tourism, hangout
+    // La deuxième fournée (2026) : le quotidien — santé, commerces,
+    // services — et la route (aires, gares, vélos). Toutes OpenStreetMap :
+    // les tags sont stables, et l'annuaire hors ligne pourra les rejoindre
+    // à la prochaine génération des annexes.
+    case bakery, cafe, bars, bank, post, hospital, doctor, vet
+    case carRepair, carWash, picnic, park, playground, trainStation
+    case bikeRental, market, cinema, library, gym, grocery
+    case hairdresser, recycling, restArea
     var id: String { rawValue }
 
     var label: String {
@@ -357,6 +365,29 @@ enum POIKind: String, CaseIterable, Identifiable {
         case .hotel: return "Hôtels"
         case .tourism: return "Tourisme"
         case .hangout: return "Sorties"
+        case .bakery: return "Boulangerie"
+        case .cafe: return "Café"
+        case .bars: return "Bars"
+        case .bank: return "Banque"
+        case .post: return "Poste"
+        case .hospital: return "Hôpital"
+        case .doctor: return "Médecin"
+        case .vet: return "Vétérinaire"
+        case .carRepair: return "Garage"
+        case .carWash: return "Lavage auto"
+        case .picnic: return "Pique-nique"
+        case .park: return "Parcs"
+        case .playground: return "Aire de jeux"
+        case .trainStation: return "Gares"
+        case .bikeRental: return "Vélos"
+        case .market: return "Marché"
+        case .cinema: return "Cinéma"
+        case .library: return "Bibliothèque"
+        case .gym: return "Salle de sport"
+        case .grocery: return "Épicerie"
+        case .hairdresser: return "Coiffeur"
+        case .recycling: return "Recyclage"
+        case .restArea: return "Aire de repos"
         }
     }
 
@@ -381,6 +412,42 @@ enum POIKind: String, CaseIterable, Identifiable {
         case .hotel: return "🏨"
         case .tourism: return "🏛️"
         case .hangout: return "🎉"
+        case .bakery: return "🥖"
+        case .cafe: return "☕"
+        case .bars: return "🍺"
+        case .bank: return "🏦"
+        case .post: return "📮"
+        case .hospital: return "🏥"
+        case .doctor: return "🩺"
+        case .vet: return "🐾"
+        case .carRepair: return "🔧"
+        case .carWash: return "🧽"
+        case .picnic: return "🧺"
+        case .park: return "🌳"
+        case .playground: return "🛝"
+        case .trainStation: return "🚉"
+        case .bikeRental: return "🚲"
+        case .market: return "🍅"
+        case .cinema: return "🎬"
+        case .library: return "📚"
+        case .gym: return "🏋️"
+        case .grocery: return "🏪"
+        case .hairdresser: return "💇"
+        case .recycling: return "♻️"
+        case .restArea: return "💤"
+        }
+    }
+
+    /// Vrai pour les catégories interrogées via Overpass (OpenStreetMap) :
+    /// l'aiguillage de `loadPOIs` s'appuie dessus, plutôt qu'une liste à
+    /// tenir à jour à chaque catégorie ajoutée.
+    var estOSM: Bool {
+        switch self {
+        case .fuel, .parking, .water, .fastFood, .restaurant, .hotel,
+            .tourism, .hangout:
+            return false
+        default:
+            return true
         }
     }
 
@@ -389,14 +456,12 @@ enum POIKind: String, CaseIterable, Identifiable {
     /// catégories « lieux Apple » utilisent une requête en langage naturel.
     var query: String {
         switch self {
-        case .fuel, .parking, .parkingAll, .charging, .toilets, .water, .surf, .skate,
-            .pharmacy, .atm, .supermarket, .camping, .drinkingWater, .viewpoint:
-            return ""
         case .fastFood: return "fast food"
         case .restaurant: return "restaurant"
         case .hotel: return "hôtel"
         case .tourism: return "site touristique"
         case .hangout: return "bar café"
+        default: return ""
         }
     }
 }
@@ -1996,8 +2061,7 @@ struct MapHomeView: View {
         }
 
         // Catégories OpenStreetMap.
-        if [.parkingAll, .charging, .toilets, .surf, .skate,
-            .pharmacy, .atm, .supermarket, .camping, .drinkingWater, .viewpoint].contains(kind) {
+        if kind.estOSM {
             // Échec réseau → l'annuaire embarqué, puis ce qui est affiché.
             guard let found = await fetchOSMCategory(kind, in: searchRegion) else {
                 await poisEmbarques(kind, dans: searchRegion, visible: region)
@@ -2319,6 +2383,139 @@ struct MapHomeView: View {
                 in: region, latCap: 2.5, lonCap: 3.5, limit: 120,
                 clauses: { "nwr[\"tourism\"=\"viewpoint\"]\($0);" },
                 name: { Self.namedOr($0, "Point de vue") })
+        case .bakery:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"shop\"=\"bakery\"]\($0);" },
+                name: { Self.namedOr($0, "Boulangerie") })
+        case .cafe:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"cafe\"]\($0);" },
+                name: { Self.namedOr($0, "Café") })
+        case .bars:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { b in
+                    "nwr[\"amenity\"=\"bar\"]\(b);"
+                        + "nwr[\"amenity\"=\"pub\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Bar") })
+        case .bank:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"bank\"]\($0);" },
+                name: { Self.namedOr($0, "Banque") })
+        case .post:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"post_office\"]\($0);" },
+                name: { Self.namedOr($0, "Bureau de poste") })
+        case .hospital:
+            // Hôpitaux et cliniques ensemble : quand on cherche l'un, l'autre
+            // fait très bien l'affaire.
+            return await fetchOverpass(
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
+                clauses: { b in
+                    "nwr[\"amenity\"=\"hospital\"]\(b);"
+                        + "nwr[\"amenity\"=\"clinic\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Hôpital") })
+        case .doctor:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"doctors\"]\($0);" },
+                name: { Self.namedOr($0, "Médecin") })
+        case .vet:
+            return await fetchOverpass(
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"veterinary\"]\($0);" },
+                name: { Self.namedOr($0, "Vétérinaire") })
+        case .carRepair:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"shop\"=\"car_repair\"]\($0);" },
+                name: { Self.namedOr($0, "Garage") })
+        case .carWash:
+            return await fetchOverpass(
+                in: region, latCap: 1.2, lonCap: 1.6, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"car_wash\"]\($0);" },
+                name: { Self.namedOr($0, "Lavage auto") })
+        case .picnic:
+            return await fetchOverpass(
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
+                clauses: { b in
+                    "nwr[\"tourism\"=\"picnic_site\"]\(b);"
+                        + "nwr[\"leisure\"=\"picnic_table\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Aire de pique-nique") })
+        case .park:
+            return await fetchOverpass(
+                in: region, latCap: 1.2, lonCap: 1.6, limit: 120,
+                clauses: { "nwr[\"leisure\"=\"park\"]\($0);" },
+                name: { Self.namedOr($0, "Parc") })
+        case .playground:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"leisure\"=\"playground\"]\($0);" },
+                name: { Self.namedOr($0, "Aire de jeux") })
+        case .trainStation:
+            // Les gares voyageurs ; `station=subway` en est écarté pour ne
+            // pas noyer une gare TER sous les bouches de métro.
+            return await fetchOverpass(
+                in: region, latCap: 2.0, lonCap: 2.8, limit: 120,
+                clauses: { "nwr[\"railway\"=\"station\"][\"station\"!=\"subway\"]\($0);" },
+                name: { Self.namedOr($0, "Gare") })
+        case .bikeRental:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"bicycle_rental\"]\($0);" },
+                name: { Self.namedOr($0, "Vélos en location") })
+        case .market:
+            return await fetchOverpass(
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"marketplace\"]\($0);" },
+                name: { Self.namedOr($0, "Marché") })
+        case .cinema:
+            return await fetchOverpass(
+                in: region, latCap: 1.5, lonCap: 2.0, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"cinema\"]\($0);" },
+                name: { Self.namedOr($0, "Cinéma") })
+        case .library:
+            return await fetchOverpass(
+                in: region, latCap: 1.2, lonCap: 1.6, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"library\"]\($0);" },
+                name: { Self.namedOr($0, "Bibliothèque") })
+        case .gym:
+            return await fetchOverpass(
+                in: region, latCap: 1.2, lonCap: 1.6, limit: 150,
+                clauses: { "nwr[\"leisure\"=\"fitness_centre\"]\($0);" },
+                name: { Self.namedOr($0, "Salle de sport") })
+        case .grocery:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"shop\"=\"convenience\"]\($0);" },
+                name: { Self.namedOr($0, "Épicerie") })
+        case .hairdresser:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"shop\"=\"hairdresser\"]\($0);" },
+                name: { Self.namedOr($0, "Coiffeur") })
+        case .recycling:
+            return await fetchOverpass(
+                in: region, latCap: 1.0, lonCap: 1.4, limit: 150,
+                clauses: { "nwr[\"amenity\"=\"recycling\"]\($0);" },
+                name: { Self.namedOr($0, "Point de recyclage") })
+        case .restArea:
+            // Les aires d'autoroute, repos comme services : c'est sur la
+            // route qu'on les cherche, la zone interrogée est donc large.
+            return await fetchOverpass(
+                in: region, latCap: 2.5, lonCap: 3.5, limit: 120,
+                clauses: { b in
+                    "nwr[\"highway\"=\"rest_area\"]\(b);"
+                        + "nwr[\"highway\"=\"services\"]\(b);"
+                },
+                name: { Self.namedOr($0, "Aire de repos") })
         default:
             return nil
         }
