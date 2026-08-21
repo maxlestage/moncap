@@ -22,7 +22,7 @@ import { App } from "./src/App";
 import { Legale } from "./src/Legale";
 import { LANGUES } from "./src/langues";
 import type { Contenu, PageLegale } from "./src/langues";
-import { jsonLd, OG_LOCALES, PUBLIC, robots, sitemap } from "./src/seo";
+import { groupes, jsonLd, jsonLdLegale, OG_LOCALES, PUBLIC, robots, sitemap } from "./src/seo";
 
 const SORTIE = "dist";
 /** Préfixe sous lequel le backend monte le dossier construit. */
@@ -100,6 +100,7 @@ function tete(c: Contenu): string {
     `<title>${attr(c.titre)}</title>`,
     `<meta name="description" content="${attr(c.description)}" />`,
     `<link rel="canonical" href="${PUBLIC}${c.chemin}" />`,
+    `<meta name="robots" content="index,follow,max-image-preview:large" />`,
     `<meta name="theme-color" content="#0e2a5e" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="MonCap GPS" />`,
@@ -124,17 +125,36 @@ function tete(c: Contenu): string {
 }
 
 /**
- * La tête d'une page légale : titre et description propres, la même feuille
- * et la même icône. Pas d'`alternate` — ces pages n'ont pas d'équivalent
- * exact d'une langue à l'autre (les adresses diffèrent), et un mauvais
- * `alternate` est pire qu'aucun.
+ * La tête d'une page légale : titre et description propres, la canonique,
+ * et les `alternate` de son groupe — /es/privacidad traduit bien
+ * /confidentialite, les adresses diffèrent mais la matière est la même,
+ * c'est exactement ce que hreflang décrit. Open Graph minimal et fil
+ * d'Ariane schema.org complètent, même feuille et même icône.
  */
-function teteLegale(p: PageLegale): string {
+function teteLegale(c: Contenu, p: PageLegale): string {
+  const groupe =
+    groupes().find((g) => g.some((page) => page.chemin === p.chemin)) ?? [];
+  const alternates = [
+    ...groupe.map(
+      (page) =>
+        `<link rel="alternate" hreflang="${page.code}" href="${PUBLIC}${page.chemin}" />`,
+    ),
+    `<link rel="alternate" hreflang="x-default" href="${PUBLIC}${groupe[0]?.chemin ?? "/"}" />`,
+  ];
   return [
     `<title>${attr(p.titre)} — MonCap GPS</title>`,
     `<meta name="description" content="${attr(p.description)}" />`,
     `<link rel="canonical" href="${PUBLIC}${p.chemin}" />`,
+    `<meta name="robots" content="index,follow,max-image-preview:large" />`,
     `<meta name="theme-color" content="#0e2a5e" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:site_name" content="MonCap GPS" />`,
+    `<meta property="og:url" content="${PUBLIC}${p.chemin}" />`,
+    `<meta property="og:title" content="${attr(p.titre)}" />`,
+    `<meta property="og:description" content="${attr(p.description)}" />`,
+    `<meta property="og:locale" content="${OG_LOCALES[c.code]}" />`,
+    ...alternates,
+    `<script type="application/ld+json">${jsonLdLegale(c, p)}</script>`,
     `<link rel="icon" type="image/png" href="${favicon}" />`,
     `<link rel="stylesheet" href="${BASE}/${nomFeuille}" />`,
   ]
@@ -180,7 +200,7 @@ for (const c of LANGUES) {
       octets: await emet(
         c.code,
         p.chemin,
-        teteLegale(p),
+        teteLegale(c, p),
         renderToStaticMarkup(<Legale c={c} page={p} res={{ logo }} />),
       ),
     });

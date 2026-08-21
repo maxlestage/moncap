@@ -7,7 +7,7 @@
  * tests ont vu.
  */
 import { AUTEUR } from "./content";
-import type { Contenu } from "./langues";
+import type { Contenu, Langue, PageLegale } from "./langues";
 import { LANGUES } from "./langues";
 
 /** L'adresse publique canonique du site. */
@@ -21,8 +21,8 @@ export const OG_LOCALES: Record<string, string> = {
 };
 
 /**
- * Les pages publiques à référencer : les trois pages principales (alternates
- * mutuelles entre langues) et les six pages légales.
+ * Les pages publiques à référencer : les trois pages principales et les six
+ * pages légales.
  */
 export function pagesPubliques(): { chemin: string; principale: boolean }[] {
   return LANGUES.flatMap((l) => [
@@ -33,25 +33,40 @@ export function pagesPubliques(): { chemin: string; principale: boolean }[] {
 }
 
 /**
- * Le plan du site. Les pages principales portent leurs alternates hreflang
- * (adresses **absolues** — un hreflang relatif est invalide pour les
- * moteurs) ; les légales, distinctes d'une langue à l'autre, vont nues.
+ * Les trois groupes de pages traduites entre elles : la principale, les
+ * mentions, la confidentialité. Chaque page d'un groupe est l'alternate des
+ * autres — les adresses diffèrent, la matière est la même, et c'est
+ * exactement ce que hreflang décrit. La version française fait x-default :
+ * c'est la langue du projet.
+ */
+export function groupes(): { code: Langue; chemin: string }[][] {
+  return [
+    LANGUES.map((l) => ({ code: l.code, chemin: l.chemin })),
+    LANGUES.map((l) => ({ code: l.code, chemin: l.mentions.chemin })),
+    LANGUES.map((l) => ({ code: l.code, chemin: l.confidentialite.chemin })),
+  ];
+}
+
+/**
+ * Le plan du site. Chaque page — principales ET légales — porte les
+ * alternates hreflang de son groupe, en adresses **absolues** : un hreflang
+ * relatif est invalide pour les moteurs, et une page légale sans alternates
+ * laissait Google deviner que /es/privacidad traduit /confidentialite.
  */
 export function sitemap(): string {
-  const alternates = [
-    ...LANGUES.map(
-      (l) =>
-        `    <xhtml:link rel="alternate" hreflang="${l.code}" href="${PUBLIC}${l.chemin}"/>`,
-    ),
-    `    <xhtml:link rel="alternate" hreflang="x-default" href="${PUBLIC}/"/>`,
-  ].join("\n");
-  const urls = pagesPubliques()
-    .map(
-      (p) =>
-        `  <url>\n    <loc>${PUBLIC}${p.chemin}</loc>\n${
-          p.principale ? `${alternates}\n` : ""
-        }  </url>`,
-    )
+  const urls = groupes()
+    .flatMap((groupe) => {
+      const alternates = [
+        ...groupe.map(
+          (p) =>
+            `    <xhtml:link rel="alternate" hreflang="${p.code}" href="${PUBLIC}${p.chemin}"/>`,
+        ),
+        `    <xhtml:link rel="alternate" hreflang="x-default" href="${PUBLIC}${groupe[0]!.chemin}"/>`,
+      ].join("\n");
+      return groupe.map(
+        (p) => `  <url>\n    <loc>${PUBLIC}${p.chemin}</loc>\n${alternates}\n  </url>`,
+      );
+    })
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls}\n</urlset>\n`;
 }
@@ -92,7 +107,11 @@ export function jsonLd(c: Contenu): string {
     applicationCategory: "TravelApplication",
     description: c.description,
     inLanguage: c.code,
+    url: `${PUBLIC}${c.chemin}`,
     author: { "@type": "Person", name: AUTEUR },
+    // Ce que l'app sait faire, mot pour mot les cartes de tarifs : le
+    // résultat enrichi raconte la même chose que la page.
+    featureList: [...c.tarifs.plus.points, ...c.tarifs.pro.points],
     offers: [
       {
         "@type": "Offer",
@@ -105,6 +124,31 @@ export function jsonLd(c: Contenu): string {
         name: "MonCap Pro",
         price: "9.99",
         priceCurrency: "EUR",
+      },
+    ],
+  });
+}
+
+/**
+ * Le fil d'Ariane d'une page légale : Accueil → la page. Deux niveaux, pas
+ * de théâtre — c'est ce que le résultat de recherche affiche sous le titre.
+ */
+export function jsonLdLegale(c: Contenu, p: PageLegale): string {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "MonCap GPS",
+        item: `${PUBLIC}${c.chemin}`,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: p.titre,
+        item: `${PUBLIC}${p.chemin}`,
       },
     ],
   });
