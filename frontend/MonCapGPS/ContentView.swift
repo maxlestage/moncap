@@ -1514,6 +1514,18 @@ struct MapHomeView: View {
         await loadTrips()
     }
 
+    /// La portabilité RGPD : le JSON complet du compte, remis par la
+    /// feuille de partage — à soi, pour soi.
+    private func exporteDonnees() {
+        Task {
+            guard let donnees = try? await api.exportData() else { return }
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("moncap-donnees.json")
+            try? donnees.write(to: url)
+            Sharer.present([url])
+        }
+    }
+
     /// Pousse Domicile et Travail au compte, en silence : un échec réseau
     /// se rattrapera au prochain rafraîchissement.
     private func pousseFavoris() {
@@ -4061,6 +4073,12 @@ struct MapHomeView: View {
                     }
                     Link(destination: api.privacyURL) {
                         Label("Politique de confidentialité", systemImage: "hand.raised")
+                    }
+                    // La portabilité RGPD : ses données, en un fichier.
+                    Button {
+                        exporteDonnees()
+                    } label: {
+                        Label("Exporter mes données", systemImage: "square.and.arrow.up.on.square")
                     }
                     Button(role: .destructive) {
                         showPlaces = false

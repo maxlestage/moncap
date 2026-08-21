@@ -339,6 +339,7 @@ T: dict[str, tuple[str, str]] = {
     "Continuer": ("Continuar", "Continue"),
     "C'est parti": ("Vamos", "Let's go"),
     "Passer": ("Saltar", "Skip"),
+    "Exporter mes données": ("Exportar mis datos", "Export my data"),
     # --- Le parrainage ---
     "Faire découvrir MonCap": (
         "Dar a conocer MonCap",
