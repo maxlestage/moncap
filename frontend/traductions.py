@@ -262,6 +262,30 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- L'entretien du véhicule ---
+    "Entretien": ("Mantenimiento", "Maintenance"),
+    "Entretien du véhicule": ("Mantenimiento del vehículo", "Vehicle maintenance"),
+    "%@ : les kilomètres y sont — c'est le moment.": (
+        "%@: los kilómetros ya están — es el momento.",
+        "%@: the mileage is there — time to do it.",
+    ),
+    "Compteur du journal": ("Contador del registro", "Log odometer"),
+    "Les kilomètres comptés sont ceux des trajets enregistrés : garde le journal vivant pour que les rappels le soient aussi.": (
+        "Los kilómetros contados son los de los viajes registrados: mantén vivo el registro para que los recordatorios también lo estén.",
+        "The kilometres counted are those of recorded trips: keep the log alive so the reminders stay alive too.",
+    ),
+    "Rappels": ("Recordatorios", "Reminders"),
+    "C'est le moment !": ("¡Es el momento!", "Time to do it!"),
+    "Encore %.0f km": ("Quedan %.0f km", "%.0f km to go"),
+    "Nouveau rappel": ("Nuevo recordatorio", "New reminder"),
+    "Quoi ?": ("¿Qué?", "What?"),
+    "Vidange": ("Cambio de aceite", "Oil change"),
+    "Contrôle technique": ("Inspección técnica", "Vehicle inspection"),
+    "Pneus": ("Neumáticos", "Tyres"),
+    "Autre": ("Otro", "Other"),
+    "Nom du rappel": ("Nombre del recordatorio", "Reminder name"),
+    "Dans %d km": ("Dentro de %d km", "In %d km"),
+    "Poser le rappel": ("Crear el recordatorio", "Set the reminder"),
     # --- Le parrainage ---
     "Faire découvrir MonCap": (
         "Dar a conocer MonCap",
