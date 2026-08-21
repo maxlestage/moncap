@@ -2273,6 +2273,22 @@
         }
       }
     },
+    "Essaie MonCap GPS : quatorze jours tout ouvert pour te faire une idée.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try MonCap GPS: fourteen days with everything open to see for yourself."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prueba MonCap GPS: catorce días con todo abierto para hacerte una idea."
+          }
+        }
+      }
+    },
     "Essence": {
       "localizations": {
         "en": {
@@ -2397,6 +2413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Facturado a:"
+          }
+        }
+      }
+    },
+    "Faire découvrir MonCap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell a friend about MonCap"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dar a conocer MonCap"
           }
         }
       }

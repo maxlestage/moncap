@@ -3851,6 +3851,18 @@ struct MapHomeView: View {
                         }
                     }
                 }
+                // Le parrainage, sans machinerie : on partage l'app, l'essai
+                // de quatorze jours fait le reste. Les codes promo offerts
+                // se distribuent depuis App Store Connect, et se saisissent
+                // dans le paywall (« J'ai un code »).
+                Section {
+                    ShareLink(
+                        item: URL(string: "https://moncap-c41a5aaf07e8.herokuapp.com/")!,
+                        message: Text("Essaie MonCap GPS : quatorze jours tout ouvert pour te faire une idée.")
+                    ) {
+                        Label("Faire découvrir MonCap", systemImage: "gift")
+                    }
+                }
                 Section("Compte") {
                     Label(auth.username, systemImage: "person.crop.circle")
                     if let info = accountInfo {
