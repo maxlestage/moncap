@@ -715,6 +715,7 @@ struct MapHomeView: View {
     @State private var showPaywallTrips = false
     @State private var showPaywallRecherche = false
     @State private var showFacturation = false
+    @State private var showAttestation = false
     /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
     @State private var showPaywallMenu = false
     @State private var gereAbonnement = false
@@ -3993,6 +3994,11 @@ struct MapHomeView: View {
                         } label: {
                             Label("Facturation", systemImage: "eurosign.circle")
                         }
+                        Button {
+                            if plus.accesPro { showAttestation = true } else { showPaywallTrips = true }
+                        } label: {
+                            Label("Attestation fiscale", systemImage: "percent")
+                        }
                     } label: {
                         Image(systemName: "briefcase")
                     }
@@ -4006,6 +4012,7 @@ struct MapHomeView: View {
         .presentationBackground(Color(.systemBackground))
         .sheet(isPresented: $showPaywallTrips) { PaywallView() }
         .sheet(isPresented: $showFacturation) { FacturationView(trajets: trips) }
+        .sheet(isPresented: $showAttestation) { AttestationFiscaleView(trajets: trips) }
     }
 
     /// Le journal kilométrique en CSV : une ligne par trajet, du plus ancien
