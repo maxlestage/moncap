@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test";
 import { LANGUES } from "./langues";
-import { jsonLd, OG_LOCALES, PUBLIC, pagesPubliques, robots, sitemap } from "./seo";
+import {
+  groupes,
+  jsonLd,
+  jsonLdLegale,
+  OG_LOCALES,
+  PUBLIC,
+  pagesPubliques,
+  robots,
+  sitemap,
+} from "./seo";
 
 /**
  * Le référencement se teste comme le contenu : ce que Google lira est
@@ -15,13 +24,30 @@ test("le plan du site liste les neuf pages, en absolu", () => {
   for (const p of pages) {
     expect(plan).toContain(`<loc>${PUBLIC}${p.chemin}</loc>`);
   }
-  // Les alternates des pages principales : une par langue + x-default,
-  // toutes absolues — un hreflang relatif est invalide pour les moteurs.
-  for (const l of LANGUES) {
-    expect(plan).toContain(`hreflang="${l.code}" href="${PUBLIC}${l.chemin}"`);
+  // Chaque groupe traduit — principales ET légales — porte ses alternates :
+  // une par langue + x-default (la française), toutes absolues — un
+  // hreflang relatif est invalide pour les moteurs.
+  for (const groupe of groupes()) {
+    for (const p of groupe) {
+      expect(plan).toContain(
+        `hreflang="${p.code}" href="${PUBLIC}${p.chemin}"`,
+      );
+    }
+    expect(plan).toContain(
+      `hreflang="x-default" href="${PUBLIC}${groupe[0]?.chemin}"`,
+    );
   }
-  expect(plan).toContain('hreflang="x-default"');
   expect(plan).not.toContain('href="/');
+});
+
+test("les groupes traduits couvrent toutes les pages publiques", () => {
+  const parGroupes = groupes().flatMap((g) => g.map((p) => p.chemin));
+  const publiques = pagesPubliques().map((p) => p.chemin);
+  expect(new Set(parGroupes)).toEqual(new Set(publiques));
+  // Trois langues par groupe : un groupe bancal casserait hreflang.
+  for (const g of groupes()) {
+    expect(g.map((p) => p.code)).toEqual(["fr", "es", "en"]);
+  }
 });
 
 test("les robots protègent le privé et trouvent le plan", () => {
@@ -53,7 +79,24 @@ test("les données structurées disent l'app et ses deux prix", () => {
     // Deux offres payantes, aucune à 0 € — rien de gratuit passé l'essai.
     const prix = d.offers.map((o: { price: string }) => o.price);
     expect(prix).toEqual(["3.99", "9.99"]);
+    // L'adresse absolue de la page, et ce que l'app sait faire — mot pour
+    // mot les cartes de tarifs.
+    expect(d.url).toBe(`${PUBLIC}${l.chemin}`);
+    expect(d.featureList.length).toBeGreaterThanOrEqual(6);
     // La locale Open Graph existe pour chaque langue servie.
     expect(OG_LOCALES[l.code]).toMatch(/^[a-z]{2}_[A-Z]{2}$/);
+  }
+});
+
+test("les pages légales portent un fil d'Ariane absolu", () => {
+  for (const l of LANGUES) {
+    for (const page of [l.mentions, l.confidentialite]) {
+      const d = JSON.parse(jsonLdLegale(l, page));
+      expect(d["@type"]).toBe("BreadcrumbList");
+      expect(d.itemListElement.length).toBe(2);
+      expect(d.itemListElement[0].item).toBe(`${PUBLIC}${l.chemin}`);
+      expect(d.itemListElement[1].item).toBe(`${PUBLIC}${page.chemin}`);
+      expect(d.itemListElement[1].name).toBe(page.titre);
+    }
   }
 });
