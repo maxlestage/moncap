@@ -3025,6 +3025,38 @@
         }
       }
     },
+    "J'arrive dans %d min.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arriving in %d min."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llego en %d min."
+          }
+        }
+      }
+    },
+    "J'arrive dans ~%d min — prévenir ?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arriving in ~%d min — send a heads-up?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Llego en ~%d min — ¿aviso?"
+          }
+        }
+      }
+    },
     "Je n'ai pas trouvé cette adresse — il faut du réseau pour chercher un nom de lieu.": {
       "localizations": {
         "en": {
@@ -5181,6 +5213,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sugerencias"
+          }
+        }
+      }
+    },
+    "Suis-moi en direct : %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow me live: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sígueme en directo: %@"
           }
         }
       }
