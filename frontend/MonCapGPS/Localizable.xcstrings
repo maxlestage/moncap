@@ -1073,6 +1073,22 @@
         }
       }
     },
+    "Aucune station le long de ce trajet — les prix ne couvrent que la France.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No station along this route — prices only cover France."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna estación a lo largo de este trayecto — los precios solo cubren Francia."
+          }
+        }
+      }
+    },
     "Autour de toi": {
       "localizations": {
         "en": {
@@ -2177,6 +2193,22 @@
         }
       }
     },
+    "En étape": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "As a stop"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Como parada"
+          }
+        }
+      }
+    },
     "Enregistrer ma position": {
       "localizations": {
         "en": {
@@ -2893,6 +2925,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La tienda no responde — reintenta con cobertura."
+          }
+        }
+      }
+    },
+    "La moins chère sur la route": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cheapest along the route"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La más barata en la ruta"
           }
         }
       }
@@ -3725,6 +3773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Conseguir una clave (2 500 pet./día)"
+          }
+        }
+      }
+    },
+    "On regarde les pompes le long du trajet…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking the pumps along the route…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Miramos los surtidores a lo largo del trayecto…"
           }
         }
       }
@@ -6189,6 +6253,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "↗ %.0f m de subida · ↘ %.0f m de bajada"
+          }
+        }
+      }
+    },
+    "≈ %.2f € gagnés sur un plein": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ €%.2f saved on a full tank"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "≈ %.2f € ahorrados en un depósito"
           }
         }
       }
