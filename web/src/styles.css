@@ -190,10 +190,12 @@ button,
   transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 
-button:not(:disabled):hover,
-.btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(26, 87, 230, 0.3);
+@media (hover: hover) {
+  button:not(:disabled):hover,
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(26, 87, 230, 0.3);
+  }
 }
 
 button:disabled {
@@ -209,10 +211,12 @@ button.secondaire,
   border: 1.5px solid var(--border);
 }
 
-button.secondaire:not(:disabled):hover,
-.btn.secondaire:hover {
-  border-color: var(--bleu);
-  box-shadow: 0 4px 12px rgba(26, 87, 230, 0.15);
+@media (hover: hover) {
+  button.secondaire:not(:disabled):hover,
+  .btn.secondaire:hover {
+    border-color: var(--bleu);
+    box-shadow: 0 4px 12px rgba(26, 87, 230, 0.15);
+  }
 }
 
 /* Fantôme, pour vivre sur le bandeau sombre. */
@@ -222,9 +226,11 @@ button.ghost {
   color: #fff;
 }
 
-button.ghost:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: none;
+@media (hover: hover) {
+  button.ghost:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
 }
 
 button.danger {
@@ -233,9 +239,11 @@ button.danger {
   border: 1.5px solid #fecaca;
 }
 
-button.danger:not(:disabled):hover {
-  border-color: #dc2626;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);
+@media (hover: hover) {
+  button.danger:not(:disabled):hover {
+    border-color: #dc2626;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.18);
+  }
 }
 
 .info {
@@ -347,8 +355,10 @@ button.danger:not(:disabled):hover {
   font-size: 0.92rem;
   color: #1a1d21;
 }
-.dest-results li button:hover {
-  background: #f1f5f9;
+@media (hover: hover) {
+  .dest-results li button:hover {
+    background: #f1f5f9;
+  }
 }
 .dest-banner {
   margin-top: 8px;
@@ -388,8 +398,10 @@ button.danger:not(:disabled):hover {
   padding: 6px 8px;
   cursor: pointer;
 }
-.alert-popup button:hover {
-  background: #eef2f7;
+@media (hover: hover) {
+  .alert-popup button:hover {
+    background: #eef2f7;
+  }
 }
 
 /* Indicateur de connexion temps réel */
@@ -440,10 +452,12 @@ button.active {
   padding: 12px 14px;
   border-radius: 12px;
 }
-.alerts-row .alert-btn:hover {
-  background: #fff;
-  border-color: var(--bleu);
-  box-shadow: 0 4px 12px rgba(26, 87, 230, 0.15);
+@media (hover: hover) {
+  .alerts-row .alert-btn:hover {
+    background: #fff;
+    border-color: var(--bleu);
+    box-shadow: 0 4px 12px rgba(26, 87, 230, 0.15);
+  }
 }
 
 /* Pin emoji des signalements sur la carte */
@@ -553,9 +567,11 @@ button.active {
   box-shadow: 0 8px 20px rgba(26, 87, 230, 0.35);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
-.auth-principal:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(26, 87, 230, 0.45);
+@media (hover: hover) {
+  .auth-principal:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(26, 87, 230, 0.45);
+  }
 }
 .auth-principal:disabled {
   opacity: 0.55;
@@ -621,10 +637,12 @@ button.active {
   line-height: 0;
   transition: transform 0.12s ease, border-color 0.12s ease;
 }
-.avatar-pick:hover {
-  transform: translateY(-2px);
-  border-color: var(--bleu);
-  box-shadow: none;
+@media (hover: hover) {
+  .avatar-pick:hover {
+    transform: translateY(-2px);
+    border-color: var(--bleu);
+    box-shadow: none;
+  }
 }
 .avatar-pick.selected { border-color: var(--blue); background: #eff6ff; }
 .avatar-pick img { width: 44px; height: 44px; object-fit: contain; }
