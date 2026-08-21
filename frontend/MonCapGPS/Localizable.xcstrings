@@ -161,6 +161,22 @@
         }
       }
     },
+    "%d adresse(s) introuvable(s) — précise la ville et recommence.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d address(es) not found — add the city and try again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d dirección(es) no encontrada(s) — precisa la ciudad y vuelve a intentarlo."
+          }
+        }
+      }
+    },
     "%d trajet(s) au journal": {
       "localizations": {
         "en": {
@@ -625,6 +641,22 @@
         }
       }
     },
+    "Adresses trouvées": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Addresses found"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direcciones encontradas"
+          }
+        }
+      }
+    },
     "Afficher les trajets cochés (%lld)": {
       "localizations": {
         "en": {
@@ -637,6 +669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mostrar los viajes marcados (%lld)"
+          }
+        }
+      }
+    },
+    "Ajouter %d arrêt(s) à la tournée": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add %d stop(s) to the run"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir %d parada(s) al reparto"
           }
         }
       }
@@ -1393,6 +1441,22 @@
         }
       }
     },
+    "Chercher les adresses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look up the addresses"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar las direcciones"
+          }
+        }
+      }
+    },
     "Chercher un lieu, une ville, un pays": {
       "localizations": {
         "en": {
@@ -1453,6 +1517,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Elegir mi fórmula"
+          }
+        }
+      }
+    },
+    "Choisis d'abord la destination finale, puis colle les arrêts — ville comprise, jusqu'à trente lignes. « Au plus court » les remettra dans le bon ordre.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick the final destination first, then paste the stops — city included, up to thirty lines. “Shortest order” will sort them out."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige primero el destino final y pega las paradas — con la ciudad, hasta treinta líneas. « La más corta » las pondrá en el buen orden."
           }
         }
       }
@@ -1565,6 +1645,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pega tu clave TomTom para activar los atascos reales en tiempo real: la navegación esquivará sola las retenciones de tu ruta."
+          }
+        }
+      }
+    },
+    "Coller des adresses": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste addresses"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pegar direcciones"
           }
         }
       }
@@ -4129,6 +4225,38 @@
         }
       }
     },
+    "Recherche des adresses…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Looking up addresses…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando las direcciones…"
+          }
+        }
+      }
+    },
+    "Recommencer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start over"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empezar de nuevo"
+          }
+        }
+      }
+    },
     "Redéfinir sur ma position": {
       "localizations": {
         "en": {
@@ -5181,6 +5309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Una ruta hasta cada punto"
+          }
+        }
+      }
+    },
+    "Une adresse par ligne": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One address per line"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Una dirección por línea"
           }
         }
       }
