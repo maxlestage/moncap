@@ -388,6 +388,9 @@ T: dict[str, tuple[str, str]] = {
         "≈ €%.2f saved on a full tank",
     ),
     "En étape": ("Como parada", "As a stop"),
+    # --- Les créneaux d'étape ---
+    "Avant": ("Antes de", "Before"),
+    "Sans créneau": ("Sin franja", "No time slot"),
     # --- La tournée collée (une adresse par ligne) ---
     "Coller des adresses": ("Pegar direcciones", "Paste addresses"),
     "Une adresse par ligne": ("Una dirección por línea", "One address per line"),
