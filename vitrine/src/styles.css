@@ -1214,15 +1214,21 @@ h2[id] {
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
-  color: var(--accent);
+  /* La teinte vit dans `--teinte`, posée par le script au fil des sections
+     (accent, cyan, orange) ; sans script, l'accent reste. */
+  color: var(--teinte, var(--accent));
   background: var(--papier);
-  border: 1px solid var(--trait);
+  border: 1px solid
+    color-mix(in srgb, var(--teinte, var(--accent)) 45%, var(--trait));
   box-shadow: 0 3px 10px rgb(0 0 0 / 0.18);
+  transition:
+    color 0.35s ease,
+    border-color 0.35s ease;
 }
 
 .fleche-nav:hover,
 .fleche-nav:focus-visible {
-  color: var(--sur-accent);
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--papier);
+  background: var(--teinte, var(--accent));
+  border-color: var(--teinte, var(--accent));
 }

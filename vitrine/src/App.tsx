@@ -250,6 +250,9 @@ const SCRIPT_FLECHE = `
     ? "auto" : "smooth";
   var dernier = pageYOffset;
   var monte = false;
+  // La couleur suit la section : les trois teintes de la maison, en jetons
+  // CSS \u2014 elles restent justes dans les quatre themes.
+  var teintes = ["var(--accent)", "var(--cyan)", "var(--orange)"];
   function maj() {
     var y = pageYOffset;
     if (Math.abs(y - dernier) > 4) { monte = y < dernier; dernier = y; }
@@ -259,6 +262,13 @@ const SCRIPT_FLECHE = `
     f.textContent = haut ? "\u2191" : "\u2304";
     f.setAttribute("aria-label", haut ? f.dataset.remonter : f.dataset.descendre);
     f.dataset.sens = haut ? "haut" : "bas";
+    var courante = 0;
+    for (var i = 0; i < titres.length; i++) {
+      if (titres[i].getBoundingClientRect().top < innerHeight * 0.5) {
+        courante = i + 1;
+      }
+    }
+    f.style.setProperty("--teinte", teintes[courante % teintes.length]);
   }
   f.addEventListener("click", function (e) {
     e.preventDefault();
