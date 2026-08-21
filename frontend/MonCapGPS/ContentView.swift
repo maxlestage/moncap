@@ -507,6 +507,8 @@ struct ContentView: View {
     @StateObject private var auth = AuthStore()
     /// Affiche l'écran de garde le temps du lancement, puis se fond dans l'app.
     @State private var showSplash = true
+    /// La découverte du premier lancement, vue une fois pour toutes.
+    @AppStorage("moncap.decouverte.vue") private var decouverteVue = false
 
     var body: some View {
         ZStack {
@@ -531,6 +533,14 @@ struct ContentView: View {
             // reviendrait à couper le geste au milieu.
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             withAnimation(.easeInOut(duration: 0.5)) { showSplash = false }
+        }
+        // La découverte, une fois l'écran de garde passé, une fois pour
+        // toutes : trois écrans qui disent la valeur avant la carte nue.
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { !decouverteVue && !showSplash }, set: { _ in })
+        ) {
+            DecouverteView { decouverteVue = true }
         }
     }
 }

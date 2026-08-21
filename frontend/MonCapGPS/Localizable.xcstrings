@@ -1329,6 +1329,22 @@
         }
       }
     },
+    "C'est parti": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's go"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vamos"
+          }
+        }
+      }
+    },
     "C'est parti vers la maison.": {
       "localizations": {
         "en": {
@@ -1729,6 +1745,22 @@
         }
       }
     },
+    "Compare, puis choisis": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare, then choose"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compara y elige"
+          }
+        }
+      }
+    },
     "Compte": {
       "localizations": {
         "en": {
@@ -1821,6 +1853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Consumo"
+          }
+        }
+      }
+    },
+    "Continuer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuar"
           }
         }
       }
@@ -3137,6 +3185,22 @@
         }
       }
     },
+    "Jusqu'à 15 itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — et tu choisis en connaissance.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Up to 15 routes side by side — time, turns, elevation, fuel, tolls — and you choose knowingly."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hasta 15 rutas una al lado de otra — duración, giros, desnivel, carburante, peajes — y eliges sabiendo."
+          }
+        }
+      }
+    },
     "Kilomètres relevés par l'application MonCap GPS, barème kilométrique en vigueur. Ne vaut pas conseil fiscal.": {
       "localizations": {
         "en": {
@@ -4353,6 +4417,22 @@
         }
       }
     },
+    "Passer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saltar"
+          }
+        }
+      }
+    },
     "Permet de calculer et de recalculer un itinéraire sans réseau. Garde autant de régions que tu veux : un trajet cherche sa route dans chacune. En revanche il doit tenir entier dans l'une d'elles — c'est à cela que servent les zones, qui se chevauchent.": {
       "localizations": {
         "en": {
@@ -4653,6 +4733,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calidad del aire"
+          }
+        }
+      }
+    },
+    "Quatorze jours pour tout essayer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fourteen days to try everything"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Catorce días para probarlo todo"
           }
         }
       }
@@ -5005,6 +5101,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nada en el registro ese año — conduce, y volvemos a contar."
+          }
+        }
+      }
+    },
+    "Roule sans réseau": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drive without signal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conduce sin cobertura"
           }
         }
       }
@@ -5681,6 +5793,22 @@
         }
       }
     },
+    "Tout est ouvert pendant l'essai. Ensuite, une formule au mois : Plus pour l'app entière, Pro pour ceux qui roulent pour travailler.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything is open during the trial. Then one monthly plan: Plus for the whole app, Pro for people who drive for a living."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todo está abierto durante la prueba. Después, una fórmula al mes: Plus para la app entera, Pro para quienes conducen por trabajo."
+          }
+        }
+      }
+    },
     "Tout offert 🎁": {
       "localizations": {
         "en": {
@@ -5885,6 +6013,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tipo de bicicleta"
+          }
+        }
+      }
+    },
+    "Télécharge ta région une fois : itinéraires, lieux et limites de vitesse se calculent sur le téléphone — vallées, tunnels, étranger.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download your region once: routes, places and speed limits are computed on the phone — valleys, tunnels, abroad."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descarga tu región una vez: rutas, lugares y límites de velocidad se calculan en el teléfono — valles, túneles, extranjero."
           }
         }
       }

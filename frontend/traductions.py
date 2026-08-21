@@ -317,6 +317,28 @@ T: dict[str, tuple[str, str]] = {
     "Nom du rappel": ("Nombre del recordatorio", "Reminder name"),
     "Dans %d km": ("Dentro de %d km", "In %d km"),
     "Poser le rappel": ("Crear el recordatorio", "Set the reminder"),
+    # --- La découverte du premier lancement ---
+    "Compare, puis choisis": ("Compara y elige", "Compare, then choose"),
+    "Jusqu'à 15 itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — et tu choisis en connaissance.": (
+        "Hasta 15 rutas una al lado de otra — duración, giros, desnivel, carburante, peajes — y eliges sabiendo.",
+        "Up to 15 routes side by side — time, turns, elevation, fuel, tolls — and you choose knowingly.",
+    ),
+    "Roule sans réseau": ("Conduce sin cobertura", "Drive without signal"),
+    "Télécharge ta région une fois : itinéraires, lieux et limites de vitesse se calculent sur le téléphone — vallées, tunnels, étranger.": (
+        "Descarga tu región una vez: rutas, lugares y límites de velocidad se calculan en el teléfono — valles, túneles, extranjero.",
+        "Download your region once: routes, places and speed limits are computed on the phone — valleys, tunnels, abroad.",
+    ),
+    "Quatorze jours pour tout essayer": (
+        "Catorce días para probarlo todo",
+        "Fourteen days to try everything",
+    ),
+    "Tout est ouvert pendant l'essai. Ensuite, une formule au mois : Plus pour l'app entière, Pro pour ceux qui roulent pour travailler.": (
+        "Todo está abierto durante la prueba. Después, una fórmula al mes: Plus para la app entera, Pro para quienes conducen por trabajo.",
+        "Everything is open during the trial. Then one monthly plan: Plus for the whole app, Pro for people who drive for a living.",
+    ),
+    "Continuer": ("Continuar", "Continue"),
+    "C'est parti": ("Vamos", "Let's go"),
+    "Passer": ("Saltar", "Skip"),
     # --- Le parrainage ---
     "Faire découvrir MonCap": (
         "Dar a conocer MonCap",
