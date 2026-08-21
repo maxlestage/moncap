@@ -5051,6 +5051,25 @@ struct MapHomeView: View {
                         "🌧️ Pluie probable à l'arrivée (%d %%)", comment: ""),
                     proba))
         }
+
+        // Les zones à faibles émissions, par variante — un contournement
+        // peut précisément les éviter. Voiture seulement : un vélo entre
+        // partout. On nomme la zone, sans prétendre connaître sa règle du
+        // moment : elle change trop souvent pour être embarquée.
+        if travelMode == .car {
+            for o in options.prefix(3) {
+                for zone in await RouteRisques.zonesFaiblesEmissions(
+                    trace: o.coordinates)
+                {
+                    risquesParOption[o.id, default: []].append(
+                        String(
+                            format: NSLocalizedString(
+                                "🚦 ZFE %@ — vérifie ta vignette Crit'Air",
+                                comment: ""),
+                            zone))
+                }
+            }
+        }
     }
 
     /// Récupère le dénivelé (côte / descente) de chaque itinéraire et met à jour

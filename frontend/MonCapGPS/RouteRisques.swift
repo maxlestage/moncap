@@ -169,4 +169,57 @@ enum RouteRisques {
         else { return nil }
         return reponse.hourly.precipitation_probability[index] ?? nil
     }
+
+    /// Les zones à faibles émissions que le tracé traverse, telles
+    /// qu'OpenStreetMap les connaît (`boundary=low_emission_zone`) : Paris,
+    /// Lyon, mais aussi les ZBE espagnoles ou les Umweltzonen allemandes.
+    ///
+    /// Le tracé est sondé en huit points au plus, en **une** requête
+    /// Overpass (`is_in` + `pivot`) sur les mêmes serveurs que la recherche
+    /// de lieux. On renvoie les **noms** des zones, rien de plus : la règle
+    /// exacte — vignette admise, horaires, dérogations — change trop souvent
+    /// pour être embarquée, c'est au conducteur de la vérifier.
+    static func zonesFaiblesEmissions(
+        trace: [CLLocationCoordinate2D]
+    ) async -> [String] {
+        guard trace.count >= 2 else { return [] }
+        let pas = max(1, trace.count / 7)
+        let sondes = Array(
+            stride(from: 0, to: trace.count, by: pas).map { trace[$0] }.prefix(8))
+        let isIn = sondes
+            .map { String(format: "is_in(%.4f,%.4f);", $0.latitude, $0.longitude) }
+            .joined()
+        let q =
+            "[out:json][timeout:15];(\(isIn))->.a;"
+            + "relation(pivot.a)[\"boundary\"=\"low_emission_zone\"];out tags;"
+        let endpoints = [
+            "https://overpass-api.de/api/interpreter",
+            "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        ]
+        var data: Data?
+        for endpoint in endpoints {
+            var comps = URLComponents(string: endpoint)!
+            comps.queryItems = [URLQueryItem(name: "data", value: q)]
+            guard let url = comps.url else { continue }
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 20
+            if let (d, resp) = try? await URLSession.shared.data(for: req),
+                (resp as? HTTPURLResponse)?.statusCode == 200
+            {
+                data = d
+                break
+            }
+        }
+        guard let data,
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let elements = json["elements"] as? [[String: Any]]
+        else { return [] }
+        var noms: [String] = []
+        for el in elements {
+            guard let tags = el["tags"] as? [String: Any] else { continue }
+            let nom = (tags["name"] as? String) ?? "ZFE"
+            if !noms.contains(nom) { noms.append(nom) }
+        }
+        return noms
+    }
 }
