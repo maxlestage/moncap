@@ -168,7 +168,6 @@ export const CONTACT = "maxlestage@icloud.com";
  * été retiré quand le dépôt était privé : le lien servait un 404 à tout
  * visiteur (voir liens.test.tsx, qui garde la mémoire de l'épisode).
  */
-export const DEPOT = "https://github.com/maxlestage/moncap";
 
 /**
  * Les sources de données et moteurs, avec l'adresse de chacun — le pied les
