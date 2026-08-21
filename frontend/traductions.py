@@ -262,6 +262,15 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- Le parrainage ---
+    "Faire découvrir MonCap": (
+        "Dar a conocer MonCap",
+        "Tell a friend about MonCap",
+    ),
+    "Essaie MonCap GPS : quatorze jours tout ouvert pour te faire une idée.": (
+        "Prueba MonCap GPS: catorce días con todo abierto para hacerte una idea.",
+        "Try MonCap GPS: fourteen days with everything open to see for yourself.",
+    ),
     # --- Le récap annuel « Mon année » ---
     "Mon année": ("Mi año", "My year"),
     "Mon année %d": ("Mi año %d", "My year %d"),
