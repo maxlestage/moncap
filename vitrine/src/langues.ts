@@ -155,7 +155,7 @@ const FR: Contenu = {
   langueLibelle: "Langue",
   chiffres: [
     { valeur: String(ITINERAIRES_MAX), legende: "itinéraires au maximum" },
-    { valeur: "19", legende: "catégories de lieux" },
+    { valeur: "42", legende: "catégories de lieux" },
     { valeur: "212", legende: "régions téléchargeables" },
     { valeur: "49", legende: "pays d'Europe" },
     { valeur: "3,99 €", legende: "par mois après 14 jours d'essai" },
@@ -387,7 +387,7 @@ const FR: Contenu = {
       emoji: "💊",
       titre: "Les lieux et les limites, embarqués",
       texte:
-        "L'annuaire des 19 catégories et les limites de vitesse descendent avec la région, tirés du même extrait OpenStreetMap que les routes. Chercher une pharmacie ou lire la limite du moment marche en mode avion.",
+        "L'annuaire des 19 catégories d'origine et les limites de vitesse descendent avec la région, tirés du même extrait OpenStreetMap que les routes. Chercher une pharmacie ou lire la limite du moment marche en mode avion ; les catégories ajoutées depuis demandent encore le réseau.",
     },
     {
       emoji: "🔎",
@@ -461,7 +461,7 @@ const FR: Contenu = {
     montre:
       "Dessin de l'app Apple Watch pendant un guidage — mise en page réelle, valeurs d'exemple.",
     lieux:
-      "Les 19 catégories, avec les libellés de l'application — montrées ici d'un seul tenant, alors que le bandeau défile sur le téléphone.",
+      "Les 42 catégories, avec les libellés de l'application — montrées ici d'un seul tenant, alors que le bandeau défile sur le téléphone.",
     regions:
       "Noms et poids réels, lus sur les Releases publiées ; seul l'avancement est mis en scène.",
   },
@@ -586,7 +586,7 @@ const ES: Contenu = {
   langueLibelle: "Idioma",
   chiffres: [
     { valeur: String(ITINERAIRES_MAX), legende: "rutas como máximo" },
-    { valeur: "19", legende: "categorías de lugares" },
+    { valeur: "42", legende: "categorías de lugares" },
     { valeur: "212", legende: "regiones descargables" },
     { valeur: "49", legende: "países de Europa" },
     { valeur: "3,99 €", legende: "al mes tras 14 días de prueba" },
@@ -818,7 +818,7 @@ const ES: Contenu = {
       emoji: "💊",
       titre: "Los lugares y los límites, a bordo",
       texte:
-        "El directorio de las 19 categorías y los límites de velocidad bajan con la región, sacados del mismo extracto de OpenStreetMap que las carreteras. Buscar una farmacia o leer el límite del momento funciona en modo avión.",
+        "El directorio de las 19 categorías originales y los límites de velocidad bajan con la región, sacados del mismo extracto de OpenStreetMap que las carreteras. Buscar una farmacia o leer el límite del momento funciona en modo avión; las categorías añadidas después aún piden red.",
     },
     {
       emoji: "🔎",
@@ -892,7 +892,7 @@ const ES: Contenu = {
     montre:
       "Dibujo de la app para Apple Watch durante una guía — maquetación real, valores de ejemplo.",
     lieux:
-      "Las 19 categorías, con los rótulos de la aplicación — mostradas aquí de una sola vez, mientras que en el teléfono la barra se desplaza.",
+      "Las 42 categorías, con los rótulos de la aplicación — mostradas aquí de una sola vez, mientras que en el teléfono la barra se desplaza.",
     regions:
       "Nombres y pesos reales, leídos en las Releases publicadas; solo el progreso está recreado.",
   },
@@ -1017,7 +1017,7 @@ const EN: Contenu = {
   langueLibelle: "Language",
   chiffres: [
     { valeur: String(ITINERAIRES_MAX), legende: "routes at most" },
-    { valeur: "19", legende: "place categories" },
+    { valeur: "42", legende: "place categories" },
     { valeur: "212", legende: "downloadable regions" },
     { valeur: "49", legende: "European countries" },
     { valeur: "3.99 €", legende: "per month after a 14-day trial" },
@@ -1249,7 +1249,7 @@ const EN: Contenu = {
       emoji: "💊",
       titre: "Places and limits, on board",
       texte:
-        "The directory of all 19 categories and the speed limits come down with the region, drawn from the same OpenStreetMap extract as the roads. Finding a pharmacy or reading the current limit works in airplane mode.",
+        "The directory of the 19 original categories and the speed limits come down with the region, drawn from the same OpenStreetMap extract as the roads. Finding a pharmacy or reading the current limit works in airplane mode; the categories added since still need the network.",
     },
     {
       emoji: "🔎",
@@ -1323,7 +1323,7 @@ const EN: Contenu = {
     montre:
       "A drawing of the Apple Watch app during guidance — real layout, example values.",
     lieux:
-      "All 19 categories, with the app's own labels — shown here in one go, whereas the strip scrolls on the phone.",
+      "All 42 categories, with the app's own labels — shown here in one go, whereas the strip scrolls on the phone.",
     regions:
       "Real names and sizes, read from the published Releases; only the progress is staged.",
   },
