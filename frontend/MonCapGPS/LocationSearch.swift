@@ -46,6 +46,21 @@ final class PlaceSearch: ObservableObject {
                 items = await run(region: nil)
                 guard !Task.isCancelled else { return }
             }
+            // Toujours rien — le réseau manque, sans doute : l'annuaire
+            // embarqué prend le relais. Les lieux nommés des régions
+            // installées se trouvent en mode avion ; les adresses, elles,
+            // restent l'affaire du réseau.
+            if items.isEmpty, let centre = self.center {
+                items = await LieuxHorsLigne.shared
+                    .cherche(query, autour: centre)
+                    .map { poi in
+                        let item = MKMapItem(
+                            placemark: MKPlacemark(coordinate: poi.coordinate))
+                        item.name = poi.name
+                        return item
+                    }
+                guard !Task.isCancelled else { return }
+            }
             self.results = items
         }
     }
