@@ -34,7 +34,6 @@ export type Contenu = {
   readonly chapeau: string;
   readonly seConnecter: string;
   /** Libellé du lien vers le dépôt, public depuis août 2026. */
-  readonly codeSource: string;
   readonly theme: { readonly libelle: string; readonly noms: readonly string[] };
   readonly langueLibelle: string;
   readonly chiffres: readonly Chiffre[];
@@ -142,7 +141,6 @@ const FR: Contenu = {
   chapeau:
     "Un GPS pour iPhone qui met les itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — puis vous guide. Téléchargez votre région une fois, et il continue de calculer tout seul : vallées, tunnels, étranger.",
   seConnecter: "Se connecter",
-  codeSource: "Code source",
   theme: {
     libelle: "Thème",
     noms: ["Auto", "Clair", "Sombre", "Marine"],
@@ -258,6 +256,60 @@ const FR: Contenu = {
         "L'écran voiture est écrit : la même carte, le tracé du guidage, la consigne du moment et sa distance. Il s'allumera dès l'agrément CarPlay d'Apple — brancher le téléphone suffira.",
     },
     {
+      emoji: "⛽",
+      titre: "Le plein au bon endroit",
+      texte:
+        "Les stations le long de l'itinéraire, classées par prix réel (open data officiel), avec l'économie dite sur un plein. La moins chère s'ajoute en étape d'un geste — cinq minutes d'arrêt comprises, le temps du plein.",
+    },
+    {
+      emoji: "🍃",
+      titre: "Les zones à faibles émissions, annoncées",
+      texte:
+        "Au choix de la route, chaque variante dit les ZFE qu'elle traverse — le Grand Paris comme leurs cousines européennes. La zone est nommée, la vignette reste ton affaire : ses règles changent trop pour être devinées.",
+    },
+    {
+      emoji: "🏍️",
+      titre: "Le mode moto",
+      texte:
+        "La même carte, une autre fonction de coût : des itinéraires pensés deux-roues. Et l'option « routes plaisir » fuit l'autoroute pour chercher les virages — pour la balade, pas pour arriver tôt.",
+    },
+    {
+      emoji: "🚚",
+      titre: "Le fourgon qui évite les ponts bas",
+      texte:
+        "Hauteur, largeur, poids déclarés carte grise en main : les ponts trop bas et les rues interdites au gabarit sortent des itinéraires, même hors ligne. L'outil Pro des utilitaires.",
+    },
+    {
+      emoji: "📋",
+      titre: "La tournée collée d'un bloc",
+      texte:
+        "Vingt adresses copiées depuis les notes, une par ligne : chacune devient un arrêt, les introuvables sont montrées au lieu d'être avalées, et « Au plus court » remet l'ordre. L'outil Pro du livreur.",
+    },
+    {
+      emoji: "🔧",
+      titre: "L'entretien qui se rappelle",
+      texte:
+        "Vidange, contrôle technique, pneus : des rappels posés « dans tant de kilomètres », déclenchés par les kilomètres réellement parcourus du journal — une voiture s'use en roulant, pas en attendant.",
+    },
+    {
+      emoji: "👋",
+      titre: "Prévenir qu'on arrive",
+      texte:
+        "À dix minutes de l'arrivée, l'app propose le message tout prêt — minutes restantes, lien de suivi en direct compris. Celui qui attend n'a plus à demander « t'es où ? ».",
+    },
+    {
+      emoji: "🏠",
+      titre: "Depuis l'écran d'accueil",
+      texte:
+        "Un widget Domicile / Travail : un toucher, et les itinéraires se comparent déjà. Il ne stocke rien — l'app résout l'adresse au réveil.",
+    },
+    {
+      emoji: "✨",
+      titre: "Mon année, en une image",
+      texte:
+        "Kilomètres, heures de route, jours au volant, plus long trajet : le journal se raconte en une carte aux couleurs de la maison, prête à partager.",
+    },
+    {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
@@ -267,7 +319,7 @@ const FR: Contenu = {
       emoji: "🧾",
       titre: "Les kilomètres qui se facturent",
       texte:
-        "Pour ceux qui roulent pour travailler : le journal des trajets s'exporte en CSV pour la comptabilité, une facture PDF se génère par mois au taux kilométrique choisi, et les tournées à beaucoup d'arrêts se remettent dans l'ordre le plus court — même sans réseau.",
+        "Pour ceux qui roulent pour travailler : le journal des trajets s'exporte en CSV, une facture PDF se génère par mois au taux kilométrique choisi, et l'attestation fiscale annuelle s'établit au barème officiel, majoration électrique comprise — même sans réseau.",
     },
   ],
   horsLigneCartes: [
@@ -478,7 +530,6 @@ const ES: Contenu = {
   chapeau:
     "Un GPS para iPhone que pone las rutas una al lado de otra — duración, giros, desnivel, combustible, peajes — y luego te guía. Descarga tu región una vez y sigue calculando solo: valles, túneles, extranjero.",
   seConnecter: "Iniciar sesión",
-  codeSource: "Código fuente",
   theme: {
     libelle: "Tema",
     noms: ["Auto", "Claro", "Oscuro", "Marino"],
@@ -594,6 +645,60 @@ const ES: Contenu = {
         "La pantalla del coche está escrita: el mismo mapa, el trazado de la guía, la indicación del momento y su distancia. Se encenderá con la aprobación CarPlay de Apple — bastará con conectar el teléfono.",
     },
     {
+      emoji: "⛽",
+      titre: "El depósito en el buen sitio",
+      texte:
+        "Las estaciones a lo largo de la ruta, ordenadas por precio real (open data oficial), con el ahorro dicho sobre un depósito. La más barata se añade como parada de un gesto — con cinco minutos de alto, lo que dura el repostaje.",
+    },
+    {
+      emoji: "🍃",
+      titre: "Las zonas de bajas emisiones, anunciadas",
+      texte:
+        "Al elegir la ruta, cada variante dice las ZBE que atraviesa — las españolas como sus primas europeas. La zona se nombra, el distintivo es cosa tuya: sus reglas cambian demasiado para adivinarlas.",
+    },
+    {
+      emoji: "🏍️",
+      titre: "El modo moto",
+      texte:
+        "El mismo mapa, otra función de coste: rutas pensadas para dos ruedas. Y la opción « rutas de placer » huye de la autopista y busca las curvas — para el paseo, no para llegar pronto.",
+    },
+    {
+      emoji: "🚚",
+      titre: "La furgoneta que evita los puentes bajos",
+      texte:
+        "Altura, anchura y peso declarados con el permiso de circulación en la mano: los puentes demasiado bajos y las calles prohibidas al gálibo salen de las rutas, incluso sin conexión. La herramienta Pro de las furgonetas.",
+    },
+    {
+      emoji: "📋",
+      titre: "El reparto pegado de un bloque",
+      texte:
+        "Veinte direcciones copiadas de las notas, una por línea: cada una se vuelve una parada, las no encontradas se muestran en vez de tragarse, y « La más corta » pone el orden. La herramienta Pro del repartidor.",
+    },
+    {
+      emoji: "🔧",
+      titre: "El mantenimiento que se recuerda",
+      texte:
+        "Cambio de aceite, inspección técnica, neumáticos: recordatorios puestos « dentro de tantos kilómetros », disparados por los kilómetros realmente recorridos del registro — un coche se desgasta rodando, no esperando.",
+    },
+    {
+      emoji: "👋",
+      titre: "Avisar de que llegas",
+      texte:
+        "A diez minutos del destino, la app propone el mensaje ya listo — minutos restantes, enlace de seguimiento en directo incluido. Quien espera ya no pregunta « ¿dónde estás? ».",
+    },
+    {
+      emoji: "🏠",
+      titre: "Desde la pantalla de inicio",
+      texte:
+        "Un widget Casa / Trabajo: un toque, y las rutas ya se comparan. No guarda nada — la app resuelve la dirección al despertar.",
+    },
+    {
+      emoji: "✨",
+      titre: "Mi año, en una imagen",
+      texte:
+        "Kilómetros, horas de carretera, días al volante, el viaje más largo: el registro se cuenta en una tarjeta con los colores de la casa, lista para compartir.",
+    },
+    {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
@@ -603,7 +708,7 @@ const ES: Contenu = {
       emoji: "🧾",
       titre: "Los kilómetros que se facturan",
       texte:
-        "Para quienes conducen por trabajo: el registro de trayectos se exporta en CSV para la contabilidad, una factura PDF se genera por mes con la tarifa por kilómetro elegida, y las rutas con muchas paradas se reordenan al camino más corto — incluso sin cobertura.",
+        "Para quienes conducen por trabajo: el registro de trayectos se exporta en CSV, una factura PDF se genera por mes con la tarifa por kilómetro elegida, y el certificado fiscal anual se establece al baremo oficial, con la mayoración eléctrica — incluso sin cobertura.",
     },
   ],
   horsLigneCartes: [
@@ -814,7 +919,6 @@ const EN: Contenu = {
   chapeau:
     "An iPhone GPS that lays the routes side by side — time, turns, elevation, fuel, tolls — then guides you. Download your region once and it keeps computing on its own: valleys, tunnels, abroad.",
   seConnecter: "Sign in",
-  codeSource: "Source code",
   theme: {
     libelle: "Theme",
     noms: ["Auto", "Light", "Dark", "Navy"],
@@ -930,6 +1034,60 @@ const EN: Contenu = {
         "The car screen is written: the same map, the route being driven, the current instruction and its distance. It lights up as soon as Apple grants the CarPlay approval — plugging in the phone will be enough.",
     },
     {
+      emoji: "⛽",
+      titre: "The tank filled in the right place",
+      texte:
+        "Stations along the route, ranked by real price (official open data), with the saving stated on a full tank. The cheapest joins the trip as a stop in one gesture — five minutes of dwell included, the time it takes to fill up.",
+    },
+    {
+      emoji: "🍃",
+      titre: "Low-emission zones, announced",
+      texte:
+        "When choosing the route, each variant names the LEZs it crosses — Greater Paris and its European cousins alike. The zone is named, the sticker stays your business: its rules change too often to be guessed.",
+    },
+    {
+      emoji: "🏍️",
+      titre: "Motorbike mode",
+      texte:
+        "The same map, a different cost function: routes thought out for two wheels. And the “fun roads” option avoids the motorway and hunts for bends — for the ride, not for arriving early.",
+    },
+    {
+      emoji: "🚚",
+      titre: "The van that avoids low bridges",
+      texte:
+        "Height, width and weight declared registration card in hand: bridges too low and streets closed to your dimensions drop out of the routes, even offline. The Pro tool for vans.",
+    },
+    {
+      emoji: "📋",
+      titre: "The delivery run pasted in one block",
+      texte:
+        "Twenty addresses copied from your notes, one per line: each becomes a stop, the ones not found are shown instead of swallowed, and “Shortest order” sorts them out. The Pro tool for couriers.",
+    },
+    {
+      emoji: "🔧",
+      titre: "Maintenance that reminds itself",
+      texte:
+        "Oil change, vehicle inspection, tyres: reminders set “in so many kilometres”, triggered by the kilometres actually driven in the log — a car wears out by driving, not by waiting.",
+    },
+    {
+      emoji: "👋",
+      titre: "Say you're arriving",
+      texte:
+        "Ten minutes from the destination, the app offers the message ready to send — minutes left, live-tracking link included. Whoever is waiting no longer asks “where are you?”.",
+    },
+    {
+      emoji: "🏠",
+      titre: "From the home screen",
+      texte:
+        "A Home / Work widget: one tap, and the routes are already being compared. It stores nothing — the app resolves the address on waking.",
+    },
+    {
+      emoji: "✨",
+      titre: "My year, in one image",
+      texte:
+        "Kilometres, hours on the road, days behind the wheel, longest trip: the log tells its story on a card in the house colours, ready to share.",
+    },
+    {
       emoji: "⭐",
       titre: "MonCap Plus",
       texte:
@@ -939,7 +1097,7 @@ const EN: Contenu = {
       emoji: "🧾",
       titre: "Kilometres that get invoiced",
       texte:
-        "For people who drive for a living: the trip log exports as CSV for bookkeeping, a PDF invoice is generated per month at the per-kilometre rate you choose, and many-stop runs are reordered into the shortest path — even with no signal.",
+        "For people who drive for a living: the trip log exports as CSV, a PDF invoice is generated per month at the per-kilometre rate you choose, and the yearly tax mileage statement is drawn up at the official scale, electric uplift included — even with no signal.",
     },
   ],
   horsLigneCartes: [
