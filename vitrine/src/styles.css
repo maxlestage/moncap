@@ -319,8 +319,10 @@ a {
   text-underline-offset: 3px;
 }
 
-.lien:hover {
-  color: #ffffff;
+@media (hover: hover) {
+  .lien:hover {
+    color: #ffffff;
+  }
 }
 
 .actions {
@@ -1116,9 +1118,11 @@ footer .signature {
   text-decoration: none;
 }
 
-.pied-colonnes a:hover {
-  color: #ffffff;
-  text-decoration: underline;
+@media (hover: hover) {
+  .pied-colonnes a:hover {
+    color: #ffffff;
+    text-decoration: underline;
+  }
 }
 
 .copyright {
