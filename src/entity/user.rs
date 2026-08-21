@@ -11,6 +11,9 @@ pub struct Model {
     pub password_hash: String,
     /// Secondes Unix de la création — l'ancre de l'essai de 14 jours.
     pub created_at: i64,
+    /// Préférences du compte (JSON : Domicile, Travail…) — les favoris
+    /// appartiennent au compte, pas à l'appareil.
+    pub prefs: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
