@@ -1044,8 +1044,9 @@ struct MapHomeView: View {
                 recordTrackPoint(c)
                 announceNearbyAlerts(from: c)
                 // À dix minutes de l'arrivée, on propose une fois de
-                // prévenir — l'outil Pro de celui qu'on attend.
-                if plus.accesPro, !arriveeProposee, nav.etaMinutes > 0,
+                // prévenir — dans Plus : tout le monde est attendu quelque
+                // part, pas seulement ceux qui roulent pour travailler.
+                if plus.accesPlus, !arriveeProposee, nav.etaMinutes > 0,
                     nav.etaMinutes <= 10
                 {
                     arriveeProposee = true
