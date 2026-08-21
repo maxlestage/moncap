@@ -1137,6 +1137,22 @@
         }
       }
     },
+    "Avant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antes de"
+          }
+        }
+      }
+    },
     "Avatar actuel": {
       "localizations": {
         "en": {
@@ -5293,6 +5309,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sin parada"
+          }
+        }
+      }
+    },
+    "Sans créneau": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No time slot"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin franja"
           }
         }
       }

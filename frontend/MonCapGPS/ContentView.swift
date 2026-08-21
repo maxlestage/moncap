@@ -729,6 +729,9 @@ struct MapHomeView: View {
     /// dans la durée affichée : un détour chez Paul, c'est le trajet plus le
     /// quart d'heure chez Paul.
     @State private var etapeArrets: [Int] = []
+    /// Créneaux « avant HH:MM » (Pro), en minutes du jour, par coordonnée
+    /// d'étape quantifiée : la clé survit au réordonnancement.
+    @State private var etapeCreneaux: [String: Int] = [:]
     /// Vrai le temps de choisir un fichier GPX dans le sélecteur.
     @State private var importeGPX = false
     /// La trace GPX en cours de suivi, s'il y en a une. Elle change la règle
@@ -2757,6 +2760,7 @@ struct MapHomeView: View {
                     HStack(spacing: 6) {
                         ForEach(Array(etapeNoms.enumerated()), id: \.offset) { i, nom in
                             let arret = etapeArrets.indices.contains(i) ? etapeArrets[i] : 0
+                            let retard = enRetardSurCreneau(i)
                             HStack(spacing: 4) {
                                 // Toucher le nom ouvre le temps d'arrêt : ce
                                 // qu'on règle le plus souvent sur une étape.
@@ -2768,11 +2772,29 @@ struct MapHomeView: View {
                                         }
                                         Text(verbatim: "1 h").tag(60)
                                     }
+                                    // Le créneau de livraison — l'outil Pro
+                                    // du tenu-par-l'heure : « avant 10 h »,
+                                    // et le chip s'alarme si l'heure estimée
+                                    // de passage le dépasse.
+                                    if plus.accesPro {
+                                        Picker("Avant", selection: lienCreneau(i)) {
+                                            Text("Sans créneau").tag(0)
+                                            ForEach(
+                                                Array(stride(from: 6 * 60, through: 20 * 60, by: 60)),
+                                                id: \.self
+                                            ) { m in
+                                                Text(verbatim: String(format: "%02d:00", m / 60))
+                                                    .tag(m)
+                                            }
+                                        }
+                                    }
                                 } label: {
                                     Text(
-                                        verbatim: arret > 0
-                                            ? "\(i + 1) · \(nom) · \(arret >= 60 ? "1 h" : "\(arret)′")"
-                                            : "\(i + 1) · \(nom)"
+                                        verbatim: (retard ? "⚠️ " : "")
+                                            + (arret > 0
+                                                ? "\(i + 1) · \(nom) · \(arret >= 60 ? "1 h" : "\(arret)′")"
+                                                : "\(i + 1) · \(nom)")
+                                            + creneauSuffixe(i)
                                     )
                                     .font(.caption2.weight(.semibold))
                                     .lineLimit(1)
@@ -2787,7 +2809,9 @@ struct MapHomeView: View {
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.indigo.opacity(0.15), in: Capsule())
+                            .background(
+                                (retard ? Color.orange.opacity(0.3) : Color.indigo.opacity(0.15)),
+                                in: Capsule())
                         }
                         Button {
                             ajouteEtape.toggle()
@@ -4934,6 +4958,86 @@ struct MapHomeView: View {
                     routeOptions[0].minutes += delta
                 }
             })
+    }
+
+    /// La clé d'un créneau : la coordonnée de l'étape, quantifiée — elle
+    /// survit au réordonnancement et au retrait, là où un index dériverait.
+    private func cleEtape(_ c: CLLocationCoordinate2D) -> String {
+        "\(Int(c.latitude * 1e5))|\(Int(c.longitude * 1e5))"
+    }
+
+    private func lienCreneau(_ index: Int) -> Binding<Int> {
+        Binding(
+            get: {
+                guard etapes.indices.contains(index) else { return 0 }
+                return etapeCreneaux[cleEtape(etapes[index])] ?? 0
+            },
+            set: { nouveau in
+                guard etapes.indices.contains(index) else { return }
+                let cle = cleEtape(etapes[index])
+                if nouveau == 0 {
+                    etapeCreneaux[cle] = nil
+                } else {
+                    etapeCreneaux[cle] = nouveau
+                }
+            })
+    }
+
+    /// « · avant 10:00 » quand l'étape porte un créneau, rien sinon.
+    private func creneauSuffixe(_ index: Int) -> String {
+        guard etapes.indices.contains(index),
+            let limite = etapeCreneaux[cleEtape(etapes[index])], limite > 0
+        else { return "" }
+        return String(format: " · ≤ %02d:%02d", limite / 60, limite % 60)
+    }
+
+    /// Minutes de route estimées jusqu'à l'étape : la proportion du tracé
+    /// parcourue à son point le plus proche, plus les arrêts d'avant — une
+    /// approximation franche, largement assez pour comparer à un créneau.
+    private func minutesJusquAEtape(_ index: Int) -> Double? {
+        guard etapes.indices.contains(index),
+            let route = routeOptions.first(where: { $0.id == selectedRouteID })
+                ?? routeOptions.first,
+            route.coordinates.count >= 2
+        else { return nil }
+        let coords = route.coordinates
+        let pas = max(1, coords.count / 200)
+        var indices: [Int] = [0]
+        var cumul: [Double] = [0]
+        var total = 0.0
+        var precedent = coords[0]
+        for j in stride(from: pas, to: coords.count, by: pas) {
+            total += metersBetween(precedent, coords[j])
+            precedent = coords[j]
+            indices.append(j)
+            cumul.append(total)
+        }
+        guard total > 0 else { return nil }
+        let cible = etapes[index]
+        var meilleur = 0
+        var dMin = Double.greatestFiniteMagnitude
+        for (k, j) in indices.enumerated() {
+            let d = metersBetween(coords[j], cible)
+            if d < dMin {
+                dMin = d
+                meilleur = k
+            }
+        }
+        let arretsAvant = (0..<index).reduce(0) {
+            $0 + (etapeArrets.indices.contains($1) ? etapeArrets[$1] : 0)
+        }
+        return route.minutes * (cumul[meilleur] / total) + Double(arretsAvant)
+    }
+
+    /// Vrai quand l'heure estimée de passage dépasse le créneau du jour.
+    private func enRetardSurCreneau(_ index: Int) -> Bool {
+        guard etapes.indices.contains(index),
+            let limite = etapeCreneaux[cleEtape(etapes[index])], limite > 0,
+            let minutes = minutesJusquAEtape(index)
+        else { return false }
+        let passage = Date().addingTimeInterval(minutes * 60)
+        let c = Calendar.current.dateComponents([.hour, .minute], from: passage)
+        return (c.hour ?? 0) * 60 + (c.minute ?? 0) > limite
     }
 
     /// Réordonne les étapes pour minimiser le chemin : force brute jusqu'à
