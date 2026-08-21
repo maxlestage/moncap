@@ -315,6 +315,25 @@ struct APIClient {
         try await send(authedRequest("account"))
     }
 
+    /// Les préférences du compte : Domicile et Travail suivent le compte,
+    /// pas l'appareil — un nouvel iPhone les retrouve.
+    struct Prefs: Codable {
+        var home: FavoritePlace?
+        var work: FavoritePlace?
+    }
+
+    func prefs() async throws -> Prefs {
+        try await send(authedRequest("prefs"))
+    }
+
+    func savePrefs(_ p: Prefs) async throws {
+        let corps = try JSONEncoder().encode(p)
+        _ = try await sendRaw(
+            authedRequest(
+                "prefs", method: "PUT", body: corps,
+                contentType: "application/json"))
+    }
+
     /// Supprime définitivement le compte et toutes ses données.
     func deleteAccount() async throws {
         try await sendRaw(authedRequest("account", method: "DELETE"))
