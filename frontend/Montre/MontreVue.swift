@@ -16,59 +16,103 @@ private func heureArrivee(_ minutes: Double) -> String {
 }
 
 /// L'écran unique de la montre : la manœuvre en grand quand un guidage
-/// tourne sur l'iPhone, un message d'attente sinon.
+/// tourne sur l'iPhone, l'écran d'attente sinon. Le fond est une nuit
+/// orangée — la lueur MonCap en haut, le noir de l'OLED en bas.
 struct MontreVue: View {
     @ObservedObject private var lien = LienTelephone.partage
 
     var body: some View {
-        Group {
+        ZStack {
+            fond
             if lien.etat.actif {
                 guidage
             } else {
                 repos
             }
         }
+        .animation(.snappy, value: lien.etat.actif)
+    }
+
+    private var fond: some View {
+        LinearGradient(
+            colors: [Color.orange.opacity(0.35), .black],
+            startPoint: .top, endPoint: .init(x: 0.5, y: 0.72)
+        )
+        .ignoresSafeArea()
     }
 
     private var guidage: some View {
         VStack(spacing: 4) {
-            Image(systemName: lien.etat.symbole)
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.orange)
-            Text(distanceCourte(lien.etat.distanceM))
-                .font(.system(.title2, design: .rounded).weight(.bold))
-                .monospacedDigit()
-            Text(lien.etat.instruction)
-                .font(.footnote)
-                .multilineTextAlignment(.center)
-                .lineLimit(3)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 2)
-            HStack {
-                Label(String(format: "%.1f km", lien.etat.restantKm),
-                      systemImage: "road.lanes")
-                Spacer()
-                Label(heureArrivee(lien.etat.etaMinutes),
-                      systemImage: "flag.checkered")
+            // La manœuvre d'abord : une pastille dégradée qui se voit du coin
+            // de l'œil, le glyphe en plein blanc.
+            ZStack {
+                Circle().fill(
+                    LinearGradient(
+                        colors: [.orange, Color(red: 0.85, green: 0.32, blue: 0.1)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: lien.etat.symbole)
+                    .font(.system(size: 25, weight: .heavy))
+                    .foregroundStyle(.white)
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .labelStyle(.titleAndIcon)
+            .frame(width: 50, height: 50)
+            .shadow(color: .orange.opacity(0.55), radius: 9)
+
+            Text(distanceCourte(lien.etat.distanceM))
+                .font(.system(size: 30, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+
+            Text(lien.etat.instruction)
+                .font(.footnote.weight(.medium))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 2)
+
+            // Le pied d'écran : restant et arrivée côte à côte, sur une
+            // plaque translucide qui les détache du fond.
+            HStack(spacing: 0) {
+                colonne(String(format: "%.1f km", lien.etat.restantKm), "restant")
+                Divider().frame(height: 22)
+                colonne(heureArrivee(lien.etat.etaMinutes), "arrivée")
+            }
+            .padding(.vertical, 5)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
-        .padding(.horizontal, 4)
+        .padding(.horizontal, 2)
+        .animation(.snappy, value: lien.etat.instruction)
+    }
+
+    private func colonne(_ valeur: String, _ legende: String) -> some View {
+        VStack(spacing: 0) {
+            Text(valeur)
+                .font(.system(.footnote, design: .rounded).weight(.bold))
+                .monospacedDigit()
+            Text(legende)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var repos: some View {
         VStack(spacing: 8) {
-            Image(systemName: "iphone.gen3.radiowaves.left.and.right")
-                .font(.system(size: 30))
+            Image(systemName: "location.north.circle.fill")
+                .font(.system(size: 40))
                 .foregroundStyle(.orange)
+                .shadow(color: .orange.opacity(0.45), radius: 8)
+            Text("MonCap")
+                .font(.system(.headline, design: .rounded).weight(.heavy))
             Text("Lancez un guidage sur l'iPhone : la consigne s'affiche ici.")
-                .font(.footnote)
+                .font(.caption2)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 8)
     }
 }
 
