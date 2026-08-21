@@ -102,6 +102,20 @@ final class MonCapPlus: ObservableObject {
         objectWillChange.send()
     }
 
+    /// La déconnexion : l'appareil oublie ce que le serveur avait dit du
+    /// compte — la date d'essai et l'invitation appartiennent au compte,
+    /// pas au téléphone. Sans cela, l'offert d'un invité déconnecté ou
+    /// l'essai expiré d'un ancien compte collerait au prochain connecté.
+    /// Retour à la grâce « serveur jamais entendu » : elle ne dure que
+    /// jusqu'à la première lecture du compte suivant, et se connecter
+    /// exige de toute façon le réseau.
+    func oublieCompte() {
+        creeLe = 0
+        offert = false
+        UserDefaults.standard.removeObject(forKey: "moncap.compte.creeLe")
+        UserDefaults.standard.removeObject(forKey: "moncap.plus.offert")
+    }
+
     // MARK: - La boutique
 
     func charge() async {
@@ -183,6 +197,10 @@ enum Formules {
 /// rien de gratuit passé quatorze jours, pour personne.
 struct PaywallView: View {
     var bloquant = false
+    /// En mode bloquant, la seule sortie honnête : se déconnecter pour
+    /// entrer avec un autre compte (l'invité, le bon abonné). Sans elle,
+    /// un mauvais compte serait un piège sans porte.
+    var surChangeCompte: (() -> Void)? = nil
 
     @ObservedObject private var plus = MonCapPlus.shared
     @Environment(\.dismiss) private var ferme
@@ -234,6 +252,9 @@ struct PaywallView: View {
                                 }
                             }
                             Button("J'ai un code") { montreCode = true }
+                            if bloquant, let surChangeCompte {
+                                Button("Changer de compte") { surChangeCompte() }
+                            }
                         }
                         .font(.caption)
 

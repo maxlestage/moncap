@@ -1217,6 +1217,22 @@
         }
       }
     },
+    "Changer de compte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch account"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cambiar de cuenta"
+          }
+        }
+      }
+    },
     "Chercher un lieu, une ville, un pays": {
       "localizations": {
         "en": {

@@ -233,6 +233,7 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Restaurer les achats": ("Restaurar compras", "Restore purchases"),
     "J'ai un code": ("Tengo un código", "I have a code"),
+    "Changer de compte": ("Cambiar de cuenta", "Switch account"),
     "Renouvellement le %@.": ("Renovación el %@.", "Renews on %@."),
     "Gérer l'abonnement": ("Gestionar la suscripción", "Manage subscription"),
     "Abonnement mensuel, renouvelé automatiquement, résiliable à tout moment dans les réglages iOS.": (
