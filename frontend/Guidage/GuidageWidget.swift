@@ -34,6 +34,93 @@ private func heureArrivee(_ minutes: Double) -> String {
 struct GuidageWidgets: WidgetBundle {
     var body: some Widget {
         GuidageWidget()
+        RaccourcisWidget()
+    }
+}
+
+// MARK: - Le widget d'écran d'accueil
+
+/// Partir d'un geste : Domicile et Travail depuis l'écran d'accueil.
+///
+/// Le widget ne porte **aucune donnée** — pas d'App Group, pas d'état
+/// partagé : seulement des liens profonds `moncap://favori`, que l'app
+/// résout au réveil avec les adresses qu'elle connaît déjà. Un widget qui
+/// ne sait rien n'a rien à désynchroniser.
+struct RaccourcisEntry: TimelineEntry {
+    let date: Date
+}
+
+struct RaccourcisProvider: TimelineProvider {
+    func placeholder(in context: Context) -> RaccourcisEntry {
+        RaccourcisEntry(date: Date())
+    }
+
+    func getSnapshot(
+        in context: Context, completion: @escaping (RaccourcisEntry) -> Void
+    ) {
+        completion(RaccourcisEntry(date: Date()))
+    }
+
+    func getTimeline(
+        in context: Context, completion: @escaping (Timeline<RaccourcisEntry>) -> Void
+    ) {
+        // Rien ne change jamais : le widget est un bouton, pas un cadran.
+        completion(Timeline(entries: [RaccourcisEntry(date: Date())], policy: .never))
+    }
+}
+
+struct RaccourcisView: View {
+    @Environment(\.widgetFamily) private var famille
+
+    var body: some View {
+        if famille == .systemSmall {
+            // Petit format : un seul geste, le retour à la maison.
+            bouton("house.fill", "Domicile")
+                .widgetURL(URL(string: "moncap://favori?nom=domicile"))
+        } else {
+            HStack(spacing: 10) {
+                Link(destination: URL(string: "moncap://favori?nom=domicile")!) {
+                    bouton("house.fill", "Domicile")
+                }
+                Link(destination: URL(string: "moncap://favori?nom=travail")!) {
+                    bouton("briefcase.fill", "Travail")
+                }
+            }
+        }
+    }
+
+    private func bouton(_ icone: String, _ titre: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icone)
+                .font(.system(size: 26, weight: .bold))
+            Text(verbatim: titre)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+struct RaccourcisWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(
+            kind: "moncap.raccourcis", provider: RaccourcisProvider()
+        ) { _ in
+            RaccourcisView()
+                .containerBackground(for: .widget) {
+                    // Le dégradé de l'écran de garde : la marque, pas un fond.
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.055, green: 0.165, blue: 0.369),
+                            Color(red: 0.10, green: 0.34, blue: 0.90),
+                        ],
+                        startPoint: .top, endPoint: .bottom)
+                }
+        }
+        .configurationDisplayName("MonCap")
+        .description("Domicile et Travail, d'un geste.")
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 

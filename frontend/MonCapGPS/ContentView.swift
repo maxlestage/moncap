@@ -5496,9 +5496,26 @@ struct MapHomeView: View {
     /// les étapes et la destination reprennent leur place, et le calcul part.
     private func ouvreLien(_ url: URL) {
         guard url.scheme == "moncap",
-            let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            comps.host == "trajet"
+            let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
         else { return }
+        // moncap://favori?nom=domicile|travail — le widget d'accueil : il ne
+        // porte aucune adresse, c'est ici qu'on résout celle du moment.
+        if comps.host == "favori" {
+            let nom = comps.queryItems?.first { $0.name == "nom" }?.value
+            guard let lieu = nom == "travail" ? workPlace : homePlace else { return }
+            let dest = CLLocationCoordinate2D(latitude: lieu.lat, longitude: lieu.lon)
+            etapes = []
+            etapeNoms = []
+            etapeArrets = []
+            etapesAtteintes = []
+            traceGPX = nil
+            showSearch = false
+            showPlaces = false
+            pendingDestination = dest
+            Task { await presentRouteOptions(to: dest) }
+            return
+        }
+        guard comps.host == "trajet" else { return }
         let items = comps.queryItems ?? []
         func valeur(_ nom: String) -> String? {
             items.first { $0.name == nom }?.value
