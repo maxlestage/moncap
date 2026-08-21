@@ -21,13 +21,17 @@ jobs:
 
       # Le simulateur ne signe pas : on coupe la signature pour ne pas
       # dépendre des secrets de livraison dans un travail de test.
+      # La destination est relevée sur la machine : les gammes d'iPhone
+      # changent à chaque image de runner, un nom en dur court après elles.
       - name: xcodebuild test
         run: |
           cd frontend
+          DEST=$(xcrun simctl list devices available | grep -m1 -oE "iPhone [^(]*" | xargs)
+          echo "Simulateur retenu : $DEST"
           xcodebuild test \
             -project MonCapGPS.xcodeproj \
             -scheme MonCapGPS \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination "platform=iOS Simulator,name=$DEST" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
