@@ -20,6 +20,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 struct MonCapGPSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
+    init() {
+        // Les plantages d'hier arrivent au lancement d'aujourd'hui : on
+        // s'abonne avant que l'écran ne se peigne.
+        Diagnostics.shared.demarre()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
