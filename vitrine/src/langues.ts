@@ -33,7 +33,11 @@ export type Contenu = {
   readonly h1: readonly [string, string];
   readonly chapeau: string;
   readonly seConnecter: string;
-  /** Libellé du lien vers le dépôt, public depuis août 2026. */
+  /** Libellés (accessibilité) des chevrons : descendre, remonter. */
+  readonly chevrons: {
+    readonly descendre: string;
+    readonly remonter: string;
+  };
   readonly theme: { readonly libelle: string; readonly noms: readonly string[] };
   readonly langueLibelle: string;
   readonly chiffres: readonly Chiffre[];
@@ -141,6 +145,7 @@ const FR: Contenu = {
   chapeau:
     "Un GPS pour iPhone qui met les itinéraires côte à côte — durée, virages, dénivelé, carburant, péages — puis vous guide. Téléchargez votre région une fois, et il continue de calculer tout seul : vallées, tunnels, étranger.",
   seConnecter: "Se connecter",
+  chevrons: { descendre: "Section suivante", remonter: "Remonter en haut" },
   theme: {
     libelle: "Thème",
     noms: ["Auto", "Clair", "Sombre", "Marine"],
@@ -530,6 +535,7 @@ const ES: Contenu = {
   chapeau:
     "Un GPS para iPhone que pone las rutas una al lado de otra — duración, giros, desnivel, combustible, peajes — y luego te guía. Descarga tu región una vez y sigue calculando solo: valles, túneles, extranjero.",
   seConnecter: "Iniciar sesión",
+  chevrons: { descendre: "Sección siguiente", remonter: "Volver arriba" },
   theme: {
     libelle: "Tema",
     noms: ["Auto", "Claro", "Oscuro", "Marino"],
@@ -919,6 +925,7 @@ const EN: Contenu = {
   chapeau:
     "An iPhone GPS that lays the routes side by side — time, turns, elevation, fuel, tolls — then guides you. Download your region once and it keeps computing on its own: valleys, tunnels, abroad.",
   seConnecter: "Sign in",
+  chevrons: { descendre: "Next section", remonter: "Back to top" },
   theme: {
     libelle: "Theme",
     noms: ["Auto", "Light", "Dark", "Navy"],

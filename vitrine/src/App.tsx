@@ -189,6 +189,20 @@ function Legende({ texte }: { texte: string }) {
 }
 
 /**
+ * Le chevron qui descend d'une section : une ancre vers le titre suivant,
+ * pas un script — la page n'en expédie toujours pas une ligne. Le défilement
+ * doux vient du CSS (`scroll-behavior`), et s'efface quand le lecteur a
+ * demandé moins de mouvement.
+ */
+function Suivant({ vers, label }: { vers: string; label: string }) {
+  return (
+    <a className="suivant" href={`#${vers}`} aria-label={label}>
+      ⌄
+    </a>
+  );
+}
+
+/**
  * Choix du thème, sans script : quatre boutons radio que la feuille de style
  * lit avec `:has()`. Le choix ne survit pas à un changement de page — il n'y
  * a rien pour le mémoriser sans JavaScript, et le dire vaut mieux que de
@@ -239,7 +253,7 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
 
   return (
     <>
-      <header className="hero">
+      <header className="hero" id="haut">
         {/* Le fond du bandeau va d'un bord à l'autre, mais son texte doit
             s'aligner sur celui du corps : d'où ce conteneur, de la même
             largeur que `main`. */}
@@ -281,6 +295,8 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
           </dl>
 
           <Themes c={c} />
+
+          <Suivant vers="comparateur-titre" label={c.chevrons.descendre} />
         </div>
       </header>
 
@@ -293,17 +309,23 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             <p className="intro">{c.comparateur.apres}</p>
           </section>
 
+          <Suivant vers="guidage-titre" label={c.chevrons.descendre} />
+
           <section aria-labelledby="guidage-titre">
             <h2 id="guidage-titre">{c.guidage.titre}</h2>
             <p className="intro">{c.guidage.intro}</p>
             <MaquetteGuidage c={c} />
           </section>
 
+          <Suivant vers="lieux-titre" label={c.chevrons.descendre} />
+
           <section aria-labelledby="lieux-titre">
             <h2 id="lieux-titre">{c.lieux.titre}</h2>
             <p className="intro">{c.lieux.intro}</p>
             <MaquetteLieux c={c} />
           </section>
+
+          <Suivant vers="atouts-titre" label={c.chevrons.descendre} />
 
           <section aria-labelledby="atouts-titre">
             <h2 id="atouts-titre">{c.atoutsTitre}</h2>
@@ -319,6 +341,8 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
               ))}
             </ul>
           </section>
+
+          <Suivant vers="hors-ligne-titre" label={c.chevrons.descendre} />
 
           <section aria-labelledby="hors-ligne-titre">
             <h2 id="hors-ligne-titre">{c.horsLigne.titre}</h2>
@@ -342,6 +366,8 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
               Pro pour ceux qui roulent pour travailler — le mensuel écrit en
               grand. L'essai n'a pas de carte : un délai avant paiement n'est
               pas une formule, et rien ici ne doit ressembler à du 0 €. */}
+          <Suivant vers="tarifs-titre" label={c.chevrons.descendre} />
+
           <section aria-labelledby="tarifs-titre" className="tarifs">
             <h2 id="tarifs-titre">{c.tarifs.titre}</h2>
             <p className="intro">{c.tarifs.intro}</p>
@@ -363,6 +389,8 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             <p className="note">{c.tarifs.note}</p>
           </section>
 
+          <Suivant vers="preuve-titre" label={c.chevrons.descendre} />
+
           <section className="preuve" aria-labelledby="preuve-titre">
             <h2 id="preuve-titre">{c.preuve.titre}</h2>
             <p>
@@ -372,6 +400,8 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             </p>
             <p className="note">{c.preuve.note}</p>
           </section>
+
+          <Suivant vers="pile-titre" label={c.chevrons.descendre} />
 
           <section aria-labelledby="pile-titre" className="pile">
             <h2 id="pile-titre">{c.pileTitre}</h2>
@@ -391,6 +421,8 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
             </dl>
           </section>
 
+          <Suivant vers="franchise-titre" label={c.chevrons.descendre} />
+
           <section aria-labelledby="franchise-titre" className="franchise">
             <h2 id="franchise-titre">{c.franchiseTitre}</h2>
             <ul>
@@ -403,6 +435,12 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
       </main>
 
       <Pied c={c} res={res} />
+
+      {/* Remonter tout, d'un geste : une ancre flottante vers le bandeau —
+          toujours visible, discrète, et pas un script non plus. */}
+      <a className="remonte" href="#haut" aria-label={c.chevrons.remonter}>
+        ↑
+      </a>
     </>
   );
 }
