@@ -1214,22 +1214,22 @@ h2[id] {
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
-  /* Le cercle porte la teinte, la flèche s'écrit dessus : `--teinte` est
-     posée par le script au fil des sections (accent, cyan, orange) ; sans
-     script, l'accent reste. `--sur-accent` sait rester lisible sur une
-     couleur pleine dans les quatre thèmes. */
-  color: var(--sur-accent);
-  background: var(--teinte, var(--accent));
+  /* Le style que le patron a élu, capture à l'appui : le disque en papier,
+     la flèche colorée dedans. `--teinte` est posée par le script au fil des
+     sections (accent, cyan, orange) ; sans script, l'accent reste. */
+  color: var(--teinte, var(--accent));
+  background: var(--papier);
   border: 1px solid
-    color-mix(in srgb, var(--teinte, var(--accent)) 72%, var(--encre));
-  box-shadow: 0 3px 10px rgb(0 0 0 / 0.22);
+    color-mix(in srgb, var(--teinte, var(--accent)) 45%, var(--trait));
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.18);
   transition:
-    background-color 0.35s ease,
+    color 0.35s ease,
     border-color 0.35s ease;
 }
 
 .fleche-nav:hover,
 .fleche-nav:focus-visible {
-  filter: brightness(1.08);
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.28);
+  color: var(--papier);
+  background: var(--teinte, var(--accent));
+  border-color: var(--teinte, var(--accent));
 }
