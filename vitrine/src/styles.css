@@ -1227,7 +1227,18 @@ h2[id] {
     border-color 0.35s ease;
 }
 
-.fleche-nav:hover,
+/* L'inversion n'existe que là où le survol existe vraiment : au doigt,
+ * iOS garde `:hover` collé après le toucher, et le disque restait plein —
+ * constaté sur appareil. La souris garde son retour, le clavier garde le
+ * sien (`:focus-visible`, que le toucher ne déclenche pas). */
+@media (hover: hover) {
+  .fleche-nav:hover {
+    color: var(--papier);
+    background: var(--teinte, var(--accent));
+    border-color: var(--teinte, var(--accent));
+  }
+}
+
 .fleche-nav:focus-visible {
   color: var(--papier);
   background: var(--teinte, var(--accent));
