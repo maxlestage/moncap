@@ -262,6 +262,26 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- Le récap annuel « Mon année » ---
+    "Mon année": ("Mi año", "My year"),
+    "Mon année %d": ("Mi año %d", "My year %d"),
+    "heures de route": ("horas de carretera", "hours on the road"),
+    "trajets": ("viajes", "trips"),
+    "jours au volant": ("días al volante", "days behind the wheel"),
+    "Plus long : %@ — %.0f km": (
+        "El más largo: %@ — %.0f km",
+        "Longest: %@ — %.0f km",
+    ),
+    "Mois le plus roulé : %@ (%.0f km)": (
+        "El mes con más ruta: %@ (%.0f km)",
+        "Busiest month: %@ (%.0f km)",
+    ),
+    "Rien au journal cette année-là — roule, on recompte.": (
+        "Nada en el registro ese año — conduce, y volvemos a contar.",
+        "Nothing in the log that year — drive, and we'll count again.",
+    ),
+    "Préparer l'image": ("Preparar la imagen", "Prepare the image"),
+    "Partager mon année": ("Compartir mi año", "Share my year"),
     # --- La station la moins chère sur la route ---
     # (« Carburant » est déjà au catalogue, côté réglages du véhicule.)
     "La moins chère sur la route": (
