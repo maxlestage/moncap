@@ -7089,6 +7089,22 @@
         }
       }
     },
+    "🚦 ZFE %@ — vérifie ta vignette Crit'Air": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🚦 LEZ %@ — check your emissions sticker"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🚦 ZBE %@ — comprueba tu distintivo ambiental"
+          }
+        }
+      }
+    },
     "🫁 Air %@ à l'arrivée": {
       "localizations": {
         "en": {

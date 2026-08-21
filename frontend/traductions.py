@@ -262,6 +262,11 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- Les zones à faibles émissions ---
+    "🚦 ZFE %@ — vérifie ta vignette Crit'Air": (
+        "🚦 ZBE %@ — comprueba tu distintivo ambiental",
+        "🚦 LEZ %@ — check your emissions sticker",
+    ),
     # --- Le gabarit utilitaire ---
     "Utilitaire": ("Furgoneta", "Van"),
     "Hauteur": ("Altura", "Height"),
