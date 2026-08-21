@@ -800,6 +800,20 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// (`bicycle_type`, `use_hills`) — il suffisait de le lui dire. Lecture
     /// directe des réglages persistés, comme les péages côté MapKit.
     nonisolated static func optionsDeCout(_ costing: String) -> [String: Any]? {
+        if costing == "motorcycle" {
+            // « Routes plaisir » : la moto fuit l'autoroute et cherche les
+            // petites routes qui tournent — c'est un choix de balade, pas
+            // d'efficacité, et il est dit comme tel dans le réglage.
+            guard UserDefaults.standard.bool(forKey: "moncap.motoPlaisir") else {
+                return nil
+            }
+            return [
+                "motorcycle": [
+                    "use_highways": 0.2,
+                    "use_trails": 0.8,
+                ]
+            ]
+        }
         guard costing == "bicycle" else { return nil }
         let type = UserDefaults.standard.string(forKey: "moncap.veloType") ?? "Hybrid"
         let eviteCotes = UserDefaults.standard.bool(forKey: "moncap.veloEviteCotes")

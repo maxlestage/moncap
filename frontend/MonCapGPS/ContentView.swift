@@ -465,7 +465,12 @@ enum TravelMode: String, CaseIterable, Identifiable {
         switch self {
         case .walk: return "pedestrian"
         case .bike: return "bicycle"
-        case .car: return "auto"
+        // En mode moto (réglage Mon véhicule), la voiture devient un
+        // deux-roues : même graphe, autre fonction de coût — Valhalla sait
+        // pencher pour les routes qui tournent.
+        case .car:
+            return UserDefaults.standard.bool(forKey: "moncap.moto")
+                ? "motorcycle" : "auto"
         // Jamais employé : le transit est calculé par le serveur, et les
         // chemins locaux sont gardés en amont. La marche est le repli le
         // moins faux si un appel se glissait quand même jusqu'ici.
@@ -619,6 +624,9 @@ struct MapHomeView: View {
     @AppStorage("moncap.avoidHighways") private var avoidHighways = false
     /// Mon véhicule : carburant et consommation (pour le coût des trajets).
     @AppStorage("moncap.fuelType") private var fuelType = "gazole"
+    /// Mode moto : la « voiture » devient un deux-roues (costing Valhalla).
+    @AppStorage("moncap.moto") private var modeMoto = false
+    @AppStorage("moncap.motoPlaisir") private var motoPlaisir = false
     @AppStorage("moncap.consumption") private var consumption = 6.5
     /// Signalements déjà annoncés vocalement pendant cette navigation.
     @State private var announcedAlertIDs: Set<Int> = []
@@ -3911,6 +3919,20 @@ struct MapHomeView: View {
                         showPlaces = false
                     } label: {
                         Label("Entretien", systemImage: "wrench.and.screwdriver")
+                    }
+                    // Le mode moto : même graphe, autre fonction de coût.
+                    Toggle(isOn: $modeMoto) {
+                        Label("Moto", systemImage: "motorcycle")
+                    }
+                    if modeMoto {
+                        Toggle(isOn: $motoPlaisir) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Routes plaisir")
+                                Text("Fuit l'autoroute, cherche les routes qui tournent — pour la balade, pas pour arriver tôt.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
                 if !leaders.isEmpty {

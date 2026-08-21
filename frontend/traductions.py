@@ -262,6 +262,13 @@ T: dict[str, tuple[str, str]] = {
     "%d trajet(s) sur la période": (
         "%d trayecto(s) en el período", "%d trip(s) in the period"),
     "Générer la facture PDF": ("Generar la factura PDF", "Generate the PDF invoice"),
+    # --- Le mode moto ---
+    "Moto": ("Moto", "Motorbike"),
+    "Routes plaisir": ("Rutas de placer", "Fun roads"),
+    "Fuit l'autoroute, cherche les routes qui tournent — pour la balade, pas pour arriver tôt.": (
+        "Huye de la autopista y busca las carreteras que giran — para el paseo, no para llegar pronto.",
+        "Avoids the motorway and hunts for twisty roads — for the ride, not for arriving early.",
+    ),
     # --- Le message d'approche « j'arrive » ---
     "J'arrive dans ~%d min — prévenir ?": (
         "Llego en ~%d min — ¿aviso?",

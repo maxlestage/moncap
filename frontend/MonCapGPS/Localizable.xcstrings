@@ -2641,6 +2641,22 @@
         }
       }
     },
+    "Fuit l'autoroute, cherche les routes qui tournent — pour la balade, pas pour arriver tôt.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoids the motorway and hunts for twisty roads — for the ride, not for arriving early."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Huye de la autopista y busca las carreteras que giran — para el paseo, no para llegar pronto."
+          }
+        }
+      }
+    },
     "Gauche": {
       "localizations": {
         "en": {
@@ -3873,6 +3889,22 @@
         }
       }
     },
+    "Moto": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motorbike"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moto"
+          }
+        }
+      }
+    },
     "Métro": {
       "localizations": {
         "en": {
@@ -4925,6 +4957,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Carretera"
+          }
+        }
+      }
+    },
+    "Routes plaisir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fun roads"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rutas de placer"
           }
         }
       }
