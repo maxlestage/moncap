@@ -2529,6 +2529,22 @@
         }
       }
     },
+    "Exporter mes données": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export my data"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportar mis datos"
+          }
+        }
+      }
+    },
     "Extrêmement mauvais": {
       "localizations": {
         "en": {

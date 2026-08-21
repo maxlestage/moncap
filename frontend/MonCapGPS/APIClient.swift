@@ -326,6 +326,11 @@ struct APIClient {
         try await send(authedRequest("prefs"))
     }
 
+    /// La portabilité RGPD : tout ce que le compte détient, en un JSON brut.
+    func exportData() async throws -> Data {
+        try await sendRaw(authedRequest("account/export"))
+    }
+
     func savePrefs(_ p: Prefs) async throws {
         let corps = try JSONEncoder().encode(p)
         _ = try await sendRaw(

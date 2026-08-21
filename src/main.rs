@@ -2854,6 +2854,7 @@ fn build_app(state: AppState) -> Router {
         .route("/alerts/:id/vote", post(vote_alert))
         .route("/account", get(account_info).delete(delete_account))
         .route("/prefs", get(get_prefs).put(put_prefs))
+        .route("/account/export", get(export_account))
         .route("/diagnostics", post(diagnostics))
         .route("/leaderboard", get(leaderboard))
         .route("/fires", get(list_fires))
@@ -4030,6 +4031,47 @@ fn public_name(username: &str) -> String {
     } else {
         prefix
     }
+}
+
+/// GET /account/export — la portabilité RGPD : tout ce que le compte
+/// détient, en un seul JSON — positions, trajets, recherches,
+/// signalements, préférences. Sans le hachage du mot de passe : un secret
+/// dérivé n'appartient à personne, pas même à son propriétaire.
+async fn export_account(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let u = user::Entity::find_by_id(uid)
+        .one(&db)
+        .await?
+        .ok_or(AppError::Unauthorized)?;
+    let (positions, trips, searches, alerts) = tokio::try_join!(
+        position::Entity::find()
+            .filter(position::Column::UserId.eq(uid))
+            .all(&db),
+        trip::Entity::find()
+            .filter(trip::Column::UserId.eq(uid))
+            .all(&db),
+        search::Entity::find()
+            .filter(search::Column::UserId.eq(uid))
+            .all(&db),
+        alert::Entity::find()
+            .filter(alert::Column::UserId.eq(uid))
+            .all(&db),
+    )?;
+    Ok(Json(serde_json::json!({
+        "compte": {
+            "username": u.username,
+            "created_at": u.created_at,
+            "prefs": u
+                .prefs
+                .and_then(|p| serde_json::from_str::<serde_json::Value>(&p).ok()),
+        },
+        "positions": positions,
+        "trajets": trips,
+        "recherches": searches,
+        "signalements": alerts,
+    })))
 }
 
 /// GET /prefs — les préférences du compte (Domicile, Travail…), telles que
@@ -5639,6 +5681,34 @@ mod integration {
         // La base de test répond → 200 (sonde de disponibilité, sans auth).
         let resp = app.oneshot(get_req("/health", None)).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn export_du_compte_complet_et_sans_secret() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("export")).await;
+        app.clone()
+            .oneshot(json_req(
+                "POST",
+                "/positions",
+                Some(&token),
+                serde_json::json!({"lat": 48.0, "lon": 2.0, "label": "Chez Paul"}),
+            ))
+            .await
+            .unwrap();
+
+        let resp = app
+            .clone()
+            .oneshot(get_req("/account/export", Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let corps = body_json(resp).await;
+        assert!(corps["compte"]["username"].as_str().is_some());
+        assert_eq!(corps["positions"].as_array().map(|p| p.len()), Some(1));
+        // Le hachage du mot de passe ne voyage jamais, même chez son
+        // propriétaire.
+        assert!(!corps.to_string().contains("password"));
     }
 
     #[tokio::test]
