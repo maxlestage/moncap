@@ -1,0 +1,33 @@
+# Les tests unitaires de l'app, sur simulateur — un travail séparé de la
+# livraison TestFlight : un test rouge doit se voir, pas bloquer une archive
+# déjà demandée. Public repo : les minutes macOS ne coûtent rien.
+name: Tests iOS
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/ios-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests unitaires (simulateur)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # Le simulateur ne signe pas : on coupe la signature pour ne pas
+      # dépendre des secrets de livraison dans un travail de test.
+      - name: xcodebuild test
+        run: |
+          cd frontend
+          xcodebuild test \
+            -project MonCapGPS.xcodeproj \
+            -scheme MonCapGPS \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
