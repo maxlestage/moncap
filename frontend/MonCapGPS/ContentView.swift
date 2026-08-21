@@ -766,6 +766,7 @@ struct MapHomeView: View {
     @State private var showStationsCarburant = false
     @State private var showRecapAnnuel = false
     @State private var showEntretien = false
+    @State private var showRappelDepart = false
     /// Proposition « j'arrive » : visible, et déjà faite pour ce trajet.
     @State private var proposeArrivee = false
     @State private var arriveeProposee = false
@@ -854,6 +855,11 @@ struct MapHomeView: View {
                 .presentationBackground(Color(.systemBackground))
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        .sheet(isPresented: $showRappelDepart) {
+            RappelDepartView(
+                minutesTrajet: (routeOptions.first { $0.id == selectedRouteID }
+                    ?? routeOptions.first)?.minutes ?? 0)
+        }
         .sheet(isPresented: $showEntretien) {
             EntretienView(kmJournal: trips.reduce(0) { $0 + $1.distance_km })
         }
@@ -2738,17 +2744,32 @@ struct MapHomeView: View {
             // seuls : à quatre onglets, les libellés ne tiennent plus dans un
             // segment — « Transports » sortait de l'écran — et l'icône se lit
             // plus vite qu'un mot. Le nom reste dit au lecteur d'écran.
-            Picker("Mode", selection: $travelMode) {
-                ForEach(TravelMode.allCases) { m in
-                    Image(systemName: m.icon)
-                        .accessibilityLabel(Text(LocalizedStringKey(m.label)))
-                        .tag(m)
+            HStack(spacing: 8) {
+                Picker("Mode", selection: $travelMode) {
+                    ForEach(TravelMode.allCases) { m in
+                        Image(systemName: m.icon)
+                            .accessibilityLabel(Text(LocalizedStringKey(m.label)))
+                            .tag(m)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: travelMode) { _, _ in
-                if let dest = pendingDestination {
-                    Task { await presentRouteOptions(to: dest) }
+                .pickerStyle(.segmented)
+                .onChange(of: travelMode) { _, _ in
+                    if let dest = pendingDestination {
+                        Task { await presentRouteOptions(to: dest) }
+                    }
+                }
+                // « Partir à l'heure » : l'app cale l'heure de départ sur le
+                // trajet choisi et pose le rappel.
+                if selected != nil {
+                    Button {
+                        showRappelDepart = true
+                    } label: {
+                        Image(systemName: "bell.badge")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.indigo)
+                    .accessibilityLabel(Text("Partir à l'heure"))
                 }
             }
 
