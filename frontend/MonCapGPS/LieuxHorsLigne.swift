@@ -71,6 +71,45 @@ actor LieuxHorsLigne {
         }
     }
 
+    /// Recherche par **nom** dans l'annuaire embarqué — le repli de la barre
+    /// de recherche quand le réseau manque : la pharmacie Dupont se trouve
+    /// en mode avion. Plis et accents ignorés, les plus proches d'abord.
+    /// Les adresses, elles, restent l'affaire du réseau : l'annuaire ne
+    /// porte que des lieux nommés.
+    func cherche(
+        _ texte: String, autour centre: CLLocationCoordinate2D, max: Int = 20
+    ) async -> [POI] {
+        let requete = texte
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .trimmingCharacters(in: .whitespaces)
+        guard requete.count >= 2 else { return [] }
+        let ids = await MainActor.run { OfflineRouter.shared.installees.map(\.id) }
+        for id in ids where !charges.contains(id) {
+            charges.insert(id)
+            lieuxParRegion[id] = Self.litLieux(OfflineRouter.lieuxPath(id))
+        }
+        var trouves: [(d: Double, e: Entree)] = []
+        for id in ids {
+            for e in lieuxParRegion[id] ?? [] {
+                guard !e.nom.isEmpty else { continue }
+                let nom = e.nom
+                    .folding(
+                        options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+                guard nom.contains(requete) else { continue }
+                let dx = e.lon - centre.longitude
+                let dy = e.lat - centre.latitude
+                trouves.append((dx * dx + dy * dy, e))
+            }
+        }
+        trouves.sort { $0.d < $1.d }
+        return trouves.prefix(max).map {
+            POI(
+                name: $0.e.nom,
+                coordinate: CLLocationCoordinate2D(
+                    latitude: $0.e.lat, longitude: $0.e.lon))
+        }
+    }
+
     /// Les jalons de vitesse autour d'un tracé (marge ~1 km), toutes régions
     /// installées confondues. Relu du disque à chaque appel — l'appel est
     /// rare (au départ du guidage, puis toutes les dix minutes) et garder le
