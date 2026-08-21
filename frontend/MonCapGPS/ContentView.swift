@@ -718,6 +718,7 @@ struct MapHomeView: View {
     @State private var showAttestation = false
     @State private var showCollerAdresses = false
     @State private var showStationsCarburant = false
+    @State private var showRecapAnnuel = false
     /// Paywall et gestion d'abonnement présentés depuis le menu Lieux.
     @State private var showPaywallMenu = false
     @State private var gereAbonnement = false
@@ -4066,6 +4067,14 @@ struct MapHomeView: View {
                         Image(systemName: "briefcase")
                     }
                 }
+                // « Mon année » : le journal en gros chiffres, partageable.
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showRecapAnnuel = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Fermer") { showTrips = false }
                 }
@@ -4073,6 +4082,7 @@ struct MapHomeView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationBackground(Color(.systemBackground))
+        .sheet(isPresented: $showRecapAnnuel) { RecapAnnuelView(trajets: trips) }
         .sheet(isPresented: $showPaywallTrips) { PaywallView() }
         .sheet(isPresented: $showFacturation) { FacturationView(trajets: trips) }
         .sheet(isPresented: $showAttestation) { AttestationFiscaleView(trajets: trips) }
