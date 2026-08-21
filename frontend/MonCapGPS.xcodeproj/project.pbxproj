@@ -20,6 +20,13 @@
 			remoteGlobalIDString = AA0000000000000000000052;
 			remoteInfo = Guidage;
 		};
+		AA000000000000000000006A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000006 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000004;
+			remoteInfo = MonCapGPS;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -47,6 +54,11 @@
 			path = Guidage;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000060 /* MonCapGPSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MonCapGPSTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +78,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000064 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -74,6 +93,7 @@
 			children = (
 				AA0000000000000000000010 /* MonCapGPS */,
 				AA0000000000000000000050 /* Guidage */,
+				AA0000000000000000000060 /* MonCapGPSTests */,
 				AA0000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -83,6 +103,7 @@
 			children = (
 				AA0000000000000000000003 /* MonCapGPS.app */,
 				AA0000000000000000000051 /* Guidage.appex */,
+				AA0000000000000000000061 /* MonCapGPSTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -92,6 +113,7 @@
 /* Begin PBXFileReference section */
 		AA0000000000000000000003 /* MonCapGPS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MonCapGPS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000051 /* Guidage.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Guidage.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000061 /* MonCapGPSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MonCapGPSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXNativeTarget section */
@@ -143,6 +165,29 @@
 			productReference = AA0000000000000000000051 /* Guidage.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AA0000000000000000000062 /* MonCapGPSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000066 /* Build configuration list for PBXNativeTarget "MonCapGPSTests" */;
+			buildPhases = (
+				AA0000000000000000000063 /* Sources */,
+				AA0000000000000000000064 /* Frameworks */,
+				AA0000000000000000000065 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA0000000000000000000069 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000060 /* MonCapGPSTests */,
+			);
+			name = MonCapGPSTests;
+			packageProductDependencies = (
+			);
+			productName = MonCapGPSTests;
+			productReference = AA0000000000000000000061 /* MonCapGPSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXTargetDependency section */
@@ -150,6 +195,11 @@
 			isa = PBXTargetDependency;
 			target = AA0000000000000000000052 /* Guidage */;
 			targetProxy = AA000000000000000000005A /* PBXContainerItemProxy */;
+		};
+		AA0000000000000000000069 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000004 /* MonCapGPS */;
+			targetProxy = AA000000000000000000006A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -166,6 +216,10 @@
 					};
 					AA0000000000000000000052 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					AA0000000000000000000062 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = AA0000000000000000000004;
 					};
 				};
 			};
@@ -190,6 +244,7 @@
 			targets = (
 				AA0000000000000000000004 /* MonCapGPS */,
 				AA0000000000000000000052 /* Guidage */,
+				AA0000000000000000000062 /* MonCapGPSTests */,
 			);
 		};
 /* End PBXProject section */
@@ -209,6 +264,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000065 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -220,6 +282,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA0000000000000000000053 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000063 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -438,6 +507,42 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000067 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2FW8T4UX4L;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxlestage.moncap.Tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MonCapGPS.app/MonCapGPS";
+			};
+			name = Debug;
+		};
+		AA0000000000000000000068 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2FW8T4UX4L;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.2.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxlestage.moncap.Tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MonCapGPS.app/MonCapGPS";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -464,6 +569,15 @@
 			buildConfigurations = (
 				AA0000000000000000000057 /* Debug */,
 				AA0000000000000000000058 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000066 /* Build configuration list for PBXNativeTarget "MonCapGPSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000067 /* Debug */,
+				AA0000000000000000000068 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
