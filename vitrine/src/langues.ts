@@ -314,6 +314,7 @@ const FR: Contenu = {
         "L'app entière : guidage, comparateur, transports",
         "212 régions hors ligne — itinéraires, lieux, limites de vitesse",
         "Import de traces GPX",
+        "La station-service la moins chère sur ta route",
       ],
     },
     pro: {
@@ -322,9 +323,10 @@ const FR: Contenu = {
       periode: "par mois, pour ceux qui roulent pour travailler",
       points: [
         "Tout MonCap Plus",
-        "Tournées optimisées, même à vingt arrêts",
-        "Journal kilométrique exportable (CSV)",
+        "Tournées optimisées — collées d'un bloc, une adresse par ligne",
+        "Journal kilométrique (CSV) et attestation fiscale au barème",
         "Facturation PDF au taux kilométrique choisi",
+        "Gabarit utilitaire : les ponts bas s'écartent du trajet",
       ],
     },
     note:
@@ -648,6 +650,7 @@ const ES: Contenu = {
         "La app entera: guía, comparador, transportes",
         "212 regiones sin conexión — rutas, lugares, límites de velocidad",
         "Importación de trazas GPX",
+        "La gasolinera más barata en tu ruta",
       ],
     },
     pro: {
@@ -656,9 +659,10 @@ const ES: Contenu = {
       periode: "al mes, para quienes conducen por trabajo",
       points: [
         "Todo MonCap Plus",
-        "Rutas de reparto optimizadas, incluso con veinte paradas",
-        "Registro de kilómetros exportable (CSV)",
+        "Repartos optimizados — pegados de un bloque, una dirección por línea",
+        "Registro de kilómetros (CSV) y certificado fiscal al baremo",
         "Facturación PDF con la tarifa por kilómetro elegida",
+        "Gálibo de furgoneta: los puentes bajos se apartan del trayecto",
       ],
     },
     note:
@@ -982,6 +986,7 @@ const EN: Contenu = {
         "The whole app: guidance, comparison, transit",
         "212 offline regions — routes, places, speed limits",
         "GPX track import",
+        "The cheapest fuel station along your route",
       ],
     },
     pro: {
@@ -990,9 +995,10 @@ const EN: Contenu = {
       periode: "per month, for people who drive for a living",
       points: [
         "Everything in MonCap Plus",
-        "Optimized multi-stop runs, even with twenty stops",
-        "Exportable mileage log (CSV)",
+        "Optimized multi-stop runs — pasted in one block, one address per line",
+        "Mileage log (CSV) and tax mileage statement",
         "PDF invoicing at the per-kilometre rate you choose",
+        "Van dimensions: low bridges stay out of the route",
       ],
     },
     note:
