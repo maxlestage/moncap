@@ -9,6 +9,12 @@ name: Xcode Cloud off
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "coupe (MonCapGPS seul) ou repare (rallume les autres apps)"
+        default: "coupe"
+        type: choice
+        options: [coupe, repare]
 
 jobs:
   couper:
@@ -26,6 +32,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          MODE: ${{ inputs.mode || 'coupe' }}
         run: |
           python -m pip install --quiet requests "pyjwt[crypto]"
           python frontend/scripts/xcode_cloud_off.py
