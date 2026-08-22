@@ -691,6 +691,13 @@ struct MapHomeView: View {
     @State private var workPlace = Session.work
     /// Dernier avertissement de dépassement de vitesse (anti-spam).
     @State private var lastSpeedWarning = Date.distantPast
+    /// Vrai tant que l'excès en cours a déjà été annoncé : la voix parle une
+    /// fois par épisode, pas toutes les vingt secondes (constaté : la limite
+    /// répétée en boucle sur un long dépassement).
+    @State private var excesAnnonce = false
+    /// La limite annoncée pour l'épisode en cours : si elle change en plein
+    /// excès (90 → 80), la nouvelle mérite sa propre annonce.
+    @State private var limiteAnnoncee: Int?
     /// Première position reçue → mise à jour immédiate de la limite de vitesse.
     @State private var didInitialSpeedFetch = false
     /// Dernière recherche d'itinéraire plus rapide (toutes les 90 s).
@@ -1144,7 +1151,9 @@ struct MapHomeView: View {
                 lastNightCheck = Date()
                 nightMode = DayNight.isNight(lat: c.latitude, lon: c.longitude)
             }
-            if location.speedKmh > 15 { checkOverspeed() }
+            // Appelé à toute vitesse : sous la limite (arrêt au feu compris)
+            // il ne fait que réarmer l'alerte, l'annonce exige un vrai excès.
+            checkOverspeed()
 
             // Notifications d'alertes à proximité (bannière + son), même hors
             // navigation, si l'option est activée.
@@ -1526,12 +1535,29 @@ struct MapHomeView: View {
         return location.speedKmh > Double(lim) + 5
     }
 
-    /// Avertit (vibration + voix) en cas de dépassement, au plus toutes les 20 s.
+    /// Avertit (vibration + voix) en cas de dépassement — une fois par
+    /// épisode, pas en boucle : l'excès s'annonce quand il commence, puis la
+    /// voix se tait tant qu'on reste au-dessus. Elle ne reprend que si la
+    /// limite change en cours d'excès (90 → 80), ou après être vraiment
+    /// repassé sous la limite (hystérésis : l'alerte part à limite + 5, se
+    /// réarme sous la limite — pas de rafale en frôlant le seuil). Le
+    /// compteur à l'écran, lui, reste rouge tant que ça dépasse.
     private func checkOverspeed() {
-        guard isOverspeeding, let lim = speedLimit.limitKmh,
-            Date().timeIntervalSince(lastSpeedWarning) > 20
-        else { return }
+        guard let lim = speedLimit.limitKmh else { return }
+        // Retour sous la limite : l'épisode se referme, l'alerte se réarme.
+        if location.speedKmh < Double(lim) {
+            excesAnnonce = false
+            limiteAnnoncee = nil
+            return
+        }
+        guard isOverspeeding else { return }
+        // Déjà annoncé pour cette limite : on n'insiste pas.
+        if excesAnnonce, limiteAnnoncee == lim { return }
+        // Plancher anti-rafale, même quand la limite change vite.
+        guard Date().timeIntervalSince(lastSpeedWarning) > 20 else { return }
         lastSpeedWarning = Date()
+        excesAnnonce = true
+        limiteAnnoncee = lim
         warnHaptic()
         nav.announce("Attention, vous dépassez la limite de \(lim) kilomètres heure.")
     }
