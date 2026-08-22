@@ -4,6 +4,9 @@ import MapKit
 @MainActor
 final class PlaceSearch: ObservableObject {
     @Published private(set) var results: [MKMapItem] = []
+    /// Vraie entre la saisie et la réponse : la feuille montre
+    /// « Recherche… » au lieu d'un vide qui ressemble à une panne.
+    @Published private(set) var enCours = false
 
     /// Centre de recherche (position de l'utilisateur) pour prioriser les
     /// résultats proches.
@@ -17,8 +20,10 @@ final class PlaceSearch: ObservableObject {
         // Recherche agressive : démarre dès 2 caractères.
         guard query.count >= 2 else {
             results = []
+            enCours = false
             return
         }
+        enCours = true
         task = Task { [weak self] in
             // Anti-rebond court : la recherche démarre vite.
             try? await Task.sleep(nanoseconds: 150_000_000)
@@ -62,11 +67,13 @@ final class PlaceSearch: ObservableObject {
                 guard !Task.isCancelled else { return }
             }
             self.results = items
+            self.enCours = false
         }
     }
 
     func clear() {
         task?.cancel()
         results = []
+        enCours = false
     }
 }

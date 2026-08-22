@@ -99,6 +99,11 @@ T: dict[str, tuple[str, str]] = {
         "MonCap también existe en el reloj — instálala desde la app Watch.",
         "MonCap also lives on the watch — install it from the Watch app."),
     "Ouvrir": ("Abrir", "Open"),
+    # La feuille de recherche : l'attente et le vide se disent.
+    "Recherche…": ("Buscando…", "Searching…"),
+    "Aucun résultat. Précisez l'adresse ou le nom du lieu.": (
+        "Sin resultados. Precisa la dirección o el nombre del lugar.",
+        "No results. Refine the address or place name."),
     # La deuxième fournée de catégories de lieux (2026).
     "Boulangerie": ("Panadería", "Bakery"),
     "Café": ("Cafetería", "Coffee"),
