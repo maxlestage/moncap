@@ -977,6 +977,22 @@
         }
       }
     },
+    "Aucun résultat. Précisez l'adresse ou le nom du lieu.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No results. Refine the address or place name."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin resultados. Precisa la dirección o el nombre del lugar."
+          }
+        }
+      }
+    },
     "Aucun trajet en transports trouvé pour cette destination.": {
       "localizations": {
         "en": {
@@ -5421,6 +5437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Buscando las direcciones…"
+          }
+        }
+      }
+    },
+    "Recherche…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscando…"
           }
         }
       }
