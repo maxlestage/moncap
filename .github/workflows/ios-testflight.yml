@@ -150,6 +150,32 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
+      # Le numéro de build EMBARQUÉ, lu dans l'IPA même — pas supposé depuis
+      # le workflow. Un utilisateur a vu « build 119 » dans TestFlight alors
+      # que le run s'appelait 275 : cette étape imprime ce que chaque cible
+      # transporte réellement, et refuse d'envoyer un numéro qui ne vaut pas
+      # celui du run.
+      - name: Vérifie le numéro de build embarqué
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/export"
+          unzip -q MonCapGPS.ipa -d ipa
+          lire() { /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$1/Info.plist"; }
+          APP="ipa/Payload/MonCapGPS.app"
+          echo "App     : $(lire "$APP") ($(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist"))"
+          echo "Guidage : $(lire "$APP/PlugIns/Guidage.appex")"
+          if [ -d "$APP/Watch/Montre.app" ]; then
+            echo "Montre  : $(lire "$APP/Watch/Montre.app")"
+            [ -d "$APP/Watch/Montre.app/PlugIns/MontreWidgets.appex" ] \
+              && echo "Widgets : $(lire "$APP/Watch/Montre.app/PlugIns/MontreWidgets.appex")"
+          fi
+          [ "$(lire "$APP")" = "${{ github.run_number }}" ] || {
+            echo "::error::Le build embarqué ($(lire "$APP")) ne vaut pas le numéro attendu (${{ github.run_number }})."
+            exit 1
+          }
+          rm -rf ipa
+
       - name: Envoie sur TestFlight
         if: steps.guard.outputs.ready == 'true'
         env:
