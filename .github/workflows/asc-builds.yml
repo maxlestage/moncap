@@ -1,0 +1,27 @@
+name: Builds TestFlight
+
+# Liste les derniers builds TestFlight et leur état de traitement, tel
+# qu'Apple les voit. Manuel uniquement : c'est un outil de diagnostic.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lister:
+    name: Lister les builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Lister
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          python -m pip install --quiet requests "pyjwt[crypto]"
+          python frontend/scripts/asc_builds.py
