@@ -3640,8 +3640,59 @@ struct MapHomeView: View {
     // MARK: - Feuille « Destination » (recherche d'adresse/lieu)
 
     private var searchSheet: some View {
-        NavigationStack {
+        // Une saisie en cours chasse les réglages : les résultats montent en
+        // tête de liste au lieu d'apparaître enterrés sous les modes, les
+        // alertes et les favoris — où personne ne les voyait (constaté :
+        // « il reste bloqué », alors que la recherche répondait plus bas).
+        let enRecherche =
+            destQuery.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+        return NavigationStack {
             List {
+                if enRecherche {
+                    if placeSearch.enCours, placeSearch.results.isEmpty {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Recherche…").foregroundStyle(.secondary)
+                        }
+                    } else if placeSearch.results.isEmpty {
+                        if horsLigne {
+                            Section("Sans réseau") {
+                                Label(
+                                    "La recherche d'adresse a besoin du réseau. Appuie longuement sur la carte pour choisir un point : l'itinéraire se calcule alors sur l'appareil.",
+                                    systemImage: "hand.tap"
+                                )
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text("Aucun résultat. Précisez l'adresse ou le nom du lieu.")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    // Résultats de la recherche en cours.
+                    ForEach(Array(placeSearch.results.enumerated()), id: \.offset) { _, item in
+                        Button {
+                            startSearchNavigation(to: item)
+                        } label: {
+                            HStack {
+                                Image(systemName: "mappin.circle.fill").foregroundStyle(.red)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.name ?? "Destination").font(.headline)
+                                    if let sub = item.placemark.title {
+                                        Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                                Label("Y aller", systemImage: "location.north.line.fill")
+                                    .labelStyle(.iconOnly)
+                                    .foregroundStyle(.green)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(location.coordinate == nil)
+                    }
+                } else {
                 // Mode de déplacement : à pied / vélo / voiture.
                 Section {
                     Picker("Mode", selection: $travelMode) {
@@ -3816,44 +3867,6 @@ struct MapHomeView: View {
                         pousseFavoris()
                     }
                 }
-                // Sans réseau, la recherche d'adresse ne rendra jamais rien :
-                // MKLocalSearch interroge les serveurs d'Apple. Le dire, et
-                // donner le geste qui marche — sinon on cherche en boucle dans
-                // un champ qui ne répondra pas.
-                if horsLigne, placeSearch.results.isEmpty {
-                    Section("Sans réseau") {
-                        Label(
-                            "La recherche d'adresse a besoin du réseau. Appuie longuement sur la carte pour choisir un point : l'itinéraire se calcule alors sur l'appareil.",
-                            systemImage: "hand.tap"
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                // Résultats de la recherche en cours.
-                ForEach(Array(placeSearch.results.enumerated()), id: \.offset) { _, item in
-                    Button {
-                        startSearchNavigation(to: item)
-                    } label: {
-                        HStack {
-                            Image(systemName: "mappin.circle.fill").foregroundStyle(.red)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.name ?? "Destination").font(.headline)
-                                if let sub = item.placemark.title {
-                                    Text(sub).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                }
-                            }
-                            Spacer()
-                            Label("Y aller", systemImage: "location.north.line.fill")
-                                .labelStyle(.iconOnly)
-                                .foregroundStyle(.green)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(location.coordinate == nil)
-                }
-
                 // Champ vide : on propose les recherches récentes.
                 if placeSearch.results.isEmpty {
                     if recents.isEmpty {
@@ -3899,6 +3912,7 @@ struct MapHomeView: View {
                             }
                         }
                     }
+                }
                 }
             }
             .navigationTitle("Où allez-vous ?")
