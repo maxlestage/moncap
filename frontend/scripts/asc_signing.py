@@ -160,6 +160,7 @@ def main():
     # L'app montre a son propre bundle (l'API n'a pas de plateforme
     # watchOS distincte : IOS couvre aussi les apps de la montre).
     assure_bundle(f"{BUNDLE_ID}.watchkitapp", "MonCap GPS Montre")
+    assure_bundle(f"{BUNDLE_ID}.watchkitapp.widgets", "MonCap GPS Montre Widgets")
 
     # 6) Profil App Store : supprime l'ancien de même nom, puis recrée
     profs = req("GET", "/profiles?filter[profileType]=IOS_APP_STORE&limit=200", token)
