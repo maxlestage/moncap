@@ -94,6 +94,11 @@ T: dict[str, tuple[str, str]] = {
     "Le réseau est de retour.": (
         "La red ha vuelto.",
         "The signal is back."),
+    # La proposition d'installer l'app montre.
+    "MonCap existe aussi sur la montre — installez-la depuis l'app Watch.": (
+        "MonCap también existe en el reloj — instálala desde la app Watch.",
+        "MonCap also lives on the watch — install it from the Watch app."),
+    "Ouvrir": ("Abrir", "Open"),
     # La deuxième fournée de catégories de lieux (2026).
     "Boulangerie": ("Panadería", "Bakery"),
     "Café": ("Cafetería", "Coffee"),
