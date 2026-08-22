@@ -3057,6 +3057,22 @@
         }
       }
     },
+    "Hors ligne choisi — calcul sur l'appareil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline by choice — computed on the device"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin conexión elegido — cálculo en el dispositivo"
+          }
+        }
+      }
+    },
     "Hors ligne 🗺️": {
       "localizations": {
         "en": {
@@ -3677,6 +3693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La más sencilla"
+          }
+        }
+      }
+    },
+    "Le réseau est de retour.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The signal is back."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La red ha vuelto."
           }
         }
       }
@@ -5681,6 +5713,22 @@
         }
       }
     },
+    "Réseau coupé. Le guidage continue sur l'appareil.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signal lost. Guidance continues on the device."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red cortada. La guía continúa en el dispositivo."
+          }
+        }
+      }
+    },
     "SIRET %@": {
       "localizations": {
         "en": {
@@ -5789,6 +5837,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sin cobertura"
+          }
+        }
+      }
+    },
+    "Sans réseau — calcul sur l'appareil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No signal — computed on the device"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin red — cálculo en el dispositivo"
           }
         }
       }

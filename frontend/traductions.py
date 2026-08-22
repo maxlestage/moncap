@@ -81,6 +81,19 @@ T: dict[str, tuple[str, str]] = {
     "Carte des feux de forêt": ("Mapa de incendios forestales", "Wildfire map"),
     "Cartes": ("Mapas", "Maps"),
     "Vue 3D": ("Vista 3D", "3D view"),
+    # Le badge hors ligne et ses annonces : être SÛR qu'on roule sans réseau.
+    "Sans réseau — calcul sur l'appareil": (
+        "Sin red — cálculo en el dispositivo",
+        "No signal — computed on the device"),
+    "Hors ligne choisi — calcul sur l'appareil": (
+        "Sin conexión elegido — cálculo en el dispositivo",
+        "Offline by choice — computed on the device"),
+    "Réseau coupé. Le guidage continue sur l'appareil.": (
+        "Red cortada. La guía continúa en el dispositivo.",
+        "Signal lost. Guidance continues on the device."),
+    "Le réseau est de retour.": (
+        "La red ha vuelto.",
+        "The signal is back."),
     # La deuxième fournée de catégories de lieux (2026).
     "Boulangerie": ("Panadería", "Bakery"),
     "Café": ("Cafetería", "Coffee"),
