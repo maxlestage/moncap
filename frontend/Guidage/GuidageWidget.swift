@@ -196,37 +196,48 @@ struct GuidageActiviteVue: View {
 
     /// Le Smart Stack de la montre, fidèle au dessin : la manœuvre dans sa
     /// pastille bleue, la distance en gros chiffres ronds, l'arrivée et le
-    /// restant à droite, le tout sur la nuit marine.
+    /// restant à droite, le tout sur la nuit marine. Chaque texte sait se
+    /// réduire : la place est comptée au poignet, et « 230 m » tronqué en
+    /// « 23… » serait pire qu'un chiffre un peu plus petit (constaté sur
+    /// appareil).
     private var montre: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             ZStack {
                 Circle().fill(
                     LinearGradient(
                         colors: [bleuMontre, marineMontre],
                         startPoint: .topLeading, endPoint: .bottomTrailing))
                 Image(systemName: etat.symbole)
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(.white)
             }
-            .frame(width: 40, height: 40)
-            VStack(alignment: .leading, spacing: 1) {
+            .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 0) {
                 Text(distanceCourte(etat.distanceM))
-                    .font(.system(.title3, design: .rounded).weight(.black))
+                    .font(.system(size: 22, weight: .black, design: .rounded))
                     .monospacedDigit()
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
                     .foregroundStyle(.white)
                 Text(etat.instruction)
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.75))
+                    .minimumScaleFactor(0.7)
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 1) {
+            .layoutPriority(1)
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 0) {
                 Text(heureArrivee(etat.etaMinutes))
-                    .font(.system(.footnote, design: .rounded).weight(.bold))
+                    .font(.system(.caption, design: .rounded).weight(.bold))
                     .monospacedDigit()
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
                     .foregroundStyle(.white)
                 Text(String(format: "%.1f km", etat.restantKm))
                     .font(.caption2)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
                     .foregroundStyle(.white.opacity(0.75))
             }
         }
