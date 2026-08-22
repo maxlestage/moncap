@@ -3809,6 +3809,22 @@
         }
       }
     },
+    "Les zones déjà enregistrées apparaissent en bleu sur la carte.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zones you already saved show in blue on the map."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las zonas ya guardadas aparecen en azul en el mapa."
+          }
+        }
+      }
+    },
     "Liste des régions indisponible — il faut du réseau une fois.": {
       "localizations": {
         "en": {
