@@ -11,6 +11,7 @@
 		AA0000000000000000000040 /* Valhalla in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000042 /* Valhalla */; };
 		AA000000000000000000005C /* Guidage.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000051 /* Guidage.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA000000000000000000007B /* Montre.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000071 /* Montre.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA000000000000000000008B /* MontreWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000081 /* MontreWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,6 +35,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = AA0000000000000000000072;
 			remoteInfo = Montre;
+		};
+		AA000000000000000000008A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000006 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0000000000000000000082;
+			remoteInfo = MontreWidgets;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -60,6 +68,17 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA000000000000000000008C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA000000000000000000008B /* MontreWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -81,6 +100,11 @@
 		AA0000000000000000000070 /* Montre */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Montre;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000000080 /* MontreWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MontreWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -116,6 +140,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000084 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -126,6 +157,7 @@
 				AA0000000000000000000050 /* Guidage */,
 				AA0000000000000000000060 /* MonCapGPSTests */,
 				AA0000000000000000000070 /* Montre */,
+				AA0000000000000000000080 /* MontreWidgets */,
 				AA0000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -137,6 +169,7 @@
 				AA0000000000000000000051 /* Guidage.appex */,
 				AA0000000000000000000061 /* MonCapGPSTests.xctest */,
 				AA0000000000000000000071 /* Montre.app */,
+				AA0000000000000000000081 /* MontreWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -148,6 +181,7 @@
 		AA0000000000000000000051 /* Guidage.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = Guidage.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000061 /* MonCapGPSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MonCapGPSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000071 /* Montre.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Montre.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000081 /* MontreWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MontreWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXNativeTarget section */
@@ -231,10 +265,12 @@
 				AA0000000000000000000073 /* Sources */,
 				AA0000000000000000000074 /* Frameworks */,
 				AA0000000000000000000075 /* Resources */,
+				AA000000000000000000008C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA0000000000000000000089 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000070 /* Montre */,
@@ -245,6 +281,28 @@
 			productName = Montre;
 			productReference = AA0000000000000000000071 /* Montre.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AA0000000000000000000082 /* MontreWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000000086 /* Build configuration list for PBXNativeTarget "MontreWidgets" */;
+			buildPhases = (
+				AA0000000000000000000083 /* Sources */,
+				AA0000000000000000000084 /* Frameworks */,
+				AA0000000000000000000085 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA0000000000000000000080 /* MontreWidgets */,
+			);
+			name = MontreWidgets;
+			packageProductDependencies = (
+			);
+			productName = MontreWidgets;
+			productReference = AA0000000000000000000081 /* MontreWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -263,6 +321,11 @@
 			isa = PBXTargetDependency;
 			target = AA0000000000000000000072 /* Montre */;
 			targetProxy = AA000000000000000000007A /* PBXContainerItemProxy */;
+		};
+		AA0000000000000000000089 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0000000000000000000082 /* MontreWidgets */;
+			targetProxy = AA000000000000000000008A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -285,6 +348,9 @@
 						TestTargetID = AA0000000000000000000004;
 					};
 					AA0000000000000000000072 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					AA0000000000000000000082 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -312,6 +378,7 @@
 				AA0000000000000000000052 /* Guidage */,
 				AA0000000000000000000062 /* MonCapGPSTests */,
 				AA0000000000000000000072 /* Montre */,
+				AA0000000000000000000082 /* MontreWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -345,6 +412,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA0000000000000000000085 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -370,6 +444,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AA0000000000000000000073 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA0000000000000000000083 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -684,6 +765,58 @@
 			};
 			name = Release;
 		};
+		AA0000000000000000000087 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2FW8T4UX4L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/MontreWidgetsInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MonCap;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxlestage.moncap.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000000088 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2FW8T4UX4L;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/MontreWidgetsInfo.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MonCap;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxlestage.moncap.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -728,6 +861,15 @@
 			buildConfigurations = (
 				AA0000000000000000000077 /* Debug */,
 				AA0000000000000000000078 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000000086 /* Build configuration list for PBXNativeTarget "MontreWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000000087 /* Debug */,
+				AA0000000000000000000088 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
