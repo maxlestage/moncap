@@ -4321,6 +4321,22 @@
         }
       }
     },
+    "MonCap existe aussi sur la montre — installez-la depuis l'app Watch.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap also lives on the watch — install it from the Watch app."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MonCap también existe en el reloj — instálala desde la app Watch."
+          }
+        }
+      }
+    },
     "Mot de passe : 6 caractères minimum.": {
       "localizations": {
         "en": {
@@ -4621,6 +4637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tormenta"
+          }
+        }
+      }
+    },
+    "Ouvrir": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir"
           }
         }
       }

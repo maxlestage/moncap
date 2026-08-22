@@ -8,8 +8,13 @@ import WatchConnectivity
 /// verrouillé. Le canal `updateApplicationContext` remplace l'état précédent
 /// au lieu d'empiler des messages — parfait pour du « dernier état connu ».
 @MainActor
-final class MontreLien: NSObject, WCSessionDelegate {
+final class MontreLien: NSObject, WCSessionDelegate, ObservableObject {
     static let partage = MontreLien()
+
+    /// Vraie quand une montre est appairée SANS l'app MonCap : l'app
+    /// propose alors de l'installer — TestFlight ne le fait pas toujours
+    /// tout seul, et personne ne va fouiller l'app Watch sans y être invité.
+    @Published private(set) var montreSansApp = false
 
     private var dernierEtat: GuidageAttributs.ContentState?
     private var derniereMaj = Date.distantPast
@@ -19,6 +24,16 @@ final class MontreLien: NSObject, WCSessionDelegate {
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
+    }
+
+    /// Relit l'état d'appairage. Les propriétés de WCSession se lisent de
+    /// n'importe quel fil ; seule la publication repasse par le main actor.
+    private nonisolated func relitMontre(_ session: WCSession) {
+        let sansApp = session.activationState == .activated && session.isPaired
+            && !session.isWatchAppInstalled
+        Task { @MainActor in
+            if self.montreSansApp != sansApp { self.montreSansApp = sansApp }
+        }
     }
 
     /// Envoie l'état courant si une montre appairée a l'app installée.
@@ -60,10 +75,17 @@ final class MontreLien: NSObject, WCSessionDelegate {
     }
 
     // WCSessionDelegate — rien à faire de spécial côté iPhone, sinon
-    // réactiver la session quand elle bascule d'une montre à l'autre.
+    // réactiver la session quand elle bascule d'une montre à l'autre, et
+    // suivre l'appairage pour la proposition d'installation.
     nonisolated func session(_ session: WCSession,
                              activationDidCompleteWith activationState: WCSessionActivationState,
-                             error: Error?) {}
+                             error: Error?) {
+        relitMontre(session)
+    }
+
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        relitMontre(session)
+    }
 
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
 

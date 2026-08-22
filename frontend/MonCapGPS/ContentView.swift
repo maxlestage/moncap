@@ -635,6 +635,11 @@ struct MapHomeView: View {
     /// L'état réel du réseau : le badge « hors ligne » ne doit pas dépendre
     /// d'un réglage mais d'un fait observé.
     @ObservedObject private var reseau = Reseau.partage
+    /// Le pont vers la montre : observé pour proposer l'app au poignet
+    /// quand une montre appairée ne l'a pas.
+    @ObservedObject private var montre = MontreLien.partage
+    /// Proposition d'installation déjà écartée : on ne la remontre pas.
+    @AppStorage("moncap.montreProposee") private var montreProposee = false
     /// Dernier état de réseau vu par l'annonce vocale : on n'annonce que les
     /// vraies bascules, pas la valeur courante rejouée à l'abonnement.
     @State private var reseauCoupePrecedent: Bool?
@@ -876,6 +881,12 @@ struct MapHomeView: View {
                 // qu'on roule sans réseau, d'un coup d'œil — coupure subie
                 // en orange, mode choisi en bleu.
                 badgeHorsLigne
+                // Une montre appairée sans l'app MonCap : on le propose une
+                // fois — TestFlight n'installe pas toujours la partie montre
+                // tout seul, et personne ne fouille l'app Watch sans raison.
+                if montre.montreSansApp, !montreProposee, !nav.active {
+                    bannerMontre
+                }
                 Spacer()
             }
             .padding(.horizontal)
@@ -2596,6 +2607,44 @@ struct MapHomeView: View {
                 .background(.regularMaterial, in: Circle())
                 .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
         }
+    }
+
+    /// La proposition d'installer l'app montre : une carte discrète, un
+    /// bouton qui ouvre l'app Watch (là où l'installation se fait), une
+    /// croix qui écarte pour de bon. Elle disparaît d'elle-même dès que
+    /// l'app est au poignet.
+    private var bannerMontre: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "applewatch")
+                .font(.title3)
+                .foregroundStyle(.blue)
+            Text("MonCap existe aussi sur la montre — installez-la depuis l'app Watch.")
+                .font(.footnote.weight(.medium))
+                .multilineTextAlignment(.leading)
+            Spacer()
+            Button {
+                // Le schéma de l'app Watch ; si iOS le refuse, la carte
+                // reste et dit déjà où aller.
+                if let url = URL(string: "itms-watchs://") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Text("Ouvrir")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.blue, in: Capsule())
+            }
+            Button {
+                montreProposee = true
+            } label: {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
     }
 
     /// Le badge hors ligne. Deux états, deux couleurs : l'orange dit que le
