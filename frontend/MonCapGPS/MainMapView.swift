@@ -143,7 +143,16 @@ struct MainMapView: UIViewRepresentable {
         // Pas de pastille bleue : la position est marquée par l'avatar,
         // posé comme épingle par la vue appelante.
         view.showsUserLocation = false
-        view.attributionButtonPosition = .bottomRight
+        // Le logo et le « i » d'attribution doivent rester VISIBLES — la
+        // licence des données l'exige, et l'écran est meublé : en bas à
+        // droite ils disparaissaient sous le panneau de commandes, en bas à
+        // gauche sous les pastilles météo/vitesse (constaté : « le petit i
+        // est caché »). Ils vivent donc juste AU-DESSUS de la colonne de
+        // pastilles, côte à côte — le seul coin que rien ne recouvre.
+        view.logoViewPosition = .bottomLeft
+        view.logoViewMargins = CGPoint(x: 10, y: 170)
+        view.attributionButtonPosition = .bottomLeft
+        view.attributionButtonMargins = CGPoint(x: 104, y: 168)
         // La boussole d'Apple avait son équivalent ici ; le logo doit rester
         // visible, la licence des données l'exige.
         view.compassView.isHidden = false
