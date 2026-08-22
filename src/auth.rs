@@ -112,6 +112,7 @@ pub fn dummy_verify(password: &str) {
 /// Extracteur : exige un en-tête `Authorization: Bearer <jwt>` valide.
 pub(crate) struct AuthUser(pub(crate) i32);
 
+#[axum::async_trait]
 impl<S: Send + Sync> FromRequestParts<S> for AuthUser {
     type Rejection = AppError;
 

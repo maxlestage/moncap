@@ -782,7 +782,7 @@ fn nature_suffixe(nature: &str) -> Option<&'static str> {
     }
 }
 
-/// GET /offline/regions/{tag}/{nature} — redirige vers l'adresse signée du
+/// GET /offline/regions/:tag/:nature — redirige vers l'adresse signée du
 /// fichier (`archive` pour les tuiles, `config` pour la configuration,
 /// `lieux` et `vitesses` pour les annexes hors ligne).
 ///
@@ -2074,7 +2074,7 @@ async fn tiles_style(headers: HeaderMap) -> Response {
     Json(style).into_response()
 }
 
-/// GET /tiles/{z}/{x}/{y} — tuile de carte, pour les cartes hors ligne de l'app.
+/// GET /tiles/:z/:x/:y — tuile de carte, pour les cartes hors ligne de l'app.
 ///
 /// Relais vers le serveur amont configuré, avec cache mémoire. **La licence
 /// applicable est celle de l'amont** : ce relais ne rend pas légitime une
@@ -2446,7 +2446,7 @@ async fn live_stop(Path(token): Path<String>) -> StatusCode {
     StatusCode::OK
 }
 
-/// GET /live/{token}/pos — dernière position (JSON), pour la page de suivi.
+/// GET /live/:token/pos — dernière position (JSON), pour la page de suivi.
 async fn live_pos(Path(token): Path<String>) -> Response {
     let now = (now_ms() / 1000) as i64;
     let g = live_map().lock().unwrap();
@@ -2822,7 +2822,7 @@ fn build_app(state: AppState) -> Router {
         // Déclarée avant la route paramétrée, sinon « style.json » serait
         // interprété comme un niveau de zoom.
         .route("/tiles/style.json", get(tiles_style))
-        .route("/tiles/{z}/{x}/{y}", get(tile))
+        .route("/tiles/:z/:x/:y", get(tile))
         .layer(middleware::from_fn(move |req, next| {
             rate_limit(tiles_rl.clone(), req, next)
         }));
@@ -2844,14 +2844,14 @@ fn build_app(state: AppState) -> Router {
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
         .route("/trips", get(list_trips).post(add_trip))
-        .route("/trips/{id}", axum::routing::delete(delete_trip))
+        .route("/trips/:id", axum::routing::delete(delete_trip))
         .route(
             "/searches",
             get(list_searches).post(add_search).delete(clear_searches),
         )
-        .route("/searches/{id}", axum::routing::delete(delete_search))
+        .route("/searches/:id", axum::routing::delete(delete_search))
         .route("/alerts", get(list_alerts))
-        .route("/alerts/{id}/vote", post(vote_alert))
+        .route("/alerts/:id/vote", post(vote_alert))
         .route("/account", get(account_info).delete(delete_account))
         .route("/prefs", get(get_prefs).put(put_prefs))
         .route("/account/export", get(export_account))
@@ -2864,14 +2864,14 @@ fn build_app(state: AppState) -> Router {
         // sont des données OpenStreetMap, redistribuables (ODbL). Le préfixe
         // d'étiquette borne strictement ce qui peut sortir du dépôt privé.
         .route("/offline/regions", get(list_paquets))
-        .route("/offline/regions/{tag}/{nature}", get(paquet_fichier))
+        .route("/offline/regions/:tag/:nature", get(paquet_fichier))
         .route("/traffic", get(list_traffic))
         .route("/live", post(live_start))
         .route(
             "/live/:token",
             get(live_page).post(live_update).delete(live_stop),
         )
-        .route("/live/{token}/pos", get(live_pos))
+        .route("/live/:token/pos", get(live_pos))
         .route("/privacy", get(privacy_page))
         .route("/t", get(trajet_partage))
         // La page du lien reçu par courriel (formulaire du nouveau mot de
@@ -3477,7 +3477,7 @@ async fn add_trip(
     Ok(Json(saved))
 }
 
-/// DELETE /trips/{id} — supprime un trajet de l'utilisateur.
+/// DELETE /trips/:id — supprime un trajet de l'utilisateur.
 async fn delete_trip(
     AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
@@ -3559,7 +3559,7 @@ async fn add_search(
     Ok(Json(saved))
 }
 
-/// DELETE /searches/{id} — supprime une recherche récente de l'utilisateur.
+/// DELETE /searches/:id — supprime une recherche récente de l'utilisateur.
 async fn delete_search(
     AuthUser(uid): AuthUser,
     State(db): State<DatabaseConnection>,
@@ -3688,7 +3688,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, uid: i32) {
     // Identité de la connexion : permet au client de reconnaître sa propre
     // position live parmi les événements diffusés.
     if let Ok(json) = serde_json::to_string(&ServerEvent::Hello { id }) {
-        let _ = socket.send(Message::Text(json.into())).await;
+        let _ = socket.send(Message::Text(json)).await;
     }
 
     // Instantané des signalements en cours (persistés), envoyé à la connexion.
@@ -3696,14 +3696,14 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, uid: i32) {
         alerts: active_alerts(&state.db).await.unwrap_or_default(),
     };
     if let Ok(json) = serde_json::to_string(&snapshot) {
-        let _ = socket.send(Message::Text(json.into())).await;
+        let _ = socket.send(Message::Text(json)).await;
     }
 
     loop {
         tokio::select! {
             res = rx.recv() => match res {
                 Ok(msg) => {
-                    if socket.send(Message::Text(msg.into())).await.is_err() {
+                    if socket.send(Message::Text(msg)).await.is_err() {
                         break;
                     }
                 }
@@ -3840,7 +3840,7 @@ struct AlertVote {
     up: bool,
 }
 
-/// POST /alerts/{id}/vote — confirme (prolonge) ou infirme (peut supprimer).
+/// POST /alerts/:id/vote — confirme (prolonge) ou infirme (peut supprimer).
 async fn vote_alert(
     AuthUser(_uid): AuthUser,
     State(state): State<AppState>,
@@ -5013,7 +5013,7 @@ mod tests {
         let tiles_rl = Arc::new(RateLimiter::new(100, 60));
         let tile_routes =
             Router::new()
-                .route("/tiles/{z}/{x}/{y}", get(ok))
+                .route("/tiles/:z/:x/:y", get(ok))
                 .layer(middleware::from_fn(move |req, next| {
                     rate_limit(tiles_rl.clone(), req, next)
                 }));
@@ -5069,7 +5069,7 @@ mod tests {
 
         // Amont configuré, sinon tout répondrait 404 sans rien valider.
         std::env::set_var("TILES_UPSTREAM", "https://exemple.invalid/{z}/{x}/{y}.png");
-        let app: Router = Router::new().route("/tiles/{z}/{x}/{y}", get(tile));
+        let app: Router = Router::new().route("/tiles/:z/:x/:y", get(tile));
 
         // Au zoom 1 il n'existe que les tuiles 0 et 1 sur chaque axe.
         for uri in [
@@ -5100,7 +5100,7 @@ mod tests {
         use tower::ServiceExt;
 
         std::env::remove_var("TILES_UPSTREAM");
-        let app: Router = Router::new().route("/tiles/{z}/{x}/{y}", get(tile));
+        let app: Router = Router::new().route("/tiles/:z/:x/:y", get(tile));
         let resp = app
             .oneshot(
                 Request::builder()
@@ -6113,7 +6113,7 @@ mod integration {
         }
         let app: Router = Router::new()
             .route("/offline/regions", get(list_paquets))
-            .route("/offline/regions/{tag}/{nature}", get(paquet_fichier));
+            .route("/offline/regions/:tag/:nature", get(paquet_fichier));
 
         for chemin in [
             "/offline/regions",
@@ -6141,7 +6141,7 @@ mod integration {
     /// Une nature de fichier inconnue ne doit pas atteindre GitHub.
     #[tokio::test]
     async fn une_nature_inconnue_est_refusee() {
-        let app: Router = Router::new().route("/offline/regions/{tag}/{nature}", get(paquet_fichier));
+        let app: Router = Router::new().route("/offline/regions/:tag/:nature", get(paquet_fichier));
         let resp = app
             .oneshot(
                 axum::http::Request::builder()
