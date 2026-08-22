@@ -130,31 +130,7 @@ struct RaccourcisWidget: Widget {
 struct GuidageWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GuidageAttributs.self) { contexte in
-            // Écran verrouillé : une carte compacte, lisible d'un regard.
-            HStack(spacing: 12) {
-                Image(systemName: contexte.state.symbole)
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundStyle(.green)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(distanceCourte(contexte.state.distanceM))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(contexte.state.instruction)
-                        .font(.headline)
-                        .lineLimit(2)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(heureArrivee(contexte.state.etaMinutes))
-                        .font(.headline)
-                    Text(String(format: "%.0f km", contexte.state.restantKm))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(14)
-            .activityBackgroundTint(Color.black.opacity(0.6))
-            .activitySystemActionForegroundColor(.white)
+            GuidageActiviteVue(etat: contexte.state)
         } dynamicIsland: { contexte in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -191,5 +167,104 @@ struct GuidageWidget: Widget {
                     .foregroundStyle(.green)
             }
         }
+        // Sans cette ligne, la montre recopie la Live Activity dans un
+        // habillage générique — nom de l'app, « Ouvrir sur l'iPhone » — au
+        // lieu de l'écran dessiné. Avec elle, watchOS demande la famille
+        // `.small` et reçoit la vue marine ci-dessous.
+        .supplementalActivityFamilies([.small])
+    }
+}
+
+/// Le bleu de la pastille et la nuit marine : les mêmes teintes que l'app
+/// montre (MontreVue) et que le dessin du site — un seul écran, partout.
+private let bleuMontre = Color(red: 0.29, green: 0.61, blue: 1.0)
+private let marineMontre = Color(red: 0.09, green: 0.16, blue: 0.38)
+
+/// La vue de la Live Activity, déclinée par famille : sur l'iPhone la carte
+/// de l'écran verrouillé ; sur la montre (Smart Stack, watchOS 11) l'écran
+/// de la maquette — pastille bleue dégradée, distance en grand, nuit marine.
+struct GuidageActiviteVue: View {
+    @Environment(\.activityFamily) private var famille
+    let etat: GuidageAttributs.ContentState
+
+    var body: some View {
+        switch famille {
+        case .small: montre
+        default: verrou
+        }
+    }
+
+    /// Le Smart Stack de la montre, fidèle au dessin : la manœuvre dans sa
+    /// pastille bleue, la distance en gros chiffres ronds, l'arrivée et le
+    /// restant à droite, le tout sur la nuit marine.
+    private var montre: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle().fill(
+                    LinearGradient(
+                        colors: [bleuMontre, marineMontre],
+                        startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(systemName: etat.symbole)
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 40, height: 40)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(distanceCourte(etat.distanceM))
+                    .font(.system(.title3, design: .rounded).weight(.black))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                Text(etat.instruction)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(heureArrivee(etat.etaMinutes))
+                    .font(.system(.footnote, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                Text(String(format: "%.1f km", etat.restantKm))
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+        }
+        .containerBackground(for: .widget) {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.15, blue: 0.25),
+                    Color(red: 0.02, green: 0.03, blue: 0.05),
+                ],
+                startPoint: .top, endPoint: .bottom)
+        }
+    }
+
+    /// Écran verrouillé de l'iPhone : une carte compacte, lisible d'un regard.
+    private var verrou: some View {
+        HStack(spacing: 12) {
+            Image(systemName: etat.symbole)
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(distanceCourte(etat.distanceM))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(etat.instruction)
+                    .font(.headline)
+                    .lineLimit(2)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(heureArrivee(etat.etaMinutes))
+                    .font(.headline)
+                Text(String(format: "%.0f km", etat.restantKm))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .activityBackgroundTint(Color.black.opacity(0.6))
+        .activitySystemActionForegroundColor(.white)
     }
 }
