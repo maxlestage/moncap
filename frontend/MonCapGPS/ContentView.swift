@@ -632,6 +632,12 @@ struct MapHomeView: View {
     /// réseau. Choisi, et non subi : partir en montagne ou à l'étranger se
     /// décide avant de perdre le signal, pas après.
     @AppStorage("moncap.horsLigne") private var horsLigne = false
+    /// L'état réel du réseau : le badge « hors ligne » ne doit pas dépendre
+    /// d'un réglage mais d'un fait observé.
+    @ObservedObject private var reseau = Reseau.partage
+    /// Dernier état de réseau vu par l'annonce vocale : on n'annonce que les
+    /// vraies bascules, pas la valeur courante rejouée à l'abonnement.
+    @State private var reseauCoupePrecedent: Bool?
     private let api = APIClient()
 
     @State private var positions: [Position] = []
@@ -866,6 +872,10 @@ struct MapHomeView: View {
                     }
                     poiBar
                 }
+                // Le badge hors ligne, sous le bandeau : on doit être SÛR
+                // qu'on roule sans réseau, d'un coup d'œil — coupure subie
+                // en orange, mode choisi en bleu.
+                badgeHorsLigne
                 Spacer()
             }
             .padding(.horizontal)
@@ -982,6 +992,20 @@ struct MapHomeView: View {
             Button("OK", role: .cancel) { shareError = nil }
         } message: {
             Text(shareError ?? "")
+        }
+        // Pendant le guidage, la voix double le badge : la coupure comme le
+        // retour du réseau se disent au moment où ils surviennent — les yeux
+        // restent sur la route. Le premier état reçu à l'abonnement n'est pas
+        // une bascule : il ne s'annonce pas.
+        .onReceive(reseau.$coupe) { coupe in
+            defer { reseauCoupePrecedent = coupe }
+            guard let avant = reseauCoupePrecedent, avant != coupe, nav.active
+            else { return }
+            nav.announce(NSLocalizedString(
+                coupe
+                    ? "Réseau coupé. Le guidage continue sur l'appareil."
+                    : "Le réseau est de retour.",
+                comment: ""))
         }
         // Un lien moncap://trajet?… — depuis la page de partage, un message,
         // un autre appareil : le trajet s'ouvre ici comme si on l'avait posé.
@@ -2571,6 +2595,36 @@ struct MapHomeView: View {
                 .frame(width: 52, height: 52)
                 .background(.regularMaterial, in: Circle())
                 .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
+        }
+    }
+
+    /// Le badge hors ligne. Deux états, deux couleurs : l'orange dit que le
+    /// réseau est réellement coupé (constaté par le moniteur), le bleu que le
+    /// mode hors ligne est un choix. Dans les deux cas, la même certitude :
+    /// l'itinéraire se calcule sur l'appareil.
+    @ViewBuilder private var badgeHorsLigne: some View {
+        if reseau.coupe {
+            HStack(spacing: 6) {
+                Image(systemName: "wifi.slash")
+                Text("Sans réseau — calcul sur l'appareil")
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color.orange.gradient, in: Capsule())
+            .shadow(color: .black.opacity(0.2), radius: 5, y: 2)
+        } else if horsLigne {
+            HStack(spacing: 6) {
+                Image(systemName: "airplane")
+                Text("Hors ligne choisi — calcul sur l'appareil")
+            }
+            .font(.caption.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color.blue.gradient, in: Capsule())
+            .shadow(color: .black.opacity(0.2), radius: 5, y: 2)
         }
     }
 
