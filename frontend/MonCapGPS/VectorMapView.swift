@@ -14,6 +14,11 @@ struct VectorMapView: UIViewRepresentable {
     let styleURL: URL
     /// Tracé de l'itinéraire mémorisé, s'il y en a un.
     let route: [CLLocationCoordinate2D]
+    /// Zones déjà enregistrées, dessinées en bleu sur la carte : on
+    /// reconnaît d'un regard ce qui est déjà téléchargé.
+    var zones: [VectorPackDownloader.ZoneEnregistree] = []
+    /// Couloirs d'itinéraire enregistrés, dessinés en trait large.
+    var couloirs: [[CLLocationCoordinate2D]] = []
     /// Cadrage demandé : à l'ouverture, puis à chaque lieu choisi dans la
     /// recherche. Chaque valeur porte une identité, donc redemander le même
     /// endroit y ramène bien.
@@ -53,6 +58,7 @@ struct VectorMapView: UIViewRepresentable {
             view.setCenter(cam.center, zoomLevel: cam.zoom, animated: true)
         }
         context.coordinator.update(route: route, on: view)
+        context.coordinator.update(zones: zones, couloirs: couloirs, on: view)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -61,6 +67,8 @@ struct VectorMapView: UIViewRepresentable {
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
         private var route: [CLLocationCoordinate2D]
+        private var zones: [VectorPackDownloader.ZoneEnregistree] = []
+        private var couloirs: [[CLLocationCoordinate2D]] = []
         private let onRegionChange: (MLNCoordinateBounds) -> Void
         /// Style demandé à la vue ; fait foi pendant le chargement.
         var appliedStyle: URL?
@@ -95,8 +103,81 @@ struct VectorMapView: UIViewRepresentable {
         /// L'itinéraire ne peut être ajouté qu'une fois le style chargé : les
         /// couches se greffent dessus.
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
-            // Rechargé, le style a perdu ses couches : le tracé est reposé.
+            // Rechargé, le style a perdu ses couches : tout est reposé.
             draw(on: style)
+            drawZones(on: style)
+        }
+
+        /// Mémorise les zones enregistrées et les redessine si besoin.
+        func update(
+            zones: [VectorPackDownloader.ZoneEnregistree],
+            couloirs: [[CLLocationCoordinate2D]], on view: MLNMapView
+        ) {
+            guard zones != self.zones || couloirs.count != self.couloirs.count
+            else { return }
+            self.zones = zones
+            self.couloirs = couloirs
+            if let style = view.style { drawZones(on: style) }
+        }
+
+        /// Les zones déjà enregistrées, en bleu translucide bordé : le seul
+        /// moyen de reconnaître d'un regard ce qui est déjà téléchargé — le
+        /// bouton, lui, ne le disait que si l'on cadrait pile dessus.
+        private func drawZones(on style: MLNStyle) {
+            for id in ["zones-fond", "zones-bord", "couloirs-trace"] {
+                if let layer = style.layer(withIdentifier: id) {
+                    style.removeLayer(layer)
+                }
+            }
+            for id in ["zones-enregistrees", "couloirs-enregistres"] {
+                if let source = style.source(withIdentifier: id) {
+                    style.removeSource(source)
+                }
+            }
+
+            if !zones.isEmpty {
+                let polygones = zones.map { z -> MLNPolygonFeature in
+                    var coins = [
+                        CLLocationCoordinate2D(latitude: z.swLat, longitude: z.swLon),
+                        CLLocationCoordinate2D(latitude: z.swLat, longitude: z.neLon),
+                        CLLocationCoordinate2D(latitude: z.neLat, longitude: z.neLon),
+                        CLLocationCoordinate2D(latitude: z.neLat, longitude: z.swLon),
+                    ]
+                    return MLNPolygonFeature(coordinates: &coins, count: 4)
+                }
+                let source = MLNShapeSource(
+                    identifier: "zones-enregistrees",
+                    shape: MLNShapeCollectionFeature(shapes: polygones), options: nil)
+                style.addSource(source)
+                let fond = MLNFillStyleLayer(identifier: "zones-fond", source: source)
+                fond.fillColor = NSExpression(forConstantValue: UIColor.systemBlue)
+                fond.fillOpacity = NSExpression(forConstantValue: 0.10)
+                style.addLayer(fond)
+                let bord = MLNLineStyleLayer(identifier: "zones-bord", source: source)
+                bord.lineColor = NSExpression(forConstantValue: UIColor.systemBlue)
+                bord.lineWidth = NSExpression(forConstantValue: 1.5)
+                bord.lineDashPattern = NSExpression(forConstantValue: [2, 2])
+                style.addLayer(bord)
+            }
+
+            if !couloirs.isEmpty {
+                let lignes = couloirs.map { trace -> MLNPolylineFeature in
+                    var coords = trace
+                    return MLNPolylineFeature(
+                        coordinates: &coords, count: UInt(coords.count))
+                }
+                let source = MLNShapeSource(
+                    identifier: "couloirs-enregistres",
+                    shape: MLNShapeCollectionFeature(shapes: lignes), options: nil)
+                style.addSource(source)
+                let couche = MLNLineStyleLayer(
+                    identifier: "couloirs-trace", source: source)
+                couche.lineColor = NSExpression(forConstantValue: UIColor.systemBlue)
+                couche.lineWidth = NSExpression(forConstantValue: 9)
+                couche.lineOpacity = NSExpression(forConstantValue: 0.18)
+                couche.lineCap = NSExpression(forConstantValue: "round")
+                style.addLayer(couche)
+            }
         }
 
         private func draw(on style: MLNStyle) {
@@ -137,6 +218,21 @@ final class VectorPackDownloader: NSObject, ObservableObject {
     @Published private(set) var storedBytes = 0
     /// Nombre de zones enregistrées.
     @Published private(set) var packCount = 0
+    /// Les rectangles des zones enregistrées, prêts à dessiner : c'est le
+    /// seul moyen de RECONNAÎTRE d'un regard ce qui est déjà téléchargé —
+    /// le bouton ne le disait que si l'on cadrait pile dessus (constaté).
+    @Published private(set) var zones: [ZoneEnregistree] = []
+    /// Les couloirs d'itinéraire enregistrés (packs en forme de tracé).
+    @Published private(set) var couloirs: [[CLLocationCoordinate2D]] = []
+
+    /// Un rectangle enregistré, en quatre nombres : `CLLocationCoordinate2D`
+    /// n'est pas Equatable, les doubles le sont.
+    struct ZoneEnregistree: Equatable {
+        let swLat: Double
+        let swLon: Double
+        let neLat: Double
+        let neLon: Double
+    }
 
     override init() {
         super.init()
@@ -207,6 +303,8 @@ final class VectorPackDownloader: NSObject, ObservableObject {
         message = nil
         storedBytes = 0
         packCount = 0
+        zones = []
+        couloirs = []
     }
 
     /// Redemande leur état aux zones enregistrées.
@@ -234,6 +332,27 @@ final class VectorPackDownloader: NSObject, ObservableObject {
     private func recount(_ packs: [MLNOfflinePack]) {
         packCount = packs.count
         storedBytes = packs.reduce(0) { $0 + Int($1.progress.countOfBytesCompleted) }
+        var rectangles: [ZoneEnregistree] = []
+        var traces: [[CLLocationCoordinate2D]] = []
+        for pack in packs {
+            if let r = pack.region as? MLNTilePyramidOfflineRegion {
+                rectangles.append(
+                    ZoneEnregistree(
+                        swLat: r.bounds.sw.latitude, swLon: r.bounds.sw.longitude,
+                        neLat: r.bounds.ne.latitude, neLon: r.bounds.ne.longitude))
+            } else if let r = pack.region as? MLNShapeOfflineRegion,
+                let ligne = r.shape as? MLNPolyline
+            {
+                let n = Int(ligne.pointCount)
+                guard n >= 2 else { continue }
+                var coords = [CLLocationCoordinate2D](
+                    repeating: CLLocationCoordinate2D(), count: n)
+                ligne.getCoordinates(&coords, range: NSRange(location: 0, length: n))
+                traces.append(coords)
+            }
+        }
+        if zones != rectangles { zones = rectangles }
+        if couloirs.count != traces.count { couloirs = traces }
     }
 
     /// Une zone déjà enregistrée couvre-t-elle celle-ci, au même détail ?
