@@ -56,30 +56,54 @@ def req(method, path, token, **kw):
     return r.json() if r.text else {}
 
 
+# Seule cette app est livrée par la CI GitHub : elle seule doit perdre son
+# pipeline Xcode Cloud. La première exécution coupait TOUT le compte — les
+# huit autres apps comprises — d'où le mode « repare » qui les rallume.
+CIBLE = "MonCapGPS"
+
+
+def regle(token, wf, produit, active):
+    body = {"data": {"type": "ciWorkflows", "id": wf["id"],
+                     "attributes": {"isEnabled": active}}}
+    req("PATCH", f"/ciWorkflows/{wf['id']}", token, data=json.dumps(body))
+    verbe = "rallumé" if active else "désactivé"
+    print(f"Workflow Xcode Cloud {verbe} : {produit} / {wf['attributes'].get('name')}")
+
+
 def main():
+    # MODE=coupe (défaut) : coupe les workflows du produit CIBLE seulement.
+    # MODE=repare : rallume tous les AUTRES produits, CIBLE reste coupée.
+    mode = os.environ.get("MODE", "coupe")
     token = make_token()
     produits = req("GET", "/ciProducts?limit=200", token).get("data", [])
     if not produits:
-        print("Aucun produit Xcode Cloud sur ce compte — rien à couper.")
+        print("Aucun produit Xcode Cloud sur ce compte — rien à faire.")
         return
-    coupes = 0
+    touches = 0
     for produit in produits:
         nom_produit = produit["attributes"].get("name")
+        vise = (nom_produit == CIBLE) if mode == "coupe" else (nom_produit != CIBLE)
+        if not vise:
+            continue
         flux = req(
             "GET", f"/ciProducts/{produit['id']}/workflows?limit=200", token
         ).get("data", [])
         for wf in flux:
-            attrs = wf["attributes"]
-            nom = attrs.get("name")
-            if not attrs.get("isEnabled", True):
-                print(f"Déjà coupé : {nom_produit} / {nom}")
+            actif = wf["attributes"].get("isEnabled", True)
+            nom_wf = wf["attributes"].get("name")
+            voulu = mode == "repare"
+            # La réparation ne rallume que ce que la première exécution a
+            # éteint : les workflows « Default ». « Optyx / Test » était
+            # déjà coupé AVANT — un choix de l'utilisateur, pas le nôtre.
+            if mode == "repare" and nom_wf != "Default":
+                print(f"Laissé tel quel : {nom_produit} / {nom_wf}")
                 continue
-            body = {"data": {"type": "ciWorkflows", "id": wf["id"],
-                             "attributes": {"isEnabled": False}}}
-            req("PATCH", f"/ciWorkflows/{wf['id']}", token, data=json.dumps(body))
-            print(f"Workflow Xcode Cloud désactivé : {nom_produit} / {nom}")
-            coupes += 1
-    print(f"{coupes} workflow(s) coupé(s). TestFlight ne reçoit plus que la CI GitHub.")
+            if actif == voulu:
+                print(f"Déjà bon : {nom_produit} / {nom_wf}")
+                continue
+            regle(token, wf, nom_produit, voulu)
+            touches += 1
+    print(f"{touches} workflow(s) modifié(s) (mode {mode}).")
 
 
 if __name__ == "__main__":
