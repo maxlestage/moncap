@@ -175,7 +175,7 @@ const FR: Contenu = {
   montre: {
     titre: "Et au poignet",
     intro:
-      "L'app Apple Watch reçoit le guidage de l'iPhone : la manœuvre en grand, la distance, le restant et l'heure d'arrivée. Un tapotement à chaque nouvelle consigne — on sent le virage venir sans regarder l'écran. Le dernier état envoyé survit à la fermeture : on lève le poignet, la consigne est déjà là.",
+      "La montre a sa propre application MonCap — pas un simple reflet de l'iPhone. Elle s'installe avec l'app, se pose en complication sur le cadran, et s'ouvre d'un toucher : la manœuvre en grand, la distance, le restant et l'heure d'arrivée, plein écran. Un tapotement à chaque nouvelle consigne — on sent le virage venir sans regarder l'écran. Le dernier état envoyé survit à la fermeture : on lève le poignet, la consigne est déjà là.",
   },
   lieux: {
     titre: "Ce qu'il y a autour",
@@ -606,7 +606,7 @@ const ES: Contenu = {
   montre: {
     titre: "Y en la muñeca",
     intro:
-      "La app para Apple Watch recibe la guía del iPhone: la maniobra en grande, la distancia, lo que queda y la hora de llegada. Un toque en la muñeca con cada nueva indicación — la curva se siente venir sin mirar la pantalla. El último estado enviado sobrevive al cierre: levantas la muñeca y la indicación ya está ahí.",
+      "El reloj tiene su propia aplicación MonCap — no un simple reflejo del iPhone. Se instala con la app, se coloca como complicación en la esfera y se abre con un toque: la maniobra en grande, la distancia, lo que queda y la hora de llegada, a pantalla completa. Un toque en la muñeca con cada nueva indicación — la curva se siente venir sin mirar la pantalla. El último estado enviado sobrevive al cierre: levantas la muñeca y la indicación ya está ahí.",
   },
   lieux: {
     titre: "Lo que hay alrededor",
@@ -1037,7 +1037,7 @@ const EN: Contenu = {
   montre: {
     titre: "And on your wrist",
     intro:
-      "The Apple Watch app receives the guidance from the iPhone: the manoeuvre writ large, the distance, what's left and the arrival time. A tap on the wrist with each new instruction — you feel the turn coming without looking at the screen. The last state sent survives the app closing: raise your wrist and the instruction is already there.",
+      "The watch has its own MonCap app — not just a mirror of the iPhone. It installs along with the app, sits as a complication on the watch face, and opens with one tap: the manoeuvre writ large, the distance, what's left and the arrival time, full screen. A tap on the wrist with each new instruction — you feel the turn coming without looking at the screen. The last state sent survives the app closing: raise your wrist and the instruction is already there.",
   },
   lieux: {
     titre: "What's around you",
