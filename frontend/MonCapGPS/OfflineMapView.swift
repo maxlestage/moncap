@@ -79,6 +79,8 @@ struct OfflineMapScreen: View {
             VectorMapView(
                 styleURL: style,
                 route: route,
+                zones: packs.zones,
+                couloirs: packs.couloirs,
                 cam: cam,
                 onRegionChange: { bounds = $0 }
             )
@@ -239,6 +241,14 @@ struct OfflineMapScreen: View {
                 ForEach(Depth.allCases) { d in Text(LocalizedStringKey(d.rawValue)).tag(d) }
             }
             .pickerStyle(.segmented)
+
+            // La carte porte la réponse : ce qui est déjà à soi se voit.
+            if packs.packCount > 0 {
+                Text("Les zones déjà enregistrées apparaissent en bleu sur la carte.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if packs.running {
                 BarreProgression(valeur: packs.progress, titre: "Fonds de carte")

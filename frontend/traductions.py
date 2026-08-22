@@ -101,6 +101,9 @@ T: dict[str, tuple[str, str]] = {
     "Ouvrir": ("Abrir", "Open"),
     # La feuille de recherche : l'attente et le vide se disent.
     "Recherche…": ("Buscando…", "Searching…"),
+    "Les zones déjà enregistrées apparaissent en bleu sur la carte.": (
+        "Las zonas ya guardadas aparecen en azul en el mapa.",
+        "Zones you already saved show in blue on the map."),
     "Aucun résultat. Précisez l'adresse ou le nom du lieu.": (
         "Sin resultados. Precisa la dirección o el nombre del lugar.",
         "No results. Refine the address or place name."),
