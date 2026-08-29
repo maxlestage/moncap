@@ -4547,7 +4547,9 @@ struct MapHomeView: View {
         Section("À propos") {
             VStack(alignment: .leading, spacing: 4) {
                 Text("MonCap GPS").font(.headline)
-                Text("par Maxime Nathan Lestage")
+                // La signature du site, mot pour mot : une seule formule,
+                // partout.
+                Text("Conçu et développé par Maxime Nathan Lestage")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(appVersion).font(.caption).foregroundStyle(.secondary)
@@ -4555,12 +4557,15 @@ struct MapHomeView: View {
             .padding(.vertical, 2)
             VStack(alignment: .leading, spacing: 3) {
                 Text("Données").font(.caption.weight(.semibold))
+                // La carte n'est plus Apple Plans : elle est rendue par
+                // MapLibre sur OpenStreetMap — le crédit le dit enfin.
                 Text(
                     """
-                    Cartes : Apple Plans · Feux : NASA FIRMS (VIIRS) · \
-                    Trafic : TomTom · Météo : Open-Meteo · \
-                    Vitesses : OpenStreetMap · Carburants : data.economie.gouv.fr · \
-                    Cartes hors ligne : serveur de tuiles configuré
+                    Cartes : OpenStreetMap (MapLibre) · \
+                    Itinéraires : Valhalla, Apple Plans · \
+                    Feux : NASA FIRMS (VIIRS) · Trafic : TomTom · \
+                    Météo : Open-Meteo · Vitesses : OpenStreetMap · \
+                    Carburants : data.economie.gouv.fr
                     """
                 )
                 .font(.caption2)

@@ -138,7 +138,9 @@ T: dict[str, tuple[str, str]] = {
     "Politique de confidentialité": ("Política de privacidad", "Privacy policy"),
     "À propos": ("Acerca de", "About"),
     "Navigation en temps réel": ("Navegación en tiempo real", "Real-time navigation"),
-    "par Maxime Nathan Lestage": ("por Maxime Nathan Lestage", "by Maxime Nathan Lestage"),
+    "Conçu et développé par Maxime Nathan Lestage": (
+        "Diseñado y desarrollado por Maxime Nathan Lestage",
+        "Designed and built by Maxime Nathan Lestage"),
     # --- Champs et invites ---
     "Où allez-vous ?": ("¿Adónde vas?", "Where are you going?"),
     "Chercher un lieu, une ville, un pays": (

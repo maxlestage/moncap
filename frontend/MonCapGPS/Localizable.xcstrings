@@ -2097,6 +2097,22 @@
         }
       }
     },
+    "Conçu et développé par Maxime Nathan Lestage": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Designed and built by Maxime Nathan Lestage"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diseñado y desarrollado por Maxime Nathan Lestage"
+          }
+        }
+      }
+    },
     "Correct": {
       "localizations": {
         "en": {
@@ -7341,22 +7357,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "no autorizado"
-          }
-        }
-      }
-    },
-    "par Maxime Nathan Lestage": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "by Maxime Nathan Lestage"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "por Maxime Nathan Lestage"
           }
         }
       }
