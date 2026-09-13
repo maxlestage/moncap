@@ -22,7 +22,16 @@ import { App } from "./src/App";
 import { Legale } from "./src/Legale";
 import { LANGUES } from "./src/langues";
 import type { Contenu, PageLegale } from "./src/langues";
-import { groupes, jsonLd, jsonLdLegale, OG_LOCALES, PUBLIC, robots, sitemap } from "./src/seo";
+import {
+  groupes,
+  jsonLd,
+  jsonLdLegale,
+  OG_LOCALES,
+  PUBLIC,
+  robots,
+  sitemap,
+  verificationGoogle,
+} from "./src/seo";
 
 const SORTIE = "dist";
 /** Préfixe sous lequel le backend monte le dossier construit. */
@@ -101,6 +110,7 @@ function tete(c: Contenu): string {
     `<meta name="description" content="${attr(c.description)}" />`,
     `<link rel="canonical" href="${PUBLIC}${c.chemin}" />`,
     `<meta name="robots" content="index,follow,max-image-preview:large" />`,
+    ...verificationGoogle(),
     `<meta name="theme-color" content="#0e2a5e" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="MonCap GPS" />`,
@@ -146,6 +156,7 @@ function teteLegale(c: Contenu, p: PageLegale): string {
     `<meta name="description" content="${attr(p.description)}" />`,
     `<link rel="canonical" href="${PUBLIC}${p.chemin}" />`,
     `<meta name="robots" content="index,follow,max-image-preview:large" />`,
+    ...verificationGoogle(),
     `<meta name="theme-color" content="#0e2a5e" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="MonCap GPS" />`,

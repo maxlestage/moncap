@@ -12,3 +12,7 @@ xcuserdata/
 *.xcodeproj/xcuserdata/
 build/
 DerivedData/
+
+# Caches Python des scripts (asc_*, heroku_config)
+__pycache__/
+*.pyc

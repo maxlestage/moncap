@@ -10,8 +10,31 @@ import { AUTEUR } from "./content";
 import type { Contenu, Langue, PageLegale } from "./langues";
 import { LANGUES } from "./langues";
 
-/** L'adresse publique canonique du site. */
-export const PUBLIC = "https://moncap-c41a5aaf07e8.herokuapp.com";
+/**
+ * L'adresse publique canonique du site.
+ *
+ * Réglable par `SITE_PUBLIC` à la construction : le jour où le vrai nom de
+ * domaine arrive, une variable suffit — canonique, hreflang, plan du site,
+ * Open Graph et données structurées suivent tous, d'un coup. La barre de
+ * fin est coupée : sans cela, `${PUBLIC}${chemin}` donnerait « //es ».
+ */
+export const PUBLIC = (
+  process.env.SITE_PUBLIC?.trim() || "https://moncap-c41a5aaf07e8.herokuapp.com"
+).replace(/\/+$/, "");
+
+/**
+ * La balise que Google Search Console réclame pour prouver qu'on tient le
+ * site. Le jeton est propre au compte Google, donc il ne peut pas vivre
+ * dans le dépôt : `GOOGLE_SITE_VERIFICATION` à la construction, et la
+ * balise apparaît sur toutes les pages. Absent, rien n'est écrit — pas de
+ * balise vide, que Google lirait comme une vérification ratée.
+ */
+export function verificationGoogle(): string[] {
+  const jeton = process.env.GOOGLE_SITE_VERIFICATION?.trim();
+  return jeton
+    ? [`<meta name="google-site-verification" content="${jeton}" />`]
+    : [];
+}
 
 /** Locale Open Graph par langue (le format `fr_FR` est celui du protocole). */
 export const OG_LOCALES: Record<string, string> = {
