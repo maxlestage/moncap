@@ -183,6 +183,18 @@ class Asc:
                 f"{r if isinstance(r, str) else r.text[:800]}")
         return r.json()
 
+    def tolere(self, path):
+        """GET dont l'absence est une réponse : Apple rend 404 pour une
+        relation qui n'a pas encore été posée, ce qui est le renseignement
+        qu'on cherche, pas une panne."""
+        code, r = self.appel("GET", f"{API}{path}")
+        if code == 404:
+            return None
+        if code >= 300 or isinstance(r, str):
+            die(f"GET {path} -> {code}: "
+                f"{r if isinstance(r, str) else r.text[:500]}")
+        return r.json()
+
     def essaie(self, path, corps):
         """Comme `post`, mais rend l'échec au lieu de mourir dessus.
 
@@ -305,6 +317,53 @@ def textes(asc, sid, f):
         faits.append(f"textes de {f['produit']} posés en {langue}")
 
 
+def disponibilite(asc, sid, f):
+    """Ouvre la vente de l'abonnement, sans quoi aucun prix ne se pose.
+
+    Diagnostic payé cher : neuf tentatives, trois écritures de requête, le
+    même 409 ENTITY_ERROR.RELATIONSHIP.INVALID à chaque fois, sur un point
+    de prix pourtant valide et rattaché à notre abonnement (son identifiant
+    encode {"s": <abonnement>, "t": "FRA"}). Ce n'était donc ni un hoquet
+    d'Apple, ni la forme de la requête.
+
+    L'interface d'App Store Connect demande deux choses dans cet ordre — la
+    disponibilité, puis les prix — et l'API tient le même ordre sans le
+    dire : un abonnement neuf n'est vendu nulle part, et un prix pour la
+    France n'a pas de sens tant que la France n'est pas ouverte. D'où un
+    refus qui parle de relation invalide.
+    """
+    etat = asc.tolere(f"/subscriptions/{sid}/subscriptionAvailability")
+    if etat is not None and etat.get("data"):
+        return
+
+    territoires = [t["id"] for t in asc.tout("/territories?limit=200")]
+    if MODE != "cree":
+        manques.append(
+            f"disponibilité de {f['produit']} ({len(territoires)} territoires)"
+        )
+        return
+    asc.post(
+        "/subscriptionAvailabilities",
+        {
+            "data": {
+                "type": "subscriptionAvailabilities",
+                "attributes": {"availableInNewTerritories": True},
+                "relationships": {
+                    "subscription": lien("subscriptions", sid),
+                    "availableTerritories": {
+                        "data": [
+                            {"type": "territories", "id": t} for t in territoires
+                        ]
+                    },
+                },
+            }
+        },
+    )
+    faits.append(
+        f"{f['produit']} ouvert à la vente dans {len(territoires)} territoires"
+    )
+
+
 def prix(asc, sid, f):
     """Le prix, partout.
 
@@ -320,6 +379,8 @@ def prix(asc, sid, f):
     }
     if BASE in poses:
         return  # Déjà tarifé : on ne retouche pas un prix en vigueur.
+
+    disponibilite(asc, sid, f)
 
     points = asc.tout(
         f"/subscriptions/{sid}/pricePoints?filter[territory]={BASE}&limit=200"
@@ -417,7 +478,11 @@ def pose_le_socle(asc, sid, socle, f):
     die(
         f"{f['produit']} : impossible de poser le prix de référence en {BASE}.\n"
         f"Point de prix {socle['id']} · {socle.get('attributes')}\n"
-        f"Dernier refus : {dernier}"
+        f"Dernier refus : {dernier}\n"
+        "Si le refus persiste après l'ouverture des territoires, la cause "
+        "restante est hors API : l'accord applications payantes doit être "
+        "signé et les coordonnées bancaires et fiscales renseignées — sans "
+        "quoi Apple refuse tout tarif, et aucune clé ne signe un contrat."
     )
 
 
