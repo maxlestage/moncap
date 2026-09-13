@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "fr",
   "strings": {
+    "%.0f m restants": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f m left"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f m restantes"
+          }
+        }
+      }
+    },
     "%.0f min · %.1f km · %d virages · arr. %@": {
       "localizations": {
         "en": {
@@ -3313,18 +3329,18 @@
         }
       }
     },
-    "Itinéraire de %.1f km en cours.": {
+    "Itinéraire de %@ en cours.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Route of %.1f km in progress."
+            "value": "Route of %@ in progress."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ruta de %.1f km en curso."
+            "value": "Ruta de %@ en curso."
           }
         }
       }

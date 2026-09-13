@@ -1070,7 +1070,11 @@ struct MapHomeView: View {
             }
         } message: {
             Text(
-                resumable.map { String(format: NSLocalizedString("Itinéraire de %.1f km en cours.", comment: ""), $0.km) }
+                resumable.map {
+                    String(
+                        format: NSLocalizedString("Itinéraire de %@ en cours.", comment: ""),
+                        Distance.courteKm($0.km))
+                }
                     ?? "")
         }
         // Vote sur un signalement touché : toujours là / plus là.
@@ -1602,8 +1606,8 @@ struct MapHomeView: View {
         f.dateFormat = "HH:mm"
         let eta = f.string(from: Date().addingTimeInterval(nav.etaMinutes * 60))
         let text = String(
-            format: "J'arrive vers %@ (%.1f km restants) — MonCap GPS 🛰️",
-            eta, nav.remainingKm)
+            format: "J'arrive vers %@ (%@ restants) — MonCap GPS 🛰️",
+            eta, Distance.courteKm(nav.remainingKm))
         Sharer.present([text])
     }
 
@@ -2715,7 +2719,11 @@ struct MapHomeView: View {
                 .symbolEffect(.pulse, isActive: nav.rerouting)
             VStack(alignment: .leading, spacing: 2) {
                 if !nav.rerouting, nav.distanceToNext > 0 {
-                    Text("\(Int(nav.distanceToNext)) m").font(.title3.weight(.bold)).foregroundStyle(.white)
+                    // Des mètres tant qu'on est dessous, des kilomètres
+                    // au-delà : « 2347 m » au départ d'une ligne droite ne
+                    // se lit pas d'un coup d'œil, « 2.3 km » si.
+                    Text(verbatim: Distance.courte(nav.distanceToNext))
+                        .font(.title3.weight(.bold)).foregroundStyle(.white)
                 }
                 Text(nav.instruction)
                     .font(.title3.weight(.bold))
@@ -2811,7 +2819,7 @@ struct MapHomeView: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.orange)
                 }
-                Text(String(format: NSLocalizedString("%.1f km restants", comment: ""), nav.remainingKm))
+                Text(verbatim: Distance.restantsKm(nav.remainingKm))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -4808,7 +4816,8 @@ struct MapHomeView: View {
         }
         if let r = await RouteService.roadRoute(through: pts) {
             routeCoords = r.coordinates
-            routeInfo = String(format: "%.1f km · %.0f min", r.distanceKm, r.minutes)
+            routeInfo = String(
+                format: "%@ · %.0f min", Distance.courteKm(r.distanceKm), r.minutes)
         }
     }
 
