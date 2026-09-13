@@ -132,10 +132,10 @@ final class CarPlayCarteVC: UIViewController, MLNMapViewDelegate {
         nav.$distanceToNext
             .receive(on: DispatchQueue.main)
             .sink { [weak self] m in
-                self?.distance.text =
-                    m >= 1_000
-                    ? String(format: "%.1f km", m / 1_000)
-                    : String(format: "%.0f m", m)
+                // La règle de la maison, une seule fois : l'écran voiture
+                // réécrivait la sienne, et elle a divergé (le seuil ne
+                // portait pas sur la valeur arrondie).
+                self?.distance.text = Distance.courte(m)
             }
             .store(in: &abonnements)
         nav.$routeCoords
