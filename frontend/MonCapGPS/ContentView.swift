@@ -769,6 +769,12 @@ struct MapHomeView: View {
     @State private var lastCamHeading: Double = -1
     /// Roulait-on au dernier recadrage ? Sert à dézoomer dès l'arrêt.
     @State private var wasDriving = false
+    /// Roule-t-on vraiment ? Les libellés des pastilles — « Ensoleillé »,
+    /// « Correct » — s'effacent alors : au volant on lit un chiffre, pas un
+    /// mot, et la carte gagne la place. Hystérésis à dessein : on n'y entre
+    /// qu'au-dessus de 15 km/h et on n'en sort qu'en dessous de 5, pour
+    /// qu'un ralentissement ou un feu ne fasse pas clignoter le mot.
+    @State private var roule = false
     /// Itinéraire interrompu retrouvé au lancement, en attente de reprise.
     @State private var resumable: SavedRoute?
     /// Carte hors ligne (tuiles téléchargées, écran dédié).
@@ -1119,6 +1125,13 @@ struct MapHomeView: View {
         }
         .onReceive(location.$coordinate) { coord in
             guard let c = coord else { return }
+            // L'allure décide de ce que les pastilles montrent (voir `roule`).
+            let allure = location.speedKmh
+            if roule, allure < Self.stoppedKmh {
+                withAnimation(.easeInOut(duration: 0.25)) { roule = false }
+            } else if !roule, allure >= Self.roulantKmh {
+                withAnimation(.easeInOut(duration: 0.25)) { roule = true }
+            }
             if sharing {
                 // Throttle : au plus 1 envoi / 2 s, et seulement si on a bougé
                 // d'au moins 8 m — évite d'inonder le WebSocket à la cadence GPS.
@@ -3572,7 +3585,11 @@ struct MapHomeView: View {
             HStack(spacing: 6) {
                 Text(w.emoji).font(.subheadline)
                 Text("\(temp)°").font(.subheadline.weight(.bold))
-                Text(LocalizedStringKey(w.label)).font(.caption2).foregroundStyle(.secondary)
+                // Le mot s'efface en roulant : le soleil et les degrés
+                // suffisent, et la pastille rétrécit d'autant.
+                if !roule {
+                    Text(LocalizedStringKey(w.label)).font(.caption2).foregroundStyle(.secondary)
+                }
                 if let age = ageTexte(weather.mesureA) {
                     Text(age).font(.caption2).foregroundStyle(.tertiary)
                 }
@@ -3601,9 +3618,13 @@ struct MapHomeView: View {
                         .font(.subheadline.weight(.bold))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
-                    Text(AirCouleurs.libelles[min(p.niveau, AirCouleurs.libelles.count - 1)])
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    // Même règle que la météo : en roulant, le rond coloré et
+                    // l'indice disent déjà tout.
+                    if !roule {
+                        Text(AirCouleurs.libelles[min(p.niveau, AirCouleurs.libelles.count - 1)])
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     if let age = ageTexte(airAutour.mesureA) {
                         Text(age).font(.caption2).foregroundStyle(.tertiary)
                     }
@@ -5790,6 +5811,11 @@ struct MapHomeView: View {
 
     /// Vitesse en dessous de laquelle on considère être à l'arrêt.
     private static let stoppedKmh = 5.0
+
+    /// Vitesse au-dessus de laquelle on roule franchement. Volontairement
+    /// plus haute que `stoppedKmh` : l'écart entre les deux est l'hystérésis
+    /// qui empêche les libellés des pastilles de clignoter au ralenti.
+    private static let roulantKmh = 15.0
 
     /// Caméra de suivi adaptée à l'allure — une seule règle pour la 2D et la 3D.
     ///
