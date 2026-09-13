@@ -156,3 +156,38 @@ final class OptionsDeCoutTests: XCTestCase {
         XCTAssertEqual(moto?["use_trails"] as? Double, 0.8)
     }
 }
+
+/// L'écriture des distances : des mètres sous le kilomètre, des kilomètres
+/// au-delà. Une règle si simple qu'elle avait trois écritures différentes
+/// dans l'app — dont une qui annonçait « 0 km » à quatre cents mètres de
+/// l'arrivée.
+final class DistanceTests: XCTestCase {
+    func testSousLeKilometreEnMetres() {
+        XCTAssertEqual(Distance.courte(0), "0 m")
+        XCTAssertEqual(Distance.courte(7), "7 m")
+        XCTAssertEqual(Distance.courte(400), "400 m")
+        XCTAssertEqual(Distance.courte(999), "999 m")
+    }
+
+    func testAuDelaEnKilometres() {
+        XCTAssertEqual(Distance.courte(1_000), "1.0 km")
+        XCTAssertEqual(Distance.courte(1_234), "1.2 km")
+        XCTAssertEqual(Distance.courte(12_345), "12.3 km")
+    }
+
+    /// 999,6 m arrondi à l'unité donnerait « 1000 m » : c'est un kilomètre.
+    func testLaBasculeSuitLArrondi() {
+        XCTAssertEqual(Distance.courte(999.6), "1.0 km")
+        XCTAssertEqual(Distance.courte(999.4), "999 m")
+    }
+
+    /// Un relevé GPS qui recule ne fait pas écrire une distance négative.
+    func testJamaisDeDistanceNegative() {
+        XCTAssertEqual(Distance.courte(-5), "0 m")
+    }
+
+    func testDepuisDesKilometres() {
+        XCTAssertEqual(Distance.courteKm(0.2), "200 m")
+        XCTAssertEqual(Distance.courteKm(8.4), "8.4 km")
+    }
+}

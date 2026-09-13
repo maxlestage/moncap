@@ -821,9 +821,14 @@ T: dict[str, tuple[str, str]] = {
         "%.0f min · %.1f km · %d turns · arr. %@",
     ),
     "%.1f km restants": ("%.1f km restantes", "%.1f km left"),
-    "Itinéraire de %.1f km en cours.": (
-        "Ruta de %.1f km en curso.",
-        "Route of %.1f km in progress.",
+    # Sous le kilomètre, le restant se dit en mètres : « 0.2 km restants »
+    # n'est la façon de parler de personne.
+    "%.0f m restants": ("%.0f m restantes", "%.0f m left"),
+    # La distance arrive déjà écrite (« 400 m », « 12.3 km ») : un seul
+    # %@ plutôt qu'un format par unité.
+    "Itinéraire de %@ en cours.": (
+        "Ruta de %@ en curso.",
+        "Route of %@ in progress.",
     ),
     "↗ %.0f m de côte · ↘ %.0f m de descente": (
         "↗ %.0f m de subida · ↘ %.0f m de bajada",
