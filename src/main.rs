@@ -6368,7 +6368,14 @@ mod integration {
             assert!(page.contains(phrase), "{uri} doit servir le texte {code}");
             // Les trois se lient mutuellement : sans cela, une page est un
             // cul-de-sac pour qui ne lit pas la langue où il a atterri.
-            for (autre, _, _) in attendus {
+            // La page en cours s'exclut : le sélecteur la rend en
+            // `<span aria-current="true">` et non en lien — un lien vers
+            // soi-même n'a rien à offrir au lecteur ni au robot.
+            assert!(
+                page.contains(r#"aria-current="true""#),
+                "{uri} doit marquer sa propre langue comme courante"
+            );
+            for (autre, _, _) in attendus.iter().filter(|(a, _, _)| *a != uri) {
                 assert!(
                     page.contains(&format!(r#"href="{autre}""#)),
                     "{uri} doit mener à {autre}"
