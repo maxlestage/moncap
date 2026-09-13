@@ -2,9 +2,11 @@ import SwiftUI
 
 /// « 400 m » ou « 1,2 km » : la distance comme le bandeau iPhone l'écrit.
 private func distanceCourte(_ m: Double) -> String {
-    m >= 1_000
+    // Seuil sur la valeur arrondie : 999,6 m arrondi à l'unité donnerait
+    // « 1000 m », qui est un kilomètre. Même règle que Distance.courte.
+    m.rounded() >= 1_000
         ? String(format: "%.1f km", m / 1_000)
-        : String(format: "%.0f m", m)
+        : String(format: "%.0f m", max(0, m))
 }
 
 /// « 18:42 » : l'heure d'arrivée, plus parlante qu'une durée.
@@ -79,7 +81,9 @@ struct MontreVue: View {
             // Le pied d'écran : restant et arrivée côte à côte, sur une
             // plaque translucide qui les détache du fond.
             HStack(spacing: 0) {
-                colonne(String(format: "%.1f km", lien.etat.restantKm), "restant")
+                // Le restant suit la même règle que la manœuvre : des
+                // mètres sous le kilomètre — « 0.2 km » ne se dit pas.
+                colonne(distanceCourte(lien.etat.restantKm * 1_000), "restant")
                 Divider().frame(height: 22)
                 colonne(heureArrivee(lien.etat.etaMinutes), "arrivée")
             }

@@ -17,9 +17,11 @@ struct GuidageAttributs: ActivityAttributes {
 
 /// « 400 m » ou « 1,2 km » : la distance comme le bandeau l'écrit.
 private func distanceCourte(_ m: Double) -> String {
-    m >= 1_000
+    // Seuil sur la valeur arrondie : 999,6 m arrondi à l'unité donnerait
+    // « 1000 m », qui est un kilomètre. Même règle que Distance.courte.
+    m.rounded() >= 1_000
         ? String(format: "%.1f km", m / 1_000)
-        : String(format: "%.0f m", m)
+        : String(format: "%.0f m", max(0, m))
 }
 
 /// « 18:42 » : l'heure d'arrivée, plus parlante qu'une durée.
@@ -150,7 +152,8 @@ struct GuidageWidget: Widget {
                         Spacer()
                         Text(
                             String(
-                                format: "%.0f km · %@", contexte.state.restantKm,
+                                format: "%@ · %@",
+                                distanceCourte(contexte.state.restantKm * 1_000),
                                 heureArrivee(contexte.state.etaMinutes)))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -234,7 +237,7 @@ struct GuidageActiviteVue: View {
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
                     .foregroundStyle(.white)
-                Text(String(format: "%.1f km", etat.restantKm))
+                Text(distanceCourte(etat.restantKm * 1_000))
                     .font(.caption2)
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
@@ -269,7 +272,9 @@ struct GuidageActiviteVue: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(heureArrivee(etat.etaMinutes))
                     .font(.headline)
-                Text(String(format: "%.0f km", etat.restantKm))
+                // « %.0f km » affichait « 0 km » à quatre cents mètres de
+                // l'arrivée : la règle de la maison s'applique ici aussi.
+                Text(distanceCourte(etat.restantKm * 1_000))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
