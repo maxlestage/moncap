@@ -125,10 +125,41 @@ class Asc:
             self._ne = time.time() + 900
         return {"Authorization": f"Bearer {self._token}"}
 
+    def appel(self, methode, url, corps=None):
+        """Un appel, avec la patience qu'exige l'API d'Apple.
+
+        Observé en vrai sur cette app : un `GET .../subscriptionGroups`, la
+        requête la plus banale qui soit, répond 500 UNEXPECTED_ERROR. Le
+        défaut est chez eux et il passe tout seul — mais un script qui meurt
+        au premier hoquet laisse un groupe créé, un abonnement créé, et pas
+        de prix. On réessaie donc les 5xx, les 429 et les coupures réseau,
+        en espaçant ; le reste (400, 403, 409) est une vraie réponse, qu'on
+        rend telle quelle sans insister.
+        """
+        attente = 3
+        dernier = None
+        for essai in range(5):
+            try:
+                r = self.session.request(
+                    methode, url, headers=self.entete(), json=corps, timeout=60
+                )
+            except requests.RequestException as e:
+                dernier = (0, f"réseau : {e}")
+            else:
+                if r.status_code < 500 and r.status_code != 429:
+                    return r.status_code, r
+                dernier = (r.status_code, (r.text or "")[:400])
+            if essai < 4:
+                print(f"    Apple répond {dernier[0]}, nouvelle tentative "
+                      f"dans {attente} s ({essai + 1}/4)…")
+                time.sleep(attente)
+                attente *= 2
+        return dernier[0], dernier[1]
+
     def get(self, path):
-        r = self.session.get(f"{API}{path}", headers=self.entete(), timeout=60)
-        if r.status_code >= 300:
-            die(f"GET {path} -> {r.status_code}: {r.text[:500]}")
+        code, r = self.appel("GET", f"{API}{path}")
+        if code >= 300 or isinstance(r, str):
+            die(f"GET {path} -> {code}: {r if isinstance(r, str) else r.text[:500]}")
         return r.json()
 
     def tout(self, path):
@@ -136,19 +167,20 @@ class Asc:
         out = []
         suite = f"{API}{path}"
         while suite:
-            r = self.session.get(suite, headers=self.entete(), timeout=60)
-            if r.status_code >= 300:
-                die(f"GET {suite} -> {r.status_code}: {r.text[:500]}")
+            code, r = self.appel("GET", suite)
+            if code >= 300 or isinstance(r, str):
+                die(f"GET {suite} -> {code}: "
+                    f"{r if isinstance(r, str) else r.text[:500]}")
             corps = r.json()
             out.extend(corps.get("data", []))
             suite = corps.get("links", {}).get("next")
         return out
 
     def post(self, path, corps):
-        r = self.session.post(f"{API}{path}", headers=self.entete(), json=corps,
-                              timeout=60)
-        if r.status_code >= 300:
-            die(f"POST {path} -> {r.status_code}: {r.text[:800]}")
+        code, r = self.appel("POST", f"{API}{path}", corps)
+        if code >= 300 or isinstance(r, str):
+            die(f"POST {path} -> {code}: "
+                f"{r if isinstance(r, str) else r.text[:800]}")
         return r.json()
 
     def essaie(self, path, corps):
@@ -157,9 +189,8 @@ class Asc:
         Les prix se posent par centaines : un territoire refusé ne doit pas
         emporter les cent quatre-vingts autres.
         """
-        r = self.session.post(f"{API}{path}", headers=self.entete(), json=corps,
-                              timeout=60)
-        return r.status_code, (r.text or "")[:400]
+        code, r = self.appel("POST", f"{API}{path}", corps)
+        return code, (r if isinstance(r, str) else (r.text or "")[:400])
 
 
 def lien(genre, ident):
