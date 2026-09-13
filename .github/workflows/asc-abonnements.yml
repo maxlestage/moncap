@@ -1,0 +1,36 @@
+name: Abonnements App Store
+
+# Crée le groupe d'abonnement et les deux formules (Plus 3,99 € / Pro
+# 9,99 €) dans App Store Connect, textes en trois langues et prix sur tous
+# les territoires. Manuel, et en vérification par défaut : rien n'est créé
+# tant qu'on n'a pas choisi `cree` à la main.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "verifie (dit ce qui manque) ou cree (crée ce qui manque)"
+        type: choice
+        default: verifie
+        options: [verifie, cree]
+
+jobs:
+  abonnements:
+    name: Groupe et formules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Applique
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          python -m pip install --quiet requests "pyjwt[crypto]"
+          python frontend/scripts/asc_abonnements.py

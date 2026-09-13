@@ -123,6 +123,11 @@ test court depuis sa création, et une review qui arrive après quatorze
 jours tomberait sur l'app verrouillée. Sur la liste d'invités, le
 compte a tout, pour toujours.
 
+L'action **Config Heroku** le fait sans risque d'effacer les invités déjà
+présents (elle ajoute, elle ne remplace jamais) ; elle demande un secret
+`HEROKU_API_KEY` dans le dépôt, obtenu par `heroku authorizations:create`.
+Lance-la d'abord en `verifie`, elle dit ce qu'elle changerait.
+
 ## Captures d'écran (à faire sur simulateur iPhone 16 Pro Max + iPad)
 
 L'ordre raconte l'app :
@@ -135,11 +140,37 @@ L'ordre raconte l'app :
 
 ## Check-list de soumission
 
-- [ ] Deux abonnements créés dans App Store Connect, groupe « MonCap Plus »,
-      identifiants exacts, prix 3,99 € / 9,99 €, sans offre d'essai
+Les lignes marquées *(action)* se font depuis l'onglet Actions du dépôt —
+rien à saisir à la main, et rien d'irréversible : les deux actions ont un
+mode « vérifie » qui ne touche à rien et dit ce qui manque.
+
+- [ ] *(action **Abonnements App Store**, mode `cree`)* groupe « MonCap »
+      et deux abonnements — identifiants `moncap.plus.mensuel` /
+      `moncap.pro.mensuel`, mensuels, Pro au niveau 1 et Plus au niveau 2,
+      textes en fr/es/en, 3,99 € et 9,99 € sur tous les territoires, sans
+      offre d'essai Apple (l'essai est celui du compte, côté serveur)
+- [ ] Capture d'écran de review pour **chacun** des deux abonnements
+      (l'écran « Ma formule » convient) — Apple la refuse absente, et
+      l'API ne sait pas la déposer
 - [ ] Accord applications payantes signé + coordonnées bancaires/fiscales
 - [ ] Small Business Program demandé (15 % de commission au lieu de 30 %)
-- [ ] `PLUS_OFFERT` ← ajouter le compte de review (voir ⚠️ ci-dessus)
+- [ ] *(action **Config Heroku**, mode `applique`)* `PLUS_OFFERT` ←
+      compte de review (voir ⚠️ ci-dessus)
 - [ ] Étiquettes de confidentialité remplies comme ci-dessus
 - [ ] Captures d'écran ×3 langues (ou FR partout : accepté)
 - [ ] Build 1.2.1+ sélectionné, notes de review collées
+
+## Référencement : ce qui attend un jeton ou un domaine
+
+Le site est prêt des deux côtés, il ne manque qu'une valeur à chaque fois —
+la construction (`vitrine/build.tsx`) lit deux variables d'environnement :
+
+- `GOOGLE_SITE_VERIFICATION` : le jeton de Google Search Console. Posé, la
+  balise `<meta name="google-site-verification">` apparaît sur les neuf
+  pages ; absent, aucune balise n'est écrite (une balise vide se lirait
+  comme une vérification ratée). Une fois le site vérifié, le plan est
+  déjà là : `/sitemap.xml`, neuf pages, hreflang compris.
+- `SITE_PUBLIC` : l'adresse canonique. Le jour où le vrai nom de domaine
+  arrive, cette seule variable déplace la canonique, les hreflang, le plan
+  du site, Open Graph et les données structurées — d'un coup, sans toucher
+  au code. Défaut : l'adresse Heroku actuelle.

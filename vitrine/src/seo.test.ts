@@ -9,6 +9,7 @@ import {
   pagesPubliques,
   robots,
   sitemap,
+  verificationGoogle,
 } from "./seo";
 
 /**
@@ -98,5 +99,32 @@ test("les pages légales portent un fil d'Ariane absolu", () => {
       expect(d.itemListElement[1].item).toBe(`${PUBLIC}${page.chemin}`);
       expect(d.itemListElement[1].name).toBe(page.titre);
     }
+  }
+});
+
+test("l'adresse publique est absolue et sans barre de fin", () => {
+  // `${PUBLIC}${chemin}` est écrit partout : une barre de fin donnerait
+  // « //es », que les moteurs comptent comme une autre page.
+  expect(PUBLIC).toMatch(/^https:\/\//);
+  expect(PUBLIC.endsWith("/")).toBe(false);
+});
+
+test("la balise Google n'apparaît que si le jeton existe", () => {
+  const avant = process.env.GOOGLE_SITE_VERIFICATION;
+  try {
+    // Sans jeton : rien. Une balise vide se lit comme une vérification
+    // ratée, c'est pire que pas de balise du tout.
+    delete process.env.GOOGLE_SITE_VERIFICATION;
+    expect(verificationGoogle()).toEqual([]);
+    process.env.GOOGLE_SITE_VERIFICATION = "   ";
+    expect(verificationGoogle()).toEqual([]);
+
+    process.env.GOOGLE_SITE_VERIFICATION = "jeton-de-test";
+    expect(verificationGoogle()).toEqual([
+      '<meta name="google-site-verification" content="jeton-de-test" />',
+    ]);
+  } finally {
+    if (avant === undefined) delete process.env.GOOGLE_SITE_VERIFICATION;
+    else process.env.GOOGLE_SITE_VERIFICATION = avant;
   }
 });
