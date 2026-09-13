@@ -151,6 +151,16 @@ class Asc:
             die(f"POST {path} -> {r.status_code}: {r.text[:800]}")
         return r.json()
 
+    def essaie(self, path, corps):
+        """Comme `post`, mais rend l'échec au lieu de mourir dessus.
+
+        Les prix se posent par centaines : un territoire refusé ne doit pas
+        emporter les cent quatre-vingts autres.
+        """
+        r = self.session.post(f"{API}{path}", headers=self.entete(), json=corps,
+                              timeout=60)
+        return r.status_code, (r.text or "")[:400]
+
 
 def lien(genre, ident):
     return {"data": {"type": genre, "id": ident}}
@@ -299,30 +309,85 @@ def prix(asc, sid, f):
         )
         return
 
-    n = 0
-    for point in cibles:
-        territoire = (
-            point.get("relationships", {}).get("territory", {}).get("data", {}).get("id")
-        )
+    forme = pose_le_socle(asc, sid, socle, f)
+    n = 1
+    refuses = []
+    for point in cibles[1:]:
+        territoire = territoire_de(point)
         if territoire and territoire in poses:
             continue
-        asc.post(
-            "/subscriptionPrices",
-            {
-                "data": {
-                    "type": "subscriptionPrices",
-                    "attributes": {"startDate": None, "preserveCurrentPrice": False},
-                    "relationships": {
-                        "subscription": lien("subscriptions", sid),
-                        "subscriptionPricePoint": lien(
-                            "subscriptionPricePoints", point["id"]
-                        ),
-                    },
-                }
+        code, texte = asc.essaie("/subscriptionPrices", charge(sid, point["id"], forme))
+        if code < 300:
+            n += 1
+        else:
+            # Un territoire refusé n'emporte pas les autres : la plupart du
+            # temps c'est un pays où l'app n'est pas distribuée.
+            refuses.append(f"{territoire or '?'} ({code})")
+    faits.append(
+        f"prix de {f['produit']} posé sur {n} territoires ({f['prix']} € en {BASE})"
+    )
+    if refuses:
+        print(f"    {len(refuses)} territoire(s) refusé(s) : {', '.join(refuses[:12])}"
+              + (" …" if len(refuses) > 12 else ""))
+
+
+def territoire_de(point):
+    return point.get("relationships", {}).get("territory", {}).get("data", {}).get("id")
+
+
+def charge(sid, point_id, attributs):
+    corps = {
+        "data": {
+            "type": "subscriptionPrices",
+            "relationships": {
+                "subscription": lien("subscriptions", sid),
+                "subscriptionPricePoint": lien("subscriptionPricePoints", point_id),
             },
-        )
-        n += 1
-    faits.append(f"prix de {f['produit']} posé sur {n} territoires ({f['prix']} € en {BASE})")
+        }
+    }
+    if attributs is not None:
+        corps["data"]["attributes"] = attributs
+    return corps
+
+
+# Trois écritures possibles du même prix. Apple documente la première, mais
+# la refuse parfois sur un abonnement tout juste créé : plutôt que parier,
+# on essaie, et la forme qui passe sert pour les cent quatre-vingts autres.
+FORMES = [
+    ("startDate null + preserveCurrentPrice", {"startDate": None,
+                                               "preserveCurrentPrice": False}),
+    ("startDate null seul", {"startDate": None}),
+    ("sans attributs", None),
+]
+
+
+def pose_le_socle(asc, sid, socle, f):
+    """Pose le prix de référence, et rend la forme de requête qui a marché.
+
+    Le socle est le seul prix dont l'échec est fatal : sans lui il n'y a
+    pas de tarif du tout. On lui laisse donc trois écritures et trois
+    tentatives espacées — l'abonnement vient d'être créé, et la tarification
+    d'Apple met parfois quelques secondes à le connaître.
+    """
+    dernier = ""
+    for essai in range(3):
+        if essai:
+            time.sleep(6)
+        for nom, attributs in FORMES:
+            code, texte = asc.essaie(
+                "/subscriptionPrices", charge(sid, socle["id"], attributs)
+            )
+            if code < 300:
+                if essai or nom != FORMES[0][0]:
+                    print(f"    socle posé en « {nom} » (tentative {essai + 1})")
+                return attributs
+            dernier = f"{nom} -> {code}: {texte}"
+        print(f"    socle refusé (tentative {essai + 1}/3), nouvelle tentative…")
+    die(
+        f"{f['produit']} : impossible de poser le prix de référence en {BASE}.\n"
+        f"Point de prix {socle['id']} · {socle.get('attributes')}\n"
+        f"Dernier refus : {dernier}"
+    )
 
 
 def main():
