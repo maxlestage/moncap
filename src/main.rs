@@ -699,8 +699,7 @@ async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
 
     // Cent par page, et l'Europe en remplit trois.
     for page in 1..=5 {
-        let url =
-            format!("https://api.github.com/repos/{depot}/releases?per_page=100&page={page}");
+        let url = format!("https://api.github.com/repos/{depot}/releases?per_page=100&page={page}");
         let resp = client
             .get(&url)
             .header(reqwest::header::USER_AGENT, "moncap")
@@ -821,7 +820,9 @@ async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response
             Ok(v) => v,
             Err(e) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {e}")).into_response(),
         },
-        Ok(r) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {}", r.status())).into_response(),
+        Ok(r) => {
+            return (StatusCode::BAD_GATEWAY, format!("GitHub : {}", r.status())).into_response()
+        }
         Err(e) => return (StatusCode::BAD_GATEWAY, format!("GitHub : {e}")).into_response(),
     };
 
@@ -868,7 +869,6 @@ async fn paquet_fichier(Path((tag, nature)): Path<(String, String)>) -> Response
             .into_response(),
     }
 }
-
 
 // --- Qualité de l'air ------------------------------------------------------
 //
@@ -966,10 +966,7 @@ fn air_dims(o: f64, su: f64, e: f64, no: f64) -> (usize, usize) {
         let n = (etendue / AIR_PAS_MODELE).round();
         (n as usize).clamp(2, max)
     };
-    (
-        compte(e - o, AIR_GRILLE_X),
-        compte(no - su, AIR_GRILLE_Y),
-    )
+    (compte(e - o, AIR_GRILLE_X), compte(no - su, AIR_GRILLE_Y))
 }
 
 /// Points d'échantillonnage d'une zone, répartis régulièrement.
@@ -978,7 +975,10 @@ fn air_dims(o: f64, su: f64, e: f64, no: f64) -> (usize, usize) {
 /// posés sur les bords, deux zones voisines mesureraient deux fois la même
 /// ligne et laisseraient le milieu de chaque maille sans mesure.
 fn air_grille(zone: &str) -> Vec<(f64, f64)> {
-    let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
+    let n: Vec<f64> = zone
+        .split(',')
+        .filter_map(|v| v.parse::<f64>().ok())
+        .collect();
     let [o, su, e, no] = n[..] else { return vec![] };
     let (nx, ny) = air_dims(o, su, e, no);
     let pas_x = (e - o) / nx as f64;
@@ -1078,8 +1078,7 @@ struct TransitCache {
     data: Vec<TransitItineraire>,
 }
 
-static TRANSIT_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, TransitCache>>> =
-    OnceLock::new();
+static TRANSIT_CACHE: OnceLock<tokio::sync::Mutex<HashMap<String, TransitCache>>> = OnceLock::new();
 
 /// Quatre-vingt-dix secondes : un horaire de passage est une donnée du moment,
 /// mais deux appuis successifs sur le même trajet n'ont pas à payer deux fois.
@@ -1130,9 +1129,8 @@ fn transit_point(brut: Option<&str>) -> Option<(f64, f64)> {
 
 /// Taille les itinéraires MOTIS au strict nécessaire de l'écran.
 fn transit_taille(brut: &serde_json::Value) -> Vec<TransitItineraire> {
-    let texte = |v: &serde_json::Value, cle: &str| {
-        v.get(cle).and_then(|x| x.as_str()).map(str::to_string)
-    };
+    let texte =
+        |v: &serde_json::Value, cle: &str| v.get(cle).and_then(|x| x.as_str()).map(str::to_string);
     let nom = |v: &serde_json::Value, cle: &str| {
         v.get(cle)
             .and_then(|x| x.get("name"))
@@ -1170,13 +1168,8 @@ fn transit_taille(brut: &serde_json::Value) -> Vec<TransitItineraire> {
                                 retard_s: if l.get("realTime").and_then(|v| v.as_bool())
                                     == Some(true)
                                 {
-                                    match (
-                                        texte(l, "startTime"),
-                                        texte(l, "scheduledStartTime"),
-                                    ) {
-                                        (Some(reel), Some(prevu)) => {
-                                            transit_ecart_s(&reel, &prevu)
-                                        }
+                                    match (texte(l, "startTime"), texte(l, "scheduledStartTime")) {
+                                        (Some(reel), Some(prevu)) => transit_ecart_s(&reel, &prevu),
                                         _ => None,
                                     }
                                 } else {
@@ -1290,7 +1283,13 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
             table.remove(&vieille);
         }
     }
-    table.insert(zone, TransitCache { fetched_at: Instant::now(), data: data.clone() });
+    table.insert(
+        zone,
+        TransitCache {
+            fetched_at: Instant::now(),
+            data: data.clone(),
+        },
+    );
     Json(data).into_response()
 }
 
@@ -1304,7 +1303,11 @@ async fn list_transit(Query(q): Query<TransitQuery>) -> Response {
 /// allant de 21 à 49 et les particules fines de 2,9 à 14,2 µg/m³.
 async fn list_air(Query(q): Query<FiresQuery>) -> Response {
     let Some(zone) = fires_zone(q.bbox.as_deref()) else {
-        return (StatusCode::BAD_REQUEST, "bbox attendue : ouest,sud,est,nord").into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            "bbox attendue : ouest,sud,est,nord",
+        )
+            .into_response();
     };
 
     let cache = AIR_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
@@ -1373,7 +1376,10 @@ async fn range_feux(zone: &str, data: Vec<FirePoint>) {
     }
     table.insert(
         zone.to_string(),
-        FiresCache { fetched_at: Instant::now(), data },
+        FiresCache {
+            fetched_at: Instant::now(),
+            data,
+        },
     );
 }
 
@@ -1392,7 +1398,10 @@ async fn range_air(zone: &str, data: Vec<AirPoint>) {
     }
     table.insert(
         zone.to_string(),
-        AirCache { fetched_at: Instant::now(), data },
+        AirCache {
+            fetched_at: Instant::now(),
+            data,
+        },
     );
 }
 
@@ -1422,7 +1431,13 @@ fn spawn_air_refresh(zone: String) {
                         table.remove(&vieille);
                     }
                 }
-                table.insert(zone.clone(), AirCache { fetched_at: Instant::now(), data });
+                table.insert(
+                    zone.clone(),
+                    AirCache {
+                        fetched_at: Instant::now(),
+                        data,
+                    },
+                );
             }
             None => tracing::warn!("Air : rafraîchissement impossible pour {zone}"),
         }
@@ -1470,7 +1485,10 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
     };
     let (dlat, dlon) = air_maille(zone);
     let (nx, ny) = {
-        let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
+        let n: Vec<f64> = zone
+            .split(',')
+            .filter_map(|v| v.parse::<f64>().ok())
+            .collect();
         match n[..] {
             [o, su, e, no] => air_dims(o, su, e, no),
             _ => return None,
@@ -1518,8 +1536,13 @@ async fn fetch_air(zone: &str) -> Option<Vec<AirPoint>> {
 
 /// Hauteur et largeur d'une maille de la grille, en degrés.
 fn air_maille(zone: &str) -> (f64, f64) {
-    let n: Vec<f64> = zone.split(',').filter_map(|v| v.parse::<f64>().ok()).collect();
-    let [o, su, e, no] = n[..] else { return (0.0, 0.0) };
+    let n: Vec<f64> = zone
+        .split(',')
+        .filter_map(|v| v.parse::<f64>().ok())
+        .collect();
+    let [o, su, e, no] = n[..] else {
+        return (0.0, 0.0);
+    };
     let (nx, ny) = air_dims(o, su, e, no);
     ((no - su) / ny as f64, (e - o) / nx as f64)
 }
@@ -1536,17 +1559,22 @@ fn air_maille(zone: &str) -> (f64, f64) {
 /// client mobile : elle ne doit jamais bloquer la réponse.
 async fn list_fires(Query(q): Query<FiresQuery>) -> Response {
     let Some(zone) = fires_zone(q.bbox.as_deref()) else {
-        return (StatusCode::BAD_REQUEST, "bbox attendue : ouest,sud,est,nord").into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            "bbox attendue : ouest,sud,est,nord",
+        )
+            .into_response();
     };
     let Some(key) = fires_key() else {
         return Json(Vec::<FirePoint>::new()).into_response();
     };
 
     let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
-    let connue = match cache.lock().await.get(&zone) {
-        Some(c) => Some((c.data.clone(), c.fetched_at.elapsed() >= FIRES_TTL)),
-        None => None,
-    };
+    let connue = cache
+        .lock()
+        .await
+        .get(&zone)
+        .map(|c| (c.data.clone(), c.fetched_at.elapsed() >= FIRES_TTL));
 
     match connue {
         // Zone déjà vue : on répond tout de suite, quitte à rafraîchir derrière.
@@ -2638,7 +2666,9 @@ async fn trajet_partage(Query(q): Query<PartageQuery>) -> Response {
 
     let jalons_js = vias
         .iter()
-        .map(|(la, lo)| format!("L.circleMarker([{la},{lo}],{{radius:6,color:'#63c'}}).addTo(map);"))
+        .map(|(la, lo)| {
+            format!("L.circleMarker([{la},{lo}],{{radius:6,color:'#63c'}}).addTo(map);")
+        })
         .collect::<Vec<_>>()
         .join("");
 
@@ -3058,8 +3088,13 @@ async fn envoie_courriel(dest: &str, sujet: &str, corps: String) -> Result<(), S
         .unwrap_or(587);
 
     let message = Message::builder()
-        .from(de.parse().map_err(|e| format!("expéditeur invalide : {e}"))?)
-        .to(dest.parse().map_err(|e| format!("destinataire invalide : {e}"))?)
+        .from(
+            de.parse()
+                .map_err(|e| format!("expéditeur invalide : {e}"))?,
+        )
+        .to(dest
+            .parse()
+            .map_err(|e| format!("destinataire invalide : {e}"))?)
         .subject(sujet)
         .header(ContentType::TEXT_PLAIN)
         .body(corps)
@@ -3122,8 +3157,12 @@ async fn forgot_password(
              Si tu n'as rien demandé, ignore ce message : rien ne changera.\n\n\
              — MonCap GPS"
         );
-        if let Err(e) =
-            envoie_courriel(&username, "Réinitialisation du mot de passe MonCap GPS", corps).await
+        if let Err(e) = envoie_courriel(
+            &username,
+            "Réinitialisation du mot de passe MonCap GPS",
+            corps,
+        )
+        .await
         {
             // On répond 204 quand même : dire l'échec ici révélerait que le
             // compte existe. L'erreur va au journal, pas au client.
@@ -3173,7 +3212,9 @@ struct ReinitQuery {
 /// Un jeton de lien vaut 32 hexadécimaux (celui que `random_token` émet) :
 /// tout le reste est rejeté avant d'être regardé — ou réfléchi dans du HTML.
 fn jeton_valide(j: &str) -> bool {
-    j.len() == 32 && j.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    j.len() == 32
+        && j.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 /// GET /reinitialisation?jeton=… — la page du lien reçu par courriel : le
@@ -3250,7 +3291,10 @@ async fn reset_password(
     else {
         return Ok((StatusCode::BAD_REQUEST, mort));
     };
-    let Some(u) = user::Entity::find_by_id(ligne.user_id).one(&state.db).await? else {
+    let Some(u) = user::Entity::find_by_id(ligne.user_id)
+        .one(&state.db)
+        .await?
+    else {
         return Ok((StatusCode::BAD_REQUEST, mort));
     };
     let mut compte: user::ActiveModel = u.into();
@@ -4631,7 +4675,10 @@ mod tests {
         assert_eq!(partage_coord("48.8566,2.3522"), Some((48.8566, 2.3522)));
         assert_eq!(partage_coord(" 44.5 , -1.2 "), Some((44.5, -1.2)));
         // Arrondi à 1e-5 : le lien profond reste court et stable.
-        assert_eq!(partage_coord("44.123456789,-1.20000049"), Some((44.12346, -1.2)));
+        assert_eq!(
+            partage_coord("44.123456789,-1.20000049"),
+            Some((44.12346, -1.2))
+        );
         assert_eq!(partage_coord("91,0"), None);
         assert_eq!(partage_coord("0,181"), None);
         assert_eq!(partage_coord("48.85,2.35,3"), None);
@@ -4642,10 +4689,7 @@ mod tests {
 
     #[test]
     fn partage_echappe_neutralise_le_html() {
-        assert_eq!(
-            partage_echappe(r#"<b>&"'"#),
-            "&lt;b&gt;&amp;&quot;&#39;"
-        );
+        assert_eq!(partage_echappe(r#"<b>&"'"#), "&lt;b&gt;&amp;&quot;&#39;");
         // Borné à soixante caractères : un nom de lieu, pas un roman.
         assert_eq!(partage_echappe(&"a".repeat(100)).chars().count(), 60);
         assert_eq!(partage_echappe("Chez\u{7}Paul"), "ChezPaul");
@@ -4653,8 +4697,14 @@ mod tests {
 
     #[test]
     fn partage_encode_reserve_tout() {
-        assert_eq!(partage_encode("chez Paul & fils"), "chez%20Paul%20%26%20fils");
-        assert_eq!(partage_encode("44.5,-1.2|44.6,-1.1"), "44.5%2C-1.2%7C44.6%2C-1.1");
+        assert_eq!(
+            partage_encode("chez Paul & fils"),
+            "chez%20Paul%20%26%20fils"
+        );
+        assert_eq!(
+            partage_encode("44.5,-1.2|44.6,-1.1"),
+            "44.5%2C-1.2%7C44.6%2C-1.1"
+        );
         assert_eq!(partage_encode("été"), "%C3%A9t%C3%A9");
     }
 
@@ -5271,7 +5321,9 @@ mod integration {
     /// de passe meurt et le nouveau vit.
     #[tokio::test]
     async fn reinitialisation_change_le_mot_de_passe_une_seule_fois() {
-        let Some((app, db)) = test_app_db().await else { return };
+        let Some((app, db)) = test_app_db().await else {
+            return;
+        };
         let nom = uniq("reset");
         let _ = signup(&app, &nom).await;
         let u = user::Entity::find()
@@ -5748,7 +5800,12 @@ mod integration {
         // Un tableau n'est pas un objet de préférences.
         let resp = app
             .clone()
-            .oneshot(json_req("PUT", "/prefs", Some(&token), serde_json::json!([1, 2])))
+            .oneshot(json_req(
+                "PUT",
+                "/prefs",
+                Some(&token),
+                serde_json::json!([1, 2]),
+            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -5906,16 +5963,25 @@ mod integration {
         );
         for mauvaise in [
             "2026-08-21T08:00:00+02:00", // un « + » serait mangé par l'URL
-            "hier", "", "2026-08-21", "javascript:Z",
+            "hier",
+            "",
+            "2026-08-21",
+            "javascript:Z",
         ] {
             assert!(transit_heure(Some(mauvaise)).is_none(), "{mauvaise:?}");
         }
         assert!(transit_heure(None).is_none());
 
-        assert_eq!(transit_point(Some("44.8820,-0.6051")), Some((44.882, -0.6051)));
+        assert_eq!(
+            transit_point(Some("44.8820,-0.6051")),
+            Some((44.882, -0.6051))
+        );
         // Arrondi au dix-millième : onze mètres, le même arrêt — et une clé
         // de cache que deux appuis voisins partagent.
-        assert_eq!(transit_point(Some("44.88204,-0.60508")), Some((44.882, -0.6051)));
+        assert_eq!(
+            transit_point(Some("44.88204,-0.60508")),
+            Some((44.882, -0.6051))
+        );
         for mauvais in ["91,0", "0,181", "nawak", "1", "", "1,2,3"] {
             assert!(transit_point(Some(mauvais)).is_none(), "{mauvais:?}");
         }
@@ -5959,7 +6025,10 @@ mod integration {
         assert_eq!(tram.ligne.as_deref(), Some("E"));
         assert_eq!(tram.couleur.as_deref(), Some("967651"));
         assert_eq!(tram.direction.as_deref(), Some("Quinconces"));
-        assert_eq!((tram.de.as_str(), tram.a.as_str()), ("Ausone", "Quinconces"));
+        assert_eq!(
+            (tram.de.as_str(), tram.a.as_str()),
+            ("Ausone", "Quinconces")
+        );
         assert_eq!(tram.trace, "def");
         // Temps réel publié : trois minutes de retard, mesurées entre le
         // départ annoncé et l'horaire en papier.
@@ -6090,12 +6159,12 @@ mod integration {
 
         // Reste refusé ce qui ne peut pas venir d'une carte.
         for mauvaise in [
-            "10,41,-5,51",           // est avant ouest
-            "-5,51,10,41",           // nord avant sud
-            "-5,41,10",              // incomplète
-            "",                      // vide
-            "a,b,c,d",               // pas des nombres
-            "-5,41,10,51,99",        // un champ de trop
+            "10,41,-5,51",    // est avant ouest
+            "-5,51,10,41",    // nord avant sud
+            "-5,41,10",       // incomplète
+            "",               // vide
+            "a,b,c,d",        // pas des nombres
+            "-5,41,10,51,99", // un champ de trop
         ] {
             assert!(fires_zone(Some(mauvaise)).is_none(), "{mauvaise:?}");
         }
