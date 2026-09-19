@@ -472,6 +472,13 @@ struct FirePoint {
     /// la colonne CSV manque (compatibilité clients existants).
     #[serde(skip_serializing_if = "Option::is_none")]
     t: Option<i64>,
+    /// **Première** détection à cet endroit sur la fenêtre demandée — permet
+    /// au client d'afficher « Créé il y a X j ». Le client le décrivait déjà,
+    /// mais rien ne le lui envoyait : un feu d'une semaine et un feu d'une
+    /// heure se ressemblaient trait pour trait. Absente comme `t` quand la
+    /// colonne CSV manque.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    t0: Option<i64>,
 }
 
 /// Cache mémoire des feux : évite d'appeler la NASA à chaque requête client.
@@ -1589,9 +1596,17 @@ async fn list_fires(Query(q): Query<FiresQuery>) -> Response {
         // désert : sur une carte qu'on fait glisser, chaque zone est nouvelle
         // une fois, et c'est précisément ce moment-là qu'on regarde.
         None => {
+            // Un seul jour ici, et c'est délibéré : quelqu'un attend derrière,
+            // et sept jours de CSV ne tiennent pas dans les cinq secondes
+            // qu'on s'accorde. On montre donc vite ce qu'on a.
             let data = attends(fetch_fires_days(&key, 1, &zone)).await;
             if let Some(data) = data {
                 range_feux(&zone, data.clone()).await;
+                // …puis on va chercher les sept jours derrière. Sans cela, le
+                // cache gardait sa version courte un quart d'heure entier
+                // (FIRES_TTL) : la carte restait sans âges ni cicatrices tout
+                // ce temps, alors que personne n'attendait plus.
+                spawn_fires_refresh(key, zone);
                 Json(data).into_response()
             } else {
                 // Trop long ou en échec : le rafraîchissement continue en fond,
@@ -1612,8 +1627,8 @@ struct FiresQuery {
 
 /// Lance (au plus un à la fois) un rafraîchissement du cache des feux en
 /// tâche de fond. Essaie d'abord 7 jours d'historique (pour « Créé il y a
-/// X j ») ; si la NASA ne répond pas à temps, repli sur 2 jours, bien plus
-/// léger, pour que la carte reste alimentée.
+/// X j ») ; si la NASA ne répond pas, repli sur 2 jours, puis sur 1, bien
+/// plus légers, pour que la carte reste alimentée quoi qu'il arrive.
 fn spawn_fires_refresh(key: String, zone: String) {
     use std::sync::Mutex as StdMutex;
     // Une zone à la fois, mais plusieurs zones en parallèle : un seul verrou
@@ -1628,10 +1643,24 @@ fn spawn_fires_refresh(key: String, zone: String) {
     }
 
     tokio::spawn(async move {
-        // Un seul jour : la carte montre les feux **actifs**, pas leur
-        // histoire. C'est aussi ce qui rend la demande mondiale tenable — la
-        // profondeur était le seul vrai coût.
-        match fetch_fires_days(&key, 1, &zone).await {
+        // Sept jours, et non plus un. La profondeur ne sert pas à montrer de
+        // vieux feux — le client n'affiche que les foyers vus dans les
+        // dernières 36 h — mais à les **dater** et à dessiner la zone brûlée,
+        // qui s'accumule sur toute l'histoire du foyer. Avec un seul jour,
+        // tout feu semblait nouveau et toute cicatrice semblait petite.
+        //
+        // C'est le chemin de fond : personne n'attend derrière, le coût d'un
+        // CSV de sept jours se paie ici et non sur l'écran de quelqu'un. Si
+        // la NASA ne suit pas, on redescend plutôt que de ne rien mettre en
+        // cache — deux jours valent mieux qu'un jour, qui vaut mieux que rien.
+        let profond = match fetch_fires_days(&key, 7, &zone).await {
+            Some(d) => Some(d),
+            None => match fetch_fires_days(&key, 2, &zone).await {
+                Some(d) => Some(d),
+                None => fetch_fires_days(&key, 1, &zone).await,
+            },
+        };
+        match profond {
             Some(data) => {
                 tracing::info!("FIRMS : {} cellules en cache pour {zone}", data.len());
                 let cache = FIRES_CACHE.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()));
@@ -1701,6 +1730,17 @@ const FIRES_GRID_DEG: f64 = 0.005;
 /// Garde-fou sur la taille de la réponse (cellules les plus récentes d'abord).
 const FIRES_MAX_POINTS: usize = 4000;
 
+/// La plus ancienne de deux dates, `None` valant « inconnue » et non
+/// « très ancienne » : `min` sur des `Option` ferait gagner `None`, et un
+/// seul horodatage manquant suffirait à effacer l'âge de tout un foyer.
+fn plus_ancienne(a: Option<i64>, b: Option<i64>) -> Option<i64> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(x.min(y)),
+        (Some(x), None) | (None, Some(x)) => Some(x),
+        (None, None) => None,
+    }
+}
+
 /// Analyse le CSV FIRMS en filtrant les faux positifs (torchères, brûlages,
 /// détections douteuses) : on ne garde que les détections de confiance
 /// nominale ou haute avec une puissance radiative (FRP) ≥ 2 MW, puis on
@@ -1756,8 +1796,12 @@ fn parse_firms_csv(text: &str) -> Vec<FirePoint> {
                     p.lon = lon;
                     p.t = t;
                 }
+                // La première détection ne bouge que vers le passé. `None` est
+                // une date inconnue, pas une date ancienne : un seul horodatage
+                // manquant ne doit pas effacer l'âge d'un foyer.
+                p.t0 = plus_ancienne(p.t0, t);
             })
-            .or_insert(FirePoint { lat, lon, t });
+            .or_insert(FirePoint { lat, lon, t, t0: t });
     }
     let mut out: Vec<FirePoint> = cells.into_values().collect();
     out.sort_by_key(|p| std::cmp::Reverse(p.t));
@@ -1790,9 +1834,14 @@ fn eclaircit(points: Vec<FirePoint>) -> Vec<FirePoint> {
             mailles
                 .entry(cle)
                 .and_modify(|garde| {
+                    // La maille garde la détection la plus récente, mais hérite
+                    // de la plus ancienne date de début qu'elle a vue : sinon
+                    // l'éclaircissement rajeunissait les foyers qu'il fusionne.
+                    let debut = plus_ancienne(garde.t0, p.t0);
                     if p.t > garde.t {
                         *garde = p.clone();
                     }
+                    garde.t0 = debut;
                 })
                 .or_insert_with(|| p.clone());
         }
@@ -4738,7 +4787,61 @@ mod tests {
             .find(|p| (p.lat - 44.5001).abs() < 1e-6)
             .expect("cellule fusionnée absente");
         assert_eq!(merged.t, acq_epoch("2026-07-28", "0142"));
+        // …et elle garde la **première** des deux dates : c'est ce qui permet
+        // de dire « Créé il y a X j ». Sans cela, un foyer vu toute la semaine
+        // paraissait né du jour même.
+        assert_eq!(merged.t0, acq_epoch("2026-07-26", "0342"));
+        assert!(
+            merged.t0 < merged.t,
+            "le début doit précéder la dernière vue"
+        );
         assert!(pts.iter().any(|p| (p.lat - 46.0).abs() < 1e-6));
+    }
+
+    /// Une date inconnue n'est pas une date ancienne. `min` sur des `Option`
+    /// ferait gagner `None`, et un seul horodatage manquant dans un foyer
+    /// suffirait à effacer son âge.
+    #[test]
+    fn une_date_inconnue_n_efface_pas_l_age_d_un_foyer() {
+        assert_eq!(plus_ancienne(Some(10), Some(4)), Some(4));
+        assert_eq!(plus_ancienne(Some(10), None), Some(10));
+        assert_eq!(plus_ancienne(None, Some(4)), Some(4));
+        assert_eq!(plus_ancienne(None, None), None);
+
+        // Sur le CSV : deux lignes de la même cellule, l'ancienne sans heure
+        // exploitable. Le foyer garde la date qu'on connaît.
+        let csv = "latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,instrument,confidence,version,bright_ti5,frp,daynight\n\
+            44.5000,-1.2000,330.1,0.4,0.4,,,N,VIIRS,h,2.0NRT,290.0,12.5,N\n\
+            44.5001,-1.2001,331.0,0.4,0.4,2026-07-28,0142,N,VIIRS,n,2.0NRT,291.0,8.0,N\n";
+        let pts = parse_firms_csv(csv);
+        assert_eq!(pts.len(), 1);
+        assert_eq!(pts[0].t0, acq_epoch("2026-07-28", "0142"));
+    }
+
+    /// L'éclaircissement fusionne des mailles pour tenir sous le plafond. Il
+    /// garde la détection la plus récente — mais doit hériter du début le plus
+    /// ancien, sinon il rajeunit les foyers qu'il regroupe.
+    #[test]
+    fn l_eclaircissement_ne_rajeunit_pas_les_foyers() {
+        let mut points = Vec::new();
+        // Assez de points pour forcer l'éclaircissement, tous très proches :
+        // ils finiront dans la même maille.
+        for i in 0..(FIRES_MAX_POINTS + 500) {
+            points.push(FirePoint {
+                lat: 43.0 + (i % 50) as f64 * 0.001,
+                lon: 6.0 + (i / 50) as f64 * 0.001,
+                t: Some(5_000_000 + i as i64),
+                // Un seul point porte un début très ancien : c'est lui que la
+                // maille doit retenir.
+                t0: Some(if i == 0 { 1_000 } else { 4_000_000 }),
+            });
+        }
+        let out = eclaircit(points);
+        assert!(out.len() <= FIRES_MAX_POINTS, "{} points", out.len());
+        assert!(
+            out.iter().any(|p| p.t0 == Some(1_000)),
+            "le début le plus ancien a été perdu à la fusion"
+        );
     }
 
     #[test]
@@ -6100,6 +6203,7 @@ mod integration {
                 lat: 10.0 + (i % 100) as f64 * 0.01,
                 lon: 5.0 + (i / 100) as f64 * 0.01,
                 t: Some(2_000_000),
+                t0: Some(1_900_000),
             });
         }
         for i in 0..40 {
@@ -6107,6 +6211,7 @@ mod integration {
                 lat: 45.0 + i as f64 * 0.3,
                 lon: 2.0 + i as f64 * 0.2,
                 t: Some(1_000_000),
+                t0: Some(900_000),
             });
         }
 

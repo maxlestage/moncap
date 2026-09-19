@@ -641,6 +641,22 @@
         }
       }
     },
+    "Actif depuis plus d'une semaine": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Burning for more than a week"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activo desde hace más de una semana"
+          }
+        }
+      }
+    },
     "Adresse": {
       "localizations": {
         "en": {
@@ -2173,6 +2189,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cubre tu posición"
+          }
+        }
+      }
+    },
+    "Créé il y a %lld h": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Started %lld h ago"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciado hace %lld h"
+          }
+        }
+      }
+    },
+    "Créé il y a %lld j": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Started %lld d ago"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciado hace %lld d"
+          }
+        }
+      }
+    },
+    "Créé il y a moins d'1 h": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Started less than 1 h ago"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciado hace menos de 1 h"
           }
         }
       }
