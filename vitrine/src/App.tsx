@@ -56,7 +56,7 @@ function MaquetteComparateur({ c }: { c: Contenu }) {
                 <p className="chiffres-route">
                   {appFormat(
                     c.code,
-                    "%.0f min · %.1f km · %d virages · arr. %@",
+                    "%.0f min · %@ · %d virages · arr. %@",
                     r.trajet,
                   )}
                 </p>
