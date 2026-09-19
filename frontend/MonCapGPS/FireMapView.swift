@@ -10,6 +10,9 @@ struct FirePerimeter: Identifiable {
     let center: CLLocationCoordinate2D
     /// Détection satellite la plus récente du foyer (pour « Mise à jour il y a X h »).
     let updatedAt: Date?
+    /// Première détection du foyer sur la fenêtre de sept jours (pour
+    /// « Créé il y a X j »). Nil tant que le serveur ne la connaît pas.
+    let startedAt: Date?
 }
 
 /// Écran dédié « Carte des feux » à la manière de feuxdeforet.fr : fond
@@ -400,7 +403,11 @@ struct FireMapScreen: View {
         HStack(alignment: .top, spacing: 12) {
             FireUpdateBubble(
                 name: name(of: p),
-                updatedAt: p.updatedAt ?? service.lastUpdate)
+                updatedAt: p.updatedAt ?? service.lastUpdate,
+                // Pas de repli sur `lastUpdate` ici : l'heure à laquelle on a
+                // interrogé le serveur ne dit rien de la naissance du feu.
+                // Inconnue, la ligne se tait.
+                startedAt: p.startedAt)
             Button {
                 withAnimation(.spring(duration: 0.25)) { selectedID = nil }
             } label: {
@@ -506,6 +513,9 @@ struct FireMapScreen: View {
 struct FireUpdateBubble: View {
     let name: String?
     let updatedAt: Date?
+    /// Première détection du foyer. Nil quand elle est inconnue — la ligne
+    /// disparaît alors, plutôt que d'annoncer un âge faux.
+    let startedAt: Date?
 
     var body: some View {
         VStack(spacing: 2) {
@@ -517,6 +527,11 @@ struct FireUpdateBubble: View {
             Text("Contour satellite approximatif")
                 .font(name == nil ? .footnote.weight(.semibold) : .caption)
                 .foregroundStyle(name == nil ? .white : .white.opacity(0.8))
+            if let depuis = depuisText {
+                Text(depuis)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
             if let ago = agoText {
                 Text(ago)
                     .font(.caption.italic())
@@ -527,6 +542,27 @@ struct FireUpdateBubble: View {
         .padding(.vertical, 9)
         .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
         .fixedSize()
+    }
+
+    /// « Créé il y a 3 j », omis si la première détection est inconnue.
+    ///
+    /// Sept jours est le fond de la fenêtre : au-delà, on ne sait pas si le
+    /// feu est né le septième jour ou le trentième. On le dit — « depuis plus
+    /// d'une semaine » — au lieu d'annoncer un âge qu'on ne connaît pas.
+    private var depuisText: String? {
+        guard let startedAt else { return nil }
+        let heures = Date().timeIntervalSince(startedAt) / 3600
+        guard heures >= 0 else { return nil }
+        if heures < 24 {
+            let h = Int(heures)
+            return h < 1
+                ? String(localized: "Créé il y a moins d'1 h")
+                : String(format: String(localized: "Créé il y a %lld h"), h)
+        }
+        let jours = Int(heures / 24)
+        return jours >= 7
+            ? String(localized: "Actif depuis plus d'une semaine")
+            : String(format: String(localized: "Créé il y a %lld j"), jours)
     }
 
     /// « Mise à jour il y a 3 h », omis si la date est inconnue.
@@ -613,7 +649,11 @@ enum FireGeometry {
                 out.append(
                     FirePerimeter(
                         id: out.count, polygon: ring, center: centers[i],
-                        updatedAt: own.compactMap { $0.detectedAt }.max()))
+                        updatedAt: own.compactMap { $0.detectedAt }.max(),
+                        // Le début, lui, se prend sur **tout** le groupe et
+                        // non sur la seule poche : un foyer qui s'est scindé
+                        // n'est pas né au moment où il s'est scindé.
+                        startedAt: group.compactMap { $0.firstSeen }.min()))
             }
         }
         return out

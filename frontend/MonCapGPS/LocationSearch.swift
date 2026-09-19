@@ -34,7 +34,21 @@ final class PlaceSearch: ObservableObject {
                 request.naturalLanguageQuery = query
                 request.resultTypes = [.address, .pointOfInterest]
                 if let region { request.region = region }
-                return (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+                let bruts = (try? await MKLocalSearch(request: request).start())?.mapItems ?? []
+                // MKLocalSearch cherche « au sens proche » : demandez une
+                // avenue dans une ville qui n'a que la rue du même nom, il
+                // rend la rue sans prévenir. Sur un plan l'erreur se voit ;
+                // ici elle enchaîne sur le guidage et vous emmène ailleurs —
+                // rue et avenue de même nom n'ont aucune raison d'être
+                // voisines. On écarte donc ce qui contredit le type demandé,
+                // et seulement cela : un résultat qui n'annonce aucun type
+                // (commerce, lieu-dit) reste, l'absence n'est pas une
+                // contradiction.
+                return bruts.filter {
+                    !TypeDeVoie.contredit(
+                        demande: query,
+                        libelles: [$0.name, $0.placemark.thoroughfare, $0.placemark.title])
+                }
             }
 
             // Grande zone (~1500 km) centrée sur l'utilisateur : priorise les

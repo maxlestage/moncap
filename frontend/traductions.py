@@ -664,6 +664,18 @@ T: dict[str, tuple[str, str]] = {
         "Updated less than 1 h ago",
     ),
     "Mise à jour il y a %lld h": ("Actualizado hace %lld h", "Updated %lld h ago"),
+    "Créé il y a moins d'1 h": (
+        "Iniciado hace menos de 1 h",
+        "Started less than 1 h ago",
+    ),
+    "Créé il y a %lld h": ("Iniciado hace %lld h", "Started %lld h ago"),
+    "Créé il y a %lld j": ("Iniciado hace %lld d", "Started %lld d ago"),
+    # Sept jours est le fond de la fenêtre d'historique : au-delà, on ne sait
+    # pas si le feu a une semaine ou un mois. On le dit plutôt que de chiffrer.
+    "Actif depuis plus d'une semaine": (
+        "Activo desde hace más de una semana",
+        "Burning for more than a week",
+    ),
     "%lld point chaud": ("%lld punto caliente", "%lld hot spot"),
     "%lld points chauds": ("%lld puntos calientes", "%lld hot spots"),
     "détections satellite · %@": (

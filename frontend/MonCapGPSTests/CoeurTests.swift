@@ -191,3 +191,108 @@ final class DistanceTests: XCTestCase {
         XCTAssertEqual(Distance.courteKm(8.4), "8.4 km")
     }
 }
+
+/// Le type de voie : rue, avenue, boulevard…
+///
+/// La règle est volontairement timide : on n'écarte un résultat que lorsque
+/// la demande **et** le résultat annoncent chacun un type, et que les deux se
+/// contredisent. Ces tests couvrent surtout les cas où il ne faut *pas*
+/// écarter — c'est là qu'une règle trop zélée fait des dégâts invisibles.
+final class TypeDeVoieTests: XCTestCase {
+
+    func testLesTypesCourantsSontReconnus() {
+        XCTAssertEqual(TypeDeVoie.dans("Avenue Victor Hugo"), "avenue")
+        XCTAssertEqual(TypeDeVoie.dans("rue de la Paix"), "rue")
+        XCTAssertEqual(TypeDeVoie.dans("Boulevard Saint-Germain"), "boulevard")
+        XCTAssertEqual(TypeDeVoie.dans("Impasse des Lilas"), "impasse")
+    }
+
+    /// Personne n'écrit « boulevard » en entier dans un champ de recherche.
+    func testLesAbreviationsValentLesMotsEntiers() {
+        XCTAssertEqual(TypeDeVoie.dans("av. Victor Hugo"), "avenue")
+        XCTAssertEqual(TypeDeVoie.dans("Bd Saint-Germain"), "boulevard")
+        XCTAssertEqual(TypeDeVoie.dans("all. des Tilleuls"), "allee")
+    }
+
+    /// Accents, majuscules et ponctuation ne changent pas le type.
+    func testLaCasseEtLesAccentsNeComptentPas() {
+        XCTAssertEqual(TypeDeVoie.dans("ALLÉE DES ROSES"), "allee")
+        XCTAssertEqual(TypeDeVoie.dans("Allée des Roses"), "allee")
+        XCTAssertEqual(TypeDeVoie.dans("Cité Bergère"), "cite")
+    }
+
+    /// Le numéro, et son suffixe, précèdent le type sans le masquer.
+    func testLeNumeroEtSonSuffixeSontFranchis() {
+        XCTAssertEqual(TypeDeVoie.dans("5 avenue Victor Hugo"), "avenue")
+        XCTAssertEqual(TypeDeVoie.dans("5 bis avenue Victor Hugo"), "avenue")
+        XCTAssertEqual(TypeDeVoie.dans("12 ter rue de la Paix"), "rue")
+    }
+
+    /// Les types en deux mots : « rond » seul ne dit rien, « point » non plus.
+    func testLesTypesEnDeuxMots() {
+        XCTAssertEqual(TypeDeVoie.dans("Rond-point de l'Europe"), "rond point")
+        XCTAssertEqual(TypeDeVoie.dans("rond point de l'Europe"), "rond point")
+        XCTAssertEqual(TypeDeVoie.dans("Lieu-dit Les Granges"), "lieu dit")
+    }
+
+    /// Le type doit venir en tête. Chercher le mot n'importe où serait
+    /// tentant et faux : un café ne devient pas un boulevard.
+    func testUnNomDeLieuNEstPasUnTypeDeVoie() {
+        XCTAssertNil(TypeDeVoie.dans("Café du Boulevard"))
+        XCTAssertNil(TypeDeVoie.dans("Hôtel de la Place"))
+        XCTAssertNil(TypeDeVoie.dans("Gare de Lyon"))
+        XCTAssertNil(TypeDeVoie.dans("Carrefour Market"))
+        XCTAssertNil(TypeDeVoie.dans(""))
+    }
+
+    // MARK: - Ce qu'on écarte, et ce qu'on garde
+
+    func testUneAvenueNeRamenePasUneRue() {
+        XCTAssertTrue(
+            TypeDeVoie.contredit(demande: "avenue Victor Hugo", candidat: "Rue Victor Hugo"))
+        XCTAssertTrue(
+            TypeDeVoie.contredit(demande: "12 bd Voltaire", candidat: "12 rue Voltaire"))
+    }
+
+    func testUnTypeIdentiqueNeContreditPas() {
+        XCTAssertFalse(
+            TypeDeVoie.contredit(demande: "avenue Victor Hugo", candidat: "Avenue Victor Hugo"))
+        // L'abréviation d'un côté, le mot entier de l'autre : même voie.
+        XCTAssertFalse(
+            TypeDeVoie.contredit(demande: "av Victor Hugo", candidat: "Avenue Victor Hugo"))
+    }
+
+    /// Le silence n'est pas une contradiction : sans type d'un côté ou de
+    /// l'autre, on ne sait pas, donc on ne jette pas.
+    func testLeSilenceNeContreditPas() {
+        XCTAssertFalse(
+            TypeDeVoie.contredit(demande: "Victor Hugo", candidat: "Rue Victor Hugo"))
+        XCTAssertFalse(
+            TypeDeVoie.contredit(demande: "avenue Victor Hugo", candidat: "Victor Hugo"))
+        XCTAssertFalse(
+            TypeDeVoie.contredit(demande: "avenue Victor Hugo", candidat: "Boulangerie Hugo"))
+    }
+
+    /// Les moteurs rangent la voie tantôt dans le nom, tantôt dans l'adresse :
+    /// un seul libellé qui s'accorde suffit à garder le résultat.
+    func testUnSeulLibelleQuiSAccordeSuffit() {
+        XCTAssertFalse(
+            TypeDeVoie.contredit(
+                demande: "avenue Victor Hugo",
+                libelles: ["Rue Victor Hugo", "Avenue Victor Hugo, Paris"]))
+        XCTAssertTrue(
+            TypeDeVoie.contredit(
+                demande: "avenue Victor Hugo",
+                libelles: ["Rue Victor Hugo", "Rue Victor Hugo, 75016 Paris"]))
+    }
+
+    /// Un candidat sans aucun libellé exploitable est gardé : on n'écarte
+    /// jamais faute d'information.
+    func testAucunLibelleExploitableGardeLeResultat() {
+        XCTAssertFalse(
+            TypeDeVoie.contredit(demande: "avenue Victor Hugo", libelles: [nil, nil]))
+        XCTAssertFalse(
+            TypeDeVoie.contredit(
+                demande: "avenue Victor Hugo", libelles: [nil, "Boulangerie Hugo"]))
+    }
+}

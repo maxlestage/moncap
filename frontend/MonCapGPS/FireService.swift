@@ -10,12 +10,21 @@ struct Fire: Identifiable {
     /// « Mise à jour il y a X h » sur la carte, comme feuxdeforet.fr.
     let detectedAt: Date?
     /// Première détection à cet endroit sur la fenêtre d'historique (7 j) —
-    /// sert à afficher « Créé il y a X j ».
+    /// sert à afficher « Créé il y a X j ». Ce commentaire décrivait une
+    /// propriété qui n'existait pas : le serveur n'envoyait que la dernière
+    /// détection, et un feu d'une semaine ressemblait trait pour trait à un
+    /// feu d'une heure. Nil quand le serveur ne la connaît pas — un vieux
+    /// backend, ou une détection sans horodatage exploitable.
+    let firstSeen: Date?
 
-    init(coordinate: CLLocationCoordinate2D, detectedAt: Date? = nil)
-    {
+    init(
+        coordinate: CLLocationCoordinate2D,
+        detectedAt: Date? = nil,
+        firstSeen: Date? = nil
+    ) {
         self.coordinate = coordinate
         self.detectedAt = detectedAt
+        self.firstSeen = firstSeen
     }
 }
 
@@ -51,9 +60,9 @@ final class FireService: ObservableObject {
 
     /// Rafraîchit la liste des feux (au plus toutes les 15 min ; immédiat si la
     /// clé change). Si `key` (clé FIRMS saisie dans les réglages) est non vide,
-    /// l'app interroge la NASA **directement**, avec repli sur 2 jours puis sur
-    /// notre backend ; sinon elle passe directement par le backend. Les données
-    /// FIRMS NRT ne changent que quelques fois par jour.
+    /// l'app interroge la NASA **directement** sur sept jours, avec repli sur
+    /// deux jours puis sur notre backend ; sinon elle passe directement par le
+    /// backend. Les données FIRMS NRT ne changent que quelques fois par jour.
     /// - Parameter bbox: « ouest,sud,est,nord ». Absente, c'est le monde — et
     ///   le serveur éclaircit alors sa réponse pour tenir sous son plafond.
     ///   La donner change tout à l'usage : le plafond s'applique à ce qu'on
@@ -70,10 +79,14 @@ final class FireService: ObservableObject {
         fetch = Task {
             var f: [Fire]?
             if !k.isEmpty {
-                // Un jour sur le monde entier pèse déjà ce que sept jours
-                // pesaient sur la France : la profondeur est le coût, pas
-                // l'étendue.
-                f = await Self.fetchNASA(key: k, days: 1, bbox: bbox)
+                // Sept jours : c'est la profondeur qui date les foyers et qui
+                // dessine la cicatrice, pas l'étendue. Elle coûte cher — un
+                // jour sur le monde entier pèse déjà ce que sept jours
+                // pesaient sur la France — d'où la descente en marches plutôt
+                // qu'un tout ou rien : sept, puis deux, puis le backend, qui a
+                // déjà fait ce travail pour tout le monde.
+                f = await Self.fetchNASA(key: k, days: 7, bbox: bbox)
+                if f == nil { f = await Self.fetchNASA(key: k, days: 2, bbox: bbox) }
                 // Clé refusée ou NASA injoignable : mieux vaut les données du
                 // backend qu'une carte vide.
                 if f == nil { f = await Self.fetchBackend(base: base, bbox: bbox) }
@@ -116,12 +129,16 @@ final class FireService: ObservableObject {
         }
     }
 
-    /// Réponse JSON du backend : `[{ "lat": .., "lon": .., "t": .. }, ...]`
-    /// (`t` = détection la plus récente, epoch UTC, optionnelle).
+    /// Réponse JSON du backend :
+    /// `[{ "lat": .., "lon": .., "t": .., "t0": .. }, ...]`
+    /// (`t` = détection la plus récente, `t0` = la première de la fenêtre de
+    /// sept jours ; toutes deux en epoch UTC et toutes deux optionnelles —
+    /// un backend plus ancien n'envoie pas `t0`).
     private struct Point: Decodable {
         let lat: Double
         let lon: Double
         let t: Double?
+        let t0: Double?
     }
 
     /// Interroge notre backend `GET /fires`. `nonisolated` : décodage hors du
@@ -139,7 +156,8 @@ final class FireService: ObservableObject {
         return points.map {
             Fire(
                 coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) })
+                detectedAt: $0.t.map { Date(timeIntervalSince1970: $0) },
+                firstSeen: $0.t0.map { Date(timeIntervalSince1970: $0) })
         }
     }
 
@@ -234,7 +252,11 @@ final class FireService: ObservableObject {
             .map {
                 Fire(
                     coordinate: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                    detectedAt: $0.last)
+                    detectedAt: $0.last,
+                    // La cellule suivait déjà sa première détection, et la
+                    // jetait au moment de construire le foyer : le chemin
+                    // direct perdait l'âge que le chemin backend va rendre.
+                    firstSeen: $0.first)
             }
     }
 

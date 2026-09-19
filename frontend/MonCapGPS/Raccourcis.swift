@@ -86,8 +86,16 @@ struct NaviguerVers: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        // Le premier résultat qui ne contredit pas le type de voie dicté :
+        // à la voix, « avenue » et « rue » se distinguent parfaitement, et
+        // partir vers l'autre bout de la commune sans rien dire serait pire
+        // ici qu'ailleurs — personne ne regarde l'écran.
+        let trouves = (try? await CLGeocoder().geocodeAddressString(destination)) ?? []
         guard
-            let lieu = try? await CLGeocoder().geocodeAddressString(destination).first,
+            let lieu = trouves.first(where: {
+                !TypeDeVoie.contredit(
+                    demande: destination, libelles: [$0.thoroughfare, $0.name])
+            }),
             let c = lieu.location?.coordinate
         else {
             return .result(
