@@ -127,7 +127,16 @@ struct CollerAdressesView: View {
         var acc: [Resultat] = []
         let geocodeur = CLGeocoder()
         for ligne in lignes.prefix(Self.maxAdresses) {
-            let lieu = try? await geocodeur.geocodeAddressString(ligne).first
+            let trouves = (try? await geocodeur.geocodeAddressString(ligne)) ?? []
+            // Le premier résultat qui ne contredit pas le type de voie
+            // demandé, et non le premier tout court : sur une tournée, une
+            // avenue livrée rue du même nom, c'est une course perdue. Aucun
+            // ne convient → on laisse l'adresse sans coordonnée, ce que
+            // l'écran signale déjà, plutôt que d'envoyer ailleurs.
+            let lieu = trouves.first {
+                !TypeDeVoie.contredit(
+                    demande: ligne, libelles: [$0.thoroughfare, $0.name])
+            }
             acc.append(
                 Resultat(
                     nom: ligne,
