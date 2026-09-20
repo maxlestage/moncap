@@ -418,6 +418,19 @@ final class NavigationManager: ObservableObject {
         speak(text)
     }
 
+    /// Dit une phrase qui n'est pas une consigne de manœuvre — une alerte
+    /// communautaire à l'approche, par exemple.
+    ///
+    /// Passe par la même voix et la même session audio que le guidage : elle
+    /// atténue la musique le temps de parler, ce qu'une notification ne fait
+    /// pas. Muette hors guidage : à pied ou à l'arrêt, la bannière suffit et
+    /// une voix qui sort du téléphone sans raison inquiète plus qu'elle
+    /// n'informe.
+    func annonce(_ texte: String) {
+        guard active, !texte.isEmpty else { return }
+        speak(texte)
+    }
+
     /// Redit la consigne en cours, à la demande.
     ///
     /// Sert la montre : au poignet on n'a pas toujours entendu — une moto,
