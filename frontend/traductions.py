@@ -885,6 +885,12 @@ T: dict[str, tuple[str, str]] = {
     "Normale": ("Normal", "Normal"),
     "Rapide": ("Rápido", "Brisk"),
     "Éviter les escaliers": ("Evitar escaleras", "Avoid stairs"),
+    # La reconnaissance automatique du mode de déplacement.
+    "Reconnaître le mode": ("Reconocer el modo", "Detect the mode"),
+    "À pied, à vélo ou en voiture, reconnu tout seul. Les transports restent un choix : rien ne distingue un bus d'une voiture au mouvement. Toucher le sélecteur reprend la main jusqu'à la fin du trajet.": (
+        "A pie, en bici o en coche, reconocido solo. El transporte público sigue siendo una elección: nada distingue un autobús de un coche por el movimiento. Tocar el selector recupera el control hasta el final del trayecto.",
+        "Walking, cycling or driving, detected on its own. Transit stays a choice: nothing tells a bus from a car by motion alone. Touching the picker takes back control until the end of the trip.",
+    ),
     "%.1f km restants": ("%.1f km restantes", "%.1f km left"),
     # Sous le kilomètre, le restant se dit en mètres : « 0.2 km restants »
     # n'est la façon de parler de personne.

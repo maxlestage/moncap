@@ -1,4 +1,5 @@
 import CoreLocation
+import CoreMotion
 import XCTest
 
 @testable import MonCapGPS
@@ -539,5 +540,73 @@ final class AlerteDevantTests: XCTestCase {
             NearbyAlertNotifier.phrase(alert: a, distance: 312).contains("300"))
         XCTAssertTrue(
             NearbyAlertNotifier.phrase(alert: a, distance: 12).contains("50"))
+    }
+}
+
+/// La lecture d'une activité Core Motion.
+///
+/// Toute la subtilité est dans les relevés ambigus : Core Motion lève
+/// plusieurs drapeaux à la fois, et ne pas trancher explicitement revient à
+/// laisser l'ordre des `if` décider à notre place.
+final class DetectionModeTests: XCTestCase {
+
+    /// Un relevé fabriqué. `CMMotionActivity` n'est pas constructible depuis
+    /// du code applicatif : on passe par KVC, comme pour tout objet Apple
+    /// dont l'initialiseur est privé.
+    private func activite(
+        _ drapeaux: [String], confiance: CMMotionActivityConfidence = .high
+    ) -> CMMotionActivity {
+        let a = CMMotionActivity()
+        for d in drapeaux { a.setValue(true, forKey: d) }
+        a.setValue(confiance.rawValue, forKey: "confidence")
+        return a
+    }
+
+    func testChaqueActiviteDesigneSonMode() {
+        XCTAssertEqual(DetectionMode.mode(de: activite(["automotive"])), .car)
+        XCTAssertEqual(DetectionMode.mode(de: activite(["cycling"])), .bike)
+        XCTAssertEqual(DetectionMode.mode(de: activite(["walking"])), .walk)
+        XCTAssertEqual(DetectionMode.mode(de: activite(["running"])), .walk)
+    }
+
+    /// À l'arrêt on est toujours dans le mode d'avant. L'oublier ferait
+    /// repartir la voiture en piéton à chaque feu rouge.
+    func testUnArretNeDitRienDuMode() {
+        XCTAssertNil(DetectionMode.mode(de: activite(["stationary"])))
+        XCTAssertNil(DetectionMode.mode(de: activite(["unknown"])))
+        XCTAssertNil(DetectionMode.mode(de: activite([])))
+    }
+
+    /// Une confiance basse ne vaut pas mieux qu'aucune activité : changer de
+    /// mode sur un « peut-être » recalculerait l'itinéraire pour rien.
+    func testUnReleveDouteuxEstIgnore() {
+        XCTAssertNil(DetectionMode.mode(de: activite(["automotive"], confiance: .low)))
+        XCTAssertNil(DetectionMode.mode(de: activite(["walking"], confiance: .low)))
+        XCTAssertEqual(
+            DetectionMode.mode(de: activite(["automotive"], confiance: .medium)), .car)
+    }
+
+    /// Core Motion lève deux drapeaux à la fois : `automotive` et
+    /// `stationary` à un feu, `walking` et `cycling` au démarrage d'un coup
+    /// de pédale. Le véhicule l'emporte, puis le vélo — se tromper vers le
+    /// plus contraignant fait faire un détour, pas emprunter une voie
+    /// interdite.
+    func testUnReleveAmbiguTrancheVersLePlusContraignant() {
+        XCTAssertEqual(
+            DetectionMode.mode(de: activite(["automotive", "stationary"])), .car)
+        XCTAssertEqual(
+            DetectionMode.mode(de: activite(["cycling", "walking"])), .bike)
+        XCTAssertEqual(
+            DetectionMode.mode(de: activite(["automotive", "cycling"])), .car)
+    }
+
+    /// Les transports ne sont jamais reconnus : rien dans l'accéléromètre ne
+    /// distingue un bus d'une berline, et deviner faux sur le seul mode où
+    /// l'on ne conduit pas serait le pire endroit pour se tromper.
+    func testLesTransportsNeSontJamaisDevines() {
+        for drapeaux in [["automotive"], ["cycling"], ["walking"], ["running"],
+                         ["stationary"], ["automotive", "stationary"]] {
+            XCTAssertNotEqual(DetectionMode.mode(de: activite(drapeaux)), .transit)
+        }
     }
 }

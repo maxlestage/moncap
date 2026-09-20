@@ -813,6 +813,15 @@ struct MapHomeView: View {
     /// Les escaliers : rien pour deux jambes libres, un mur avec une
     /// poussette, une valise ou un fauteuil.
     @AppStorage("moncap.marcheEviteEscaliers") private var marcheEviteEscaliers = false
+    /// Reconnaître tout seul à pied / vélo / voiture. Activé par défaut :
+    /// c'est le réglage qui rend service à qui ne connaît pas l'option, et il
+    /// se coupe d'un geste.
+    @AppStorage("moncap.modeAuto") private var modeAuto = true
+    @ObservedObject private var detection = DetectionMode.partage
+    /// Vraie dès qu'on a touché le sélecteur : la détection se tait alors
+    /// jusqu'à la fin du guidage. Un réglage qui se rétablit tout seul est
+    /// pire que pas de détection du tout.
+    @State private var modeManuel = false
     /// Le moment du trajet en transports : maintenant, partir à, ou arriver
     /// avant. Les horaires sont toute la donnée d'un tram — les figer sur
     /// « maintenant » interdisait de préparer le bus de demain matin.
@@ -1122,6 +1131,9 @@ struct MapHomeView: View {
             // vraie position affine dès le premier point GPS).
             nightMode = DayNight.isNight(lat: 46.6, lon: 2.5)
             location.start()
+            // La reconnaissance du mode : le coprocesseur de mouvement
+            // classe l'activité en continu, sans réveiller le GPS.
+            if modeAuto { detection.commence() }
             realtime.onPositionsChanged = { Task { await refresh() } }
             nav.onReroute = { Task { await recomputeRoute() } }
             // Navigation interrompue (app relancée, téléphone redémarré) : on
@@ -1266,6 +1278,29 @@ struct MapHomeView: View {
                 cap: location.course, vitesseKmh: location.speedKmh,
                 annonce: nav.active ? { nav.annonce($0) } : nil
             ) { emoji(for: $0) }
+        }
+        // Le mode reconnu s'applique — sauf si on a choisi soi-même.
+        .onReceive(detection.$detecte.compactMap { $0 }) { reconnu in
+            guard modeAuto, !modeManuel, reconnu != travelMode else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { travelMode = reconnu }
+            // Le recalcul appartient au sélecteur quand on y touche ; ici il
+            // faut le demander, la carte d'itinéraire n'étant pas toujours à
+            // l'écran au moment où le mode change.
+            if let dest = pendingDestination {
+                Task { await presentRouteOptions(to: dest) }
+            }
+        }
+        .onChange(of: nav.active) { _, actif in
+            // Fin de guidage : la question se repose depuis le début. On rend
+            // la main à la détection et on oublie ce qu'elle croyait savoir —
+            // le trajet suivant commence souvent autrement que le précédent.
+            if !actif {
+                modeManuel = false
+                detection.oublie()
+            }
+        }
+        .onChange(of: modeAuto) { _, actif in
+            actif ? detection.commence() : detection.arrete()
         }
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.
@@ -3132,6 +3167,22 @@ struct MapHomeView: View {
 
     /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi) qu'on
     /// déroule pour comparer toutes les infos, puis « Démarrer ».
+    /// Le sélecteur de mode, vu comme une décision.
+    ///
+    /// Passer par une liaison plutôt que `$travelMode` permet de distinguer
+    /// « l'utilisateur a choisi » de « la détection a reconnu » : les deux
+    /// écrivent la même variable, mais seul le premier doit faire taire la
+    /// détection. Sans cette distinction, le mode reconnu se serait pris
+    /// lui-même pour un choix et la détection se serait coupée aussitôt.
+    private var modeChoisi: Binding<TravelMode> {
+        Binding(
+            get: { travelMode },
+            set: { nouveau in
+                modeManuel = true
+                travelMode = nouveau
+            })
+    }
+
     private var routeOptionsCard: some View {
         let selected = routeOptions.first { $0.id == selectedRouteID } ?? routeOptions.first
         let fastestID = routeOptions.min { $0.minutes < $1.minutes }?.id
@@ -3142,7 +3193,7 @@ struct MapHomeView: View {
             // segment — « Transports » sortait de l'écran — et l'icône se lit
             // plus vite qu'un mot. Le nom reste dit au lecteur d'écran.
             HStack(spacing: 8) {
-                Picker("Mode", selection: $travelMode) {
+                Picker("Mode", selection: modeChoisi) {
                     ForEach(TravelMode.allCases) { m in
                         Image(systemName: m.icon)
                             .accessibilityLabel(Text(LocalizedStringKey(m.label)))
@@ -3795,7 +3846,7 @@ struct MapHomeView: View {
                 } else {
                 // Mode de déplacement : à pied / vélo / voiture.
                 Section {
-                    Picker("Mode", selection: $travelMode) {
+                    Picker("Mode", selection: modeChoisi) {
                         ForEach(TravelMode.allCases) { m in
                             Image(systemName: m.icon)
                         .accessibilityLabel(Text(LocalizedStringKey(m.label)))
@@ -3808,6 +3859,17 @@ struct MapHomeView: View {
                     Text(LocalizedStringKey(travelMode.resumeDuMode))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    // La reconnaissance automatique. Masquée sur un appareil
+                    // qui ne sait pas classer l'activité : proposer un
+                    // interrupteur sans effet est pire que ne rien proposer.
+                    if detection.disponible {
+                        Toggle(isOn: $modeAuto) {
+                            Label("Reconnaître le mode", systemImage: "wand.and.stars")
+                        }
+                        Text("À pied, à vélo ou en voiture, reconnu tout seul. Les transports restent un choix : rien ne distingue un bus d'une voiture au mouvement. Toucher le sélecteur reprend la main jusqu'à la fin du trajet.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     if travelMode == .car {
                         Toggle(isOn: $avoidTolls) {
                             Label("Éviter les péages", systemImage: "eurosign.circle")

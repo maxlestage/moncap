@@ -5841,6 +5841,22 @@
         }
       }
     },
+    "Reconnaître le mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detect the mode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconocer el modo"
+          }
+        }
+      }
+    },
     "Recyclage": {
       "localizations": {
         "en": {
@@ -7965,6 +7981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "A pie"
+          }
+        }
+      }
+    },
+    "À pied, à vélo ou en voiture, reconnu tout seul. Les transports restent un choix : rien ne distingue un bus d'une voiture au mouvement. Toucher le sélecteur reprend la main jusqu'à la fin du trajet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walking, cycling or driving, detected on its own. Transit stays a choice: nothing tells a bus from a car by motion alone. Touching the picker takes back control until the end of the trip."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pie, en bici o en coche, reconocido solo. El transporte público sigue siendo una elección: nada distingue un autobús de un coche por el movimiento. Tocar el selector recupera el control hasta el final del trayecto."
           }
         }
       }
