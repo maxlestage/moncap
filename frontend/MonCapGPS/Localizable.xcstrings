@@ -1281,18 +1281,18 @@
         }
       }
     },
-    "Avatar actuel": {
+    "Avec un enfant": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Current avatar"
+            "value": "With a child"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avatar actual"
+            "value": "Con un niño"
           }
         }
       }
@@ -1389,6 +1389,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baremo kilométrico de la administración fiscal francesa, con la mayoración eléctrica cuando corresponde. El documento se traslada a la declaración según tu situación — no es asesoría fiscal."
+          }
+        }
+      }
+    },
+    "Bateau": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boat"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barco"
           }
         }
       }
@@ -1777,6 +1793,22 @@
         }
       }
     },
+    "Chaque mode garde le sien : votre voiture reste votre voiture pendant que la marche garde son marcheur.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each mode keeps its own: your car stays your car while walking keeps its walker."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cada modo conserva el suyo: tu coche sigue siendo tu coche mientras que caminar conserva su caminante."
+          }
+        }
+      }
+    },
     "Chercher les adresses": {
       "localizations": {
         "en": {
@@ -2033,6 +2065,70 @@
         }
       }
     },
+    "Combi bleu": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue van"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combi azul"
+          }
+        }
+      }
+    },
+    "Combi menthe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mint van"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combi menta"
+          }
+        }
+      }
+    },
+    "Combi orange": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange van"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combi naranja"
+          }
+        }
+      }
+    },
+    "Combi vert": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green van"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combi verde"
+          }
+        }
+      }
+    },
     "Compare, puis choisis": {
       "localizations": {
         "en": {
@@ -2225,6 +2321,22 @@
         }
       }
     },
+    "Coureur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runner"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Corredor"
+          }
+        }
+      }
+    },
     "Couvert": {
       "localizations": {
         "en": {
@@ -2301,6 +2413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Iniciado hace menos de 1 h"
+          }
+        }
+      }
+    },
+    "Cycliste": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cyclist"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ciclista"
           }
         }
       }
@@ -3037,6 +3165,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Comida rápida"
+          }
+        }
+      }
+    },
+    "Fauteuil roulant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wheelchair"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silla de ruedas"
           }
         }
       }
@@ -4141,6 +4285,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Caminar hasta %@"
+          }
+        }
+      }
+    },
+    "Marcheur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Walker"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caminante"
           }
         }
       }
@@ -5665,6 +5825,22 @@
         }
       }
     },
+    "Randonneur": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hiker"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senderista"
+          }
+        }
+      }
+    },
     "Rapide": {
       "localizations": {
         "en": {
@@ -7025,6 +7201,22 @@
         }
       }
     },
+    "Trottinette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scooter"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patinete"
+          }
+        }
+      }
+    },
     "Très mauvais": {
       "localizations": {
         "en": {
@@ -7101,6 +7293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Descarga · %lld %"
+          }
+        }
+      }
+    },
+    "Téléphérique": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cable car"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teleférico"
           }
         }
       }
@@ -8061,6 +8269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claros"
+          }
+        }
+      }
+    },
+    "Électrique": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Electric"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eléctrico"
           }
         }
       }

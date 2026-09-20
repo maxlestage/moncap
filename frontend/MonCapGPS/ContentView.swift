@@ -667,6 +667,13 @@ struct MapHomeView: View {
     // Nom affiché aux autres : l'e-mail de connexion.
     @State private var driverName = Session.username.isEmpty ? "Moi" : Session.username
     @State private var avatar = Session.avatar
+    /// Un avatar retenu **par mode** : la voiture garde sa Ferrari pendant
+    /// que la marche garde son randonneur. Sans cela, le mode changeant tout
+    /// seul, l'avatar aurait sauté d'un mode à l'autre sans qu'on l'ait
+    /// choisi — ou serait resté une voiture pendant qu'on court.
+    @AppStorage("moncap.avatar.walk") private var avatarWalk = "walk"
+    @AppStorage("moncap.avatar.bike") private var avatarBike = "bike"
+    @AppStorage("moncap.avatar.transit") private var avatarTransit = "bus"
     @State private var routeCoords: [CLLocationCoordinate2D] = []
     @State private var multiRoutes: [ColoredRoute] = []
     @State private var selectedIDs: Set<Int> = []
@@ -2009,35 +2016,50 @@ struct MapHomeView: View {
         return best
     }
 
-    /// Avatar diffusé/affiché selon le mode : voiture = avatar choisi ;
-    /// à pied / à vélo = pictogramme dédié (pas la voiture).
+    /// L'avatar diffusé et affiché : celui du mode en cours.
+    ///
+    /// Chaque mode a le sien, et c'est tout l'intérêt — sans quoi partir
+    /// courir montrerait une voiture à ceux qui suivent le partage en direct.
     private var liveAvatar: String {
         switch travelMode {
         case .car: return avatar
-        case .walk: return "walk"
-        case .bike: return "bike"
-        // En transports, on est un piéton entre deux véhicules.
-        case .transit: return "walk"
+        case .walk: return avatarWalk
+        case .bike: return avatarBike
+        case .transit: return avatarTransit
         }
     }
 
-    /// Marqueur d'un utilisateur sur la carte : image d'avatar, ou pictogramme
-    /// piéton / vélo selon l'identifiant spécial.
+    /// Le choix d'avatar du mode en cours, en lecture et en écriture.
+    ///
+    /// La voiture écrit aussi dans `Session`, qui porte l'identité vue par
+    /// le serveur : les autres modes restent locaux, ils décrivent une
+    /// façon de se déplacer, pas une personne.
+    private var avatarDuMode: Binding<String> {
+        Binding(
+            get: { liveAvatar },
+            set: { nouveau in
+                switch travelMode {
+                case .car:
+                    avatar = nouveau
+                    Session.avatar = nouveau
+                case .walk: avatarWalk = nouveau
+                case .bike: avatarBike = nouveau
+                case .transit: avatarTransit = nouveau
+                }
+            })
+    }
+
+    /// Marqueur d'un utilisateur sur la carte : illustration du catalogue, ou
+    /// symbole sur son disque de couleur. La table est dans Avatars.swift —
+    /// plus de cas particulier ici, et un mode ajouté n'oblige à rien.
     @ViewBuilder
     private func avatarMarker(_ id: String, size: CGFloat) -> some View {
-        if id == "walk" {
-            Image(systemName: "figure.walk")
-                .font(.system(size: size * 0.52, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: size, height: size)
-                .background(Color.green, in: Circle())
-                .shadow(radius: 2)
-        } else if id == "bike" {
-            Image(systemName: "bicycle")
+        if let m = Avatars.modele(id), let symbole = m.symbole {
+            Image(systemName: symbole)
                 .font(.system(size: size * 0.5, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: size, height: size)
-                .background(Color.blue, in: Circle())
+                .background(m.teinte.couleur, in: Circle())
                 .shadow(radius: 2)
         } else {
             Image(Avatars.asset(id))
@@ -4471,37 +4493,40 @@ struct MapHomeView: View {
                     }
                 }
                 Section("Mon avatar") {
+                    // Le sélecteur suit le mode en cours : on choisit son
+                    // marcheur quand on marche, sa voiture quand on conduit.
+                    // Tout montrer d'un bloc obligeait à faire défiler trente
+                    // vignettes pour trouver les trois qui concernent.
                     HStack(spacing: 12) {
-                        Image(Avatars.asset(avatar))
-                            .resizable().scaledToFit()
-                            .frame(width: 60, height: 60)
+                        avatarMarker(avatarDuMode.wrappedValue, size: 60)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Avatar actuel").font(.subheadline.weight(.semibold))
-                            Text(Avatars.labels[avatar] ?? avatar)
+                            Text(LocalizedStringKey(Avatars.libelle(avatarDuMode.wrappedValue)))
+                                .font(.subheadline.weight(.semibold))
+                            Text(LocalizedStringKey(travelMode.label))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(Avatars.all, id: \.self) { id in
-                                Image(Avatars.asset(id))
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 54, height: 54)
+                            ForEach(Avatars.pour(travelMode)) { m in
+                                let choisi = avatarDuMode.wrappedValue == m.id
+                                avatarMarker(m.id, size: 54)
                                     .padding(6)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(avatar == id ? Color.blue : Color.gray.opacity(0.3),
-                                                    lineWidth: avatar == id ? 3 : 1)
+                                            .stroke(
+                                                choisi ? Color.blue : Color.gray.opacity(0.3),
+                                                lineWidth: choisi ? 3 : 1)
                                     )
-                                    .onTapGesture {
-                                        avatar = id
-                                        Session.avatar = id
-                                    }
+                                    .onTapGesture { avatarDuMode.wrappedValue = m.id }
+                                    .accessibilityLabel(Text(LocalizedStringKey(m.libelle)))
                             }
                         }
                         .padding(.vertical, 4)
                     }
+                    Text("Chaque mode garde le sien : votre voiture reste votre voiture pendant que la marche garde son marcheur.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Mon véhicule") {
                     Picker("Carburant", selection: $fuelType) {
