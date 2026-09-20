@@ -831,6 +831,24 @@ final class OfflineRouter: NSObject, ObservableObject {
                 ]
             ]
         }
+        if costing == "pedestrian" {
+            // L'allure ne change pas le chemin, elle change l'heure
+            // d'arrivée — et le défaut de Valhalla (5,1 km/h) est une marche
+            // soutenue. Les escaliers, eux, changent bien le chemin : une
+            // pénalité les contourne quand il existe un détour praticable,
+            // sans jamais les interdire — parfois l'escalier est le seul
+            // passage, et un trajet impossible serait pire qu'une volée de
+            // marches.
+            let d = UserDefaults.standard
+            let allure = d.double(forKey: "moncap.marcheAllure")
+            let escaliers = d.bool(forKey: "moncap.marcheEviteEscaliers")
+            return [
+                "pedestrian": [
+                    "walking_speed": allure > 0 ? allure : 5.1,
+                    "step_penalty": escaliers ? 600 : 0,
+                ]
+            ]
+        }
         guard costing == "bicycle" else { return nil }
         let type = UserDefaults.standard.string(forKey: "moncap.veloType") ?? "Hybrid"
         let eviteCotes = UserDefaults.standard.bool(forKey: "moncap.veloEviteCotes")

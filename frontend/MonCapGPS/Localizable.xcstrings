@@ -17,18 +17,34 @@
         }
       }
     },
-    "%.0f min · %.1f km · %d virages · arr. %@": {
+    "%.0f min · %@ · %d virages · arr. %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%.0f min · %.1f km · %d turns · arr. %@"
+            "value": "%.0f min · %@ · %d turns · arr. %@"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%.0f min · %.1f km · %d giros · lleg. %@"
+            "value": "%.0f min · %@ · %d giros · lleg. %@"
+          }
+        }
+      }
+    },
+    "%.0f min · %@ · arr. %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · %@ · arr. %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%.0f min · %@ · lleg. %@"
           }
         }
       }
@@ -813,6 +829,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ir al trabajo"
+          }
+        }
+      }
+    },
+    "Allure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pace"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ritmo"
           }
         }
       }
@@ -1617,6 +1649,22 @@
         }
       }
     },
+    "Carburant, péages et virages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fuel, tolls and turns"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combustible, peajes y giros"
+          }
+        }
+      }
+    },
     "Carte des feux de forêt": {
       "localizations": {
         "en": {
@@ -2397,6 +2445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Di las dimensiones verdaderas, con el permiso de circulación en la mano: son ellas las que apartan los puentes bajos y las calles prohibidas."
+          }
+        }
+      }
+    },
+    "Distances courtes et dénivelé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Short distances and elevation"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distancias cortas y desnivel"
           }
         }
       }
@@ -3921,6 +3985,22 @@
         }
       }
     },
+    "Lignes, correspondances et horaires": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lines, transfers and times"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Líneas, transbordos y horarios"
+          }
+        }
+      }
+    },
     "Liste des régions indisponible — il faut du réseau une fois.": {
       "localizations": {
         "en": {
@@ -4641,6 +4721,22 @@
         }
       }
     },
+    "Normale": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normal"
+          }
+        }
+      }
+    },
     "Nouveau rappel": {
       "localizations": {
         "en": {
@@ -5265,6 +5361,22 @@
         }
       }
     },
+    "Profil vélo : côtes et descentes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cycling profile: climbs and descents"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perfil ciclista: subidas y bajadas"
+          }
+        }
+      }
+    },
     "Préparer l'image": {
       "localizations": {
         "en": {
@@ -5421,6 +5533,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "¿Qué?"
+          }
+        }
+      }
+    },
+    "Rapide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brisk"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rápido"
           }
         }
       }
@@ -6689,6 +6817,22 @@
         }
       }
     },
+    "Tranquille": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Easy"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tranquilo"
+          }
+        }
+      }
+    },
     "Transports": {
       "localizations": {
         "en": {
@@ -7853,6 +7997,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Evitar las cuestas"
+          }
+        }
+      }
+    },
+    "Éviter les escaliers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoid stairs"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Evitar escaleras"
           }
         }
       }

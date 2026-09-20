@@ -44,8 +44,14 @@ export type Itineraire = {
   /** Clé d'étiquette, telle que l'application la construit. */
   readonly etiquette: string;
   readonly teinte: "verte" | "bleue" | "orange";
-  /** minutes, kilomètres, virages, heure d'arrivée. */
-  readonly trajet: readonly [number, number, number, string];
+  /**
+   * minutes, distance **déjà mise en forme**, virages, heure d'arrivée.
+   *
+   * La distance est une chaîne et non un nombre : l'app la fabrique avec
+   * `Distance`, qui écrit des mètres sous le kilomètre. Lui passer 0,8 ici
+   * afficherait « 0.8 km », que l'app ne dit plus.
+   */
+  readonly trajet: readonly [number, string, number, string];
   /** Côte puis descente, en mètres. */
   readonly denivele?: readonly [number, number];
   /** Carburant seul, ou carburant + péages + total. */
@@ -65,19 +71,19 @@ export const MAQUETTE_ITINERAIRES: readonly Itineraire[] = [
   {
     etiquette: "Le plus simple",
     teinte: "verte",
-    trajet: [28, 24.3, 6, "18:42"],
+    trajet: [28, "24.3 km", 6, "18:42"],
     cout: [2.6],
   },
   {
     etiquette: "Le plus rapide",
     teinte: "bleue",
-    trajet: [22, 31.8, 11, "18:36"],
+    trajet: [22, "31.8 km", 11, "18:36"],
     cout: [3.4, 1.9, 5.3],
   },
   {
     etiquette: "Le plus court",
     teinte: "orange",
-    trajet: [34, 21.7, 19, "18:48"],
+    trajet: [34, "21.7 km", 19, "18:48"],
     denivele: [180, 165],
     cout: [2.3],
     avertissement: [180],

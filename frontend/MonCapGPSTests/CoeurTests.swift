@@ -296,3 +296,98 @@ final class TypeDeVoieTests: XCTestCase {
                 demande: "avenue Victor Hugo", libelles: [nil, "Boulangerie Hugo"]))
     }
 }
+
+/// Chaque mode de déplacement a sa vue.
+///
+/// Les quatre partageaient une seule carte, donc un seul discours — celui de
+/// la voiture, servi à tout le monde. Ces tests fixent la table des
+/// différences : ce que chaque mode montre, et ce qu'il tait.
+final class VueDuModeTests: XCTestCase {
+
+    /// Les virages disent la simplicité d'un trajet en voiture. À pied on en
+    /// fait trente sans y penser, et en tram ils n'existent pas.
+    func testLesViragesNeComptentQuEnVoiture() {
+        XCTAssertTrue(TravelMode.car.montreVirages)
+        XCTAssertFalse(TravelMode.walk.montreVirages)
+        XCTAssertFalse(TravelMode.bike.montreVirages)
+        XCTAssertFalse(TravelMode.transit.montreVirages)
+    }
+
+    /// Le dénivelé décide du chemin à pied et à vélo ; au volant, quarante
+    /// mètres de côte sont du bruit.
+    func testLeDeniveleEstPourLesJambes() {
+        XCTAssertTrue(TravelMode.walk.montreDenivele)
+        XCTAssertTrue(TravelMode.bike.montreDenivele)
+        XCTAssertFalse(TravelMode.car.montreDenivele)
+        XCTAssertFalse(TravelMode.transit.montreDenivele)
+    }
+
+    /// Carburant et péages : la voiture seule les paie.
+    func testSeuleLaVoiturePaieLeTrajet() {
+        XCTAssertTrue(TravelMode.car.montreCout)
+        for m in [TravelMode.walk, .bike, .transit] {
+            XCTAssertFalse(m.montreCout, "\(m.rawValue) ne paie pas de carburant")
+        }
+    }
+
+    /// Les étapes se chaînent partout sauf en transports, et les horaires
+    /// n'appartiennent qu'aux transports.
+    func testEtapesEtHorairesSExcluent() {
+        for m in [TravelMode.walk, .bike, .car] {
+            XCTAssertTrue(m.montreEtapes)
+            XCTAssertFalse(m.montreHoraires)
+        }
+        XCTAssertFalse(TravelMode.transit.montreEtapes)
+        XCTAssertTrue(TravelMode.transit.montreHoraires)
+    }
+
+    /// Chaque mode annonce ce que sa vue met en avant — quatre phrases
+    /// distinctes, sinon le sélecteur changerait la carte sans rien expliquer.
+    func testChaqueModeAnnonceSaVue() {
+        let resumes = TravelMode.allCases.map(\.resumeDuMode)
+        XCTAssertEqual(Set(resumes).count, TravelMode.allCases.count)
+        for r in resumes { XCTAssertFalse(r.isEmpty) }
+    }
+
+    // MARK: - La ligne de résumé
+
+    /// La voiture compte ses virages, le piéton non — et c'est la seule
+    /// différence entre les deux lignes.
+    func testLaLigneAPiedNAnnoncePasDeVirages() {
+        let voiture = ResumeItineraire.ligne(
+            mode: .car, minutes: 23, km: 18.4, virages: 12, arrivee: "14:05")
+        let pied = ResumeItineraire.ligne(
+            mode: .walk, minutes: 23, km: 18.4, virages: 12, arrivee: "14:05")
+        XCTAssertTrue(voiture.contains("12"), voiture)
+        XCTAssertFalse(pied.contains("12"), pied)
+        XCTAssertTrue(pied.contains("14:05"), pied)
+    }
+
+    /// Sous le kilomètre, la distance se dit en mètres. Indifférent au
+    /// volant, décisif à pied : « 0.8 km » pour huit cents mètres de marche
+    /// n'est la façon de parler de personne.
+    func testSousLeKilometreLaMarcheSeCompteEnMetres() {
+        let pied = ResumeItineraire.ligne(
+            mode: .walk, minutes: 9, km: 0.8, virages: 4, arrivee: "09:12")
+        XCTAssertTrue(pied.contains("800 m"), pied)
+        XCTAssertFalse(pied.contains("0.8 km"), pied)
+    }
+
+    /// Au-delà du kilomètre, on repasse aux kilomètres — même règle que
+    /// partout ailleurs dans l'app.
+    func testAuDelaDuKilometreOnRepasseAuxKilometres() {
+        let velo = ResumeItineraire.ligne(
+            mode: .bike, minutes: 41, km: 12.6, virages: 8, arrivee: "10:30")
+        XCTAssertTrue(velo.contains("12.6 km"), velo)
+    }
+
+    /// Deux jambes ou deux roues, même discours : ni l'un ni l'autre ne
+    /// compte ses virages, tous deux veulent la distance juste.
+    func testLePietonEtLeCyclisteParlentPareil() {
+        let pied = ResumeItineraire.ligne(
+            mode: .walk, minutes: 30, km: 2.4, virages: 9, arrivee: "16:00")
+        let velo = ResumeItineraire.ligne(
+            mode: .bike, minutes: 30, km: 2.4, virages: 9, arrivee: "16:00")
+        XCTAssertEqual(pied, velo)
+    }
+}
