@@ -30,7 +30,16 @@ struct MontreVue: View {
         ZStack {
             fond
             if lien.etat.actif {
-                guidage
+                // Deux pages. La consigne reste seule sur la sienne : c'est
+                // elle qu'on regarde en roulant, et un bouton posé dessus se
+                // touche par accident — au poignet, la main qui tient le
+                // volant passe devant l'écran à chaque virage. Les commandes
+                // sont à un glissement, ce qui demande une intention.
+                TabView {
+                    guidage
+                    commandes
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
             } else {
                 repos
             }
@@ -92,6 +101,41 @@ struct MontreVue: View {
         }
         .padding(.horizontal, 2)
         .animation(.snappy, value: lien.etat.instruction)
+    }
+
+    /// La page des ordres. Deux seulement, et les deux utiles au poignet :
+    /// redemander la consigne qu'on n'a pas entendue, et couper court.
+    ///
+    /// « Arrêter » en rouge et en second : c'est l'ordre qu'on ne veut pas
+    /// donner par erreur, il est donc le plus loin du pouce qui arrive.
+    private var commandes: some View {
+        VStack(spacing: 8) {
+            Text("Commandes")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Button {
+                lien.commande("redit")
+            } label: {
+                Label("Redire", systemImage: "speaker.wave.2.fill")
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(Self.bleu)
+            Button {
+                lien.commande("arrete")
+            } label: {
+                Label("Arrêter", systemImage: "xmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+            }
+            .tint(.red)
+        }
+        .buttonStyle(.borderedProminent)
+        .padding(.horizontal, 4)
     }
 
     private func colonne(_ valeur: String, _ legende: String) -> some View {

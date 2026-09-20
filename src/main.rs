@@ -773,16 +773,18 @@ async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
     Ok(trouvees)
 }
 
-/// Suffixe de pièce jointe pour chaque nature de fichier servie. `lieux` et
-/// `vitesses` sont les annexes hors ligne — annuaire de lieux et jalons de
-/// limites de vitesse — produites par le workflow des tuiles depuis le même
-/// extrait OSM ; les régions bâties avant leur existence ne les portent pas,
-/// et l'app les traite comme optionnelles (un 404 n'est pas une panne).
+/// Suffixe de pièce jointe pour chaque nature de fichier servie. `lieux`,
+/// `rues` et `vitesses` sont les annexes hors ligne — annuaire de lieux,
+/// index des voies nommées et jalons de limites de vitesse — produites par le
+/// workflow des tuiles depuis le même extrait OSM ; les régions bâties avant
+/// leur existence ne les portent pas, et l'app les traite comme optionnelles
+/// (un 404 n'est pas une panne).
 fn nature_suffixe(nature: &str) -> Option<&'static str> {
     match nature {
         "archive" => Some(".tar"),
         "config" => Some(".json"),
         "lieux" => Some(".lieux.zz"),
+        "rues" => Some(".rues.zz"),
         "vitesses" => Some(".vitesses.zz"),
         _ => None,
     }
@@ -790,7 +792,7 @@ fn nature_suffixe(nature: &str) -> Option<&'static str> {
 
 /// GET /offline/regions/:tag/:nature — redirige vers l'adresse signée du
 /// fichier (`archive` pour les tuiles, `config` pour la configuration,
-/// `lieux` et `vitesses` pour les annexes hors ligne).
+/// `lieux`, `rues` et `vitesses` pour les annexes hors ligne).
 ///
 /// GitHub répond à une demande de pièce jointe authentifiée par une redirection
 /// vers une adresse signée, valable quelques minutes et qui ne demande aucune
@@ -4764,6 +4766,7 @@ mod tests {
         assert_eq!(nature_suffixe("archive"), Some(".tar"));
         assert_eq!(nature_suffixe("config"), Some(".json"));
         assert_eq!(nature_suffixe("lieux"), Some(".lieux.zz"));
+        assert_eq!(nature_suffixe("rues"), Some(".rues.zz"));
         assert_eq!(nature_suffixe("vitesses"), Some(".vitesses.zz"));
         assert_eq!(nature_suffixe("autre"), None);
         assert_eq!(nature_suffixe("../secret"), None);

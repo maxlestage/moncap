@@ -391,3 +391,49 @@ final class VueDuModeTests: XCTestCase {
         XCTAssertEqual(pied, velo)
     }
 }
+
+/// L'index des rues hors ligne : la partie délicate est la lecture du numéro.
+///
+/// Une adresse se tape « 12 bis rue des Lilas ». L'index, lui, ne connaît que
+/// des voies : il faut retirer le numéro pour chercher, et le garder pour
+/// afficher — sans quoi le résultat ne ressemble plus à la demande.
+final class RuesHorsLigneTests: XCTestCase {
+
+    func testLeNumeroEstRetireAvantDeChercher() {
+        XCTAssertEqual(
+            RuesHorsLigne.retireLeNumero("12 rue des Lilas"), "rue des Lilas")
+        XCTAssertEqual(
+            RuesHorsLigne.retireLeNumero("12 bis rue des Lilas"), "rue des Lilas")
+        XCTAssertEqual(
+            RuesHorsLigne.retireLeNumero("3 TER Avenue Victor Hugo"),
+            "Avenue Victor Hugo")
+    }
+
+    /// Sans numéro, la demande passe entière — et surtout, un nom de rue qui
+    /// commence par un mot ordinaire ne doit pas être amputé.
+    func testSansNumeroRienNEstRetire() {
+        XCTAssertEqual(
+            RuesHorsLigne.retireLeNumero("rue des Lilas"), "rue des Lilas")
+        XCTAssertEqual(
+            RuesHorsLigne.retireLeNumero("Avenue Victor Hugo"),
+            "Avenue Victor Hugo")
+        // « Rue du 8 Mai 1945 » : le chiffre est au milieu, il reste.
+        XCTAssertEqual(
+            RuesHorsLigne.retireLeNumero("Rue du 8 Mai 1945"), "Rue du 8 Mai 1945")
+    }
+
+    /// Le numéro est gardé pour l'affichage : le résultat doit ressembler à
+    /// ce qu'on a tapé, pas à ce qu'on a cherché.
+    func testLeNumeroEstGardePourLAffichage() {
+        XCTAssertEqual(RuesHorsLigne.numeroDe("12 rue des Lilas"), "12")
+        XCTAssertEqual(RuesHorsLigne.numeroDe("12 bis rue des Lilas"), "12 bis")
+        XCTAssertEqual(RuesHorsLigne.numeroDe("rue des Lilas"), "")
+        XCTAssertEqual(RuesHorsLigne.numeroDe("Rue du 8 Mai 1945"), "")
+    }
+
+    /// Un nom de voie seul est une demande valide : « bis » sans numéro
+    /// devant n'est pas un suffixe, c'est le début du nom.
+    func testUnMotSuffixeSeulNEstPasUnNumero() {
+        XCTAssertEqual(RuesHorsLigne.numeroDe("bis rue Untel"), "")
+    }
+}

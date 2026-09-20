@@ -44,6 +44,34 @@ final class LienTelephone: NSObject, WCSessionDelegate, ObservableObject {
         applique(applicationContext)
     }
 
+    /// Envoie un ordre au téléphone, et le dit au poignet.
+    ///
+    /// `sendMessage` exige que l'iPhone soit joignable — c'est le cas pendant
+    /// un guidage, l'app y tourne au premier plan ou en arrière-plan actif.
+    /// Injoignable, on ne fait pas semblant : une vibration d'échec, et
+    /// l'écran reste tel qu'il est. Rien n'est plus trompeur qu'un bouton qui
+    /// s'anime sans que rien ne se passe à l'autre bout.
+    func commande(_ nom: String) {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else {
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
+        session.sendMessage(
+            ["cmd": nom],
+            replyHandler: { reponse in
+                let fait = reponse["fait"] as? Bool ?? false
+                DispatchQueue.main.async {
+                    WKInterfaceDevice.current().play(fait ? .success : .failure)
+                }
+            },
+            errorHandler: { _ in
+                DispatchQueue.main.async {
+                    WKInterfaceDevice.current().play(.failure)
+                }
+            })
+    }
+
     private func applique(_ d: [String: Any]) {
         DispatchQueue.main.async {
             var nouveau = EtatGuidage()

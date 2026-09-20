@@ -6,12 +6,15 @@ import MapKit
 /// lus dans les annexes téléchargées avec elle.
 ///
 /// Le workflow des tuiles produit, du même extrait OpenStreetMap que le graphe
-/// routier, deux fichiers par région : `<id>.lieux.zz` — les dix-neuf
+/// routier, trois fichiers par région. Deux sont lus ici : `<id>.lieux.zz` — les dix-neuf
 /// catégories d'origine de l'app, une ligne tabulée par lieu (les catégories
 /// ajoutées depuis rejoindront les annexes à leur prochaine génération) — et
 /// `<id>.vitesses.zz` — des jalons tous les ~120 m le long des voies à limite
 /// explicite, neuf octets par jalon. Les deux sont en DEFLATE brut, ce que le
 /// cadre Compression décode sous le nom `.zlib`.
+///
+/// Le troisième, `<id>.rues.zz`, porte les voies nommées et se lit dans
+/// `RuesHorsLigne`.
 ///
 /// C'est le pendant hors ligne d'Overpass et de MKLocalSearch : chercher une
 /// pharmacie ou afficher la limite de vitesse cesse de dépendre du réseau dès
@@ -75,8 +78,8 @@ actor LieuxHorsLigne {
     /// Recherche par **nom** dans l'annuaire embarqué — le repli de la barre
     /// de recherche quand le réseau manque : la pharmacie Dupont se trouve
     /// en mode avion. Plis et accents ignorés, les plus proches d'abord.
-    /// Les adresses, elles, restent l'affaire du réseau : l'annuaire ne
-    /// porte que des lieux nommés.
+    /// Cet annuaire ne porte que des lieux nommés ; les adresses sont
+    /// l'affaire de `RuesHorsLigne`, consulté avant celui-ci.
     func cherche(
         _ texte: String, autour centre: CLLocationCoordinate2D, max: Int = 20
     ) async -> [POI] {

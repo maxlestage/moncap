@@ -74,9 +74,62 @@ final class MontreLien: NSObject, WCSessionDelegate, ObservableObject {
         try? session.updateApplicationContext(["actif": false])
     }
 
+    // MARK: - Les commandes venues du poignet
+
+    /// Exécute une commande envoyée par la montre.
+    ///
+    /// Le canal est `sendMessage` et non `updateApplicationContext` : un
+    /// ordre n'est pas un état. Il doit partir maintenant ou échouer
+    /// franchement — « arrête-toi » livré trois minutes plus tard, après
+    /// l'arrivée, serait pire que pas livré du tout.
+    ///
+    /// L'instance de guidage est atteinte par le même sujet que CarPlay :
+    /// elle vit dans la scène du téléphone, et ce sujet est le pont.
+    ///
+    /// Rend faux quand la commande n'a pas pu s'appliquer — commande
+    /// inconnue, ou aucun guidage en cours. La montre en fait un retour
+    /// haptique d'échec plutôt que de laisser croire que l'ordre est passé.
+    @MainActor
+    static func execute(_ commande: String) -> Bool {
+        guard let nav = NavigationManager.instanceCourante.value, nav.active else {
+            return false
+        }
+        switch commande {
+        case "arrete":
+            nav.stop()
+            return true
+        case "redit":
+            nav.redit()
+            return true
+        default:
+            return false
+        }
+    }
+
     // WCSessionDelegate — rien à faire de spécial côté iPhone, sinon
     // réactiver la session quand elle bascule d'une montre à l'autre, et
     // suivre l'appairage pour la proposition d'installation.
+
+    /// La montre attend une réponse : elle s'en sert pour vibrer juste. Le
+    /// `replyHandler` doit donc être appelé dans tous les cas, y compris
+    /// quand la commande échoue — sans quoi la montre attend puis rend une
+    /// erreur de délai, qui ne dit pas la même chose qu'un refus.
+    nonisolated func session(
+        _ session: WCSession,
+        didReceiveMessage message: [String: Any],
+        replyHandler: @escaping ([String: Any]) -> Void
+    ) {
+        let commande = message["cmd"] as? String ?? ""
+        Task { @MainActor in
+            replyHandler(["fait": MontreLien.execute(commande)])
+        }
+    }
+
+    /// Même chose pour un envoi sans réponse attendue.
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        let commande = message["cmd"] as? String ?? ""
+        Task { @MainActor in _ = MontreLien.execute(commande) }
+    }
     nonisolated func session(_ session: WCSession,
                              activationDidCompleteWith activationState: WCSessionActivationState,
                              error: Error?) {
