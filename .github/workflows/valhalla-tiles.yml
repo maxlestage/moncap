@@ -332,7 +332,7 @@ jobs:
             exit 1
           fi
 
-      - name: Annuaire de lieux et limites de vitesse
+      - name: Annuaire de lieux, rues et limites de vitesse
         # Le même extrait OSM qui a donné les tuiles donne aussi, en un
         # passage : l'annuaire des lieux (les dix-neuf catégories de l'app —
         # pharmacies, campings, restaurants…) et les limites de vitesse
@@ -356,10 +356,11 @@ jobs:
             nwr/leisure=skatepark,swimming_area,beach_resort,water_park \
             nwr/sport=surfing,skateboard \
             nwr/natural=beach \
-            w/maxspeed
+            w/maxspeed \
+            w/highway=residential,living_street,unclassified,pedestrian,tertiary,tertiary_link,secondary,secondary_link,primary,primary_link,trunk,trunk_link
           osmium export data/filtre.osm.pbf -f geojsonseq -o data/filtre.geojsonseq
           python3 - <<'PY'
-          import json, math, re, struct, zlib
+          import json, math, re, struct, unicodedata, zlib
 
           # Mêmes catégories que POIKind côté app : la clé écrite ici est le
           # rawValue Swift, c'est le contrat entre le fichier et l'app.
@@ -471,7 +472,29 @@ jobs:
                   du += d
               return out
 
+          # Les voies qui portent une adresse. On écarte les chemins, les
+          # pistes et les voies de service : personne n'habite au 12 d'un
+          # sentier, et les garder triplait le fichier.
+          RUES = {
+              "residential", "living_street", "unclassified", "pedestrian",
+              "tertiary", "tertiary_link", "secondary", "secondary_link",
+              "primary", "primary_link", "trunk", "trunk_link",
+          }
+          # Maille de dédoublonnage des rues, en degrés (~2 km). Une rue est
+          # découpée en dizaines de tronçons dans OSM : sans maille, « rue de
+          # la Paix » sortirait quarante fois. Avec, une longue avenue garde
+          # quelques ancrages le long de son tracé, ce qui est juste — elle
+          # traverse réellement plusieurs quartiers.
+          MAILLE = 0.02
+
+          def cle_rue(nom):
+              # Comparaison insensible à la casse et aux accents, comme côté
+              # app : « Allée » et « ALLEE » sont la même rue.
+              return unicodedata.normalize("NFD", nom.lower()).encode(
+                  "ascii", "ignore").decode()
+
           lieux, vitesses, nb_v = [], [], 0
+          rues, vues = [], set()
           with open("data/filtre.geojsonseq", encoding="utf-8") as f:
               for ligne in f:
                   ligne = ligne.lstrip("\x1e").strip()
@@ -483,14 +506,30 @@ jobs:
                       continue
                   tags = feat.get("properties") or {}
                   geom = feat.get("geometry") or {}
-                  brut = tags.get("maxspeed")
-                  if brut and tags.get("highway") and geom.get("type") == "LineString":
-                      v = vitesse(brut)
-                      if v and 5 <= v <= 200:
-                          for x, y in jalons(geom["coordinates"]):
-                              vitesses.append(struct.pack(
-                                  "<iiB", round(y * 1e5), round(x * 1e5), v))
-                              nb_v += 1
+                  voie = tags.get("highway")
+                  if voie and geom.get("type") == "LineString":
+                      # Une voie peut porter un nom **et** une limite : l'un
+                      # ne doit pas faire sauter l'autre. L'ancien code
+                      # passait à la suivante dès la limite traitée.
+                      brut = tags.get("maxspeed")
+                      if brut:
+                          v = vitesse(brut)
+                          if v and 5 <= v <= 200:
+                              for x, y in jalons(geom["coordinates"]):
+                                  vitesses.append(struct.pack(
+                                      "<iiB", round(y * 1e5), round(x * 1e5), v))
+                                  nb_v += 1
+                      nom_voie = re.sub(
+                          r"\s+", " ", tags.get("name", "")).strip()[:70]
+                      if nom_voie and voie in RUES:
+                          p = represente(geom)
+                          if p:
+                              cle = (cle_rue(nom_voie),
+                                     round(p[0] / MAILLE), round(p[1] / MAILLE))
+                              if cle not in vues:
+                                  vues.add(cle)
+                                  rues.append(
+                                      "%s\t%.5f\t%.5f" % (nom_voie, p[0], p[1]))
                       continue
                   cat = categorie(tags)
                   if not cat:
@@ -513,9 +552,12 @@ jobs:
           if vitesses:
               with open("data/vitesses.zz", "wb") as f:
                   f.write(deflate(b"".join(vitesses)))
-          print(f"{len(lieux)} lieux, {nb_v} jalons de vitesse")
+          if rues:
+              with open("data/rues.zz", "wb") as f:
+                  f.write(deflate("\n".join(rues).encode("utf-8")))
+          print(f"{len(lieux)} lieux, {len(rues)} rues, {nb_v} jalons de vitesse")
           PY
-          ls -lh data/lieux.zz data/vitesses.zz || true
+          ls -lh data/lieux.zz data/rues.zz data/vitesses.zz || true
           rm -f data/filtre.osm.pbf data/filtre.geojsonseq
 
       - name: Publie la Release
@@ -553,6 +595,10 @@ jobs:
           if [ -s data/vitesses.zz ]; then
             mv data/vitesses.zz "data/$TAG.vitesses.zz"
             fichiers+=("data/$TAG.vitesses.zz")
+          fi
+          if [ -s data/rues.zz ]; then
+            mv data/rues.zz "data/$TAG.rues.zz"
+            fichiers+=("data/$TAG.rues.zz")
           fi
           # `--clobber` : reconstruire une région remplace ses tuiles au lieu
           # d'échouer, l'adresse de téléchargement reste donc la même.

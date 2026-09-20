@@ -418,6 +418,17 @@ final class NavigationManager: ObservableObject {
         speak(text)
     }
 
+    /// Redit la consigne en cours, à la demande.
+    ///
+    /// Sert la montre : au poignet on n'a pas toujours entendu — une moto,
+    /// une conversation, un passage sous un pont — et rien ne permettait de
+    /// redemander sans sortir le téléphone. Muette hors guidage : redire
+    /// « continuez tout droit » à l'arrêt n'aiderait personne.
+    func redit() {
+        guard active else { return }
+        speak(spokenInstruction)
+    }
+
     func stop() {
         active = false
         rerouting = false

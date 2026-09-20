@@ -65,10 +65,21 @@ final class PlaceSearch: ObservableObject {
                 items = await run(region: nil)
                 guard !Task.isCancelled else { return }
             }
-            // Toujours rien — le réseau manque, sans doute : l'annuaire
-            // embarqué prend le relais. Les lieux nommés des régions
-            // installées se trouvent en mode avion ; les adresses, elles,
-            // restent l'affaire du réseau.
+            // Toujours rien — le réseau manque, sans doute : les annexes
+            // embarquées prennent le relais. D'abord les rues, car une barre
+            // de recherche qui ne trouve rien sert le plus souvent à taper
+            // une adresse ; l'annuaire des lieux nommés vient ensuite.
+            if items.isEmpty, let centre = self.center {
+                items = await RuesHorsLigne.shared
+                    .cherche(query, autour: centre)
+                    .map { poi in
+                        let item = MKMapItem(
+                            placemark: MKPlacemark(coordinate: poi.coordinate))
+                        item.name = poi.name
+                        return item
+                    }
+                guard !Task.isCancelled else { return }
+            }
             if items.isEmpty, let centre = self.center {
                 items = await LieuxHorsLigne.shared
                     .cherche(query, autour: centre)
