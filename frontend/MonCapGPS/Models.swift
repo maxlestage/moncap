@@ -59,9 +59,15 @@ struct Trip: Codable, Identifiable {
     /// cette version ne l'envoie pas, et la synthèse Codable de Swift exige
     /// la clé pour un champ non optionnel — l'app refuserait alors tout le
     /// journal à cause d'un champ ajouté.
-    let pro: Bool?
+    ///
+    /// `var` avec valeur par défaut, et non `let` : c'est ce qui donne à
+    /// l'initialiseur par membres une valeur par défaut, sans quoi tout appel
+    /// existant à `Trip(...)` cesse de compiler dès qu'on ajoute un champ.
+    /// Un `let` à valeur par défaut serait pire encore — Swift l'exclurait du
+    /// décodage, et le champ ne serait jamais lu du JSON.
+    var pro: Bool? = nil
     /// Le motif du déplacement, libre. Optionnel pour la même raison.
-    let motif: String?
+    var motif: String? = nil
 
     var date: Date { Date(timeIntervalSince1970: created_at) }
 
