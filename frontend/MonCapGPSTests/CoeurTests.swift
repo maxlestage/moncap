@@ -1,3 +1,4 @@
+import CoreLocation
 import XCTest
 
 @testable import MonCapGPS
