@@ -299,9 +299,27 @@ T: dict[str, tuple[str, str]] = {
     # --- Journal et facturation ---
     "Exporter en CSV": ("Exportar en CSV", "Export as CSV"),
     "Facturation": ("Facturación", "Invoicing"),
-    "Date;Trajet;Distance (km);Durée (min)": (
-        "Fecha;Trayecto;Distancia (km);Duración (min)",
-        "Date;Trip;Distance (km);Duration (min)",
+    # L'en-tête du journal kilométrique. La nature et le motif s'y ajoutent :
+    # sans eux, un comptable ne peut pas distinguer une tournée d'une course
+    # du samedi, et le fichier ne vaut rien devant l'administration.
+    "Date;Trajet;Distance (km);Durée (min);Nature;Motif": (
+        "Fecha;Trayecto;Distancia (km);Duración (min);Naturaleza;Motivo",
+        "Date;Trip;Distance (km);Duration (min);Type;Purpose",
+    ),
+    "Professionnel": ("Profesional", "Business"),
+    "Personnel": ("Personal", "Personal"),
+    # La requalification d'un trajet, au glissement.
+    "Pro": ("Pro", "Business"),
+    "Perso": ("Personal", "Personal"),
+    "Motif": ("Motivo", "Purpose"),
+    "Motif du déplacement": ("Motivo del desplazamiento", "Purpose of the trip"),
+    "Livraison Dupont, chantier…": (
+        "Entrega Pérez, obra…",
+        "Delivery for Smith, site visit…",
+    ),
+    "Un journal kilométrique se défend ligne à ligne : c'est le motif qui le permet.": (
+        "Un registro de kilometraje se justifica línea a línea: es el motivo quien lo permite.",
+        "A mileage log is defended line by line, and the purpose is what allows it.",
     ),
     "Émetteur": ("Emisor", "Issuer"),
     "Nom ou entreprise": ("Nombre o empresa", "Name or company"),

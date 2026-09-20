@@ -858,6 +858,9 @@ struct MapHomeView: View {
     @State private var showPaywallRecherche = false
     @State private var showFacturation = false
     @State private var showAttestation = false
+    /// Le trajet dont on saisit le motif, et le texte en cours de saisie.
+    @State private var trajetMotif: Trip?
+    @State private var motifSaisi = ""
     @State private var showCollerAdresses = false
     @State private var showStationsCarburant = false
     @State private var showRecapAnnuel = false
@@ -4724,9 +4727,29 @@ struct MapHomeView: View {
                         HStack {
                             Image(systemName: "map.fill").foregroundStyle(.indigo)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(t.label).font(.headline)
+                                HStack(spacing: 6) {
+                                    Text(t.label).font(.headline).lineLimit(1)
+                                    // La pastille ne s'affiche que pour le
+                                    // professionnel : marquer aussi le
+                                    // personnel ferait deux étiquettes à lire
+                                    // là où une seule porte l'information.
+                                    if t.estPro {
+                                        Text("Pro")
+                                            .font(.caption2.weight(.heavy))
+                                            .padding(.vertical, 2)
+                                            .padding(.horizontal, 6)
+                                            .background(Color.green.opacity(0.18), in: Capsule())
+                                            .foregroundStyle(.green)
+                                    }
+                                }
                                 Text(tripSubtitle(t))
                                     .font(.caption).foregroundStyle(.secondary)
+                                if !t.motifOuVide.isEmpty {
+                                    Text(verbatim: t.motifOuVide)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
                             }
                             Spacer()
                             Image(systemName: "eye").foregroundStyle(.indigo)
@@ -4734,6 +4757,26 @@ struct MapHomeView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // On ne qualifie pas ses trajets en roulant : on les
+                    // qualifie le dimanche soir, devant la liste. D'où un
+                    // geste qui coûte peu et se répète — un glissement.
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            requalifie(t, pro: !t.estPro)
+                        } label: {
+                            Label(
+                                t.estPro ? "Perso" : "Pro",
+                                systemImage: t.estPro ? "person" : "briefcase")
+                        }
+                        .tint(t.estPro ? .gray : .green)
+                        Button {
+                            trajetMotif = t
+                            motifSaisi = t.motifOuVide
+                        } label: {
+                            Label("Motif", systemImage: "text.quote")
+                        }
+                        .tint(.indigo)
+                    }
                 }
                 .onDelete(perform: deleteTrips)
             }
@@ -4782,8 +4825,30 @@ struct MapHomeView: View {
         .presentationBackground(Color(.systemBackground))
         .sheet(isPresented: $showRecapAnnuel) { RecapAnnuelView(trajets: trips) }
         .sheet(isPresented: $showPaywallTrips) { PaywallView() }
-        .sheet(isPresented: $showFacturation) { FacturationView(trajets: trips) }
-        .sheet(isPresented: $showAttestation) { AttestationFiscaleView(trajets: trips) }
+        // Facture et attestation ne voient que les trajets professionnels :
+        // le barème kilométrique ne s'applique qu'à eux, et un document
+        // fiscal qui compte les courses du samedi est une déclaration fausse.
+        // « Mon année », lui, garde tout — c'est un récapitulatif personnel,
+        // pas une pièce comptable.
+        .sheet(isPresented: $showFacturation) {
+            FacturationView(trajets: trips.filter(\.estPro))
+        }
+        .sheet(isPresented: $showAttestation) {
+            AttestationFiscaleView(trajets: trips.filter(\.estPro))
+        }
+        .alert("Motif du déplacement", isPresented: Binding(
+            get: { trajetMotif != nil },
+            set: { if !$0 { trajetMotif = nil } }
+        )) {
+            TextField("Livraison Dupont, chantier…", text: $motifSaisi)
+            Button("Enregistrer") {
+                if let t = trajetMotif { requalifie(t, motif: motifSaisi) }
+                trajetMotif = nil
+            }
+            Button("Annuler", role: .cancel) { trajetMotif = nil }
+        } message: {
+            Text("Un journal kilométrique se défend ligne à ligne : c'est le motif qui le permet.")
+        }
     }
 
     /// Le journal kilométrique en CSV : une ligne par trajet, du plus ancien
@@ -4793,11 +4858,17 @@ struct MapHomeView: View {
     private func exporteJournal() {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd HH:mm"
-        var csv = NSLocalizedString("Date;Trajet;Distance (km);Durée (min)", comment: "") + "\n"
+        var csv =
+            NSLocalizedString(
+                "Date;Trajet;Distance (km);Durée (min);Nature;Motif", comment: "") + "\n"
+        let pro = NSLocalizedString("Professionnel", comment: "")
+        let perso = NSLocalizedString("Personnel", comment: "")
         for t in trips.sorted(by: { $0.created_at < $1.created_at }) {
             let libelle = t.label.replacingOccurrences(of: ";", with: ",")
+            let motif = t.motifOuVide.replacingOccurrences(of: ";", with: ",")
             csv += "\(f.string(from: t.date));\(libelle);"
-            csv += String(format: "%.1f;%.0f\n", t.distance_km, t.duration_min)
+            csv += String(format: "%.1f;%.0f;", t.distance_km, t.duration_min)
+            csv += "\(t.estPro ? pro : perso);\(motif)\n"
         }
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("journal-moncap.csv")
@@ -4823,6 +4894,30 @@ struct MapHomeView: View {
         routeInfo = nil
         let coords = t.coordinates.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) }
         fitCoordinates(coords)
+    }
+
+    /// Requalifie un trajet et met la liste à jour.
+    ///
+    /// L'écran bouge d'abord, le serveur confirme ensuite : qualifier trente
+    /// trajets à la file avec un aller-retour réseau visible entre chacun
+    /// serait pénible, et c'est précisément un geste qu'on répète. En cas
+    /// d'échec la réponse du serveur — ou le rechargement — remet les choses
+    /// en place ; rien n'est perdu, la vérité reste côté serveur.
+    private func requalifie(_ t: Trip, pro: Bool? = nil, motif: String? = nil) {
+        guard let i = trips.firstIndex(where: { $0.id == t.id }) else { return }
+        let avant = trips[i]
+        trips[i] = Trip(
+            id: avant.id, label: avant.label, distance_km: avant.distance_km,
+            duration_min: avant.duration_min, polyline: avant.polyline,
+            created_at: avant.created_at,
+            pro: pro ?? avant.pro, motif: motif ?? avant.motif)
+        Task {
+            if let maj = try? await api.majTrip(id: t.id, pro: pro, motif: motif),
+                let j = trips.firstIndex(where: { $0.id == maj.id })
+            {
+                trips[j] = maj
+            }
+        }
     }
 
     private func deleteTrips(at offsets: IndexSet) {

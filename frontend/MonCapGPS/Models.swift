@@ -55,8 +55,20 @@ struct Trip: Codable, Identifiable {
     let polyline: String
     /// Date d'enregistrement (secondes Unix).
     let created_at: Double
+    /// Trajet **professionnel**. Optionnel dans le JSON : un serveur d'avant
+    /// cette version ne l'envoie pas, et la synthèse Codable de Swift exige
+    /// la clé pour un champ non optionnel — l'app refuserait alors tout le
+    /// journal à cause d'un champ ajouté.
+    let pro: Bool?
+    /// Le motif du déplacement, libre. Optionnel pour la même raison.
+    let motif: String?
 
     var date: Date { Date(timeIntervalSince1970: created_at) }
+
+    /// L'absence de qualification vaut « personnel » : on ne déclare jamais
+    /// un trajet professionnel à la place de quelqu'un.
+    var estPro: Bool { pro ?? false }
+    var motifOuVide: String { motif ?? "" }
 
     /// Décode le tracé en coordonnées exploitables par MapKit.
     var coordinates: [Coord] {
