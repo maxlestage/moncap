@@ -72,7 +72,33 @@ T: dict[str, tuple[str, str]] = {
     "Ton message": ("Tu mensaje", "Your message"),
     "Destinataire": ("Destinatario", "Recipient"),
     "Mon avatar": ("Mi avatar", "My avatar"),
-    "Avatar actuel": ("Avatar actual", "Current avatar"),
+    # Les avatars, un jeu par mode de déplacement. Les noms propres
+    # (Ferrari, Alpine, GR Yaris…) ne se traduisent pas : ils passent tels
+    # quels, et n'ont donc pas à figurer ici.
+    "Combi vert": ("Combi verde", "Green van"),
+    "Combi orange": ("Combi naranja", "Orange van"),
+    "Combi bleu": ("Combi azul", "Blue van"),
+    "Combi menthe": ("Combi menta", "Mint van"),
+    "Voiture": ("Coche", "Car"),
+    "Électrique": ("Eléctrico", "Electric"),
+    "Utilitaire": ("Furgoneta", "Van"),
+    "Marcheur": ("Caminante", "Walker"),
+    "Coureur": ("Corredor", "Runner"),
+    "Randonneur": ("Senderista", "Hiker"),
+    "Avec un enfant": ("Con un niño", "With a child"),
+    "Fauteuil roulant": ("Silla de ruedas", "Wheelchair"),
+    "Vélo": ("Bici", "Bike"),
+    "Cycliste": ("Ciclista", "Cyclist"),
+    "Trottinette": ("Patinete", "Scooter"),
+    "Bus": ("Bus", "Bus"),
+    "Tram": ("Tranvía", "Tram"),
+    "Train": ("Tren", "Train"),
+    "Bateau": ("Barco", "Boat"),
+    "Téléphérique": ("Teleférico", "Cable car"),
+    "Chaque mode garde le sien : votre voiture reste votre voiture pendant que la marche garde son marcheur.": (
+        "Cada modo conserva el suyo: tu coche sigue siendo tu coche mientras que caminar conserva su caminante.",
+        "Each mode keeps its own: your car stays your car while walking keeps its walker.",
+    ),
     "Mon véhicule": ("Mi vehículo", "My vehicle"),
     "Carburant": ("Combustible", "Fuel"),
     "Consommation": ("Consumo", "Consumption"),
@@ -885,6 +911,12 @@ T: dict[str, tuple[str, str]] = {
     "Normale": ("Normal", "Normal"),
     "Rapide": ("Rápido", "Brisk"),
     "Éviter les escaliers": ("Evitar escaleras", "Avoid stairs"),
+    # La reconnaissance automatique du mode de déplacement.
+    "Reconnaître le mode": ("Reconocer el modo", "Detect the mode"),
+    "À pied, à vélo ou en voiture, reconnu tout seul. Les transports restent un choix : rien ne distingue un bus d'une voiture au mouvement. Toucher le sélecteur reprend la main jusqu'à la fin du trajet.": (
+        "A pie, en bici o en coche, reconocido solo. El transporte público sigue siendo una elección: nada distingue un autobús de un coche por el movimiento. Tocar el selector recupera el control hasta el final del trayecto.",
+        "Walking, cycling or driving, detected on its own. Transit stays a choice: nothing tells a bus from a car by motion alone. Touching the picker takes back control until the end of the trip.",
+    ),
     "%.1f km restants": ("%.1f km restantes", "%.1f km left"),
     # Sous le kilomètre, le restant se dit en mètres : « 0.2 km restants »
     # n'est la façon de parler de personne.

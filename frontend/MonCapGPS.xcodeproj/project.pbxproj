@@ -567,6 +567,7 @@
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "MonCap GPS utilise votre position pour l'afficher, calculer vos trajets et la partager en direct.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "MonCap GPS lit l'activité de mouvement pour reconnaître seul si vous êtes à pied, à vélo ou en voiture, et adapter l'itinéraire.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
@@ -603,6 +604,7 @@
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "MonCap GPS utilise votre position pour l'afficher, calculer vos trajets et la partager en direct.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "MonCap GPS lit l'activité de mouvement pour reconnaître seul si vous êtes à pied, à vélo ou en voiture, et adapter l'itinéraire.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = NO;

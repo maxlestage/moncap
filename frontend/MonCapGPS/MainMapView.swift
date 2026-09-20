@@ -581,10 +581,11 @@ enum PinRenderer {
     }
 
     private static func avatar(_ id: String, size: CGFloat) -> UIImage {
-        if id == "walk" || id == "bike" {
-            let symbol = id == "walk" ? "figure.walk" : "bicycle"
-            let tint: UIColor = id == "walk" ? .systemGreen : .systemBlue
-            return disc(symbol: symbol, diameter: size, fill: tint)
+        // Les avatars à symbole se dessinent sur un disque de couleur ; les
+        // autres sont des illustrations du catalogue. La table est dans
+        // Avatars.swift — ici on ne fait plus de cas particulier.
+        if let m = Avatars.modele(id), let symbole = m.symbole {
+            return disc(symbol: symbole, diameter: size, fill: m.teinte.ui)
         }
         guard let art = UIImage(named: Avatars.asset(id)) else {
             return disc(emoji: "🚐", diameter: size)
