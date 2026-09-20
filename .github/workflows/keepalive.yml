@@ -1,11 +1,36 @@
 name: Keep-alive backend
 
-# Ping régulier de l'app Heroku pour éviter qu'elle ne s'endorme (eco dyno)
-# pendant les sessions de test. Léger : ne compile rien, fait juste un GET.
+# Ping régulier de l'app Heroku pour éviter qu'elle ne s'endorme (eco dyno).
+# Léger : ne compile rien, fait juste un GET.
+#
+# Léger, mais pas gratuit — et c'est tout le sujet de ce fichier. Actions
+# facture chaque job à la **minute entamée** : ce GET de cinq secondes coûte
+# une minute pleine, comme n'importe quel job. Toutes les cinq minutes, cela
+# faisait 288 minutes par jour, ~8 600 par mois, sur un dépôt privé dont
+# l'enveloppe mensuelle se compte en milliers. Le keep-alive représentait à
+# lui seul 1 308 des 2 253 exécutions du dépôt, et c'est lui qui a vidé le
+# quota le 19 septembre — un jour sans CI, donc sans build possible, pour
+# garder éveillé un serveur que personne n'interrogeait.
+#
+# D'où l'intervalle : un eco dyno s'endort après **trente minutes** sans
+# trafic web. Vingt-cinq minutes suffisent donc à le tenir éveillé en
+# permanence, avec une marge de cinq minutes pour les retards de
+# planification — GitHub ne garantit pas l'heure exacte d'un cron. Le coût
+# tombe à ~1 700 minutes par mois, et le service rendu est exactement le
+# même : le dyno ne dort jamais.
+#
+# Vingt-quatre heures sur vingt-quatre, volontairement. La tentation est de
+# ne veiller qu'aux heures ouvrées, mais les relecteurs d'Apple travaillent
+# sur la côte ouest — leur journée tombe en pleine nuit européenne, et un
+# démarrage à froid pendant la revue ressemble à une app cassée.
+#
+# Ce contrôle demande seulement si le serveur est debout. Pour savoir s'il
+# rend vraiment ses services, voir `sante.yml` — c'est la leçon du jeton
+# GitHub expiré, que ce ping-ci a laissé passer des semaines durant.
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # toutes les 5 min (minimum autorisé par GitHub)
+    - cron: "*/25 * * * *" # :00, :25, :50 — jamais plus de 25 min d'écart
   workflow_dispatch: # déclenchement manuel possible
 
 jobs:
