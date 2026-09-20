@@ -18,6 +18,14 @@ pub struct Model {
     pub polyline: String,
     /// Date d'enregistrement (secondes Unix).
     pub created_at: i64,
+    /// Trajet **professionnel** : seuls ceux-là entrent dans le barème
+    /// fiscal et dans la facturation. Faux par défaut — un trajet que
+    /// personne n'a qualifié ne doit pas gonfler une déclaration.
+    pub pro: bool,
+    /// Le motif, libre : « livraison Dupont », « chantier Mérignac ». Un
+    /// journal kilométrique se défend ligne à ligne, et c'est le motif qui
+    /// le permet — pas la distance.
+    pub motif: String,
     /// Propriétaire du trajet (non exposé dans le JSON).
     #[serde(skip)]
     pub user_id: i32,

@@ -372,6 +372,29 @@ struct NewTrip {
     /// Durée réelle du trajet en minutes (mesurée par le client).
     #[serde(default)]
     duration_min: f64,
+    /// Trajet professionnel. Absent d'un vieux client : faux, donc personnel
+    /// — on ne qualifie jamais un trajet à la place de quelqu'un.
+    #[serde(default)]
+    pro: bool,
+    /// Le motif, libre.
+    #[serde(default)]
+    motif: String,
+}
+
+/// Requalification d'un trajet déjà enregistré.
+///
+/// On ne classe pas ses trajets au moment où on les roule : on les classe le
+/// dimanche soir, ou à la fin du mois, devant la liste. Sans cette route, la
+/// nature aurait été figée à l'enregistrement — c'est-à-dire jamais renseignée.
+///
+/// Les deux champs sont optionnels et indépendants : cocher « professionnel »
+/// ne doit pas effacer un motif déjà écrit.
+#[derive(Deserialize)]
+struct MajTrip {
+    #[serde(default)]
+    pro: Option<bool>,
+    #[serde(default)]
+    motif: Option<String>,
 }
 
 /// Recherche de destination envoyée par le client pour être mémorisée.
@@ -2925,7 +2948,10 @@ fn build_app(state: AppState) -> Router {
         .route("/route", post(compute_route))
         .route("/route/multi", post(compute_multi_route))
         .route("/trips", get(list_trips).post(add_trip))
-        .route("/trips/:id", axum::routing::delete(delete_trip))
+        .route(
+            "/trips/:id",
+            axum::routing::delete(delete_trip).patch(maj_trip),
+        )
         .route(
             "/searches",
             get(list_searches).post(add_search).delete(clear_searches),
@@ -3564,12 +3590,47 @@ async fn add_trip(
         duration_min: Set(input.duration_min.max(0.0)),
         polyline: Set(polyline),
         created_at: Set((now_ms() / 1000) as i64),
+        pro: Set(input.pro),
+        motif: Set(clean_label(&input.motif)),
         user_id: Set(uid),
         ..Default::default()
     }
     .insert(&db)
     .await?;
     Ok(Json(saved))
+}
+
+/// PATCH /trips/:id — requalifie un trajet : professionnel ou non, et motif.
+///
+/// Le filtre sur `user_id` n'est pas une précaution de style : sans lui,
+/// n'importe qui requalifierait les trajets d'autrui en connaissant un
+/// identifiant. Un trajet qui n'appartient pas au demandeur se comporte comme
+/// un trajet qui n'existe pas — 404, et rien de plus, pour ne pas révéler
+/// qu'il existe ailleurs.
+async fn maj_trip(
+    AuthUser(uid): AuthUser,
+    State(db): State<DatabaseConnection>,
+    Path(id): Path<i32>,
+    Json(input): Json<MajTrip>,
+) -> Result<Json<trip::Model>, AppError> {
+    let Some(existant) = trip::Entity::find()
+        .filter(trip::Column::Id.eq(id))
+        .filter(trip::Column::UserId.eq(uid))
+        .one(&db)
+        .await?
+    else {
+        return Err(AppError::NotFound("trajet introuvable".into()));
+    };
+    let mut actif: trip::ActiveModel = existant.into();
+    // Chaque champ est indépendant : cocher « professionnel » ne doit pas
+    // effacer un motif déjà écrit, et l'inverse non plus.
+    if let Some(pro) = input.pro {
+        actif.pro = Set(pro);
+    }
+    if let Some(motif) = input.motif {
+        actif.motif = Set(clean_label(&motif));
+    }
+    Ok(Json(actif.update(&db).await?))
 }
 
 /// DELETE /trips/:id — supprime un trajet de l'utilisateur.
@@ -5807,6 +5868,123 @@ mod integration {
                 .any(|t| t["label"] == "Balade"),
             "le trajet enregistré doit apparaître dans l'historique"
         );
+    }
+
+    /// La nature d'un trajet se décide après coup — le dimanche soir, devant
+    /// la liste — et jamais à la place de quelqu'un.
+    #[tokio::test]
+    async fn un_trajet_se_requalifie_apres_coup() {
+        let Some(app) = test_app().await else { return };
+        let token = signup(&app, &uniq("requal")).await;
+
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/trips",
+                Some(&token),
+                serde_json::json!({
+                    "label": "Tournée",
+                    "points": [{"lat": 44.83, "lon": -0.57}, {"lat": 44.84, "lon": -0.58}],
+                    "duration_min": 20.0
+                }),
+            ))
+            .await
+            .unwrap();
+        let cree = body_json(resp).await;
+        let id = cree["id"].as_i64().unwrap();
+        // Non qualifié à l'enregistrement : personnel, et sans motif. Le
+        // contraire gonflerait une déclaration dans le dos de quelqu'un.
+        assert_eq!(cree["pro"], serde_json::json!(false));
+        assert_eq!(cree["motif"], serde_json::json!(""));
+
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "PATCH",
+                &format!("/trips/{id}"),
+                Some(&token),
+                serde_json::json!({"pro": true, "motif": "Livraison Dupont"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let maj = body_json(resp).await;
+        assert_eq!(maj["pro"], serde_json::json!(true));
+        assert_eq!(maj["motif"], serde_json::json!("Livraison Dupont"));
+
+        // Les deux champs sont indépendants : recocher la nature ne doit pas
+        // effacer un motif déjà écrit.
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "PATCH",
+                &format!("/trips/{id}"),
+                Some(&token),
+                serde_json::json!({"pro": false}),
+            ))
+            .await
+            .unwrap();
+        let maj = body_json(resp).await;
+        assert_eq!(maj["pro"], serde_json::json!(false));
+        assert_eq!(
+            maj["motif"],
+            serde_json::json!("Livraison Dupont"),
+            "le motif survit à un changement de nature"
+        );
+    }
+
+    /// Le trajet d'autrui se comporte comme un trajet qui n'existe pas :
+    /// sans le filtre sur le propriétaire, un identifiant deviné suffirait à
+    /// requalifier le journal de quelqu'un d'autre.
+    #[tokio::test]
+    async fn on_ne_requalifie_pas_le_trajet_d_autrui() {
+        let Some(app) = test_app().await else { return };
+        let sien = signup(&app, &uniq("proprio")).await;
+        let autre = signup(&app, &uniq("voisin")).await;
+
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "POST",
+                "/trips",
+                Some(&sien),
+                serde_json::json!({
+                    "label": "Privé",
+                    "points": [{"lat": 44.83, "lon": -0.57}, {"lat": 44.84, "lon": -0.58}],
+                    "duration_min": 5.0
+                }),
+            ))
+            .await
+            .unwrap();
+        let id = body_json(resp).await["id"].as_i64().unwrap();
+
+        let resp = app
+            .clone()
+            .oneshot(json_req(
+                "PATCH",
+                &format!("/trips/{id}"),
+                Some(&autre),
+                serde_json::json!({"pro": true}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        // Et le trajet n'a pas bougé pour son propriétaire.
+        let resp = app
+            .clone()
+            .oneshot(get_req("/trips", Some(&sien)))
+            .await
+            .unwrap();
+        let list = body_json(resp).await;
+        let mien = list
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["id"].as_i64() == Some(id))
+            .expect("le trajet doit rester au propriétaire");
+        assert_eq!(mien["pro"], serde_json::json!(false));
     }
 
     #[tokio::test]

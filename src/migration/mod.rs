@@ -8,6 +8,7 @@ mod m0005_alerts;
 mod m0006_reset_tokens;
 mod m0007_users_created_at;
 mod m0008_users_prefs;
+mod m0009_trips_nature;
 
 /// Liste ordonnée des migrations appliquées au démarrage.
 pub struct Migrator;
@@ -24,6 +25,7 @@ impl MigratorTrait for Migrator {
             Box::new(m0006_reset_tokens::Migration),
             Box::new(m0007_users_created_at::Migration),
             Box::new(m0008_users_prefs::Migration),
+            Box::new(m0009_trips_nature::Migration),
         ]
     }
 }

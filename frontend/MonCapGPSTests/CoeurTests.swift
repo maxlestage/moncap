@@ -437,3 +437,42 @@ final class RuesHorsLigneTests: XCTestCase {
         XCTAssertEqual(RuesHorsLigne.numeroDe("bis rue Untel"), "")
     }
 }
+
+/// La compatibilité du journal avec un serveur qui ne connaît pas encore la
+/// nature des trajets.
+///
+/// Ce test existe parce que l'erreur est silencieuse et totale : la synthèse
+/// Codable de Swift exige la clé pour un champ **non optionnel**, et un
+/// champ ajouté au modèle aurait fait échouer le décodage de la liste
+/// entière. L'app n'aurait pas affiché « pas de nature » — elle n'aurait
+/// affiché aucun trajet.
+final class TripCompatibiliteTests: XCTestCase {
+
+    private func decode(_ json: String) throws -> Trip {
+        try JSONDecoder().decode(Trip.self, from: Data(json.utf8))
+    }
+
+    func testUnTrajetSansNatureSeDecodeQuandMeme() throws {
+        let t = try decode(
+            """
+            {"id":1,"label":"Tournée","distance_km":12.5,"duration_min":30,
+             "polyline":"48.1,-1.6;48.2,-1.5","created_at":1700000000}
+            """)
+        XCTAssertEqual(t.label, "Tournée")
+        // L'absence vaut « personnel » : on ne déclare jamais un trajet
+        // professionnel à la place de quelqu'un.
+        XCTAssertFalse(t.estPro)
+        XCTAssertEqual(t.motifOuVide, "")
+    }
+
+    func testUnTrajetQualifieGardeSaNature() throws {
+        let t = try decode(
+            """
+            {"id":2,"label":"Chantier","distance_km":4,"duration_min":10,
+             "polyline":"48.1,-1.6;48.2,-1.5","created_at":1700000000,
+             "pro":true,"motif":"Chantier Mérignac"}
+            """)
+        XCTAssertTrue(t.estPro)
+        XCTAssertEqual(t.motifOuVide, "Chantier Mérignac")
+    }
+}

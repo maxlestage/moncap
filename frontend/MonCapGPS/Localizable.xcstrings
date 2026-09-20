@@ -2353,18 +2353,18 @@
         }
       }
     },
-    "Date;Trajet;Distance (km);Durée (min)": {
+    "Date;Trajet;Distance (km);Durée (min);Nature;Motif": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Date;Trip;Distance (km);Duration (min)"
+            "value": "Date;Trip;Distance (km);Duration (min);Type;Purpose"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fecha;Trayecto;Distancia (km);Duración (min)"
+            "value": "Fecha;Trayecto;Distancia (km);Duración (min);Naturaleza;Motivo"
           }
         }
       }
@@ -4017,6 +4017,22 @@
         }
       }
     },
+    "Livraison Dupont, chantier…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delivery for Smith, site visit…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrega Pérez, obra…"
+          }
+        }
+      }
+    },
     "Ma formule": {
       "localizations": {
         "en": {
@@ -4573,6 +4589,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "¿Contraseña olvidada?"
+          }
+        }
+      }
+    },
+    "Motif": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Purpose"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motivo"
+          }
+        }
+      }
+    },
+    "Motif du déplacement": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Purpose of the trip"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Motivo del desplazamiento"
           }
         }
       }
@@ -5137,6 +5185,38 @@
         }
       }
     },
+    "Perso": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal"
+          }
+        }
+      }
+    },
+    "Personnel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal"
+          }
+        }
+      }
+    },
     "Pharmacie": {
       "localizations": {
         "en": {
@@ -5357,6 +5437,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Precio del combustible"
+          }
+        }
+      }
+    },
+    "Pro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pro"
+          }
+        }
+      }
+    },
+    "Professionnel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profesional"
           }
         }
       }
@@ -6957,6 +7069,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Descarga · %lld %"
+          }
+        }
+      }
+    },
+    "Un journal kilométrique se défend ligne à ligne : c'est le motif qui le permet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A mileage log is defended line by line, and the purpose is what allows it."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un registro de kilometraje se justifica línea a línea: es el motivo quien lo permite."
           }
         }
       }

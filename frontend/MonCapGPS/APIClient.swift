@@ -273,6 +273,23 @@ struct APIClient {
                 body: try JSONEncoder().encode(trip), contentType: "application/json"))
     }
 
+    /// Requalifie un trajet : nature professionnelle, motif, ou les deux.
+    ///
+    /// Les deux champs sont indépendants et n'entrent dans la charge que
+    /// lorsqu'ils sont demandés : cocher « professionnel » ne doit pas
+    /// effacer un motif déjà écrit, et le serveur ne touche qu'à ce qu'on
+    /// lui envoie.
+    func majTrip(id: Int, pro: Bool? = nil, motif: String? = nil) async throws -> Trip {
+        var champs: [String: Any] = [:]
+        if let pro { champs["pro"] = pro }
+        if let motif { champs["motif"] = motif }
+        return try await send(
+            authedRequest(
+                "trips/\(id)", method: "PATCH",
+                body: try JSONSerialization.data(withJSONObject: champs),
+                contentType: "application/json"))
+    }
+
     func deleteTrip(id: Int) async throws {
         try await sendRaw(authedRequest("trips/\(id)", method: "DELETE"))
     }
