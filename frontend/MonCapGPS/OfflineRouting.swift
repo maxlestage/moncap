@@ -278,11 +278,16 @@ final class OfflineRouter: NSObject, ObservableObject {
         dossier.appendingPathComponent("\(id).json")
     }
 
-    /// Les deux annexes hors ligne d'une région : l'annuaire de lieux et les
-    /// jalons de limites de vitesse, produits par le workflow des tuiles.
-    /// Lisibles par `LieuxHorsLigne`, d'où le niveau d'accès.
+    /// Les trois annexes hors ligne d'une région : l'annuaire de lieux,
+    /// l'index des voies nommées et les jalons de limites de vitesse, produits
+    /// par le workflow des tuiles. Lisibles par `LieuxHorsLigne` et
+    /// `RuesHorsLigne`, d'où le niveau d'accès.
     nonisolated static func lieuxPath(_ id: String) -> URL {
         dossier.appendingPathComponent("\(id).lieux.zz")
+    }
+
+    nonisolated static func ruesPath(_ id: String) -> URL {
+        dossier.appendingPathComponent("\(id).rues.zz")
     }
 
     nonisolated static func vitessesPath(_ id: String) -> URL {
@@ -496,18 +501,23 @@ final class OfflineRouter: NSObject, ObservableObject {
         // sont remplacées, et leur absence n'empêche rien — l'annuaire et
         // les limites sont un plus, pas une condition.
         try? FileManager.default.removeItem(at: Self.lieuxPath(id))
+        try? FileManager.default.removeItem(at: Self.ruesPath(id))
         try? FileManager.default.removeItem(at: Self.vitessesPath(id))
         Task { await Self.rapatrieAnnexes(id) }
     }
 
     /// Télécharge les annexes hors ligne d'une région installée — l'annuaire
-    /// de lieux et les jalons de vitesse — quand elles manquent encore.
+    /// de lieux, l'index des rues et les jalons de vitesse — quand elles
+    /// manquent encore.
     ///
     /// Best effort et hors session de fond : quelques mégaoctets par requête
     /// ordinaire, un 404 pour les régions bâties avant que le workflow ne les
     /// produise, et rien d'installé n'en dépend.
     nonisolated static func rapatrieAnnexes(_ id: String) async {
-        for (nature, chemin) in [("lieux", lieuxPath(id)), ("vitesses", vitessesPath(id))] {
+        for (nature, chemin) in [
+            ("lieux", lieuxPath(id)), ("rues", ruesPath(id)),
+            ("vitesses", vitessesPath(id)),
+        ] {
             guard !FileManager.default.fileExists(atPath: chemin.path),
                 let url = URL(string: "\(Region.base)/\(id)/\(nature)")
             else { continue }
@@ -517,6 +527,7 @@ final class OfflineRouter: NSObject, ObservableObject {
             try? data.write(to: chemin, options: .atomic)
         }
         await LieuxHorsLigne.shared.oublie(id)
+        await RuesHorsLigne.shared.oublie(id)
     }
 
     nonisolated static func poids(_ url: URL) -> Int {
@@ -542,6 +553,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         try? FileManager.default.removeItem(at: Self.archivePath(id))
         try? FileManager.default.removeItem(at: Self.configPath(id))
         try? FileManager.default.removeItem(at: Self.lieuxPath(id))
+        try? FileManager.default.removeItem(at: Self.ruesPath(id))
         try? FileManager.default.removeItem(at: Self.vitessesPath(id))
         moteurs[id] = nil
         installees.removeAll { $0.id == id }
@@ -555,6 +567,7 @@ final class OfflineRouter: NSObject, ObservableObject {
             try? FileManager.default.removeItem(at: Self.archivePath(r.id))
             try? FileManager.default.removeItem(at: Self.configPath(r.id))
             try? FileManager.default.removeItem(at: Self.lieuxPath(r.id))
+            try? FileManager.default.removeItem(at: Self.ruesPath(r.id))
             try? FileManager.default.removeItem(at: Self.vitessesPath(r.id))
             Task { [id = r.id] in await LieuxHorsLigne.shared.oublie(id) }
         }
