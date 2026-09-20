@@ -828,10 +828,42 @@ T: dict[str, tuple[str, str]] = {
     # --- Chaînes de `String(format:)` -------------------------------------
     # Enveloppées dans `NSLocalizedString` côté Swift : sans cela,
     # `String(format:)` ne consulte aucun catalogue.
-    "%.0f min · %.1f km · %d virages · arr. %@": (
-        "%.0f min · %.1f km · %d giros · lleg. %@",
-        "%.0f min · %.1f km · %d turns · arr. %@",
+    # La ligne d'itinéraire, dans la langue de son mode. La distance arrive
+    # déjà mise en forme (« 800 m » ou « 24.3 km ») : c'est la règle de
+    # Distance, des mètres sous le kilomètre — indifférent au volant, décisif
+    # à pied. Les virages ne comptent qu'en voiture : un piéton en fait trente
+    # sans y penser.
+    "%.0f min · %@ · %d virages · arr. %@": (
+        "%.0f min · %@ · %d giros · lleg. %@",
+        "%.0f min · %@ · %d turns · arr. %@",
     ),
+    "%.0f min · %@ · arr. %@": (
+        "%.0f min · %@ · lleg. %@",
+        "%.0f min · %@ · arr. %@",
+    ),
+    # Ce que la vue de chaque mode met en avant, dit sous le sélecteur.
+    "Distances courtes et dénivelé": (
+        "Distancias cortas y desnivel",
+        "Short distances and elevation",
+    ),
+    "Profil vélo : côtes et descentes": (
+        "Perfil ciclista: subidas y bajadas",
+        "Cycling profile: climbs and descents",
+    ),
+    "Carburant, péages et virages": (
+        "Combustible, peajes y giros",
+        "Fuel, tolls and turns",
+    ),
+    "Lignes, correspondances et horaires": (
+        "Líneas, transbordos y horarios",
+        "Lines, transfers and times",
+    ),
+    # Les réglages du piéton : ce mode n'en avait aucun.
+    "Allure": ("Ritmo", "Pace"),
+    "Tranquille": ("Tranquilo", "Easy"),
+    "Normale": ("Normal", "Normal"),
+    "Rapide": ("Rápido", "Brisk"),
+    "Éviter les escaliers": ("Evitar escaleras", "Avoid stairs"),
     "%.1f km restants": ("%.1f km restantes", "%.1f km left"),
     # Sous le kilomètre, le restant se dit en mètres : « 0.2 km restants »
     # n'est la façon de parler de personne.
@@ -1015,7 +1047,7 @@ VITRINE = [
     "Droite", "Quitter", "%.1f km restants",
     # Les formats de `String(format:)` : la vitrine les remplit avec des
     # valeurs d'exemple plutôt que de recopier des phrases toutes faites.
-    "%.0f min · %.1f km · %d virages · arr. %@",
+    "%.0f min · %@ · %d virages · arr. %@",
     "↗ %.0f m de côte · ↘ %.0f m de descente",
     "⚠️ Forte côte (%.0f m)",
     "⛽ ~%.2f € · sans péage",

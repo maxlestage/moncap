@@ -806,6 +806,13 @@ struct MapHomeView: View {
     /// Profil du vélo pour le calcul local (Road / Hybrid / Mountain).
     @AppStorage("moncap.veloType") private var veloType = "Hybrid"
     @AppStorage("moncap.veloEviteCotes") private var veloEviteCotes = false
+    /// L'allure de marche, en km/h — elle ne change pas le chemin mais
+    /// l'heure d'arrivée, et 5,1 km/h (le défaut de Valhalla) est une marche
+    /// soutenue que tout le monde ne tient pas.
+    @AppStorage("moncap.marcheAllure") private var marcheAllure = 5.1
+    /// Les escaliers : rien pour deux jambes libres, un mur avec une
+    /// poussette, une valise ou un fauteuil.
+    @AppStorage("moncap.marcheEviteEscaliers") private var marcheEviteEscaliers = false
     /// Le moment du trajet en transports : maintenant, partir à, ou arriver
     /// avant. Les horaires sont toute la donnée d'un tram — les figer sur
     /// « maintenant » interdisait de préparer le bus de demain matin.
@@ -2932,8 +2939,15 @@ struct MapHomeView: View {
                     o.minutes, o.turns, horaire)
             }
         }
-        return String(format: NSLocalizedString("%.0f min · %.1f km · %d virages · arr. %@", comment: ""),
-               o.minutes, o.km, o.turns, routeArrival(o.minutes))
+        // Chaque mode a sa langue : les virages ne comptent qu'en voiture, et
+        // la distance se dit en mètres sous le kilomètre — indifférent au
+        // volant, décisif à pied. La table est dans VueDuMode.swift.
+        return ResumeItineraire.ligne(
+            mode: travelMode,
+            minutes: o.minutes,
+            km: o.km,
+            virages: o.turns,
+            arrivee: routeArrival(o.minutes))
     }
 
     /// La chaîne des lignes d'un itinéraire en transports : les pastilles des
@@ -2989,6 +3003,9 @@ struct MapHomeView: View {
 
     /// Dénivelé (côte ↗ / descente ↘) si connu.
     private func routeElevationText(_ o: RouteOption) -> String? {
+        // À pied et à vélo seulement : au volant, quarante mètres de côte
+        // sont du bruit qu'on affichait à tout le monde.
+        guard travelMode.montreDenivele else { return nil }
         guard let up = o.climb, let down = o.descent, up >= 5 || down >= 5 else { return nil }
         return String(format: NSLocalizedString("↗ %.0f m de côte · ↘ %.0f m de descente", comment: ""), up, down)
     }
@@ -2998,6 +3015,9 @@ struct MapHomeView: View {
 
     /// Avertissement si l'itinéraire présente une grosse côte / descente.
     private func routeWarning(_ o: RouteOption) -> String? {
+        // Même règle que le dénivelé détaillé : l'avertissement s'adresse à
+        // des jambes, pas à un moteur.
+        guard travelMode.montreDenivele else { return nil }
         let bigUp = (o.climb ?? 0) >= bigElevation
         let bigDown = (o.descent ?? 0) >= bigElevation
         switch (bigUp, bigDown) {
@@ -3022,7 +3042,7 @@ struct MapHomeView: View {
     /// Les péages sont une estimation (part d'autoroute × ~0,078 €/km,
     /// tarif moyen français classe 1) — pas le tarif exact du concessionnaire.
     private func routeCosts(_ o: RouteOption) -> (fuel: Double, toll: Double)? {
-        guard travelMode == .car else { return nil }
+        guard travelMode.montreCout else { return nil }
         let price = fuel.effectivePrice(type: fuelType)
         let fuelCost = o.km * consumption / 100 * price
         var toll = 0.0
@@ -3135,10 +3155,20 @@ struct MapHomeView: View {
                 }
             }
 
+            // Le mode change, la carte change de discours : autant le dire.
+            // Sans cette ligne, passer de la voiture au vélo faisait
+            // disparaître le carburant et apparaître le dénivelé sans que
+            // rien n'explique pourquoi.
+            Text(LocalizedStringKey(travelMode.resumeDuMode))
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
             // Les étapes du trajet, dans l'ordre, chacune retirable — et le
             // bouton qui arme la pose de la suivante sur la carte. Pas en
             // transports : MOTIS ne chaîne pas les arrêts.
-            if travelMode != .transit, !etapes.isEmpty || pendingDestination != nil {
+            if travelMode.montreEtapes, !etapes.isEmpty || pendingDestination != nil {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(Array(etapeNoms.enumerated()), id: \.offset) { i, nom in
@@ -3209,7 +3239,7 @@ struct MapHomeView: View {
                         .controlSize(.mini)
                         // La station la moins chère le long du trajet — en
                         // voiture seulement : un vélo ne fait pas le plein.
-                        if travelMode == .car, !routeOptions.isEmpty {
+                        if travelMode.montreCout, !routeOptions.isEmpty {
                             Button {
                                 if plus.accesPlus {
                                     showStationsCarburant = true
@@ -3280,7 +3310,7 @@ struct MapHomeView: View {
             // En transports, l'heure est un paramètre du calcul, pas un
             // détail : le menu choisit le sens (partir / arriver avant), la
             // roue choisit l'heure, et tout changement recalcule.
-            if travelMode == .transit {
+            if travelMode.montreHoraires {
                 HStack(spacing: 10) {
                     Menu {
                         ForEach(TransitQuand.allCases) { q in
@@ -3758,12 +3788,33 @@ struct MapHomeView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    // Chaque mode a ses réglages, et ce que la vue mettra en
+                    // avant est dit ici même : on choisit en connaissance.
+                    Text(LocalizedStringKey(travelMode.resumeDuMode))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     if travelMode == .car {
                         Toggle(isOn: $avoidTolls) {
                             Label("Éviter les péages", systemImage: "eurosign.circle")
                         }
                         Toggle(isOn: $avoidHighways) {
                             Label("Éviter les autoroutes", systemImage: "road.lanes")
+                        }
+                    }
+                    // À pied, le chemin se discute peu — c'est l'allure qui
+                    // décide de l'heure d'arrivée, et les escaliers qui
+                    // décident si le trajet est seulement possible. Ce mode
+                    // n'avait aucun réglage : il héritait d'une marche à
+                    // 5,1 km/h que tout le monde ne tient pas.
+                    if travelMode == .walk {
+                        Picker("Allure", selection: $marcheAllure) {
+                            Text("Tranquille").tag(4.0)
+                            Text("Normale").tag(5.1)
+                            Text("Rapide").tag(6.5)
+                        }
+                        .pickerStyle(.segmented)
+                        Toggle(isOn: $marcheEviteEscaliers) {
+                            Label("Éviter les escaliers", systemImage: "figure.stairs")
                         }
                     }
                     // Le vélo a son profil : Valhalla distingue le vélo de
