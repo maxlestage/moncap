@@ -90,29 +90,55 @@ final class DetectionMode: ObservableObject {
         }
     }
 
-    // MARK: - La lecture d'une activité
+    // MARK: - La lecture d'un relevé
 
-    /// Le mode que cette activité désigne, ou nil quand elle ne désigne rien.
+    /// Un relevé d'activité, réduit à ce dont la décision a besoin.
     ///
-    /// `nonisolated static` : c'est une fonction pure sur un relevé, et les
-    /// tests doivent pouvoir l'appeler sans acteur.
-    nonisolated static func mode(de a: CMMotionActivity) -> TravelMode? {
-        // Une activité douteuse ne vaut pas mieux qu'aucune : Core Motion
-        // marque lui-même sa confiance, et changer de mode sur un « peut-être »
-        // recalculerait l'itinéraire pour rien.
-        guard a.confidence != .low else { return nil }
-        // L'ordre compte. Core Motion peut lever deux drapeaux à la fois —
-        // `automotive` et `stationary` à un feu rouge, `walking` et `cycling`
-        // au démarrage d'un coup de pédale. Le véhicule l'emporte, puis le
-        // vélo : c'est du plus contraignant au moins contraignant pour le
-        // calcul d'itinéraire, et se tromper vers le plus contraignant fait
-        // faire un détour, pas emprunter une voie interdite.
-        if a.automotive { return .car }
-        if a.cycling { return .bike }
-        if a.walking || a.running { return .walk }
-        // `stationary` et `unknown` ne disent rien du mode : à l'arrêt on est
+    /// Ce type existe pour une raison précise : `CMMotionActivity` ne se
+    /// fabrique pas. Ses propriétés sont en lecture seule et l'objet ne
+    /// répond pas à KVC — un test qui voudrait lui poser un drapeau obtient
+    /// un relevé vide, et vérifie alors que rien ne vaut rien.
+    ///
+    /// Plutôt que de ruser avec l'objet d'Apple, on sort la décision de
+    /// l'objet. Ce qui reste d'intestable se réduit à l'adaptateur d'en
+    /// dessous : quatre champs recopiés, que le compilateur vérifie.
+    struct Releve {
+        var automobile = false
+        var velo = false
+        var marche = false
+        var course = false
+        /// Confiance suffisante pour agir. Un « peut-être » ne vaut pas
+        /// mieux qu'aucun relevé : changer de mode dessus recalculerait
+        /// l'itinéraire pour rien.
+        var sur = true
+    }
+
+    /// Le mode que ce relevé désigne, ou nil quand il ne désigne rien.
+    ///
+    /// L'ordre compte. Core Motion lève deux drapeaux à la fois — automobile
+    /// et immobile à un feu rouge, marche et vélo au démarrage d'un coup de
+    /// pédale. Le véhicule l'emporte, puis le vélo : du plus contraignant au
+    /// moins contraignant pour le calcul d'itinéraire. Se tromper vers le
+    /// plus contraignant fait faire un détour ; se tromper dans l'autre sens
+    /// fait emprunter une voie interdite.
+    nonisolated static func mode(_ r: Releve) -> TravelMode? {
+        guard r.sur else { return nil }
+        if r.automobile { return .car }
+        if r.velo { return .bike }
+        if r.marche || r.course { return .walk }
+        // Immobile ou inconnu ne disent rien du mode : à l'arrêt on est
         // toujours dans le mode d'avant, et l'oublier ferait repartir la
         // voiture en piéton à chaque feu.
         return nil
+    }
+
+    /// L'adaptateur : un relevé d'Apple devient le nôtre. Volontairement
+    /// sans logique — tout ce qui se décide se décide au-dessus.
+    nonisolated static func mode(de a: CMMotionActivity) -> TravelMode? {
+        mode(
+            Releve(
+                automobile: a.automotive, velo: a.cycling,
+                marche: a.walking, course: a.running,
+                sur: a.confidence != .low))
     }
 }
