@@ -14,7 +14,9 @@ quinzième jour tomberait sur l'app verrouillée. Sur la liste, il a tout,
 pour toujours.
 
 Deux modes, par la variable MODE :
-  - `verifie` (défaut) : ne touche à rien, dit ce qui manque.
+  - `verifie` (défaut) : ne touche à rien, dit ce qui manque — et éprouve le
+    jeton GitHub déjà en place, ce qui suffit à diagnostiquer les paquets
+    hors ligne sans rien modifier.
   - `applique`         : pose ce qui manque, et seulement cela.
 
 Les secrets SMTP_* sont facultatifs : absents, le serveur sait déjà s'en
@@ -38,6 +40,17 @@ INVITES = ["review.apple@moncap-gps.fr"]
 # Reprises des secrets GitHub du même nom quand ils existent.
 SMTP = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "SMTP_PORT"]
 
+# Le jeton qui permet au serveur de lire les pièces jointes des Releases —
+# c'est lui qui sert les paquets hors ligne. Traité à part des SMTP : il est
+# **vérifié avant d'être posé**, parce qu'un jeton mort ne se voit pas.
+# Symptôme observé : /offline/regions répondait 502 « GitHub : 401
+# Unauthorized » pendant des semaines, et rien ne le disait — l'app se
+# contentait de ne proposer aucune région.
+JETON = "GITHUB_TOKEN"
+
+# Le dépôt sur lequel on éprouve le jeton avant de l'installer.
+DEPOT = os.environ.get("PAQUETS_DEPOT", "maxlestage/moncap")
+
 
 def die(msg):
     print(f"::error::{msg}")
@@ -57,6 +70,39 @@ def entetes():
         "Accept": "application/vnd.heroku+json; version=3",
         "Content-Type": "application/json",
     }
+
+
+def jeton_valide(jeton):
+    """Le jeton ouvre-t-il vraiment le dépôt ?
+
+    Poser un jeton sans l'éprouver reviendrait à remplacer une panne
+    silencieuse par une autre. On demande donc au dépôt lui-même : c'est
+    exactement ce que le serveur fera, et un refus ici coûte dix secondes
+    quand un refus en production coûte des semaines.
+
+    Rend (vrai, détail) ou (faux, raison lisible).
+    """
+    r = requests.get(
+        f"https://api.github.com/repos/{DEPOT}",
+        headers={
+            "Authorization": f"Bearer {jeton}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "moncap-config",
+        },
+        timeout=30,
+    )
+    if r.status_code == 200:
+        prive = r.json().get("private")
+        return True, f"accès au dépôt confirmé ({'privé' if prive else 'public'})"
+    if r.status_code == 401:
+        return False, "401 Unauthorized — jeton expiré, révoqué, ou mal collé"
+    if r.status_code == 404:
+        return False, (
+            "404 — le jeton est valide mais ne voit pas le dépôt : "
+            "un jeton à portée fine doit accorder « Contents: read » sur "
+            f"{DEPOT}"
+        )
+    return False, f"HTTP {r.status_code}"
 
 
 def config_actuelle():
@@ -112,6 +158,35 @@ def main():
     notes.append(note)
     if valeur is not None:
         changements["PLUS_OFFERT"] = valeur
+
+    # Le jeton des paquets, éprouvé avant d'être posé.
+    fourni = os.environ.get(JETON, "").strip()
+    if fourni:
+        bon, raison = jeton_valide(fourni)
+        if not bon:
+            die(
+                f"{JETON} refusé par GitHub : {raison}. "
+                "Rien n'a été posé — installer un jeton mort remplacerait une "
+                "panne silencieuse par une autre."
+            )
+        notes.append(f"{JETON} : {raison}")
+        if actuel.get(JETON) == fourni:
+            notes.append(f"{JETON} : déjà à jour")
+        else:
+            changements[JETON] = fourni
+    else:
+        present = actuel.get(JETON)
+        if present:
+            bon, raison = jeton_valide(present)
+            etat = "fonctionne" if bon else f"NE FONCTIONNE PLUS ({raison})"
+            notes.append(f"{JETON} : présent sur Heroku, {etat}")
+            if not bon:
+                notes.append(
+                    "  → les paquets hors ligne sont hors service tant qu'un "
+                    "jeton valide n'est pas posé"
+                )
+        else:
+            notes.append(f"{JETON} : absent — les paquets hors ligne ne sont pas servis")
 
     for nom in SMTP:
         fourni = os.environ.get(nom, "").strip()

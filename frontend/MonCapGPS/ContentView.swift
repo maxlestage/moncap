@@ -667,6 +667,13 @@ struct MapHomeView: View {
     // Nom affiché aux autres : l'e-mail de connexion.
     @State private var driverName = Session.username.isEmpty ? "Moi" : Session.username
     @State private var avatar = Session.avatar
+    /// Un avatar retenu **par mode** : la voiture garde sa Ferrari pendant
+    /// que la marche garde son randonneur. Sans cela, le mode changeant tout
+    /// seul, l'avatar aurait sauté d'un mode à l'autre sans qu'on l'ait
+    /// choisi — ou serait resté une voiture pendant qu'on court.
+    @AppStorage("moncap.avatar.walk") private var avatarWalk = "walk"
+    @AppStorage("moncap.avatar.bike") private var avatarBike = "bike"
+    @AppStorage("moncap.avatar.transit") private var avatarTransit = "bus"
     @State private var routeCoords: [CLLocationCoordinate2D] = []
     @State private var multiRoutes: [ColoredRoute] = []
     @State private var selectedIDs: Set<Int> = []
@@ -813,6 +820,15 @@ struct MapHomeView: View {
     /// Les escaliers : rien pour deux jambes libres, un mur avec une
     /// poussette, une valise ou un fauteuil.
     @AppStorage("moncap.marcheEviteEscaliers") private var marcheEviteEscaliers = false
+    /// Reconnaître tout seul à pied / vélo / voiture. Activé par défaut :
+    /// c'est le réglage qui rend service à qui ne connaît pas l'option, et il
+    /// se coupe d'un geste.
+    @AppStorage("moncap.modeAuto") private var modeAuto = true
+    @ObservedObject private var detection = DetectionMode.partage
+    /// Vraie dès qu'on a touché le sélecteur : la détection se tait alors
+    /// jusqu'à la fin du guidage. Un réglage qui se rétablit tout seul est
+    /// pire que pas de détection du tout.
+    @State private var modeManuel = false
     /// Le moment du trajet en transports : maintenant, partir à, ou arriver
     /// avant. Les horaires sont toute la donnée d'un tram — les figer sur
     /// « maintenant » interdisait de préparer le bus de demain matin.
@@ -1122,6 +1138,9 @@ struct MapHomeView: View {
             // vraie position affine dès le premier point GPS).
             nightMode = DayNight.isNight(lat: 46.6, lon: 2.5)
             location.start()
+            // La reconnaissance du mode : le coprocesseur de mouvement
+            // classe l'activité en continu, sans réveiller le GPS.
+            if modeAuto { detection.commence() }
             realtime.onPositionsChanged = { Task { await refresh() } }
             nav.onReroute = { Task { await recomputeRoute() } }
             // Navigation interrompue (app relancée, téléphone redémarré) : on
@@ -1266,6 +1285,29 @@ struct MapHomeView: View {
                 cap: location.course, vitesseKmh: location.speedKmh,
                 annonce: nav.active ? { nav.annonce($0) } : nil
             ) { emoji(for: $0) }
+        }
+        // Le mode reconnu s'applique — sauf si on a choisi soi-même.
+        .onReceive(detection.$detecte.compactMap { $0 }) { reconnu in
+            guard modeAuto, !modeManuel, reconnu != travelMode else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { travelMode = reconnu }
+            // Le recalcul appartient au sélecteur quand on y touche ; ici il
+            // faut le demander, la carte d'itinéraire n'étant pas toujours à
+            // l'écran au moment où le mode change.
+            if let dest = pendingDestination {
+                Task { await presentRouteOptions(to: dest) }
+            }
+        }
+        .onChange(of: nav.active) { _, actif in
+            // Fin de guidage : la question se repose depuis le début. On rend
+            // la main à la détection et on oublie ce qu'elle croyait savoir —
+            // le trajet suivant commence souvent autrement que le précédent.
+            if !actif {
+                modeManuel = false
+                detection.oublie()
+            }
+        }
+        .onChange(of: modeAuto) { _, actif in
+            actif ? detection.commence() : detection.arrete()
         }
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.
@@ -1974,35 +2016,50 @@ struct MapHomeView: View {
         return best
     }
 
-    /// Avatar diffusé/affiché selon le mode : voiture = avatar choisi ;
-    /// à pied / à vélo = pictogramme dédié (pas la voiture).
+    /// L'avatar diffusé et affiché : celui du mode en cours.
+    ///
+    /// Chaque mode a le sien, et c'est tout l'intérêt — sans quoi partir
+    /// courir montrerait une voiture à ceux qui suivent le partage en direct.
     private var liveAvatar: String {
         switch travelMode {
         case .car: return avatar
-        case .walk: return "walk"
-        case .bike: return "bike"
-        // En transports, on est un piéton entre deux véhicules.
-        case .transit: return "walk"
+        case .walk: return avatarWalk
+        case .bike: return avatarBike
+        case .transit: return avatarTransit
         }
     }
 
-    /// Marqueur d'un utilisateur sur la carte : image d'avatar, ou pictogramme
-    /// piéton / vélo selon l'identifiant spécial.
+    /// Le choix d'avatar du mode en cours, en lecture et en écriture.
+    ///
+    /// La voiture écrit aussi dans `Session`, qui porte l'identité vue par
+    /// le serveur : les autres modes restent locaux, ils décrivent une
+    /// façon de se déplacer, pas une personne.
+    private var avatarDuMode: Binding<String> {
+        Binding(
+            get: { liveAvatar },
+            set: { nouveau in
+                switch travelMode {
+                case .car:
+                    avatar = nouveau
+                    Session.avatar = nouveau
+                case .walk: avatarWalk = nouveau
+                case .bike: avatarBike = nouveau
+                case .transit: avatarTransit = nouveau
+                }
+            })
+    }
+
+    /// Marqueur d'un utilisateur sur la carte : illustration du catalogue, ou
+    /// symbole sur son disque de couleur. La table est dans Avatars.swift —
+    /// plus de cas particulier ici, et un mode ajouté n'oblige à rien.
     @ViewBuilder
     private func avatarMarker(_ id: String, size: CGFloat) -> some View {
-        if id == "walk" {
-            Image(systemName: "figure.walk")
-                .font(.system(size: size * 0.52, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: size, height: size)
-                .background(Color.green, in: Circle())
-                .shadow(radius: 2)
-        } else if id == "bike" {
-            Image(systemName: "bicycle")
+        if let m = Avatars.modele(id), let symbole = m.symbole {
+            Image(systemName: symbole)
                 .font(.system(size: size * 0.5, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: size, height: size)
-                .background(Color.blue, in: Circle())
+                .background(m.teinte.couleur, in: Circle())
                 .shadow(radius: 2)
         } else {
             Image(Avatars.asset(id))
@@ -3132,6 +3189,22 @@ struct MapHomeView: View {
 
     /// Carte de choix d'itinéraire : bandeau compact (itinéraire choisi) qu'on
     /// déroule pour comparer toutes les infos, puis « Démarrer ».
+    /// Le sélecteur de mode, vu comme une décision.
+    ///
+    /// Passer par une liaison plutôt que `$travelMode` permet de distinguer
+    /// « l'utilisateur a choisi » de « la détection a reconnu » : les deux
+    /// écrivent la même variable, mais seul le premier doit faire taire la
+    /// détection. Sans cette distinction, le mode reconnu se serait pris
+    /// lui-même pour un choix et la détection se serait coupée aussitôt.
+    private var modeChoisi: Binding<TravelMode> {
+        Binding(
+            get: { travelMode },
+            set: { nouveau in
+                modeManuel = true
+                travelMode = nouveau
+            })
+    }
+
     private var routeOptionsCard: some View {
         let selected = routeOptions.first { $0.id == selectedRouteID } ?? routeOptions.first
         let fastestID = routeOptions.min { $0.minutes < $1.minutes }?.id
@@ -3142,7 +3215,7 @@ struct MapHomeView: View {
             // segment — « Transports » sortait de l'écran — et l'icône se lit
             // plus vite qu'un mot. Le nom reste dit au lecteur d'écran.
             HStack(spacing: 8) {
-                Picker("Mode", selection: $travelMode) {
+                Picker("Mode", selection: modeChoisi) {
                     ForEach(TravelMode.allCases) { m in
                         Image(systemName: m.icon)
                             .accessibilityLabel(Text(LocalizedStringKey(m.label)))
@@ -3795,7 +3868,7 @@ struct MapHomeView: View {
                 } else {
                 // Mode de déplacement : à pied / vélo / voiture.
                 Section {
-                    Picker("Mode", selection: $travelMode) {
+                    Picker("Mode", selection: modeChoisi) {
                         ForEach(TravelMode.allCases) { m in
                             Image(systemName: m.icon)
                         .accessibilityLabel(Text(LocalizedStringKey(m.label)))
@@ -3808,6 +3881,17 @@ struct MapHomeView: View {
                     Text(LocalizedStringKey(travelMode.resumeDuMode))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    // La reconnaissance automatique. Masquée sur un appareil
+                    // qui ne sait pas classer l'activité : proposer un
+                    // interrupteur sans effet est pire que ne rien proposer.
+                    if detection.disponible {
+                        Toggle(isOn: $modeAuto) {
+                            Label("Reconnaître le mode", systemImage: "wand.and.stars")
+                        }
+                        Text("À pied, à vélo ou en voiture, reconnu tout seul. Les transports restent un choix : rien ne distingue un bus d'une voiture au mouvement. Toucher le sélecteur reprend la main jusqu'à la fin du trajet.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                     if travelMode == .car {
                         Toggle(isOn: $avoidTolls) {
                             Label("Éviter les péages", systemImage: "eurosign.circle")
@@ -4409,37 +4493,40 @@ struct MapHomeView: View {
                     }
                 }
                 Section("Mon avatar") {
+                    // Le sélecteur suit le mode en cours : on choisit son
+                    // marcheur quand on marche, sa voiture quand on conduit.
+                    // Tout montrer d'un bloc obligeait à faire défiler trente
+                    // vignettes pour trouver les trois qui concernent.
                     HStack(spacing: 12) {
-                        Image(Avatars.asset(avatar))
-                            .resizable().scaledToFit()
-                            .frame(width: 60, height: 60)
+                        avatarMarker(avatarDuMode.wrappedValue, size: 60)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Avatar actuel").font(.subheadline.weight(.semibold))
-                            Text(Avatars.labels[avatar] ?? avatar)
+                            Text(LocalizedStringKey(Avatars.libelle(avatarDuMode.wrappedValue)))
+                                .font(.subheadline.weight(.semibold))
+                            Text(LocalizedStringKey(travelMode.label))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(Avatars.all, id: \.self) { id in
-                                Image(Avatars.asset(id))
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 54, height: 54)
+                            ForEach(Avatars.pour(travelMode)) { m in
+                                let choisi = avatarDuMode.wrappedValue == m.id
+                                avatarMarker(m.id, size: 54)
                                     .padding(6)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .stroke(avatar == id ? Color.blue : Color.gray.opacity(0.3),
-                                                    lineWidth: avatar == id ? 3 : 1)
+                                            .stroke(
+                                                choisi ? Color.blue : Color.gray.opacity(0.3),
+                                                lineWidth: choisi ? 3 : 1)
                                     )
-                                    .onTapGesture {
-                                        avatar = id
-                                        Session.avatar = id
-                                    }
+                                    .onTapGesture { avatarDuMode.wrappedValue = m.id }
+                                    .accessibilityLabel(Text(LocalizedStringKey(m.libelle)))
                             }
                         }
                         .padding(.vertical, 4)
                     }
+                    Text("Chaque mode garde le sien : votre voiture reste votre voiture pendant que la marche garde son marcheur.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 Section("Mon véhicule") {
                     Picker("Carburant", selection: $fuelType) {

@@ -541,3 +541,63 @@ final class AlerteDevantTests: XCTestCase {
             NearbyAlertNotifier.phrase(alert: a, distance: 12).contains("50"))
     }
 }
+
+/// La lecture d'un relevé d'activité.
+///
+/// Les tests portent sur `Releve`, pas sur `CMMotionActivity` : l'objet
+/// d'Apple ne se fabrique pas — propriétés en lecture seule, insensible à
+/// KVC — et un relevé forgé en sortait vide. Un premier jet l'a appris à la
+/// CI, avec dix-neuf assertions qui vérifiaient que rien ne vaut rien.
+///
+/// La décision a donc été sortie de l'objet. Ce qui reste d'intestable est
+/// l'adaptateur : quatre champs recopiés, que le compilateur vérifie.
+final class DetectionModeTests: XCTestCase {
+
+    private typealias Releve = DetectionMode.Releve
+
+    func testChaqueActiviteDesigneSonMode() {
+        XCTAssertEqual(DetectionMode.mode(Releve(automobile: true)), .car)
+        XCTAssertEqual(DetectionMode.mode(Releve(velo: true)), .bike)
+        XCTAssertEqual(DetectionMode.mode(Releve(marche: true)), .walk)
+        XCTAssertEqual(DetectionMode.mode(Releve(course: true)), .walk)
+    }
+
+    /// À l'arrêt on est toujours dans le mode d'avant. L'oublier ferait
+    /// repartir la voiture en piéton à chaque feu rouge.
+    func testUnArretNeDitRienDuMode() {
+        XCTAssertNil(DetectionMode.mode(Releve()))
+    }
+
+    /// Une confiance basse ne vaut pas mieux qu'aucune activité : changer de
+    /// mode sur un « peut-être » recalculerait l'itinéraire pour rien.
+    func testUnReleveDouteuxEstIgnore() {
+        XCTAssertNil(DetectionMode.mode(Releve(automobile: true, sur: false)))
+        XCTAssertNil(DetectionMode.mode(Releve(marche: true, sur: false)))
+        XCTAssertEqual(DetectionMode.mode(Releve(automobile: true, sur: true)), .car)
+    }
+
+    /// Core Motion lève deux drapeaux à la fois : automobile et immobile à un
+    /// feu, marche et vélo au démarrage d'un coup de pédale. Le véhicule
+    /// l'emporte, puis le vélo — se tromper vers le plus contraignant fait
+    /// faire un détour, pas emprunter une voie interdite.
+    func testUnReleveAmbiguTrancheVersLePlusContraignant() {
+        XCTAssertEqual(
+            DetectionMode.mode(Releve(automobile: true, marche: true)), .car)
+        XCTAssertEqual(DetectionMode.mode(Releve(velo: true, marche: true)), .bike)
+        XCTAssertEqual(DetectionMode.mode(Releve(automobile: true, velo: true)), .car)
+    }
+
+    /// Les transports ne sont jamais reconnus : rien dans l'accéléromètre ne
+    /// distingue un bus d'une berline, et deviner faux sur le seul mode où
+    /// l'on ne conduit pas serait le pire endroit pour se tromper.
+    func testLesTransportsNeSontJamaisDevines() {
+        let releves = [
+            Releve(automobile: true), Releve(velo: true), Releve(marche: true),
+            Releve(course: true), Releve(),
+            Releve(automobile: true, marche: true),
+        ]
+        for r in releves {
+            XCTAssertNotEqual(DetectionMode.mode(r), .transit)
+        }
+    }
+}
