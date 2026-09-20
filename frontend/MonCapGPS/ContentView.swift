@@ -1185,7 +1185,15 @@ struct MapHomeView: View {
             // Notifications d'alertes à proximité (bannière + son), même hors
             // navigation, si l'option est activée.
             if notifyNearbyAlerts {
-                nearbyNotifier.check(from: c, alerts: realtime.alerts) { emoji(for: $0) }
+                // En guidage, l'alerte se dit : le téléphone est sur son
+                // support et les yeux sont sur la route. Le cap et la vitesse
+                // servent à ne prévenir que de ce qui est devant, et assez
+                // tôt pour agir — pas une minute à l'avance en ville.
+                nearbyNotifier.check(
+                    from: c, alerts: realtime.alerts,
+                    cap: location.course, vitesseKmh: location.speedKmh,
+                    annonce: nav.active ? { nav.annonce($0) } : nil
+                ) { emoji(for: $0) }
             }
 
             if nav.active {
@@ -1253,7 +1261,11 @@ struct MapHomeView: View {
             // Nouvelle alerte reçue : notifie si elle est proche (utile même à
             // l'arrêt, quand on ne bouge pas vers l'alerte).
             guard notifyNearbyAlerts, let c = location.coordinate else { return }
-            nearbyNotifier.check(from: c, alerts: alerts) { emoji(for: $0) }
+            nearbyNotifier.check(
+                from: c, alerts: alerts,
+                cap: location.course, vitesseKmh: location.speedKmh,
+                annonce: nav.active ? { nav.annonce($0) } : nil
+            ) { emoji(for: $0) }
         }
         .onChange(of: notifyNearbyAlerts) { _, on in
             // À l'activation : demande l'autorisation de notification.

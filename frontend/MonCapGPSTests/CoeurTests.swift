@@ -476,3 +476,67 @@ final class TripCompatibiliteTests: XCTestCase {
         XCTAssertEqual(t.motifOuVide, "Chantier Mérignac")
     }
 }
+
+/// Les alertes communautaires : ne prévenir que de ce qui est devant.
+///
+/// Un rayon seul prévient de ce qui est **derrière**, et de l'autre côté du
+/// terre-plein. Sur une deux-fois-deux-voies, la moitié des alertes à six
+/// cents mètres ne concernent pas celui qui roule — et une alerte qui ne
+/// concerne pas finit par faire ignorer celles qui concernent.
+final class AlerteDevantTests: XCTestCase {
+
+    private let ici = CLLocationCoordinate2D(latitude: 44.8400, longitude: -0.5800)
+
+    private func alerte(lat: Double, lon: Double) -> Alert {
+        Alert(
+            id: 1, category: "danger", lat: lat, lon: lon, label: "", ts: 0,
+            confirms: nil, denies: nil)
+    }
+
+    /// Cap plein nord, alerte plein nord : droit devant.
+    func testUneAlerteDroitDevantEstRetenue() {
+        let a = alerte(lat: 44.8450, lon: -0.5800)
+        XCTAssertLessThan(
+            NearbyAlertNotifier.ecartDeCap(de: ici, vers: a, cap: 0), 5)
+    }
+
+    /// Cap plein nord, alerte plein sud : on vient de la dépasser.
+    func testUneAlerteDerriereEstEcartee() {
+        let a = alerte(lat: 44.8350, lon: -0.5800)
+        XCTAssertGreaterThan(
+            NearbyAlertNotifier.ecartDeCap(de: ici, vers: a, cap: 0), 170)
+    }
+
+    /// Le repliement autour de zéro : sans lui, une alerte plein nord vue
+    /// depuis un cap de 350° donnerait 350 degrés d'écart au lieu de dix, et
+    /// serait écartée alors qu'elle est presque droit devant.
+    func testLePassageParLeNordNeTrompePas() {
+        let a = alerte(lat: 44.8450, lon: -0.5800)
+        let ecart = NearbyAlertNotifier.ecartDeCap(de: ici, vers: a, cap: 350)
+        XCTAssertLessThan(ecart, 15, "écart mesuré : \(ecart)")
+    }
+
+    /// L'écart est toujours ramené entre 0 et 180 : c'est ce qui permet de le
+    /// comparer à une simple ouverture, sans se soucier du sens.
+    func testLEcartResteEntreZeroEtCentQuatreVingts() {
+        for cap in stride(from: 0.0, to: 360.0, by: 37.0) {
+            for (dlat, dlon) in [(0.005, 0.0), (0.0, 0.005), (-0.004, 0.003)] {
+                let a = alerte(lat: ici.latitude + dlat, lon: ici.longitude + dlon)
+                let e = NearbyAlertNotifier.ecartDeCap(de: ici, vers: a, cap: cap)
+                XCTAssertGreaterThanOrEqual(e, 0)
+                XCTAssertLessThanOrEqual(e, 180)
+            }
+        }
+    }
+
+    /// La phrase dite à la voix : des mètres arrondis à la cinquantaine. La
+    /// précision au mètre serait fausse — le signalement est posé à la
+    /// louche — et illisible à l'oreille.
+    func testLaPhraseArrondritLesMetres() {
+        let a = alerte(lat: 44.84, lon: -0.58)
+        XCTAssertTrue(
+            NearbyAlertNotifier.phrase(alert: a, distance: 312).contains("300"))
+        XCTAssertTrue(
+            NearbyAlertNotifier.phrase(alert: a, distance: 12).contains("50"))
+    }
+}

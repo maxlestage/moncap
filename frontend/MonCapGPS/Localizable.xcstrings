@@ -161,6 +161,22 @@
         }
       }
     },
+    "%@ dans %lld mètres.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ in %lld metres."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a %lld metros."
+          }
+        }
+      }
+    },
     "%@ direction %@ — descendre à %@": {
       "localizations": {
         "en": {

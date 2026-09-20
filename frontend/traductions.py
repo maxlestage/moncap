@@ -306,6 +306,9 @@ T: dict[str, tuple[str, str]] = {
         "Fecha;Trayecto;Distancia (km);Duración (min);Naturaleza;Motivo",
         "Date;Trip;Distance (km);Duration (min);Type;Purpose",
     ),
+    # L'alerte dite à la voix pendant le guidage, plutôt qu'affichée en
+    # bannière : au volant, le téléphone est sur son support.
+    "%@ dans %lld mètres.": ("%@ a %lld metros.", "%@ in %lld metres."),
     "Professionnel": ("Profesional", "Business"),
     "Personnel": ("Personal", "Personal"),
     # La requalification d'un trajet, au glissement.
