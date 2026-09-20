@@ -32,6 +32,10 @@ jobs:
       - name: Applique
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          # Le jeton des paquets hors ligne. Éprouvé contre GitHub avant
+          # d'être posé : un jeton mort ne se voit pas, celui d'avant a
+          # laissé le hors ligne hors service des semaines durant.
+          GITHUB_TOKEN_PAQUETS: ${{ secrets.GITHUB_TOKEN_PAQUETS }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
@@ -40,4 +44,8 @@ jobs:
           MODE: ${{ inputs.mode }}
         run: |
           python -m pip install --quiet requests
+          # `GITHUB_TOKEN` est réservé par Actions (jeton éphémère du run,
+          # sans accès aux Releases d'un dépôt privé) : le secret porte donc
+          # un autre nom, et on le rend au script sous celui qu'il attend.
+          export GITHUB_TOKEN="$GITHUB_TOKEN_PAQUETS"
           python scripts/heroku_config.py
