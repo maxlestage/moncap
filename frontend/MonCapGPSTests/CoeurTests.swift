@@ -652,14 +652,31 @@ final class PlansAppleCadrageTests: XCTestCase {
     }
 
     /// La convention de `MapCam` : au zoom 0 le tour du monde fait 512 points.
-    /// Le code existant en déduit 274 degrés sur un écran de 390 points, et
-    /// les deux calculs doivent retomber sur le même chiffre — sans quoi la
-    /// caméra d'Apple et celle de MapLibre ne montreraient pas la même chose.
+    /// Les deux calculs doivent retomber sur le même chiffre — sans quoi la
+    /// caméra d'Apple et celle de MapLibre ne montreraient pas la même chose
+    /// au même zoom.
+    ///
+    /// L'égalité porte sur la valeur **exacte**, `360 × 390 / 512`, et non sur
+    /// le 274 qu'écrit `MapCam.init(region:)` : la vraie constante vaut
+    /// 274,21875, et le code l'arrondit à bon droit puisqu'un degré de cadrage
+    /// ne se joue pas à la quatrième décimale. Ma première version de ce test
+    /// comparait à l'arrondi avec une tolérance de 1e-9 et échouait de 5,7e-7
+    /// — elle ne mesurait que l'arrondi, pas la conversion.
     func testMemeConventionQueMapCam() {
         let lat = 44.84, largeurPt = 390.0, zoom = 15.0
         let degresParMetre = 360 / (40_075_017 * cos(lat * .pi / 180))
         let degresVus = largeurPt * mpp(zoom, lat) * degresParMetre
-        XCTAssertEqual(degresVus, 274.2 / pow(2, zoom), accuracy: 1e-9)
+        XCTAssertEqual(degresVus, 360 * largeurPt / (512 * pow(2, zoom)), accuracy: 1e-12)
+    }
+
+    /// Et le 274 du code reste bien un arrondi de cette constante, pas une
+    /// autre convention qui aurait divergé : moins d'un millionième de degré
+    /// d'écart au zoom 15.
+    func testLe274DeMapCamEstBienCetteConstante() {
+        let zoom = 15.0
+        let degresParMetre = 360 / (40_075_017 * cos(44.84 * .pi / 180))
+        let degresVus = 390.0 * mpp(zoom, 44.84) * degresParMetre
+        XCTAssertEqual(degresVus, 274.2 / pow(2, zoom), accuracy: 1e-6)
     }
 
     /// Chaque niveau de zoom divise l'échelle par deux. C'est la propriété qui
