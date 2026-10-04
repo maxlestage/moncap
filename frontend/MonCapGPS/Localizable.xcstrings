@@ -929,6 +929,38 @@
         }
       }
     },
+    "Apple Plans": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Maps"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Mapas"
+          }
+        }
+      }
+    },
+    "Apple Plans a des commerces à jour et le trafic, mais ne garde aucune carte : sans réseau, l'app repasse seule sur OpenStreetMap, qui sait se télécharger. Les cartes hors ligne, des feux et de l'air restent toujours sur OpenStreetMap.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Maps has up-to-date businesses and traffic, but keeps no maps: with no network, the app switches back to OpenStreetMap on its own, which can be downloaded. The offline, fire and air maps always stay on OpenStreetMap."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Mapas tiene comercios al día y el tráfico, pero no guarda ningún mapa: sin red, la app vuelve sola a OpenStreetMap, que sí se puede descargar. Los mapas sin conexión, de incendios y del aire siguen siempre en OpenStreetMap."
+          }
+        }
+      }
+    },
     "Arriver avant": {
       "localizations": {
         "en": {
@@ -3217,6 +3249,22 @@
         }
       }
     },
+    "Fond de carte 🗺️": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Map background 🗺️"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fondo de mapa 🗺️"
+          }
+        }
+      }
+    },
     "Fonds de carte": {
       "localizations": {
         "en": {
@@ -4881,6 +4929,22 @@
         }
       }
     },
+    "Navigation hors ligne active : OpenStreetMap est affiché.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline navigation on: OpenStreetMap is shown."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navegación sin conexión activa: se muestra OpenStreetMap."
+          }
+        }
+      }
+    },
     "Naviguer hors ligne": {
       "localizations": {
         "en": {
@@ -5069,6 +5133,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Miramos los surtidores a lo largo del trayecto…"
+          }
+        }
+      }
+    },
+    "OpenStreetMap": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenStreetMap"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenStreetMap"
           }
         }
       }
@@ -5325,6 +5405,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salir a tiempo"
+          }
+        }
+      }
+    },
+    "Pas de réseau : OpenStreetMap est affiché.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No network: OpenStreetMap is shown."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin red: se muestra OpenStreetMap."
           }
         }
       }
@@ -5597,6 +5693,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Correos"
+          }
+        }
+      }
+    },
+    "Pour me déplacer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For getting around"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Para desplazarme"
           }
         }
       }
