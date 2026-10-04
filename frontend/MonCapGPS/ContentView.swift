@@ -635,6 +635,12 @@ struct MapHomeView: View {
     /// L'état réel du réseau : le badge « hors ligne » ne doit pas dépendre
     /// d'un réglage mais d'un fait observé.
     @ObservedObject private var reseau = Reseau.partage
+    /// Le fond de la carte de conduite : Apple Plans ou OpenStreetMap.
+    ///
+    /// Apple Plans par défaut — pour se déplacer, ses noms de commerces sont à
+    /// jour et son trafic existe. Il demande le réseau : le repli vers
+    /// OpenStreetMap est automatique et décidé par `FondDeCarte.effectif`.
+    @AppStorage(FondDeCarte.cle) private var fondDeCarte = FondDeCarte.apple.rawValue
     /// Le pont vers la montre : observé pour proposer l'app au poignet
     /// quand une montre appairée ne l'a pas.
     @ObservedObject private var montre = MontreLien.partage
@@ -1772,44 +1778,75 @@ struct MapHomeView: View {
     /// affiché : mieux vaut une carte tout de suite que rien.
     @State private var mapStyle = URL(string: TileSource.defaultStyle)!
 
+    /// Le fond réellement rendu, qui n'est pas toujours celui demandé : Apple
+    /// Plans ne garde aucune tuile, et sans réseau il ne montrerait rien.
+    private var fondEffectif: FondDeCarte {
+        FondDeCarte.effectif(
+            choix: FondDeCarte(rawValue: fondDeCarte) ?? .apple,
+            horsLigne: horsLigne, reseauCoupe: reseau.coupe)
+    }
+
+    /// Un lieu du fond de carte touché → propose les itinéraires, ou pose
+    /// l'étape qu'on est en train de désigner.
+    ///
+    /// Partagé par les deux fonds : les lieux d'Apple et les couches `poi_*`
+    /// d'OpenMapTiles arrivent ici de la même façon.
+    private func toucheUnLieu(_ coord: CLLocationCoordinate2D) {
+        guard !nav.active else { return }
+        if ajouteEtape { ajouterEtape(coord); return }
+        Task { await presentRouteOptions(to: coord) }
+    }
+
+    private func bougeLaCarte(_ region: MKCoordinateRegion) {
+        visibleRegion = region
+        // Recharge les lieux seulement si la carte a vraiment bougé.
+        if let kind = poiKind, !nav.active, regionChangedEnough(region) {
+            Task { await loadPOIs(kind) }
+        }
+    }
+
+    @ViewBuilder
     private var map: some View {
-        MainMapView(
-            styleURL: mapStyle,
-            cam: camera,
-            pins: mapPins,
-            lines: mapLines,
-            buildings3D: is3D,
-            onPinTap: handlePinTap,
-            onPlaceTap: { coord, _ in
-                // Un lieu du fond de carte touché → propose les itinéraires,
-                // ou pose l'étape qu'on est en train de désigner.
-                guard !nav.active else { return }
-                if ajouteEtape { ajouterEtape(coord); return }
-                Task { await presentRouteOptions(to: coord) }
-            },
-            onMapTap: handleMapTap,
-            // Appui long : la seule façon de désigner une destination sans
-            // réseau. La recherche passe par MKLocalSearch et les positions
-            // enregistrées par l'API — en mode avion, ni l'une ni l'autre ne
-            // rend quoi que ce soit, et le paquet d'itinéraires installé
-            // restait sans emploi faute de but à lui nommer.
-            onMapLongPress: { coord in
-                guard !nav.active else { return }
-                if ajouteEtape { ajouterEtape(coord); return }
-                Task { await presentRouteOptions(to: coord) }
-            },
-            onRegionChange: { region in
-                visibleRegion = region
-                // Recharge les lieux seulement si la carte a vraiment bougé.
-                if let kind = poiKind, !nav.active, regionChangedEnough(region) {
-                    Task { await loadPOIs(kind) }
-                }
-            },
-            onUserGesture: userTouchedMap
-        )
-        .ignoresSafeArea()
-        .task(id: styleURL) {
-            mapStyle = await TileSource.resolvedStyle(custom: styleURL)
+        // Les deux fonds reçoivent exactement les mêmes épingles, tracés et
+        // caméra : tout ce qui se dessine sur la carte ignore lequel des deux
+        // moteurs la rend, et un ajout n'est donc jamais à faire deux fois.
+        switch fondEffectif {
+        case .apple:
+            PlansAppleView(
+                cam: camera,
+                pins: mapPins,
+                lines: mapLines,
+                buildings3D: is3D,
+                onPinTap: handlePinTap,
+                onPlaceTap: { coord, _ in toucheUnLieu(coord) },
+                onMapTap: handleMapTap,
+                // Appui long : la seule façon de désigner une destination sans
+                // réseau. La recherche passe par MKLocalSearch et les
+                // positions enregistrées par l'API — en mode avion, ni l'une
+                // ni l'autre ne rend quoi que ce soit.
+                onMapLongPress: { coord in toucheUnLieu(coord) },
+                onRegionChange: bougeLaCarte,
+                onUserGesture: userTouchedMap
+            )
+            .ignoresSafeArea()
+        case .osm:
+            MainMapView(
+                styleURL: mapStyle,
+                cam: camera,
+                pins: mapPins,
+                lines: mapLines,
+                buildings3D: is3D,
+                onPinTap: handlePinTap,
+                onPlaceTap: { coord, _ in toucheUnLieu(coord) },
+                onMapTap: handleMapTap,
+                onMapLongPress: { coord in toucheUnLieu(coord) },
+                onRegionChange: bougeLaCarte,
+                onUserGesture: userTouchedMap
+            )
+            .ignoresSafeArea()
+            .task(id: styleURL) {
+                mapStyle = await TileSource.resolvedStyle(custom: styleURL)
+            }
         }
     }
 
@@ -3961,6 +3998,28 @@ struct MapHomeView: View {
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                }
+                Section("Fond de carte 🗺️") {
+                    Picker("Pour me déplacer", selection: $fondDeCarte) {
+                        ForEach(FondDeCarte.allCases) { fond in
+                            Text(fond.libelle).tag(fond.rawValue)
+                        }
+                    }
+                    Text(
+                        "Apple Plans a des commerces à jour et le trafic, mais ne garde aucune carte : sans réseau, l'app repasse seule sur OpenStreetMap, qui sait se télécharger. Les cartes hors ligne, des feux et de l'air restent toujours sur OpenStreetMap."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    if fondDeCarte == FondDeCarte.apple.rawValue, fondEffectif == .osm {
+                        Label(
+                            horsLigne
+                                ? "Navigation hors ligne active : OpenStreetMap est affiché."
+                                : "Pas de réseau : OpenStreetMap est affiché.",
+                            systemImage: "info.circle"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    }
                 }
                 Section("Hors ligne 🗺️") {
                     Button {

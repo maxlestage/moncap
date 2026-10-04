@@ -601,3 +601,114 @@ final class DetectionModeTests: XCTestCase {
         }
     }
 }
+
+/// Le fond de la carte de conduite : Apple Plans quand il peut servir,
+/// OpenStreetMap dès qu'il ne peut plus.
+///
+/// Cette règle décide de ce qu'on voit au moment où l'on a le plus besoin de
+/// voir. Apple Plans ne garde aucune tuile : s'il restait affiché sans réseau,
+/// l'écran serait vide — et les zones téléchargées, qui existent précisément
+/// pour ce moment-là, resteraient sans emploi.
+final class FondDeCarteTests: XCTestCase {
+    func testAppleEnLigne() {
+        XCTAssertEqual(
+            FondDeCarte.effectif(choix: .apple, horsLigne: false, reseauCoupe: false), .apple)
+    }
+
+    /// Le réseau coupé est un fait : Apple Plans n'a rien à afficher.
+    func testSansReseauOnReplieSurOSM() {
+        XCTAssertEqual(
+            FondDeCarte.effectif(choix: .apple, horsLigne: false, reseauCoupe: true), .osm)
+    }
+
+    /// Le mode hors ligne est un choix, et il vaut la même chose : on a dit
+    /// qu'on ne comptait pas sur le réseau, inutile d'en dépendre pour le fond.
+    func testHorsLigneChoisiReplieAussi() {
+        XCTAssertEqual(
+            FondDeCarte.effectif(choix: .apple, horsLigne: true, reseauCoupe: false), .osm)
+    }
+
+    /// Qui a choisi OpenStreetMap le garde en toutes circonstances : aucune
+    /// condition ne doit le faire basculer vers Apple à son insu.
+    func testOSMChoisiResteOSM() {
+        for horsLigne in [false, true] {
+            for coupe in [false, true] {
+                XCTAssertEqual(
+                    FondDeCarte.effectif(
+                        choix: .osm, horsLigne: horsLigne, reseauCoupe: coupe), .osm)
+            }
+        }
+    }
+}
+
+/// La conversion zoom → distance de la carte Apple.
+///
+/// MapLibre cadre en niveaux de zoom, MapKit en mètres : tout l'écran de
+/// conduite parle la première langue, cette fonction est le seul endroit qui
+/// traduise. Un facteur deux ici, et la carte s'ouvre sur le mauvais quartier.
+final class PlansAppleCadrageTests: XCTestCase {
+    private func mpp(_ zoom: Double, _ lat: Double) -> Double {
+        CadrageApple.metresParPoint(zoom: zoom, lat: lat)
+    }
+
+    /// La convention de `MapCam` : au zoom 0 le tour du monde fait 512 points.
+    /// Les deux calculs doivent retomber sur le même chiffre — sans quoi la
+    /// caméra d'Apple et celle de MapLibre ne montreraient pas la même chose
+    /// au même zoom.
+    ///
+    /// L'égalité porte sur la valeur **exacte**, `360 × 390 / 512`, et non sur
+    /// le 274 qu'écrit `MapCam.init(region:)` : la vraie constante vaut
+    /// 274,21875, et le code l'arrondit à bon droit puisqu'un degré de cadrage
+    /// ne se joue pas à la quatrième décimale. Ma première version de ce test
+    /// comparait à l'arrondi avec une tolérance de 1e-9 et échouait de 5,7e-7
+    /// — elle ne mesurait que l'arrondi, pas la conversion.
+    func testMemeConventionQueMapCam() {
+        let lat = 44.84, largeurPt = 390.0, zoom = 15.0
+        let degresParMetre = 360 / (40_075_017 * cos(lat * .pi / 180))
+        let degresVus = largeurPt * mpp(zoom, lat) * degresParMetre
+        XCTAssertEqual(degresVus, 360 * largeurPt / (512 * pow(2, zoom)), accuracy: 1e-12)
+    }
+
+    /// Et le 274 du code reste bien un arrondi de cette constante, pas une
+    /// autre convention qui aurait divergé : moins d'un millionième de degré
+    /// d'écart au zoom 15.
+    func testLe274DeMapCamEstBienCetteConstante() {
+        let zoom = 15.0
+        let degresParMetre = 360 / (40_075_017 * cos(44.84 * .pi / 180))
+        let degresVus = 390.0 * mpp(zoom, 44.84) * degresParMetre
+        XCTAssertEqual(degresVus, 274.2 / pow(2, zoom), accuracy: 1e-6)
+    }
+
+    /// Chaque niveau de zoom divise l'échelle par deux. C'est la propriété qui
+    /// rend un zoom comparable d'un moteur à l'autre.
+    func testChaqueNiveauDiviseParDeux() {
+        for z in stride(from: 2.0, through: 18.0, by: 1) {
+            XCTAssertEqual(mpp(z + 1, 48.85), mpp(z, 48.85) / 2, accuracy: 1e-9)
+        }
+    }
+
+    /// Des ordres de grandeur qu'on peut juger de tête : au zoom 15 un écran
+    /// montre quelques rues, au zoom 19 un bâtiment. Un test qui ne vérifie
+    /// que l'algèbre laisserait passer une erreur d'unité.
+    func testOrdresDeGrandeur() {
+        let lat = 44.84, largeurPt = 390.0
+        let villeM = largeurPt * mpp(15, lat)
+        XCTAssertTrue((500...900).contains(villeM), "zoom 15 : \(villeM) m")
+        let rueM = largeurPt * mpp(19, lat)
+        XCTAssertTrue((25...70).contains(rueM), "zoom 19 : \(rueM) m")
+    }
+
+    /// Plus on monte vers les pôles, plus un point couvre peu de terrain :
+    /// Mercator étire les hautes latitudes. Oublier le cosinus donnait un
+    /// cadrage juste à l'équateur et faux partout où l'app sert.
+    func testLaLatitudeResserreLEchelle() {
+        XCTAssertLessThan(mpp(15, 60), mpp(15, 0))
+        XCTAssertEqual(mpp(15, 60), mpp(15, 0) * 0.5, accuracy: 1e-6)
+    }
+
+    /// Un zoom négatif ne veut rien dire, et ne doit pas produire une distance
+    /// absurde : la caméra est bornée, la conversion aussi.
+    func testZoomNegatifBorne() {
+        XCTAssertEqual(mpp(-5, 44.84), mpp(0, 44.84), accuracy: 1e-9)
+    }
+}

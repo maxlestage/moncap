@@ -173,6 +173,23 @@ T: dict[str, tuple[str, str]] = {
         "Buscar un lugar, una ciudad, un país",
         "Search a place, a city, a country",
     ),
+    # --- Fond de la carte de conduite ---
+    'Fond de carte\xa0🗺️': ('Fondo de mapa\xa0🗺️', 'Map background\xa0🗺️'),
+    'Pour me déplacer': ('Para desplazarme', 'For getting around'),
+    'Apple Plans': ('Apple Mapas', 'Apple Maps'),
+    'OpenStreetMap': ('OpenStreetMap', 'OpenStreetMap'),
+    "Apple Plans a des commerces à jour et le trafic, mais ne garde aucune carte : sans réseau, l'app repasse seule sur OpenStreetMap, qui sait se télécharger. Les cartes hors ligne, des feux et de l'air restent toujours sur OpenStreetMap.": (
+        'Apple Mapas tiene comercios al día y el tráfico, pero no guarda ningún mapa: sin red, la app vuelve sola a OpenStreetMap, que sí se puede descargar. Los mapas sin conexión, de incendios y del aire siguen siempre en OpenStreetMap.',
+        'Apple Maps has up-to-date businesses and traffic, but keeps no maps: with no network, the app switches back to OpenStreetMap on its own, which can be downloaded. The offline, fire and air maps always stay on OpenStreetMap.',
+    ),
+    'Navigation hors ligne active : OpenStreetMap est affiché.': (
+        'Navegación sin conexión activa: se muestra OpenStreetMap.',
+        'Offline navigation on: OpenStreetMap is shown.',
+    ),
+    'Pas de réseau : OpenStreetMap est affiché.': (
+        'Sin red: se muestra OpenStreetMap.',
+        'No network: OpenStreetMap is shown.',
+    ),
     "Hors ligne 🗺️": ("Sin conexión 🗺️", "Offline 🗺️"),
     "Préparer une zone hors ligne": (
         "Preparar una zona sin conexión",
@@ -1184,7 +1201,7 @@ def verbatim(fichiers: list[tuple[str, str]]) -> list[str]:
         # Déjà typés LocalizedStringKey à la source (PlusAtout, MonCapPlus,
         # BaremeFiscal.Puissance) : la traduction se fait bien, le contrôleur
         # ne voit que la surface.
-        "a.titre", "a.detail", "p.libelle",
+        "a.titre", "a.detail", "p.libelle", "fond.libelle",
     }
     # Limite assumée : la liste est indexée par expression, non par site.
     # « t.label » désigne ici le nom d'un trajet — donnée d'utilisateur — mais
