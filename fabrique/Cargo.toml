@@ -1,0 +1,13 @@
+# Les outils de construction partagés par la vitrine et le front web :
+# empreintes de contenu, allègement de la feuille de style, chaîne
+# WebAssembly (cargo, wasm-bindgen, wasm-opt).
+#
+# Natif seulement, sans dépendance. Les deux binaires `construit` s'en
+# servent ; le WebAssembly livré n'en contient pas un octet.
+[package]
+name = "fabrique"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]

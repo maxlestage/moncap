@@ -2,18 +2,30 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>MonCap GPS</title>
-    <!-- Leaflet (carte OpenStreetMap, sans clé d'API) -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-  <link rel="stylesheet" crossorigin href="./index-n0y874p8.css"><script type="module" crossorigin src="./index-xwjebj9a.js"></script></head>
+    <meta name="description" content="Votre carte MonCap GPS : positions, itinéraires, signalements et conducteurs en direct." />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0e2a5e" />
+    <link rel="icon" type="image/png" href="/web/favicon-7m0a8mfv.png" />
+    <link rel="stylesheet" href="/web/styles-mgegdkv3.css" />
+    <link rel="modulepreload" href="/web/app-bl9tjhk7.js" />
+    <link rel="preload" href="/web/app-a1lwrgfz.wasm" as="fetch" type="application/wasm" crossorigin="anonymous" />
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+    <noscript><style>.rideau{display:none}</style></noscript>
+  </head>
   <body>
-    <div id="root"></div>
-    
+    <div id="rideau" class="rideau" aria-hidden="true">
+      <img src="/web/logo-nf8jccdk.webp" width="88" height="88" alt="" />
+      <span class="rideau-barre"><span></span></span>
+    </div>
+    <div id="racine" data-ressources="{&quot;avatars&quot;:{&quot;abarthRed&quot;:&quot;/web/abarthRed-f9zuzxig.webp&quot;,&quot;abarthWhite&quot;:&quot;/web/abarthWhite-xvz4ph4b.webp&quot;,&quot;alpine&quot;:&quot;/web/alpine-2t9oordm.webp&quot;,&quot;blue&quot;:&quot;/web/blue-2gmvjjnn.webp&quot;,&quot;ferrari&quot;:&quot;/web/ferrari-b1p8xvix.webp&quot;,&quot;green&quot;:&quot;/web/green-bq4l1nr3.webp&quot;,&quot;merc1&quot;:&quot;/web/merc1-ga39y5pd.webp&quot;,&quot;merc2&quot;:&quot;/web/merc2-lpn0ntwp.webp&quot;,&quot;mint&quot;:&quot;/web/mint-mgjdh9lp.webp&quot;,&quot;orange&quot;:&quot;/web/orange-bpcm1yyw.webp&quot;,&quot;red1&quot;:&quot;/web/red1-vf9ykywb.webp&quot;,&quot;yarisBlue&quot;:&quot;/web/yarisBlue-1puf0bud.webp&quot;,&quot;yarisGrey&quot;:&quot;/web/yarisGrey-7ztn4tf8.webp&quot;,&quot;yarisWhite&quot;:&quot;/web/yarisWhite-boi5vei4.webp&quot;},&quot;logo&quot;:&quot;/web/logo-nf8jccdk.webp&quot;}"></div>
+    <noscript>
+      <p class="sans-script">MonCap GPS a besoin de JavaScript et de WebAssembly pour afficher la carte. <a href="/">Retour au site</a></p>
+    </noscript>
+    <script type="module">
+      import init from "/web/app-bl9tjhk7.js";
+      init({ module_or_path: "/web/app-a1lwrgfz.wasm" });
+    </script>
   </body>
 </html>
