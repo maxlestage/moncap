@@ -3,12 +3,27 @@
 Page de présentation de MonCap GPS, en **français, espagnol et anglais**,
 pensée pour le téléphone d'abord.
 
+Écrite en **Rust**, avec [Yew](https://yew.rs) : les composants compilent
+en WebAssembly pour le navigateur, et le même code compile en natif pour
+fabriquer les coquilles HTML. Le texte des trois langues n'existe donc
+qu'une fois.
+
 ```sh
-bun install
-bun run dev       # aperçu avec rechargement à chaud
-bun run verifie   # tsc --noEmit puis bun test
-bun run build     # écrit dist/
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli   # la version doit suivre celle de la crate
+npm install -g binaryen          # fournit wasm-opt (facultatif)
+
+cargo test                       # 39 tests
+cargo fmt --check && cargo clippy --all-targets -- -D warnings
+cargo run --release --bin construit   # écrit dist/
 ```
+
+`construit` enchaîne tout : il compile le WebAssembly, le passe à
+`wasm-bindgen` puis `wasm-opt`, empreinte les fichiers, écrit les neuf pages,
+le plan du site et les consignes aux robots.
+
+`wasm-opt` est un confort : absent, la construction le dit et livre un
+WebAssembly plus gros, ce qui ne l'empêche pas de fonctionner.
 
 ## Où elle est servie
 
@@ -23,8 +38,8 @@ Le front web — écran de connexion compris — vit derrière `/app` ; le bouto
 « Se connecter » y mène.
 
 `dist/` est **versionné**, contrairement à l'usage. Le buildpack Heroku ne
-compile que la crate Rust : aucun Bun ne tourne sur le dyno, donc le résultat
-de la construction doit être dans le dépôt.
+compile que la crate du serveur : rien ne fabrique le WebAssembly sur le
+dyno, donc le résultat de la construction doit être dans le dépôt.
 
 Il n'y a rien à lancer à la main pour autant : `.github/workflows/vitrine.yml`
 reconstruit et verse `dist/` à chaque changement de `src/`, poussé sur
@@ -61,20 +76,49 @@ sans revalidation. Seule la page garde une adresse fixe — c'est le seul
 document qui ne peut pas en changer — et se revalide à chaque visite, sans
 quoi le navigateur ne verrait jamais la nouvelle empreinte.
 
-## React sans envoyer React
+## Rendue par le navigateur, et ce que ça coûte
 
-La page n'a aucun état : rien n'y bouge après l'affichage. Elle est donc
-rendue **à la construction** (`renderToStaticMarkup` dans `build.tsx`), et
-`dist/` ne contient que du HTML et une feuille de style.
+La page est une application WebAssembly : le corps part vide et Yew le
+peint. C'est un choix assumé, pas un défaut — mais il a un prix, et le voici
+mesuré plutôt que deviné.
 
-| | poids livré |
+| | poids livré (gzip) |
 | --- | --- |
-| Paquet React classique | 397 Ko de JavaScript |
-| Rendu à la construction | **13,9 Ko de HTML + 9,1 Ko de CSS + 14,3 Ko de logo**, zéro JavaScript |
+| Version précédente, rendue à la construction | **15,8 Ko**, zéro JavaScript |
+| Version Yew/WebAssembly | **128 Ko** — 114 de WebAssembly, 6,7 de colle, 2,2 de HTML, 5 de CSS |
 
-React et TypeScript restent la façon d'écrire la page — typage du contenu,
-composition, relecture. Ils ne sont simplement pas du voyage. `src/index.tsx`
-n'existe que pour le mode développement.
+Soit huit fois plus, et le texte n'apparaît qu'après téléchargement **et**
+compilation du WebAssembly. Deux conséquences qu'il faut connaître :
+
+- **Les aperçus de liens restent parfaits.** Messageries et réseaux ne
+  lisent que la tête du document, qui est complète et statique — titres,
+  Open Graph, Twitter, données structurées, alternates.
+- **L'indexation dépend du moteur.** Google exécute le JavaScript et le
+  WebAssembly, mais plus tard et moins sûrement qu'il ne lit du HTML. Les
+  robots qui n'exécutent rien ne voient que le repli.
+
+D'où le repli `<noscript>` que chaque page embarque (`seo::repli`) : le
+chapeau, les titres de section, les prix, les trois langues et les pages
+légales. Il ne refait pas la page — il en donne la substance, et reste vrai
+sans entretien.
+
+## Ce que Rust achète ici
+
+Ce n'est pas la vitesse : la page ne calcule rien.
+
+- **Une seule source pour le texte.** `src/contenu.rs` compile dans les deux
+  cibles — le WebAssembly du navigateur et le binaire qui fabrique les
+  coquilles. Avant, le contenu était en TypeScript et le serveur en Rust ;
+  le référencement recopiait des chaînes d'un monde à l'autre.
+- **Le dernier script est passé sous contrôle.** La flèche de défilement
+  était cinquante lignes de JavaScript dans une chaîne de caractères,
+  qu'aucun outil ne relisait. C'est désormais `src/fleche.rs`, que le
+  compilateur vérifie et que six tests couvrent — la règle du sens est une
+  fonction pure, testable sans navigateur.
+- **Des types qui disent ce qu'ils veulent dire.** `Teinte` est une
+  énumération, `avancement` une `Option`, les tuples de `trajet` sont
+  devenus des champs nommés. Une quatrième couleur est maintenant une erreur
+  de compilation, plus une classe CSS absente découverte à l'écran.
 
 ## Ce qui a été vérifié
 
@@ -100,7 +144,7 @@ reproduit le routage (`/` et `/vitrine/…`), et vérifient qu'un fond est bien
 appliqué aux maquettes — une page sans style se photographie aussi bien
 qu'une autre.
 
-`bun test` couvre le contenu lui-même : pas de version dans la pile, pas de
+`cargo test` couvre le contenu lui-même : pas de version dans la pile, pas de
 doublon dans les listes qui servent de clés de rendu, pas de section vide.
 
 Il défend aussi la **matière** de la page. En ajoutant les fonctions en ligne,
@@ -114,21 +158,21 @@ supprimer ne l'est pas.
 
 ## Les trois langues
 
-`src/langues.ts` porte les trois versions, dans un seul fichier plutôt que
+`src/contenu.rs` porte les trois versions, dans un seul fichier plutôt que
 trois jumeaux qui divergeraient en silence. Le type `Contenu` est la
 garantie : oublier une phrase dans une langue ne produit pas une page à
 trou, mais **une erreur de compilation**. Un test complète ce que le type
 ne peut pas voir — une chaîne vide compile très bien.
 
 Les libellés visibles **dans les maquettes** ne sont pas retapés : ils
-viennent de `src/appstrings.ts`, engendré par `frontend/traductions.py` à
+viennent de `src/appstrings.rs`, engendré par `frontend/traductions.py` à
 partir du tableau qui alimente aussi le catalogue iOS. Un écran dessiné ici
 dit donc exactement ce que l'application affiche, dans la même langue, et ne
 peut pas s'en écarter sans que la génération le montre. Un job d'intégration
 continue refuse d'ailleurs un module engendré qui aurait divergé du tableau.
 
 Les lignes chiffrées sont composées en versant des valeurs d'exemple dans les
-**formats de l'application** (`src/traduire.ts`), plutôt qu'en recopiant des
+**formats de l'application** (`src/traduire.rs`), plutôt qu'en recopiant des
 phrases. La maquette suit ainsi la langue et la façon dont l'app écrit ses
 nombres : `String(format:)` sans locale met un point décimal, l'app affiche
 donc « 24.3 km » y compris en français — ce que la maquette écrivait à tort
@@ -176,7 +220,7 @@ une page qu'il ne saurait déjà pas afficher.
 
 ## Contenu
 
-Tout le texte chiffré est dans `src/content.ts`, séparé de la mise en forme.
+Tout le texte chiffré est dans `src/contenu.rs`, séparé de la mise en forme.
 Les nombres qui y figurent sont **mesurés** : les tailles viennent des
 Releases publiées, les 222,5 km de Bordeaux → Limoges d'un calcul réel sans
 réseau (voir `.github/workflows/valhalla-epreuve.yml`). Une vitrine qui
@@ -190,11 +234,11 @@ La pile technique (`OUTILS`) est listée **sans numéro de version**. Une
 version affichée sur une page vieillit toute seule : elle est fausse dès la
 mise à jour suivante et personne ne revient la corriger. Le nom, lui, reste
 vrai ; qui veut la version la lit dans `Cargo.toml` ou `package.json`, où
-elle est tenue à jour par construction. `src/content.test.ts` fait échouer la
+elle est tenue à jour par construction. les tests de `src/contenu.rs` font échouer la
 construction si un chiffre réapparaît dans la liste — c'est une règle qu'on
-réintroduit sans y penser, « React 19 » se tape tout seul.
+réintroduit sans y penser, « Yew 0.23 » se tape tout seul.
 
-`src/styles.test.ts` relit la feuille de style à la recherche de couleurs
+Le contrôle de la feuille de style la relit à la recherche de couleurs
 mal tapées. J'ai écrit `#2b3burlywood`, `#142banchor` et `#1b3straw` dans la
 même journée : un nom de couleur CSS venu se coller à un code hexadécimal.
 Rien n'échoue — le navigateur ignore la déclaration et sert la page avec un
@@ -241,7 +285,7 @@ prend enfin la teinte.
 
 Remettre `--papier` sur `body` est le geste le plus naturel du monde, et
 aucune capture ne le rattraperait : la barre du navigateur ne se photographie
-pas. Un test de `src/styles.test.ts` s'en charge.
+pas. Un test s'en charge.
 
 ## Style
 

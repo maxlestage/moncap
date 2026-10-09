@@ -415,7 +415,7 @@ qu'un trou.
 | Fichier | Rôle |
 | --- | --- |
 | `frontend/MonCapGPS/Localizable.xcstrings` | le catalogue lu par SwiftUI |
-| `vitrine/src/appstrings.ts` | les mêmes libellés pour les maquettes du site |
+| `vitrine/src/appstrings.rs` | les mêmes libellés pour les maquettes du site |
 
 Relancer `python3 frontend/traductions.py` après toute modification. Le
 groupe de fichiers du projet Xcode est synchronisé : le catalogue déposé dans
