@@ -2,24 +2,28 @@ name: Vitrine
 
 # Construit la vitrine et verse le résultat dans le dépôt.
 #
-# Le buildpack Heroku ne compile que la crate Rust : aucun Bun ne tourne sur
-# le dyno, donc `vitrine/dist` doit être versionné pour que le serveur ait
-# quelque chose à servir. Or ce dépôt se tient depuis un navigateur, sans
-# machine de développement — personne ne peut lancer `bun run build` à la
-# main. C'est donc ce workflow qui le fait, à chaque changement des sources
-# de la vitrine.
+# Le buildpack Heroku ne compile que la crate du serveur : rien ne fabrique
+# le WebAssembly sur le dyno, donc `vitrine/dist` doit être versionné pour
+# que le serveur ait quelque chose à servir. Or ce dépôt se tient depuis un
+# navigateur, sans machine de développement — personne ne peut lancer la
+# construction à la main. C'est donc ce workflow qui le fait, à chaque
+# changement des sources.
 #
-# Pas de boucle : le déclencheur ne regarde que `vitrine/src` et les fichiers
-# de construction, alors que le commit produit ne touche que `vitrine/dist`.
+# Depuis que la vitrine est en Yew, la chaîne est entièrement Rust : cargo
+# pour le WebAssembly, `wasm-bindgen` pour la colle, `wasm-opt` pour la
+# taille, et le binaire `construit` pour les coquilles HTML, le plan du site
+# et les consignes aux robots. Plus de Bun, plus de Node.
+#
+# Pas de boucle : le déclencheur ne regarde que les sources, alors que le
+# commit produit ne touche que `vitrine/dist`.
 
 on:
   push:
     branches: [master]
     paths:
       - "vitrine/src/**"
-      - "vitrine/index.html"
-      - "vitrine/build.tsx"
-      - "vitrine/package.json"
+      - "vitrine/assets/**"
+      - "vitrine/Cargo.toml"
       - ".github/workflows/vitrine.yml"
   workflow_dispatch:
 
@@ -47,21 +51,50 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - name: Chaîne Rust, cible WebAssembly
+        run: rustup target add wasm32-unknown-unknown
+
+      # Les trois dossiers qui comptent, dont le binaire de `wasm-bindgen` :
+      # le recompiler à chaque passage coûterait plusieurs minutes pour rien.
+      - uses: actions/cache@v4
         with:
-          bun-version: latest
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            vitrine/target
+          key: vitrine-${{ runner.os }}-${{ hashFiles('vitrine/Cargo.toml') }}
+          restore-keys: vitrine-${{ runner.os }}-
 
-      - name: Installer
-        run: bun install --frozen-lockfile
+      # La version doit correspondre **exactement** à celle que la crate
+      # utilise : le format d'échange entre les deux n'est pas stable, et un
+      # décalage fait échouer la liaison avec un message peu parlant.
+      - name: wasm-bindgen
+        run: |
+          attendue=$(cargo tree -i wasm-bindgen --depth 0 2>/dev/null \
+            | head -1 | sed 's/.* v//' | cut -d' ' -f1)
+          echo "wasm-bindgen attendu : $attendue"
+          installee=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}' || true)
+          if [ "$installee" != "$attendue" ]; then
+            cargo install wasm-bindgen-cli --version "$attendue" --force
+          fi
 
-      # Typage puis tests du contenu, avant de construire : une page qui ne
-      # compile pas n'a rien à faire en production, et l'échec ici est bien
-      # plus lisible qu'un rendu vide.
+      # `wasm-opt` vient de binaryen. La construction s'en passe s'il manque
+      # (elle le dit et livre un WebAssembly plus gros), mais autant l'avoir.
+      - name: wasm-opt
+        run: npm install -g binaryen
+
+      # Les tests avant la construction : une page qui ne compile pas n'a
+      # rien à faire en production, et l'échec ici est bien plus lisible
+      # qu'un rendu vide.
       - name: Vérifier
-        run: bun run verifie
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
 
       - name: Construire
-        run: bun run build
+        run: cargo run --release --bin construit
 
       # `dist/` est le rendu de `src/` : s'il n'a pas bougé, il n'y a rien à
       # committer et surtout rien à redéployer.
@@ -77,7 +110,7 @@ jobs:
           git commit -m "Reconstruit la vitrine
 
           Rendu de vitrine/src par le CI : le dyno Heroku ne compile que la
-          crate Rust, dist/ doit donc être versionné.
+          crate du serveur, dist/ doit donc être versionné.
 
           Source : ${GITHUB_SHA}"
           # Rejouer sur la pointe du moment : une autre poussée a pu arriver

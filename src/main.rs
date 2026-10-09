@@ -2860,7 +2860,7 @@ fn build_app(state: AppState) -> Router {
         .route_service("/es", ServeFile::new("vitrine/dist/es/index.html"))
         .route_service("/en", ServeFile::new("vitrine/dist/en/index.html"))
         // Les pages légales, liées depuis le pied — une par langue, aux
-        // adresses que `vitrine/src/langues.ts` déclare (le test des liens
+        // adresses que `vitrine/src/contenu.rs` déclare (le test des liens
         // de la vitrine vérifie que le pied ne pointe que vers des adresses
         // servies : les deux listes doivent bouger ensemble).
         .route_service(
@@ -2888,7 +2888,7 @@ fn build_app(state: AppState) -> Router {
             ServeFile::new("vitrine/dist/en/privacy/index.html"),
         )
         // Le référencement : les robots et le plan du site, engendrés par la
-        // construction de la vitrine (voir vitrine/src/seo.ts).
+        // construction de la vitrine (voir vitrine/src/seo.rs).
         .route_service("/robots.txt", ServeFile::new("vitrine/dist/robots.txt"))
         .route_service("/sitemap.xml", ServeFile::new("vitrine/dist/sitemap.xml"))
         .layer(middleware::from_fn(revalider));
@@ -4720,7 +4720,7 @@ mod tests {
     /// Les routes de la vitrine servent des fichiers versionnés de
     /// `vitrine/dist` : le dyno ne construit que la crate Rust, aucun Bun ne
     /// tourne au déploiement. Une route ajoutée sans reconstruire la vitrine
-    /// (`bun run build`, puis versionner `dist`) servirait un 404 — ce test
+    /// (`cargo run --bin construit`, puis versionner `dist`) servirait un 404 — ce test
     /// l'attrape avant le déploiement.
     /// Le jeton du lien : 32 hexadécimaux minuscules, rien d'autre — ce qui
     /// est réfléchi dans le HTML de la page doit être inoffensif par forme.

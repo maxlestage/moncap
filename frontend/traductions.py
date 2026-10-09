@@ -1126,30 +1126,105 @@ VITRINE = [
 
 
 def exporte_vitrine(chemin: pathlib.Path) -> None:
-    """Écrit le module TypeScript que la vitrine importe pour ses maquettes."""
+    """Écrit le module Rust que la vitrine compile pour ses maquettes.
+
+    Rust depuis que la vitrine est en Yew. Le tableau `T` reste l'unique
+    source : l'application, le site et ce fichier disent le même mot, et le
+    jour où une traduction change, elle change ici.
+
+    Une table de paires plutôt qu'une carte de hachage : cinquante-six
+    entrées se parcourent plus vite qu'elles ne se hachent, et une table
+    constante ne coûte rien au démarrage — ce qui compte quand le tout part
+    en WebAssembly.
+    """
+
+    def litteral(s: str) -> str:
+        """Un littéral Rust, en chaîne crue quand c'est lisible."""
+        if '"' not in s and "\\" not in s and "#" not in s:
+            return f'"{s}"'
+        return json.dumps(s, ensure_ascii=False)
+
     lignes = [
-        "// Généré par frontend/traductions.py — ne pas modifier à la main.",
-        "//",
-        "// Les libellés que les maquettes reproduisent, dans les trois langues,",
-        "// tirés du même tableau que le catalogue de l'application. Un écran",
-        "// dessiné sur le site dit ainsi exactement ce que l'app affiche.",
+        "//! Généré par `frontend/traductions.py` — ne pas modifier à la main.",
+        "//!",
+        "//! Les libellés que les maquettes reproduisent, dans les trois langues,",
+        "//! tirés du même tableau que le catalogue de l'application. Un écran",
+        "//! dessiné sur le site dit ainsi exactement ce que l'app affiche.",
         "",
-        'export type LangueApp = "fr" | "es" | "en";',
+        "use crate::contenu::Langue;",
         "",
-        "export const APP: Record<LangueApp, Record<string, string>> = {",
+        "/// Les libellés d'une langue, en paires (clé, traduction).",
+        "type Table = &'static [(&'static str, &'static str)];",
+        "",
     ]
-    for langue in ("fr", "es", "en"):
-        lignes.append(f"  {langue}: {{")
+    for langue, nom in (("fr", "FR"), ("es", "ES"), ("en", "EN")):
+        lignes.append(f"const {nom}: Table = &[")
         for cle in VITRINE:
             # Absent du tableau : le mot ne change pas d'une langue à
             # l'autre (« Surf », « Skatepark »). Retomber sur la clé, c'est
             # exactement ce que fait l'application.
             es, en = T.get(cle, (cle, cle))
             valeur = {"fr": cle, "es": es, "en": en}[langue]
-            lignes.append(f'    {json.dumps(cle, ensure_ascii=False)}: '
-                          f'{json.dumps(valeur, ensure_ascii=False)},')
-        lignes.append("  },")
-    lignes += ["};", ""]
+            lignes.append(f"    ({litteral(cle)}, {litteral(valeur)}),")
+        lignes.append("];")
+        lignes.append("")
+
+    lignes += [
+        "/// Le libellé de l'application dans la langue de la page.",
+        "///",
+        "/// Une clé absente retombe sur elle-même — c'est aussi ce que fait",
+        "/// SwiftUI, et cela évite qu'un oubli de traduction laisse un vide.",
+        "pub fn app(langue: Langue, cle: &str) -> &str {",
+        "    let table = match langue {",
+        "        Langue::Fr => FR,",
+        "        Langue::Es => ES,",
+        "        Langue::En => EN,",
+        "    };",
+        "    table",
+        "        .iter()",
+        "        .find(|(k, _)| *k == cle)",
+        "        .map(|(_, v)| *v)",
+        "        .unwrap_or(cle)",
+        "}",
+        "",
+        "/// Le nombre de libellés par langue — ce que les tests vérifient.",
+        f"pub const NOMBRE: usize = {len(VITRINE)};",
+        "",
+        "#[cfg(test)]",
+        "mod tests {",
+        "    use super::*;",
+        "",
+        "    #[test]",
+        "    fn les_trois_langues_ont_le_meme_nombre_de_libelles() {",
+        "        assert_eq!(FR.len(), NOMBRE);",
+        "        assert_eq!(ES.len(), NOMBRE);",
+        "        assert_eq!(EN.len(), NOMBRE);",
+        "    }",
+        "",
+        "    #[test]",
+        "    fn les_trois_langues_ont_les_memes_cles_dans_le_meme_ordre() {",
+        "        // Les tables sont parcourues par clé : un décalage passerait",
+        "        // inaperçu jusqu'à ce qu'un mot espagnol s'affiche en anglais.",
+        "        for i in 0..NOMBRE {",
+        "            assert_eq!(FR[i].0, ES[i].0);",
+        "            assert_eq!(FR[i].0, EN[i].0);",
+        "        }",
+        "    }",
+        "",
+        "    #[test]",
+        "    fn une_cle_inconnue_retombe_sur_elle_meme() {",
+        '        assert_eq!(app(Langue::Es, "Rue de la Paix"), "Rue de la Paix");',
+        "    }",
+        "",
+        "    #[test]",
+        "    fn les_libelles_connus_sont_bien_traduits() {",
+        '        assert_eq!(app(Langue::Fr, "Voiture"), "Voiture");',
+        '        assert_ne!(app(Langue::Es, "Voiture"), "Voiture");',
+        '        assert_ne!(app(Langue::En, "Voiture"), "Voiture");',
+        "    }",
+        "}",
+        "",
+    ]
     chemin.write_text("\n".join(lignes), encoding="utf-8")
     print(f"{chemin.name} : {len(VITRINE)} libellés × 3 langues")
 
@@ -1300,7 +1375,9 @@ def main() -> None:
     )
     print(f"{chemin.name} : {len(T)} clés, 2 langues")
 
-    exporte_vitrine(pathlib.Path(__file__).parent.parent / "vitrine" / "src" / "appstrings.ts")
+    exporte_vitrine(
+        pathlib.Path(__file__).parent.parent / "vitrine" / "src" / "appstrings.rs"
+    )
 
 
 if __name__ == "__main__":
