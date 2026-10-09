@@ -116,6 +116,26 @@ magnétiques, compteurs, route qui se dessine, bandeau défilant. Elles sont
 jouées par la crate `../mouvement`, partagée avec la vitrine, et décrites
 dans le README principal.
 
+La seconde vague ajoute :
+
+- **la porte** : « MonCap GPS » monte lettre à lettre ; des épingles de
+  signalement flottent autour et suivent la souris selon leur profondeur
+  (à partir de 48 rem — sur téléphone elles passeraient sur le formulaire) ;
+  la carte de connexion s'incline à peine vers la souris ;
+- **la carte arrive en vol** : elle part de plus haut et descend sur la
+  France une fois dévoilée — pas avant, le vol se jouerait sous le volet.
+  Un cadrage en attente (des positions à montrer) passe devant, et un
+  geste de l'utilisateur l'interrompt ;
+- **des ondes** partent du point touché sur les boutons, au doigt comme à
+  la souris ; **les libellés roulent** au survol ;
+- **les chiffres et les panneaux s'inclinent** vers la souris, une lueur
+  dedans suit le pointeur — la transformation n'existe que pendant le
+  survol, le texte reste net au repos ;
+- **l'avatar choisi saute** à sa place avec une gerbe, et l'image de
+  l'en-tête renaît à chaque changement ;
+- **le badge « en direct » bat**, une **barre de lecture** suit la page, le
+  curseur qui suit et le volet de sortie viennent du moteur.
+
 ## Les adresses et le cache
 
 | Adresse | Contenu | `Cache-Control` |
@@ -138,6 +158,7 @@ Mesuré sur la construction, et non supposé :
 | --- | --- |
 | Ancien front : React (125 Ko) + feuille (2,5 Ko) + Leaflet depuis unpkg (~46 Ko) | **~174 Ko** |
 | Front Yew : WebAssembly (227 Ko) + colle (9,8 Ko) + feuille (7 Ko) + coquille (1 Ko) | **~245 Ko** |
+| Seconde vague d'animation : WebAssembly (238 Ko) + colle (10,4 Ko) + feuille (7,8 Ko) + coquille (0,9 Ko) | **~257 Ko** |
 
 Soit environ 40 % de plus. Le poids est réparti, sans dépendance qui domine
 (relevé avec `twiggy` sur une construction non dépouillée) : le plus gros

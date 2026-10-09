@@ -40,6 +40,58 @@ pub fn Mots(p: &MotsProps) -> Html {
         .collect()
 }
 
+#[derive(Properties, PartialEq)]
+pub struct LettresProps {
+    pub texte: AttrValue,
+}
+
+/// Un texte découpé en lettres, chacune derrière le masque de son mot —
+/// plus démonstratif que les mots, réservé aux grands titres. Le parent
+/// porte `data-mvt="lettres"`, et son nom accessible (`aria-label`) : épelé
+/// lettre à lettre, le titre se lirait mal au lecteur d'écran.
+#[function_component]
+pub fn Lettres(p: &LettresProps) -> Html {
+    let mots: Vec<&str> = calcul::mots(&p.texte).collect();
+    let n = mots.len();
+    let mut rang = 0usize;
+    let mut rendu = Vec::with_capacity(n);
+    for (i, m) in mots.into_iter().enumerate() {
+        let lettres: Html = m
+            .chars()
+            .map(|ch| {
+                let j = rang;
+                rang += 1;
+                html! { <span class="lettre" style={format!("--j:{j}")}>{ ch.to_string() }</span> }
+            })
+            .collect();
+        rendu.push(html! {
+            <>
+                <span class="mot" aria-hidden="true">{ lettres }</span>
+                if i + 1 < n { { " " } }
+            </>
+        });
+    }
+    rendu.into_iter().collect()
+}
+
+#[derive(Properties, PartialEq)]
+pub struct RouleProps {
+    pub texte: AttrValue,
+}
+
+/// Un libellé qui roule au survol de son lien ou de son bouton : le texte
+/// monte et son double le remplace. Le double est caché aux lecteurs
+/// d'écran, qui liraient sinon chaque libellé deux fois.
+#[function_component]
+pub fn Roule(p: &RouleProps) -> Html {
+    html! {
+        <span class="roule">
+            <span>{ p.texte.clone() }</span>
+            <span class="roule-double" aria-hidden="true">{ p.texte.clone() }</span>
+        </span>
+    }
+}
+
 type Boucle = Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
 
 /// Une animation en cours, arrêtée quand on la lâche.

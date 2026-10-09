@@ -1,0 +1,164 @@
+/*
+ * Les éléments que le moteur crée lui-même : le curseur, le volet de
+ * sortie, les ondes des clics. Injectée au démarrage, retirée à l'arrêt —
+ * en mouvement réduit, le moteur ne démarre pas et rien de ceci n'existe.
+ *
+ * Les couleurs sont celles de la page (`--cyan`, `--orange`, `--marine`,
+ * `--bleu`), avec les valeurs de la maison en repli.
+ */
+
+/* --- Le curseur ------------------------------------------------------------ */
+.curseur {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 2000;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.curseur.cache {
+  opacity: 0;
+}
+
+.curseur-point,
+.curseur-anneau {
+  position: fixed;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.curseur-point {
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  background: var(--orange, #f8a838);
+  transition: opacity 0.25s ease;
+}
+
+.curseur-anneau {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border: 1.5px solid color-mix(in srgb, var(--cyan, #3898c8) 85%, transparent);
+  transition:
+    width 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    height 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    margin 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    scale 0.2s ease;
+}
+
+.curseur.survol .curseur-anneau {
+  width: 66px;
+  height: 66px;
+  margin: -33px 0 0 -33px;
+  background: color-mix(in srgb, var(--cyan, #3898c8) 16%, transparent);
+}
+
+.curseur.survol .curseur-point {
+  opacity: 0;
+}
+
+.curseur.etiquette .curseur-anneau {
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  background: var(--orange, #f8a838);
+  border-color: transparent;
+}
+
+.curseur-texte {
+  font: 700 0.72rem/1.1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--marine, #0e2a5e);
+  opacity: 0;
+  scale: 0.6;
+  transition:
+    opacity 0.25s ease,
+    scale 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.curseur.etiquette .curseur-texte {
+  opacity: 1;
+  scale: 1;
+}
+
+.curseur.appui .curseur-anneau {
+  scale: 0.82;
+}
+
+/* --- Le volet de sortie ------------------------------------------------------ */
+.volet-sortie {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, var(--marine, #0e2a5e), var(--bleu, #1a57e6));
+  transform: translateY(100%);
+  transition: transform 0.56s cubic-bezier(0.76, 0, 0.24, 1);
+  pointer-events: none;
+}
+
+.volet-sortie.part {
+  transform: none;
+  pointer-events: auto;
+}
+
+.volet-sortie-anneau {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid rgb(255 255 255 / 0.22);
+  border-top-color: var(--orange, #f8a838);
+  opacity: 0;
+  animation: mouvement-tourne 0.8s linear infinite;
+  transition: opacity 0.3s ease 0.3s;
+}
+
+.volet-sortie.part .volet-sortie-anneau {
+  opacity: 1;
+}
+
+@keyframes mouvement-tourne {
+  to {
+    rotate: 1turn;
+  }
+}
+
+/* --- Les ondes ------------------------------------------------------------- */
+/* `:where()` : sans poids, pour que la page puisse placer l'élément comme
+   elle l'entend. L'isolement range l'onde sous le texte, au-dessus du fond. */
+:where([data-onde]) {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.onde-clic {
+  position: absolute;
+  z-index: -1;
+  width: var(--taille, 200px);
+  height: var(--taille, 200px);
+  margin: calc(var(--taille, 200px) / -2) 0 0 calc(var(--taille, 200px) / -2);
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+  scale: 0;
+  pointer-events: none;
+  animation: mouvement-onde 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mouvement-onde {
+  to {
+    scale: 1;
+    opacity: 0;
+  }
+}

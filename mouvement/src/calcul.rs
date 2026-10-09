@@ -212,6 +212,68 @@ pub fn valeur_comptee(c: &Chiffre, t: f64) -> String {
     compose(c, c.valeur * expo_sortie(t))
 }
 
+/// Le pointeur ramené entre −1 et 1 sur chaque axe, 0 au centre de la
+/// fenêtre. C'est ce que lisent les décors en parallaxe : un calque qui
+/// suit la souris de `--sx × 20 px` reste le même sur tous les écrans.
+pub fn pointeur_normalise(x: f64, y: f64, largeur: f64, hauteur: f64) -> (f64, f64) {
+    let n = |v: f64, t: f64| {
+        if t <= 0.0 {
+            0.0
+        } else {
+            borne(v / t * 2.0 - 1.0, -1.0, 1.0)
+        }
+    };
+    (n(x, largeur), n(y, hauteur))
+}
+
+/// L'inclinaison d'une carte sous le pointeur, en degrés : `(rx, ry)`.
+///
+/// Le bord sous le pointeur s'enfonce, comme une carte qu'on presse du
+/// doigt. Le pointeur en haut fait basculer le haut vers l'arrière (`rx`
+/// positif), à droite fait tourner vers la droite (`ry` positif).
+pub fn inclinaison(local: (f64, f64), taille: (f64, f64), max_deg: f64) -> (f64, f64) {
+    if taille.0 <= 0.0 || taille.1 <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let fx = borne(local.0 / taille.0, 0.0, 1.0) - 0.5;
+    let fy = borne(local.1 / taille.1, 0.0, 1.0) - 0.5;
+    (-fy * 2.0 * max_deg, fx * 2.0 * max_deg)
+}
+
+/// Un clic sur un lien, vu par le volet de sortie.
+#[derive(Clone, Copy, Debug)]
+pub struct Clic<'a> {
+    /// Le bouton de la souris : 0 pour le principal.
+    pub bouton: i16,
+    /// Ctrl, Maj, Alt ou Cmd : l'intention d'ouvrir ailleurs.
+    pub modificateur: bool,
+    /// Un autre gestionnaire a déjà pris le clic en charge.
+    pub deja_pris: bool,
+    /// L'attribut `target` du lien.
+    pub cible: &'a str,
+    /// Le lien porte `download`.
+    pub telechargement: bool,
+    pub meme_origine: bool,
+    pub chemin_actuel: &'a str,
+    pub chemin_cible: &'a str,
+}
+
+/// Faut-il jouer le volet avant de suivre ce lien ?
+///
+/// Seulement pour une vraie navigation interne : bouton principal sans
+/// touche, même onglet, même site, une autre page. Ouvrir un nouvel onglet,
+/// télécharger, sauter à une ancre de la même page ou partir ailleurs garde
+/// le comportement du navigateur, sans délai.
+pub fn volet_de_sortie(c: &Clic) -> bool {
+    c.bouton == 0
+        && !c.modificateur
+        && !c.deja_pris
+        && (c.cible.is_empty() || c.cible == "_self")
+        && !c.telechargement
+        && c.meme_origine
+        && c.chemin_actuel != c.chemin_cible
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +405,80 @@ mod tests {
         let c = decompose("3,99 €").unwrap();
         assert_eq!(valeur_comptee(&c, 1.0), "3,99 €");
         assert_eq!(valeur_comptee(&c, 0.0), "0,00 €");
+    }
+
+    #[test]
+    fn le_pointeur_est_ramene_au_centre() {
+        assert_eq!(pointeur_normalise(500.0, 400.0, 1000.0, 800.0), (0.0, 0.0));
+        assert_eq!(pointeur_normalise(0.0, 800.0, 1000.0, 800.0), (-1.0, 1.0));
+        assert_eq!(
+            pointeur_normalise(5000.0, -10.0, 1000.0, 800.0),
+            (1.0, -1.0)
+        );
+        assert_eq!(pointeur_normalise(10.0, 10.0, 0.0, 0.0), (0.0, 0.0));
+    }
+
+    #[test]
+    fn la_carte_s_enfonce_sous_le_pointeur() {
+        let taille = (200.0, 100.0);
+        assert_eq!(inclinaison((100.0, 50.0), taille, 8.0), (0.0, 0.0));
+        // En haut à droite : le haut bascule, la droite tourne.
+        let (rx, ry) = inclinaison((200.0, 0.0), taille, 8.0);
+        assert_eq!((rx, ry), (8.0, 8.0));
+        // Hors de la carte, l'angle reste borné.
+        let (rx, ry) = inclinaison((-500.0, 900.0), taille, 8.0);
+        assert_eq!((rx, ry), (-8.0, -8.0));
+    }
+
+    fn clic<'a>(chemin_cible: &'a str) -> Clic<'a> {
+        Clic {
+            bouton: 0,
+            modificateur: false,
+            deja_pris: false,
+            cible: "",
+            telechargement: false,
+            meme_origine: true,
+            chemin_actuel: "/",
+            chemin_cible,
+        }
+    }
+
+    #[test]
+    fn le_volet_accompagne_une_navigation_interne() {
+        assert!(volet_de_sortie(&clic("/en")));
+        assert!(volet_de_sortie(&Clic {
+            cible: "_self",
+            ..clic("/app")
+        }));
+    }
+
+    #[test]
+    fn le_volet_ne_retarde_rien_d_autre() {
+        // Une ancre de la même page.
+        assert!(!volet_de_sortie(&clic("/")));
+        assert!(!volet_de_sortie(&Clic {
+            modificateur: true,
+            ..clic("/en")
+        }));
+        assert!(!volet_de_sortie(&Clic {
+            bouton: 1,
+            ..clic("/en")
+        }));
+        assert!(!volet_de_sortie(&Clic {
+            cible: "_blank",
+            ..clic("/en")
+        }));
+        assert!(!volet_de_sortie(&Clic {
+            telechargement: true,
+            ..clic("/positions.gpx")
+        }));
+        assert!(!volet_de_sortie(&Clic {
+            meme_origine: false,
+            ..clic("/copyright")
+        }));
+        assert!(!volet_de_sortie(&Clic {
+            deja_pris: true,
+            ..clic("/en")
+        }));
     }
 }

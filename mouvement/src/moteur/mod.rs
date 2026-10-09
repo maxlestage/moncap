@@ -13,8 +13,17 @@
 //! | `data-scrub`       | reçoit `--p`, sa traversée de l'écran (0 → 1)             |
 //! | `data-defile`      | reçoit `--defile`, `--defile-ecrans` et `--elan`         |
 //! | `data-aimant`      | suit le pointeur, à la souris seulement                  |
+//! | `data-incline`     | s'incline sous la souris : `--rx`, `--ry`, `--mx`, `--my` |
+//! | `data-souris`      | reçoit `--sx`, `--sy`, la souris lissée (−1 → 1)         |
+//! | `data-onde`        | une onde part du point touché, au clic comme au doigt    |
+//! | `data-curseur="…"` | le curseur grossit au survol et affiche ce texte          |
 //! | `data-defile-libre`| la molette y garde son comportement natif                |
 //! | `data-mvt-calme`   | ses changements de contenu ne relancent pas d'inventaire  |
+//!
+//! Le moteur crée lui-même trois choses, et la feuille qui les dessine
+//! (`moteur.css`) : le **curseur** qui suit la souris, le **volet** qui
+//! couvre l'écran avant de suivre un lien interne, et les **ondes** des
+//! clics. Les deux sites n'ont donc rien à recopier.
 //!
 //! **Le contenu reste visible sans le moteur.** L'état masqué n'existe que
 //! sous `html.mvt`, classe que le moteur pose en démarrant et retire en
@@ -30,11 +39,18 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{
     AddEventListenerOptions, CssStyleDeclaration, Document, Element, Event, EventTarget,
     HtmlElement, IntersectionObserver, IntersectionObserverEntry, IntersectionObserverInit,
-    MutationObserver, MutationObserverInit, MutationRecord, Node, PointerEvent, ScrollBehavior,
-    ScrollToOptions, SvgElement, WheelEvent, Window,
+    MutationObserver, MutationObserverInit, MutationRecord, Node, ScrollBehavior, ScrollToOptions,
+    SvgElement, WheelEvent, Window,
 };
 
 use crate::calcul::{self, Chiffre};
+
+mod pages;
+mod pointeur;
+
+/// La feuille des éléments que le moteur crée lui-même. Injectée au
+/// démarrage, retirée à l'arrêt : sans moteur, ni curseur ni volet.
+const FEUILLE: &str = include_str!("moteur.css");
 
 /// Les réglages du moteur.
 #[derive(Clone, Copy, Debug)]
@@ -156,7 +172,18 @@ struct Interne {
     defilants: RefCell<Vec<CssStyleDeclaration>>,
     scrubs: RefCell<Vec<(Element, CssStyleDeclaration)>>,
     compteurs: RefCell<Vec<Compteur>>,
+
+    // Le pointeur (voir `pointeur.rs`).
+    pointeur: Cell<Option<(f64, f64)>>,
+    pointeur_lisse: Cell<(f64, f64)>,
+    souris: RefCell<Vec<CssStyleDeclaration>>,
+    curseur: RefCell<Option<pointeur::Curseur>>,
     aimant_courant: RefCell<Option<HtmlElement>>,
+    incline_courant: RefCell<Option<HtmlElement>>,
+
+    // Les éléments que le moteur ajoute à la page.
+    feuille: RefCell<Option<Element>>,
+    volet: RefCell<Option<HtmlElement>>,
 
     io: RefCell<Option<IntersectionObserver>>,
     mo: RefCell<Option<MutationObserver>>,
@@ -197,7 +224,14 @@ impl Moteur {
             defilants: RefCell::new(Vec::new()),
             scrubs: RefCell::new(Vec::new()),
             compteurs: RefCell::new(Vec::new()),
+            pointeur: Cell::new(None),
+            pointeur_lisse: Cell::new((0.0, 0.0)),
+            souris: RefCell::new(Vec::new()),
+            curseur: RefCell::new(None),
             aimant_courant: RefCell::new(None),
+            incline_courant: RefCell::new(None),
+            feuille: RefCell::new(None),
+            volet: RefCell::new(None),
             io: RefCell::new(None),
             mo: RefCell::new(None),
             rappel_io: RefCell::new(None),
@@ -206,7 +240,10 @@ impl Moteur {
             ecouteurs: RefCell::new(Vec::new()),
         });
 
+        interne.injecte_feuille();
         Interne::branche(&interne);
+        Interne::branche_pointeur(&interne);
+        Interne::branche_pages(&interne);
         if let Some(racine) = interne.document.document_element() {
             let _ = racine.class_list().add_1("mvt");
         }
@@ -332,24 +369,18 @@ impl Interne {
                 }
             });
         }
+    }
 
-        // Le magnétisme n'a de sens qu'avec un vrai pointeur : au doigt, il
-        // n'y a pas de survol, seulement un bouton qui sauterait sous le
-        // pouce.
-        if media("(hover: hover) and (pointer: fine)").unwrap_or(false) {
-            let cible_doc: EventTarget = moi.document.clone().into();
-            let f = faible.clone();
-            moi.ecoute(&cible_doc, "pointermove", true, move |e| {
-                if let (Some(i), Ok(e)) = (f.upgrade(), e.dyn_into::<PointerEvent>()) {
-                    i.aimante(&e);
-                }
-            });
-            let f = faible;
-            moi.ecoute(&cible_doc, "pointerleave", true, move |_| {
-                if let Some(i) = f.upgrade() {
-                    i.relache_aimant();
-                }
-            });
+    /// Ajoute la feuille des éléments du moteur à la tête du document.
+    fn injecte_feuille(&self) {
+        let Ok(style) = self.document.create_element("style") else {
+            return;
+        };
+        style.set_text_content(Some(FEUILLE));
+        let _ = style.set_attribute("data-mouvement", "");
+        if let Some(tete) = self.document.head() {
+            let _ = tete.append_child(&style);
+            *self.feuille.borrow_mut() = Some(style);
         }
     }
 
@@ -394,6 +425,18 @@ impl Interne {
         // Rien ne doit rester masqué derrière un moteur arrêté.
         if let Some(racine) = self.document.document_element() {
             let _ = racine.class_list().remove_1("mvt");
+        }
+        if let Some(c) = self.curseur.borrow_mut().take() {
+            c.retire();
+        }
+        for el in [
+            self.feuille.borrow_mut().take(),
+            self.volet.borrow_mut().take().map(Into::into),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            el.remove();
         }
         for c in self.compteurs.borrow_mut().drain(..) {
             c.noeud.set_node_value(Some(&c.final_));
@@ -445,6 +488,9 @@ impl Interne {
             self.actuel.set(y);
             self.cible.set(y);
         }
+        // La page glisse sous une souris immobile : ce qu'elle survole a
+        // changé sans qu'aucun `pointermove` ne le dise.
+        self.resurvole();
         self.demande_image();
     }
 
@@ -575,6 +621,10 @@ impl Interne {
             encore = true;
         }
 
+        if self.avance_pointeur(dt) {
+            encore = true;
+        }
+
         if encore {
             self.demande_image();
         } else {
@@ -623,6 +673,10 @@ impl Interne {
         *self.scrubs.borrow_mut() = tous(&self.document, "[data-scrub]")
             .into_iter()
             .filter_map(|e| style_de(&e).map(|s| (e, s)))
+            .collect();
+        *self.souris.borrow_mut() = tous(&self.document, "[data-souris]")
+            .iter()
+            .filter_map(style_de)
             .collect();
         self.a_peindre.set(true);
     }
@@ -728,41 +782,6 @@ impl Interne {
             }
         });
         !compteurs.is_empty()
-    }
-
-    // --- Le magnétisme -------------------------------------------------------
-
-    fn aimante(&self, e: &PointerEvent) {
-        let sous = e
-            .target()
-            .and_then(|t| t.dyn_into::<Element>().ok())
-            .and_then(|el| el.closest("[data-aimant]").ok().flatten())
-            .and_then(|el| el.dyn_into::<HtmlElement>().ok());
-        let courant = self.aimant_courant.borrow().clone();
-        if courant != sous {
-            self.relache_aimant();
-        }
-        let Some(el) = sous else { return };
-        let r = el.get_bounding_client_rect();
-        let centre = (r.left() + r.width() / 2.0, r.top() + r.height() / 2.0);
-        let (x, y) = calcul::aimant(
-            (e.client_x() as f64, e.client_y() as f64),
-            centre,
-            0.28,
-            10.0,
-        );
-        let s = el.style();
-        let _ = s.set_property("--ax", &format!("{x:.1}px"));
-        let _ = s.set_property("--ay", &format!("{y:.1}px"));
-        *self.aimant_courant.borrow_mut() = Some(el);
-    }
-
-    fn relache_aimant(&self) {
-        if let Some(el) = self.aimant_courant.borrow_mut().take() {
-            let s = el.style();
-            let _ = s.set_property("--ax", "0px");
-            let _ = s.set_property("--ay", "0px");
-        }
     }
 }
 

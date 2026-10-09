@@ -97,15 +97,21 @@ enum Geste {
 enum Animation {
     /// La carte lâchée continue sur sa lancée, et ralentit.
     Inertie { vx: f64, vy: f64 },
-    /// Un déplacement vers une vue, avec la courbe de la maison.
+    /// Un déplacement vers une vue, selon une courbe — celle de la maison,
+    /// sauf pour l'arrivée. `t0` peut être dans le futur : le vol attend.
     Vol {
         de: Vue,
         vers: Vue,
         t0: Option<f64>,
         duree_ms: f64,
+        courbe: fn(f64) -> f64,
     },
     /// Le zoom à la molette ou aux boutons, lissé vers sa cible.
     Zoom { cible: f64, ancre: (f64, f64) },
+    /// L'arrivée, en attente que la carte soit dévoilée : un vol joué
+    /// derrière le volet ou sous le masque du dévoilement serait perdu.
+    /// `guet` est le bloc révélé par le moteur (`data-mvt`) qui la contient.
+    Arrivee { guet: Element, t0: Option<f64> },
 }
 
 /// Un toucher en attente : est-ce le premier d'un double toucher ?
@@ -175,6 +181,23 @@ const DEPART: Coord = Coord {
     lon: 2.5,
 };
 const ZOOM_DEPART: f64 = 5.0;
+/// De combien de niveaux la carte descend en arrivant, et en combien de
+/// temps.
+const ZOOM_ARRIVEE: f64 = 2.5;
+const DELAI_ARRIVEE_MS: f64 = 350.0;
+const DUREE_ARRIVEE_MS: f64 = 1900.0;
+/// L'arrivée n'attend pas le dévoilement plus longtemps : passé ce délai,
+/// la carte se pose directement sur sa vue.
+const ATTENTE_ARRIVEE_MS: f64 = 4000.0;
+
+/// Lente au départ, lente à l'arrivée : la courbe de l'arrivée.
+fn en_douceur(t: f64) -> f64 {
+    if t < 0.5 {
+        4.0 * t * t * t
+    } else {
+        1.0 - (2.0 - 2.0 * t).powi(3) / 2.0
+    }
+}
 
 fn maintenant() -> f64 {
     web_sys::window()
@@ -277,9 +300,12 @@ impl Component for Carte {
                 if taille == self.taille {
                     return false;
                 }
+                let premiere = self.taille.0 == 0.0;
                 self.taille = taille;
                 if self.cadrage_en_attente {
                     self.applique_cadrage(ctx);
+                } else if premiere && taille.0 > 0.0 && self.mouvement {
+                    self.prepare_arrivee(ctx, &el);
                 }
                 true
             }
@@ -1004,7 +1030,22 @@ impl Carte {
             vers,
             t0: None,
             duree_ms,
+            courbe: calcul::expo_sortie,
         });
+        self.demande_image();
+    }
+
+    /// L'arrivée : la carte part de plus haut et descend sur la France, le
+    /// geste de l'app quand elle s'ouvre — une fois la carte dévoilée.
+    ///
+    /// Un cadrage en attente fait déjà voler la carte, vers les positions :
+    /// plus utile qu'un vol pour le décor, il passe devant.
+    fn prepare_arrivee(&mut self, ctx: &Context<Self>, el: &Element) {
+        let Some(guet) = el.closest("[data-mvt]").ok().flatten() else {
+            return;
+        };
+        self.regle_vue(ctx, Vue::sur(DEPART, ZOOM_DEPART - ZOOM_ARRIVEE));
+        self.animation = Some(Animation::Arrivee { guet, t0: None });
         self.demande_image();
     }
 
@@ -1064,16 +1105,18 @@ impl Carte {
                 vers,
                 t0,
                 duree_ms,
+                courbe,
             } => {
                 let t0 = t0.unwrap_or(t);
                 let avance = ((t - t0) / duree_ms).clamp(0.0, 1.0);
-                let v = de.vers(&vers, calcul::expo_sortie(avance));
+                let v = de.vers(&vers, courbe(avance));
                 self.regle_vue(ctx, v);
                 (avance < 1.0).then_some(Animation::Vol {
                     de,
                     vers,
                     t0: Some(t0),
                     duree_ms,
+                    courbe,
                 })
             }
             Animation::Zoom { cible, ancre } => {
@@ -1084,6 +1127,27 @@ impl Carte {
                 self.regle_vue(ctx, v);
                 (!fini).then_some(Animation::Zoom { cible, ancre })
             }
+            Animation::Arrivee { guet, t0 } => {
+                let t0 = t0.unwrap_or(t);
+                let vers = Vue::sur(DEPART, ZOOM_DEPART);
+                if guet.has_attribute("data-vu") {
+                    // Un temps, que le dévoilement ait commencé, puis une
+                    // descente qui accélère et se pose : un vol qui part
+                    // d'un coup se jouerait encore sous le masque.
+                    Some(Animation::Vol {
+                        de: self.vue,
+                        vers,
+                        t0: Some(t + DELAI_ARRIVEE_MS),
+                        duree_ms: DUREE_ARRIVEE_MS,
+                        courbe: en_douceur,
+                    })
+                } else if t - t0 > ATTENTE_ARRIVEE_MS {
+                    self.regle_vue(ctx, vers);
+                    None
+                } else {
+                    Some(Animation::Arrivee { guet, t0: Some(t0) })
+                }
+            }
         };
         self.animation = suite;
         if self.animation.is_some() {
@@ -1092,5 +1156,26 @@ impl Carte {
             self.image_prec = None;
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn l_arrivee_part_et_se_pose_sans_a_coup() {
+        assert_eq!(en_douceur(0.0), 0.0);
+        assert_eq!(en_douceur(0.5), 0.5);
+        assert_eq!(en_douceur(1.0), 1.0);
+        // Lente aux deux bouts, croissante entre les deux.
+        assert!(en_douceur(0.1) < 0.01);
+        assert!(en_douceur(0.9) > 0.99);
+        let mut avant = 0.0;
+        for i in 1..=100 {
+            let v = en_douceur(i as f64 / 100.0);
+            assert!(v >= avant);
+            avant = v;
+        }
     }
 }
