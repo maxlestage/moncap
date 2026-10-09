@@ -12,7 +12,7 @@
 //! l'indexation, elle, dépend de l'exécution du WebAssembly par le moteur.
 //! Le repli `<noscript>` ci-dessous existe pour cette raison.
 
-use crate::contenu::{Contenu, Langue, PageLegale, AUTEUR};
+use crate::contenu::{Contenu, Langue, PageLegale, AUTEUR, CONNEXION};
 
 /// L'adresse publique canonique du site.
 ///
@@ -389,6 +389,14 @@ pub fn repli(c: &Contenu, l: Langue) -> String {
     let mut s = String::from("<noscript><div class=\"dedans repli\">");
     s.push_str(&format!("<h1>{} {}</h1>", texte(c.h1[0]), texte(c.h1[1])));
     s.push_str(&format!("<p>{}</p>", texte(c.chapeau)));
+    // La porte de l'application. Depuis que la page est rendue par le
+    // WebAssembly, ce repli était le seul HTML lisible sans script — et il
+    // ne menait plus nulle part : le test d'intégration du serveur qui
+    // cherche ce lien échouait depuis.
+    s.push_str(&format!(
+        "<p><a href=\"{CONNEXION}\">{}</a></p>",
+        texte(c.se_connecter)
+    ));
     for sec in [&c.comparateur.titre, &c.guidage.titre, &c.hors_ligne.titre] {
         s.push_str(&format!("<h2>{}</h2>", texte(sec)));
     }
@@ -405,13 +413,22 @@ pub fn repli(c: &Contenu, l: Langue) -> String {
         ));
     }
     s.push_str("<p>");
-    for autre in Langue::TOUTES.into_iter().filter(|a| *a != l) {
-        s.push_str(&format!(
-            "<a href=\"{}\" hreflang=\"{}\">{}</a> ",
-            autre.chemin(),
-            autre.code(),
-            texte(autre.contenu().nom)
-        ));
+    // Les trois langues, la courante marquée et non liée — comme le
+    // sélecteur de la page rendue : un lien vers soi n'offre rien.
+    for autre in Langue::TOUTES {
+        if autre == l {
+            s.push_str(&format!(
+                "<span aria-current=\"true\">{}</span> ",
+                texte(autre.contenu().nom)
+            ));
+        } else {
+            s.push_str(&format!(
+                "<a href=\"{}\" hreflang=\"{}\">{}</a> ",
+                autre.chemin(),
+                autre.code(),
+                texte(autre.contenu().nom)
+            ));
+        }
     }
     s.push_str(&format!(
         "<a href=\"{}\">{}</a> <a href=\"{}\">{}</a>",
@@ -434,6 +451,27 @@ pub fn repli(c: &Contenu, l: Langue) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Sans script, le repli est toute la page : il doit mener à
+    /// l'application et dire dans quelle langue on se trouve. Le serveur le
+    /// vérifie aussi, mais seulement avec une base de données sous la main.
+    #[test]
+    fn le_repli_mene_a_l_application_et_dit_sa_langue() {
+        for l in Langue::TOUTES {
+            let r = repli(l.contenu(), l);
+            assert!(
+                r.contains(&format!("href=\"{CONNEXION}\"")),
+                "{} : pas de lien de connexion",
+                l.code()
+            );
+            assert_eq!(
+                r.matches("aria-current=\"true\"").count(),
+                1,
+                "{} : la langue courante doit être marquée, une fois",
+                l.code()
+            );
+        }
+    }
 
     #[test]
     fn l_adresse_publique_n_a_pas_de_barre_finale() {

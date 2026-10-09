@@ -1,0 +1,53 @@
+# Le mouvement, partagé entre la vitrine et le front web.
+#
+# Ce que zamocorp.com obtient avec GSAP, ScrollTrigger et Lenis — cascades
+# décalées, révélations au défilement, progression liée à la molette,
+# défilement inertiel, boutons magnétiques, chiffres qui comptent — écrit
+# ici en Rust, compilé dans le même WebAssembly que la page.
+#
+# `[workspace]` vide, comme pour la vitrine : la crate est autonome, et
+# sans cette ligne cargo la rattacherait au paquet du serveur, à la racine.
+[package]
+name = "mouvement"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+wasm-bindgen = "0.2.129"
+js-sys = "0.3.106"
+
+# Les interfaces énumérées une à une : chaque fonctionnalité non demandée
+# est du code qui ne part pas dans le WebAssembly.
+[dependencies.web-sys]
+version = "0.3.106"
+features = [
+    "AddEventListenerOptions",
+    "CssStyleDeclaration",
+    "Document",
+    "DomRect",
+    "DomTokenList",
+    "Element",
+    "Event",
+    "EventTarget",
+    "HtmlElement",
+    "IntersectionObserver",
+    "IntersectionObserverEntry",
+    "IntersectionObserverInit",
+    "MediaQueryList",
+    "MutationObserver",
+    "MutationObserverInit",
+    "MutationRecord",
+    "Node",
+    "NodeList",
+    "Performance",
+    "PointerEvent",
+    "MouseEvent",
+    "ScrollBehavior",
+    "ScrollToOptions",
+    "SvgElement",
+    "WheelEvent",
+    "Window",
+]

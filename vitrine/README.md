@@ -20,7 +20,9 @@ cargo run --release --bin construit   # écrit dist/
 
 `construit` enchaîne tout : il compile le WebAssembly, le passe à
 `wasm-bindgen` puis `wasm-opt`, empreinte les fichiers, écrit les neuf pages,
-le plan du site et les consignes aux robots.
+le plan du site et les consignes aux robots. Ses outils — empreinte,
+allègement de la feuille, chaîne WebAssembly — vivent dans `../fabrique`,
+partagés avec le front web ; les animations dans `../mouvement`.
 
 `wasm-opt` est un confort : absent, la construction le dit et livre un
 WebAssembly plus gros, ce qui ne l'empêche pas de fonctionner.
@@ -86,9 +88,13 @@ mesuré plutôt que deviné.
 | --- | --- |
 | Version précédente, rendue à la construction | **15,8 Ko**, zéro JavaScript |
 | Version Yew/WebAssembly | **128 Ko** — 114 de WebAssembly, 6,7 de colle, 2,2 de HTML, 5 de CSS |
+| Version animée (moteur `mouvement`) | **148 Ko** — 132 de WebAssembly, 8,1 de colle, 2,4 de HTML, 5,5 de CSS |
 
-Soit huit fois plus, et le texte n'apparaît qu'après téléchargement **et**
-compilation du WebAssembly. Deux conséquences qu'il faut connaître :
+Le texte n'apparaît qu'après téléchargement **et** compilation du
+WebAssembly. Cette attente n'est plus une page blanche : la coquille porte
+un rideau aux couleurs de la marque, écrit en HTML et CSS, que
+l'application lève une fois montée. Sans script, il ne s'affiche pas — il
+cacherait le repli. Deux conséquences qu'il faut connaître :
 
 - **Les aperçus de liens restent parfaits.** Messageries et réseaux ne
   lisent que la tête du document, qui est complète et statique — titres,
@@ -98,8 +104,12 @@ compilation du WebAssembly. Deux conséquences qu'il faut connaître :
   robots qui n'exécutent rien ne voient que le repli.
 
 D'où le repli `<noscript>` que chaque page embarque (`seo::repli`) : le
-chapeau, les titres de section, les prix, les trois langues et les pages
-légales. Il ne refait pas la page — il en donne la substance, et reste vrai
+chapeau, le lien de connexion, les titres de section, les prix, les trois
+langues — la courante marquée — et les pages légales. Le lien de connexion
+et la marque de langue y manquaient depuis le passage au WebAssembly : deux
+tests d'intégration du serveur échouaient depuis sans que personne le voie,
+leur job ne se lançant qu'à la main. Un test de la vitrine, sans base de
+données, les garde désormais. Il ne refait pas la page — il en donne la substance, et reste vrai
 sans entretien.
 
 ## Ce que Rust achète ici
@@ -119,6 +129,65 @@ Ce n'est pas la vitesse : la page ne calcule rien.
   énumération, `avancement` une `Option`, les tuples de `trajet` sont
   devenus des champs nommés. Une quatrième couleur est maintenant une erreur
   de compilation, plus une classe CSS absente découverte à l'écran.
+
+## Le mouvement
+
+Les animations suivent [zamocorp.com](https://zamocorp.com), dont l'analyse
+des paquets est consignée dans l'historique (#383) : GSAP et ScrollTrigger
+pour les cascades, les masques et la progression liée au défilement, Lenis
+pour la molette qui glisse. Les gestes en sont repris, en Rust, par la crate
+`../mouvement`, partagée avec le front web :
+
+- **le rideau** de chargement, qui se lève quand la page est montée ;
+- **les titres montent mot à mot** derrière leur masque (le « yPercent »
+  de GSAP), découpés au rendu par `mots()` — le DOM n'est jamais retouché
+  après coup, et le rendu des tests voit le même HTML ;
+- **les cascades** : cartes, tarifs, pile, pied — chaque élément entre à
+  son tour, avec un retard plafonné ;
+- **les maquettes s'allument** par le bas (`clip-path`) ;
+- **les chiffres comptent** jusqu'à leur valeur — les vignettes du bandeau,
+  les prix, la mesure Bordeaux → Limoges — et finissent sur le texte
+  d'origine, à l'octet près ;
+- **la molette glisse**, comme Lenis : un amortissement de 0,1 par image à
+  60 Hz, ramené à l'intervalle réel pour que la glisse soit la même à
+  120 Hz. Le toucher n'est jamais intercepté ;
+- **le fil de l'itinéraire** se dessine au défilement, le bandeau dérive et
+  s'efface, le **bandeau défilant** (les promesses du hors-ligne, déjà
+  traduites) s'incline avec l'élan ;
+- **les boutons sont magnétiques**, à la souris seulement.
+
+**Pourquoi plus seulement du CSS.** La version précédente liait tout à
+`animation-timeline`, sans un octet de script de plus. Mais la page est
+désormais rendue par le WebAssembly — le moteur n'y coûte que son propre
+code — et Firefox n'a toujours pas activé `animation-timeline` par défaut
+(encore derrière un drapeau en version 152, juin 2026) : une part des
+visiteurs voyait une page immobile. Les révélations passent maintenant par
+un `IntersectionObserver`, qui marche partout.
+
+**Ce que ça coûte**, mesuré avec `twiggy` : environ 19 Ko gzippés (113 → 132
+Ko de WebAssembly) — 18 Ko bruts pour le moteur, 9 pour le rendu mot à mot,
+7 de chaînes. Il en coûtait 15 de plus dans une première version : le
+compteur lisait « 3,99 » avec `str::parse::<f64>`, qui embarque les tables
+de l'analyseur de flottants de la bibliothèque standard. Il lit
+maintenant deux entiers.
+
+**Le contenu reste visible par défaut, toujours.** Tout état masqué vit
+sous `html.mvt`, la classe que le moteur pose en démarrant et retire s'il
+s'arrête. Le moteur ne démarre pas quand le système demande moins de
+mouvement (`prefers-reduced-motion`) ; le bloc « mouvement réduit » de la
+feuille coupe en plus toute animation.
+
+Deux pièges trouvés en regardant vraiment la page :
+
+- **Chromium applique le `clip-path` d'un élément au calcul de son
+  intersection avec l'écran.** Découpé à son départ, un élément n'offrait
+  qu'une bande sous son bord bas : hors champ sur un grand écran, il
+  n'était jamais « vu », et restait caché — la carte entière du front web,
+  à 1280 px. Le dévoilement découpe donc l'enfant, jamais l'élément observé.
+- **Une révélation par `transition` garde son délai pour toujours** : une
+  carte survolée se serait soulevée avec une demi-seconde de retard. Ce
+  sont des animations jouées une fois, en `backwards`, qui rendent ensuite
+  l'élément à ses propres règles.
 
 ## Ce qui a été vérifié
 

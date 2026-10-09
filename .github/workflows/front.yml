@@ -1,0 +1,152 @@
+name: Front
+
+# Construit les deux fronts — la vitrine et l'application web — et verse
+# le résultat dans le dépôt.
+#
+# Le buildpack Heroku ne compile que la crate du serveur : rien ne fabrique
+# le WebAssembly sur le dyno, donc `vitrine/dist` et `web/dist` doivent être
+# versionnés pour que le serveur ait quelque chose à servir. Or ce dépôt se
+# tient depuis un navigateur, sans machine de développement — personne ne
+# peut lancer la construction à la main. C'est donc ce workflow qui le fait,
+# à chaque changement des sources.
+#
+# Les deux fronts sont en Rust (Yew), et partagent deux crates : `mouvement`
+# (les animations) et `fabrique` (empreintes, feuille de style, chaîne
+# WebAssembly). Un changement dans l'une d'elles touche les deux sites : ils
+# se construisent donc ensemble, en un seul commit. La chaîne est
+# entièrement Rust : cargo pour le WebAssembly, `wasm-bindgen` pour la colle,
+# `wasm-opt` pour la taille, et un binaire `construit` par site pour les
+# coquilles HTML. Ni Bun ni Node, sinon pour installer `wasm-opt`.
+#
+# Pas de boucle : le déclencheur ne regarde que les sources, alors que le
+# commit produit ne touche que les `dist`.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "vitrine/src/**"
+      - "vitrine/assets/**"
+      - "vitrine/Cargo.toml"
+      - "web/src/**"
+      - "web/assets/**"
+      - "web/Cargo.toml"
+      - "mouvement/**"
+      - "fabrique/**"
+      - ".github/workflows/front.yml"
+  workflow_dispatch:
+
+# Un seul passage à la fois : deux constructions concurrentes se pousseraient
+# mutuellement dans le vide.
+concurrency:
+  group: front
+  cancel-in-progress: false
+
+jobs:
+  construire:
+    name: Construire et verser les dist/
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      # Historique complet : l'étape finale rejoue sur la pointe du moment
+      # (`pull --rebase`), ce qu'un clone superficiel ne permet pas.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Chaîne Rust, cible WebAssembly
+        run: rustup target add wasm32-unknown-unknown
+
+      # Les dossiers qui comptent, dont le binaire de `wasm-bindgen` : le
+      # recompiler à chaque passage coûterait plusieurs minutes pour rien.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            vitrine/target
+            web/target
+            mouvement/target
+            fabrique/target
+          key: front-${{ runner.os }}-${{ hashFiles('vitrine/Cargo.lock', 'web/Cargo.lock', 'mouvement/Cargo.lock') }}
+          restore-keys: front-${{ runner.os }}-
+
+      # La version doit correspondre **exactement** à celle que les crates
+      # utilisent : le format d'échange entre les deux n'est pas stable, et un
+      # décalage fait échouer la liaison avec un message peu parlant. Les deux
+      # sites partagent l'outil : ils doivent donc verrouiller la même.
+      - name: wasm-bindgen
+        run: |
+          version() { (cd "$1" && cargo tree -i wasm-bindgen --depth 0 2>/dev/null \
+            | head -1 | sed 's/.* v//' | cut -d' ' -f1); }
+          vitrine=$(version vitrine)
+          web=$(version web)
+          echo "wasm-bindgen : vitrine $vitrine, web $web"
+          if [ "$vitrine" != "$web" ]; then
+            echo "::error::les deux fronts verrouillent des wasm-bindgen différents ($vitrine, $web) — aligner les Cargo.lock"
+            exit 1
+          fi
+          installee=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}' || true)
+          if [ "$installee" != "$web" ]; then
+            cargo install wasm-bindgen-cli --version "$web" --force
+          fi
+
+      # `wasm-opt` vient de binaryen. La construction s'en passe s'il manque
+      # (elle le dit et livre un WebAssembly plus gros), mais autant l'avoir.
+      - name: wasm-opt
+        run: npm install -g binaryen
+
+      # Les tests avant la construction : une page qui ne compile pas n'a
+      # rien à faire en production, et l'échec ici est bien plus lisible
+      # qu'un rendu vide. Le moteur d'animation est aussi vérifié pour la
+      # cible WebAssembly, la seule où il tourne vraiment.
+      - name: Vérifier
+        run: |
+          for crate in fabrique mouvement vitrine web; do
+            echo "::group::$crate"
+            (cd "$crate" \
+              && cargo fmt --check \
+              && cargo clippy --all-targets -- -D warnings \
+              && cargo test) || exit 1
+            echo "::endgroup::"
+          done
+          (cd mouvement && cargo clippy --target wasm32-unknown-unknown -- -D warnings)
+
+      - name: Construire la vitrine
+        working-directory: vitrine
+        run: cargo run --release --bin construit
+
+      - name: Construire le front web
+        working-directory: web
+        run: cargo run --release --bin construit
+
+      # Les `dist/` sont le rendu des sources : s'ils n'ont pas bougé, il n'y
+      # a rien à committer et surtout rien à redéployer.
+      - name: Verser le résultat
+        run: |
+          if git diff --quiet -- vitrine/dist web/dist \
+            && [ -z "$(git ls-files --others --exclude-standard vitrine/dist web/dist)" ]; then
+            echo "dist/ inchangés — rien à committer."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A vitrine/dist web/dist
+          git commit -m "Reconstruit les fronts
+
+          Rendu de vitrine/ et web/ par le CI : le dyno Heroku ne compile que
+          la crate du serveur, les dist/ doivent donc être versionnés.
+
+          Source : ${GITHUB_SHA}"
+          # Rejouer sur la pointe du moment : une autre poussée a pu arriver
+          # pendant la construction.
+          for essai in 1 2 3; do
+            git pull --rebase origin master && git push origin HEAD:master && exit 0
+            echo "poussée refusée, nouvelle tentative ($essai)"
+            sleep $((essai * 4))
+          done
+          echo "::error::impossible de pousser les dist/ après trois tentatives"
+          exit 1
