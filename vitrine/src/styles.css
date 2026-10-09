@@ -1329,7 +1329,15 @@ footer .signature {
   }
 }
 
-/* Le mouvement n'apporte rien ici ; s'il en venait, il resterait facultatif. */
+/* Le mouvement est venu (voir « Mouvement », en bas de cette feuille), et il
+ * est resté facultatif comme annoncé. Ce bloc est la porte de sortie, et il
+ * reste la seule chose à lire pour savoir qu'elle est franche : `*` avec
+ * `!important` passe devant tout ce qui suit, y compris les animations liées
+ * au défilement, quel que soit l'ordre des règles.
+ *
+ * Ce qui tient debout derrière cette porte : aucun état masqué ne vit dans
+ * une règle de base, seulement dans une image-clé de départ. Couper les
+ * animations rend donc la page immobile, jamais vide. */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;
@@ -1394,4 +1402,332 @@ h2[id] {
   color: var(--papier);
   background: var(--teinte, var(--accent));
   border-color: var(--teinte, var(--accent));
+}
+
+/* === Mouvement ============================================================
+ * Des animations au défilement, dans l'esprit des sites qui en vivent —
+ * cascades décalées, révélations liées à la molette, un tracé qui se dessine.
+ *
+ * **Sans une ligne de JavaScript de plus.** La référence du genre s'obtient
+ * d'ordinaire avec GSAP et Lenis : environ quatre-vingts kilooctets de script
+ * à télécharger, analyser et exécuter avant que rien ne bouge. Cette page
+ * expédie un demi-kilooctet en tout et le build l'affiche à chaque
+ * construction ; ajouter cent soixante fois ça pour du décor contredirait le
+ * principe au moment même où il compte le plus — un forfait serré, un
+ * téléphone en bord de réseau.
+ *
+ * Le navigateur sait désormais le faire seul. `animation-timeline: view()`
+ * lie une animation à l'entrée d'un élément dans l'écran, `scroll()` à la
+ * progression de la page : c'est exactement le « scrub » et le « stagger »
+ * qu'on allait chercher dans une bibliothèque, mais calculé par le
+ * compositeur, sans repasser par le fil principal. Rien à charger, rien à
+ * initialiser, et aucun saut au premier affichage.
+ *
+ * **Ce qui n'est pas repris, et pourquoi.** Le défilement inertiel (Lenis)
+ * demande d'intercepter la molette pour déplacer la page soi-même : c'est du
+ * script, par nature, et cela prend la main sur un geste que le système rend
+ * déjà bien. On garde `scroll-behavior` du navigateur.
+ *
+ * **Le contenu est visible par défaut, toujours.** L'état masqué ne vit que
+ * dans l'image-clé de départ, jamais dans une règle de base. Un navigateur
+ * sans `animation-timeline` — Firefox à ce jour — affiche donc la page
+ * entière, simplement immobile, et non des blocs transparents qu'aucun
+ * défilement ne révélerait jamais. C'est la seule façon correcte d'écrire
+ * ceci : la panne doit laisser le texte lisible.
+ */
+
+/* La courbe de la maison : un départ franc, une arrivée qui se pose. */
+@keyframes monte {
+  from {
+    opacity: 0;
+    transform: translateY(var(--monte, 1.2rem));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Les maquettes se dévoilent par le haut plutôt que de monter : ce sont des
+ * écrans, et un écran qui s'allume se lit mieux qu'un écran qui glisse. */
+@keyframes devoile {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 42% 0);
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+
+/* Le bandeau s'éloigne pendant qu'on descend : le texte du haut monte un peu
+ * moins vite que la page, et s'efface avant de sortir. */
+@keyframes derive {
+  to {
+    opacity: 0.5;
+    transform: translateY(2.75rem);
+  }
+}
+
+/* L'onde d'une position GPS. La seule animation perpétuelle de la page, et
+ * elle ne touche qu'`opacity` et `transform` : le compositeur s'en charge
+ * seul, sans recalcul de mise en page. */
+@keyframes onde {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(3.4);
+  }
+}
+
+/* Le tracé d'un itinéraire. `pathLength="1"` sur le chemin normalise sa
+ * longueur : le pointillé se compte alors en fractions du parcours, et
+ * personne n'a besoin de mesurer la courbe — ce qu'il aurait fallu faire en
+ * script autrement. */
+@keyframes tracer {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* --- L'entrée du bandeau --------------------------------------------------
+ * Une cascade au chargement, en temps et non au défilement : elle joue une
+ * fois, à l'arrivée, là où le lecteur n'a encore rien à lire.
+ *
+ * `backwards` porte l'état de départ pendant le délai. Sans lui, chaque bloc
+ * s'afficherait en clair puis disparaîtrait pour rentrer — un clignotement,
+ * exactement ce qu'on cherche à éviter.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .hero .barre,
+  .hero h1,
+  .hero .chapeau,
+  .hero .actions,
+  .hero .chiffres div,
+  .hero .reglages {
+    animation: monte 0.72s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+
+  .hero .barre {
+    animation-delay: 0.04s;
+  }
+  .hero h1 {
+    animation-delay: 0.12s;
+    --monte: 1.6rem;
+  }
+  .hero .chapeau {
+    animation-delay: 0.22s;
+  }
+  .hero .actions {
+    animation-delay: 0.32s;
+  }
+
+  /* Les vignettes une à une, et non leur conteneur : la cascade se poursuit
+     à l'intérieur du bloc au lieu de s'arrêter à sa bordure.
+     Animer les deux serait pire que l'un ou l'autre — deux opacités
+     inférieures à 1 se multiplient, et le bloc entier passerait par un gris
+     que ni l'une ni l'autre ne demande. */
+  .hero .chiffres div {
+    animation-delay: calc(0.4s + 0.055s * var(--rang, 0));
+  }
+  .hero .chiffres div:nth-child(2) {
+    --rang: 1;
+  }
+  .hero .chiffres div:nth-child(3) {
+    --rang: 2;
+  }
+  .hero .chiffres div:nth-child(4) {
+    --rang: 3;
+  }
+  .hero .chiffres div:nth-child(5) {
+    --rang: 4;
+  }
+
+  .hero .reglages {
+    animation-delay: 0.68s;
+  }
+}
+
+/* --- Les révélations au défilement ----------------------------------------
+ * `animation-range` remplace ici le délai : une animation liée au défilement
+ * n'a pas de durée, elle a une portée. Décaler la portée d'un élément à
+ * l'autre produit la cascade — le « stagger » des bibliothèques, sans
+ * bibliothèque.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    main h2,
+    main .intro,
+    .cartes li,
+    main figcaption {
+      animation: monte linear both;
+      animation-timeline: view();
+      animation-range: entry 8% cover 26%;
+    }
+
+    .maquette {
+      animation: devoile linear both;
+      animation-timeline: view();
+      animation-range: entry 6% cover 32%;
+    }
+
+    /* La cascade des cartes. Énumérée plutôt que calculée : six portées
+       écrites noir sur blanc se relisent, là où un `calc()` sur l'index
+       demande de dérouler l'arithmétique pour savoir ce qui se passe. */
+    .cartes li:nth-child(2) {
+      animation-range: entry 13% cover 31%;
+    }
+    .cartes li:nth-child(3) {
+      animation-range: entry 18% cover 36%;
+    }
+    .cartes li:nth-child(4) {
+      animation-range: entry 23% cover 41%;
+    }
+    .cartes li:nth-child(5) {
+      animation-range: entry 28% cover 46%;
+    }
+    .cartes li:nth-child(6) {
+      animation-range: entry 33% cover 51%;
+    }
+  }
+}
+
+/* --- La dérive du bandeau -------------------------------------------------
+ * Lié à la progression de la page et non à un élément : c'est `scroll()` et
+ * non `view()`, et la portée se compte en hauteurs d'écran.
+ */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .hero .dedans {
+      animation: derive linear both;
+      animation-timeline: scroll();
+      animation-range: 0 90vh;
+    }
+  }
+}
+
+/* --- Le fil de l'itinéraire -----------------------------------------------
+ * Un tracé qui se dessine à mesure qu'on descend : la page est le trajet.
+ * Décoratif au sens strict — `aria-hidden`, hors de la tabulation, insensible
+ * au pointeur — et il ne déplace rien, puisqu'il est fixé.
+ *
+ * Il reste **entièrement tracé** quand l'animation ne joue pas : mouvement
+ * refusé, ou navigateur sans `animation-timeline`. Un trait complet est un
+ * ornement ; un trait effacé qu'aucun défilement ne remplirait serait un
+ * défaut.
+ *
+ * Caché sous 60rem : sur un téléphone, la gouttière qu'il demande n'existe
+ * pas, et il passerait sur le texte.
+ */
+.fil-route {
+  display: none;
+}
+
+@media (min-width: 60rem) {
+  .fil-route {
+    display: block;
+    position: fixed;
+    inset-block: 0;
+    left: max(0.75rem, calc(50% - 35rem));
+    width: 1.75rem;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .fil-route path {
+    fill: none;
+    stroke: var(--cyan);
+    stroke-width: 2;
+    stroke-linecap: round;
+    /* L'épaisseur ne suit pas la mise à l'échelle : le cadre est étiré en
+       hauteur pour couvrir l'écran, et sans cela le trait s'épaissirait d'un
+       côté seulement. */
+    vector-effect: non-scaling-stroke;
+    stroke-dasharray: 1;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  @media (min-width: 60rem) and (prefers-reduced-motion: no-preference) {
+    .fil-route path {
+      animation: tracer linear both;
+      animation-timeline: scroll();
+      /* Toute la page : le tracé se referme au pied, pas avant. */
+      animation-range: 0 100%;
+    }
+  }
+}
+
+/* --- L'onde de position ---------------------------------------------------
+ * Sur le repère de la maquette de guidage : ce que dessine une position GPS
+ * qui vient d'être relevée.
+ */
+/* `z-index: 0` n'est pas décoratif : il fait du repère un contexte
+ * d'empilement. Sans lui, le `z-index: -1` de l'onde ci-dessous ne se range
+ * pas derrière la flèche mais derrière le fond du panneau, et l'animation
+ * tourne en peignant dans le vide — constaté à l'image, deux captures à
+ * 0,9 s d'écart rigoureusement identiques. */
+.loc {
+  position: relative;
+  z-index: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Un anneau, et non un disque plein : sur le fond sombre du panneau, un
+   * aplat de cyan à faible opacité se confond avec la pastille, là où un
+   * trait net reste lisible à dix pixels. C'est aussi ce que dessine une
+   * position GPS partout ailleurs. */
+  .loc::after {
+    content: "";
+    position: absolute;
+    inset: 50% auto auto 50%;
+    box-sizing: border-box;
+    width: 0.8rem;
+    height: 0.8rem;
+    margin: -0.4rem 0 0 -0.4rem;
+    border: 1.5px solid var(--cyan);
+    border-radius: 50%;
+    animation: onde 2.4s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
+    /* Sous le repère : l'onde l'entoure, elle ne le couvre pas. */
+    z-index: -1;
+  }
+}
+
+/* --- Les micro-réponses ---------------------------------------------------
+ * Au survol seulement, et seulement là où le survol existe : au doigt, iOS
+ * garde `:hover` collé après le toucher, et la carte resterait soulevée.
+ * Même raison que pour la flèche de défilement, plus haut.
+ */
+@media (hover: hover) {
+  .cartes li {
+    transition:
+      transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  .cartes li:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--trait));
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+  }
+
+  .bouton {
+    transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .bouton:hover {
+    transform: translateY(-1px);
+  }
 }

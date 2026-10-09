@@ -336,6 +336,36 @@ const SCRIPT_FLECHE = `
 })();
 `;
 
+/**
+ * Le fil de l'itinéraire : un tracé qui se dessine à mesure qu'on descend.
+ *
+ * Purement décoratif, et traité comme tel — `aria-hidden`, insensible au
+ * pointeur, hors de la tabulation. Il ne déplace rien : la feuille de style
+ * le fixe dans la gouttière de gauche, et le masque sous 60rem où cette
+ * gouttière n'existe pas.
+ *
+ * `pathLength="1"` est l'astuce qui dispense de script : elle déclare au
+ * navigateur que ce chemin mesure une unité, quelle que soit sa vraie
+ * longueur. Le pointillé se compte alors en fractions du parcours, là où il
+ * aurait fallu mesurer la courbe en JavaScript pour l'animer.
+ */
+function FilRoute() {
+  return (
+    <svg
+      className="fil-route"
+      viewBox="0 0 28 1000"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        pathLength="1"
+        d="M14 0C6 110 22 190 14 300C6 410 24 470 14 560C4 650 22 720 14 830C7 920 18 960 14 1000"
+      />
+    </svg>
+  );
+}
+
 export function App({ c, res }: { c: Contenu; res: Ressources }) {
   // La mesure est mise en valeur au milieu de la phrase : le gabarit évite
   // de couper le texte en trois morceaux traduits séparément.
@@ -343,6 +373,7 @@ export function App({ c, res }: { c: Contenu; res: Ressources }) {
 
   return (
     <>
+      <FilRoute />
       <header className="hero" id="haut">
         {/* Le fond du bandeau va d'un bord à l'autre, mais son texte doit
             s'aligner sur celui du corps : d'où ce conteneur, de la même
