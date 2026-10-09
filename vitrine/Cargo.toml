@@ -33,6 +33,12 @@ path = "src/bin/app.rs"
 [dependencies]
 yew = { version = "0.23", features = ["csr"] }
 
+# Le mouvement de zamocorp.com, en Rust : partagé avec le front web.
+mouvement = { path = "../mouvement" }
+# Les outils de `construit` (empreintes, feuille, chaîne WebAssembly),
+# partagés avec le front web. Natifs : rien n'en part au navigateur.
+fabrique = { path = "../fabrique" }
+
 # Le navigateur, vu depuis Rust. Les fonctionnalités sont énumérées une par
 # une et non prises en bloc : `web-sys` est immense, et chaque interface non
 # demandée est du code qui ne part pas dans le WebAssembly.

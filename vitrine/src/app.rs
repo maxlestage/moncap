@@ -5,11 +5,18 @@
 //! ligne, et c'est voulu — un portage qui change deux choses à la fois ne se
 //! vérifie plus.
 //!
+//! Le mouvement — titres qui montent mot à mot, cascades, dévoilements,
+//! compteurs, bandeau défilant — est déclaré ici par des attributs
+//! (`data-mvt`, `data-compte`, `data-defile`, `data-aimant`) et joué par la
+//! crate `mouvement`, partagée avec le front web. Le rendu côté serveur des
+//! tests ne lance rien : il voit le même HTML, immobile.
+//!
 //! Les maquettes sont du HTML et du CSS, pas des images : elles restent
 //! nettes à toutes les résolutions, suivent le thème, se lisent au lecteur
 //! d'écran, et ne coûtent pas un octet de téléchargement supplémentaire. Ce
 //! sont des dessins de l'interface, marqués comme tels.
 
+use mouvement::{calcul, Moteur, Reglages};
 use yew::prelude::*;
 
 use crate::appstrings::app;
@@ -54,6 +61,20 @@ pub struct Props {
 #[function_component]
 pub fn App(p: &Props) -> Html {
     let c = p.langue.contenu();
+
+    // Le moteur démarre une fois la page peinte, et lève le rideau de
+    // chargement que la coquille affichait pendant l'arrivée du
+    // WebAssembly. Il ne démarre pas quand le système demande moins de
+    // mouvement : la page est alors simplement immobile.
+    let moteur = use_mut_ref(|| None::<Moteur>);
+    use_effect_with((), move |_| {
+        *moteur.borrow_mut() = Moteur::demarre(Reglages::default());
+        mouvement::leve_rideau();
+        move || {
+            moteur.borrow_mut().take();
+        }
+    });
+
     match p.page {
         Page::Accueil => html! { <Accueil ..p.clone() /> },
         Page::Mentions => html! { <Legale ..legale_props(p, &c.mentions) /> },
@@ -67,6 +88,56 @@ fn legale_props(p: &Props, page: &'static PageLegale) -> LegaleProps {
         page,
         res: p.res.clone(),
         annee: p.annee,
+    }
+}
+
+// --- Le mouvement ----------------------------------------------------------
+
+/// Un texte découpé en mots, chacun derrière son masque : le parent porte
+/// `data-mvt="mots"`, la feuille fait monter les mots un à un. `depart` est
+/// le rang du premier mot, pour enchaîner deux lignes dans la même cascade.
+///
+/// Les espaces insécables restent dans le mot (voir `calcul::mots`) : « 3,99
+/// € » ne se coupe pas plus animé qu'immobile.
+fn mots(texte: &str, depart: usize) -> Html {
+    let liste: Vec<&str> = calcul::mots(texte).collect();
+    let n = liste.len();
+    liste
+        .into_iter()
+        .enumerate()
+        .map(|(i, m)| {
+            html! {
+                <>
+                    <span class="mot">
+                        <span style={format!("--i:{}", depart + i)}>{ m.to_string() }</span>
+                    </span>
+                    if i + 1 < n { { " " } }
+                </>
+            }
+        })
+        .collect()
+}
+
+/// Le bandeau qui défile sous le chapeau : les promesses du hors-ligne,
+/// déjà traduites dans les trois langues. Doublé pour boucler sans couture,
+/// et lu une seule fois par les lecteurs d'écran — la seconde moitié leur
+/// est cachée.
+#[function_component]
+fn Defilant(props: &LangueProps) -> Html {
+    let c = props.langue.contenu();
+    let suite = |cachee: bool| {
+        html! {
+            <span class="defilant-suite" aria-hidden={cachee.then_some("true")}>
+                { for c.hors_ligne_cartes.iter().map(|a| html! {
+                    <span key={a.titre}>{ a.titre }<i aria-hidden="true">{ "✦" }</i></span>
+                }) }
+            </span>
+        }
+    };
+    html! {
+        <div class="defilant" data-defile="">
+            <div class="defilant-piste">{ suite(false) }{ suite(true) }</div>
+        </div>
     }
 }
 
@@ -109,7 +180,7 @@ fn MaquetteComparateur(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette">
+        <figure class="maquette" data-mvt="devoile">
             <div class="ecran">
                 <div class="modes" aria-hidden="true">
                     { for MODES.iter().map(|m| html! {
@@ -169,7 +240,7 @@ fn MaquetteGuidage(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette">
+        <figure class="maquette" data-mvt="devoile">
             <div class="ecran">
                 <div class="guidage" aria-hidden="true">
                     <span class="fleche">{ "↱" }</span>
@@ -226,7 +297,7 @@ fn MaquetteMontre(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette montre">
+        <figure class="maquette montre" data-mvt="devoile">
             <div class="cadran" aria-hidden="true">
                 <span class="fleche-poignet">{ "↱" }</span>
                 <p class="distance-poignet">{ "400 m" }</p>
@@ -247,7 +318,7 @@ fn MaquetteLieux(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette">
+        <figure class="maquette" data-mvt="devoile">
             <div class="ecran">
                 <ul class="lieux">
                     { for LIEUX.iter().enumerate().map(|(i, lieu)| html! {
@@ -268,7 +339,7 @@ fn MaquetteLieux(props: &LangueProps) -> Html {
 fn MaquetteRegions(props: &LangueProps) -> Html {
     let c = props.langue.contenu();
     html! {
-        <figure class="maquette">
+        <figure class="maquette" data-mvt="devoile">
             <div class="ecran">
                 <ul class="regions">
                     { for MAQUETTE_REGIONS.iter().map(|r| html! {
@@ -315,7 +386,7 @@ fn MaquetteRegions(props: &LangueProps) -> Html {
 fn Themes(props: &LangueProps) -> Html {
     let c = props.langue.contenu();
     html! {
-        <fieldset class="reglages">
+        <fieldset class="reglages" data-mvt="monte">
             <legend>{ c.theme.libelle }</legend>
             { for THEMES.iter().zip(c.theme.noms.iter()).map(|(t, nom)| html! {
                 <span key={*t}>
@@ -373,7 +444,7 @@ pub fn Pied(p: &PiedProps) -> Html {
     html! {
         <footer>
             <div class="dedans">
-                <div class="pied-haut">
+                <div class="pied-haut" data-mvt="monte">
                     <p class="marque">
                         <img class="logo" src={p.res.logo.clone()}
                              width="40" height="40" alt="" />
@@ -382,13 +453,15 @@ pub fn Pied(p: &PiedProps) -> Html {
                     <Langues langue={p.langue} />
                 </div>
 
-                <p class="slogan">{ c.pied.slogan }</p>
+                <p class="slogan" data-mvt="mots">{ mots(c.pied.slogan, 0) }</p>
 
-                <p class="pied-liens">
-                    <a class="bouton" href={CONNEXION}>{ c.se_connecter }</a>
+                <p class="pied-liens" data-mvt="monte">
+                    <a class="bouton" href={CONNEXION} data-aimant="">
+                        <span>{ c.se_connecter }</span>
+                    </a>
                 </p>
 
-                <nav class="pied-colonnes">
+                <nav class="pied-colonnes" data-mvt="monte">
                     <div>
                         <h3>{ c.pied.decouvrir }</h3>
                         <ul>
@@ -454,9 +527,10 @@ fn Accueil(p: &Props) -> Html {
             <header class="hero" id="haut">
                 // Le fond du bandeau va d'un bord à l'autre, mais son texte
                 // doit s'aligner sur celui du corps : d'où ce conteneur, de
-                // la même largeur que `main`.
-                <div class="dedans">
-                    <div class="barre">
+                // la même largeur que `main`. Il s'éloigne quand on descend
+                // (`data-defile` : le moteur lui donne la progression).
+                <div class="dedans" data-defile="">
+                    <div class="barre" data-mvt="monte">
                         <p class="marque">
                             <img class="logo" src={p.res.logo.clone()}
                                  width="40" height="40" alt="" />
@@ -465,20 +539,24 @@ fn Accueil(p: &Props) -> Html {
                         <Langues langue={l} />
                     </div>
 
-                    <h1>
-                        { c.h1[0] }<br />
-                        <em>{ c.h1[1] }</em>
+                    <h1 data-mvt="mots">
+                        { mots(c.h1[0], 0) }<br />
+                        <em>{ mots(c.h1[1], calcul::mots(c.h1[0]).count()) }</em>
                     </h1>
-                    <p class="chapeau">{ c.chapeau }</p>
+                    <p class="chapeau" data-mvt="monte">{ c.chapeau }</p>
 
-                    <div class="actions">
-                        <a class="bouton" href={CONNEXION}>{ c.se_connecter }</a>
+                    <div class="actions" data-mvt="monte">
+                        <a class="bouton" href={CONNEXION} data-aimant="">
+                            <span>{ c.se_connecter }</span>
+                        </a>
                     </div>
 
-                    <dl class="chiffres">
-                        { for c.chiffres.iter().map(|n| html! {
-                            <div key={n.legende}>
-                                <dt>{ n.valeur }</dt>
+                    // Chaque vignette entre à son tour, et son nombre compte
+                    // jusqu'à sa valeur.
+                    <dl class="chiffres" data-mvt="cascade">
+                        { for c.chiffres.iter().enumerate().map(|(i, n)| html! {
+                            <div key={n.legende} style={format!("--i:{i}")}>
+                                <dt data-compte="">{ n.valeur }</dt>
                                 <dd>{ n.legende }</dd>
                             </div>
                         }) }
@@ -486,40 +564,41 @@ fn Accueil(p: &Props) -> Html {
 
                     <Themes langue={l} />
                 </div>
+                <Defilant langue={l} />
             </header>
 
             <main>
                 <div class="dedans">
                     <section aria-labelledby="comparateur-titre">
-                        <h2 id="comparateur-titre">{ c.comparateur.titre }</h2>
-                        <p class="intro">{ c.comparateur.intro }</p>
+                        <h2 id="comparateur-titre" data-mvt="mots">{ mots(c.comparateur.titre, 0) }</h2>
+                        <p class="intro" data-mvt="monte">{ c.comparateur.intro }</p>
                         <MaquetteComparateur langue={l} />
-                        <p class="intro">{ c.comparateur.apres }</p>
+                        <p class="intro" data-mvt="monte">{ c.comparateur.apres }</p>
                     </section>
 
                     <section aria-labelledby="guidage-titre">
-                        <h2 id="guidage-titre">{ c.guidage.titre }</h2>
-                        <p class="intro">{ c.guidage.intro }</p>
+                        <h2 id="guidage-titre" data-mvt="mots">{ mots(c.guidage.titre, 0) }</h2>
+                        <p class="intro" data-mvt="monte">{ c.guidage.intro }</p>
                         <MaquetteGuidage langue={l} />
                     </section>
 
                     <section aria-labelledby="montre-titre">
-                        <h2 id="montre-titre">{ c.montre.titre }</h2>
-                        <p class="intro">{ c.montre.intro }</p>
+                        <h2 id="montre-titre" data-mvt="mots">{ mots(c.montre.titre, 0) }</h2>
+                        <p class="intro" data-mvt="monte">{ c.montre.intro }</p>
                         <MaquetteMontre langue={l} />
                     </section>
 
                     <section aria-labelledby="lieux-titre">
-                        <h2 id="lieux-titre">{ c.lieux.titre }</h2>
-                        <p class="intro">{ c.lieux.intro }</p>
+                        <h2 id="lieux-titre" data-mvt="mots">{ mots(c.lieux.titre, 0) }</h2>
+                        <p class="intro" data-mvt="monte">{ c.lieux.intro }</p>
                         <MaquetteLieux langue={l} />
                     </section>
 
                     <section aria-labelledby="atouts-titre">
-                        <h2 id="atouts-titre">{ c.atouts_titre }</h2>
-                        <ul class="cartes">
-                            { for c.atouts.iter().map(|a| html! {
-                                <li key={a.titre}>
+                        <h2 id="atouts-titre" data-mvt="mots">{ mots(c.atouts_titre, 0) }</h2>
+                        <ul class="cartes" data-mvt="cascade">
+                            { for c.atouts.iter().enumerate().map(|(i, a)| html! {
+                                <li key={a.titre} style={format!("--i:{}", i.min(5))}>
                                     <span class="emoji" aria-hidden="true">{ a.emoji }</span>
                                     <h3>{ a.titre }</h3>
                                     <p>{ a.texte }</p>
@@ -529,12 +608,12 @@ fn Accueil(p: &Props) -> Html {
                     </section>
 
                     <section aria-labelledby="hors-ligne-titre">
-                        <h2 id="hors-ligne-titre">{ c.hors_ligne.titre }</h2>
-                        <p class="intro">{ c.hors_ligne.intro }</p>
+                        <h2 id="hors-ligne-titre" data-mvt="mots">{ mots(c.hors_ligne.titre, 0) }</h2>
+                        <p class="intro" data-mvt="monte">{ c.hors_ligne.intro }</p>
                         <MaquetteRegions langue={l} />
-                        <ul class="cartes">
-                            { for c.hors_ligne_cartes.iter().map(|a| html! {
-                                <li key={a.titre}>
+                        <ul class="cartes" data-mvt="cascade">
+                            { for c.hors_ligne_cartes.iter().enumerate().map(|(i, a)| html! {
+                                <li key={a.titre} style={format!("--i:{}", i.min(5))}>
                                     <span class="emoji" aria-hidden="true">{ a.emoji }</span>
                                     <h3>{ a.titre }</h3>
                                     <p>{ a.texte }</p>
@@ -549,16 +628,17 @@ fn Accueil(p: &Props) -> Html {
                     // L'essai n'a pas de carte : un délai avant paiement n'est
                     // pas une formule, et rien ici ne doit ressembler à du 0 €.
                     <section aria-labelledby="tarifs-titre" class="tarifs">
-                        <h2 id="tarifs-titre">{ c.tarifs.titre }</h2>
-                        <p class="intro">{ c.tarifs.intro }</p>
-                        <div class="formules">
+                        <h2 id="tarifs-titre" data-mvt="mots">{ mots(c.tarifs.titre, 0) }</h2>
+                        <p class="intro" data-mvt="monte">{ c.tarifs.intro }</p>
+                        <div class="formules" data-mvt="cascade">
                             { for [&c.tarifs.plus, &c.tarifs.pro].iter().enumerate()
                                 .map(|(i, f)| html! {
-                                <div key={f.nom}
+                                <div key={f.nom} style={format!("--i:{i}")}
                                      class={if i == 0 { "formule vedette" } else { "formule" }}>
                                     <h3>{ f.nom }</h3>
                                     <p class="prix">
-                                        { f.prix }{ " " }<span>{ f.periode }</span>
+                                        <span data-compte="">{ f.prix }</span>
+                                        { " " }<span>{ f.periode }</span>
                                     </p>
                                     <ul>
                                         { for f.points.iter().map(|pt| html! {
@@ -568,24 +648,24 @@ fn Accueil(p: &Props) -> Html {
                                 </div>
                             }) }
                         </div>
-                        <p class="note">{ c.tarifs.note }</p>
+                        <p class="note" data-mvt="monte">{ c.tarifs.note }</p>
                     </section>
 
-                    <section class="preuve" aria-labelledby="preuve-titre">
+                    <section class="preuve" aria-labelledby="preuve-titre" data-mvt="monte">
                         <h2 id="preuve-titre">{ c.preuve.titre }</h2>
                         <p>
                             { avant }
-                            <strong>{ c.preuve.mesure }</strong>
+                            <strong data-compte="">{ c.preuve.mesure }</strong>
                             { apres }
                         </p>
                         <p class="note">{ c.preuve.note }</p>
                     </section>
 
                     <section aria-labelledby="pile-titre" class="pile">
-                        <h2 id="pile-titre">{ c.pile_titre }</h2>
-                        <dl>
-                            { for c.pile.iter().map(|pi| html! {
-                                <div key={pi.domaine}>
+                        <h2 id="pile-titre" data-mvt="mots">{ mots(c.pile_titre, 0) }</h2>
+                        <dl data-mvt="cascade">
+                            { for c.pile.iter().enumerate().map(|(i, pi)| html! {
+                                <div key={pi.domaine} style={format!("--i:{}", i.min(5))}>
                                     <dt>{ pi.domaine }</dt>
                                     <dd>
                                         <ul>
@@ -600,10 +680,10 @@ fn Accueil(p: &Props) -> Html {
                     </section>
 
                     <section aria-labelledby="franchise-titre" class="franchise">
-                        <h2 id="franchise-titre">{ c.franchise_titre }</h2>
-                        <ul>
-                            { for c.franchise.iter().map(|f| html! {
-                                <li key={*f}>{ *f }</li>
+                        <h2 id="franchise-titre" data-mvt="mots">{ mots(c.franchise_titre, 0) }</h2>
+                        <ul data-mvt="cascade">
+                            { for c.franchise.iter().enumerate().map(|(i, f)| html! {
+                                <li key={*f} style={format!("--i:{}", i.min(5))}>{ *f }</li>
                             }) }
                         </ul>
                     </section>
@@ -636,16 +716,16 @@ pub fn Legale(p: &LegaleProps) -> Html {
     html! {
         <>
             <header class="hero legale">
-                <div class="dedans">
-                    <div class="barre">
+                <div class="dedans" data-defile="">
+                    <div class="barre" data-mvt="monte">
                         <p class="marque">
                             <img class="logo" src={p.res.logo.clone()}
                                  width="40" height="40" alt="" />
                             { "MonCap GPS" }
                         </p>
                     </div>
-                    <h1>{ p.page.titre }</h1>
-                    <p class="chapeau">
+                    <h1 data-mvt="mots">{ mots(p.page.titre, 0) }</h1>
+                    <p class="chapeau" data-mvt="monte">
                         <a class="retour" href={c.chemin}>{ p.page.retour }</a>
                     </p>
                 </div>
@@ -654,7 +734,7 @@ pub fn Legale(p: &LegaleProps) -> Html {
             <main>
                 <div class="dedans juridique">
                     { for p.page.sections.iter().map(|s| html! {
-                        <section key={s.titre}>
+                        <section key={s.titre} data-mvt="monte">
                             <h2>{ s.titre }</h2>
                             { for s.corps.iter().map(|para| html! {
                                 <p key={*para}>{ *para }</p>
@@ -681,7 +761,7 @@ pub fn Legale(p: &LegaleProps) -> Html {
 fn FilRoute() -> Html {
     html! {
         <svg class="fil-route" viewBox="0 0 28 1000" preserveAspectRatio="none"
-             aria-hidden="true" focusable="false">
+             aria-hidden="true" focusable="false" data-defile="">
             <path pathLength="1"
                   d="M14 0C6 110 22 190 14 300C6 410 24 470 14 560C4 650 22 720 14 830C7 920 18 960 14 1000" />
         </svg>

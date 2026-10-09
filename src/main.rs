@@ -2834,23 +2834,34 @@ async fn fige(req: Request, next: Next) -> Response {
 /// compression/CORS/trace). Extrait de `main` pour être réutilisable tel quel
 /// par les tests d'intégration.
 fn build_app(state: AppState) -> Router {
-    // Front web statique (React + Bun, voir web/). Servi en repli : toute
-    // requête qui ne correspond pas à l'API renvoie un fichier de web/dist,
-    // avec index.html en repli (SPA). C'est aussi ce repli qui sert `/app`,
-    // l'adresse par laquelle on entre dans l'application : les chemins
-    // relatifs de son index.html se résolvent alors à la racine, où ses
-    // fichiers se trouvent effectivement.
+    // Front web (Yew + WebAssembly, voir web/). On y entre par `/app`, qui
+    // sert la coquille ; ses fichiers vivent sous `/web`, nommés d'après leur
+    // contenu — la même répartition que la vitrine, pour la même raison :
+    // seule la coquille garde une adresse fixe, et c'est la seule à
+    // revalider.
+    //
+    // Le repli reste en place pour les liens profonds : toute requête qui
+    // ne correspond pas à l'API renvoie un fichier de web/dist, avec
+    // index.html en repli (SPA). La coquille lie ses fichiers par des
+    // chemins absolus (`/web/…`) : elle fonctionne à n'importe quelle
+    // adresse.
     // `fallback` et non `not_found_service` : ce dernier force le statut à 404
     // (il enveloppe le service dans un `SetStatus`). Le SPA était donc bien
     // renvoyé sur les liens profonds, mais annoncé introuvable — invisible
     // dans un navigateur, faux pour tout le reste : caches, robots, clients
     // qui lisent le statut.
     let web = ServeDir::new("web/dist").fallback(ServeFile::new("web/dist/index.html"));
+    let front: Router<AppState> = Router::new()
+        .route_service("/app", ServeFile::new("web/dist/index.html"))
+        .layer(middleware::from_fn(revalider));
+    let front_fichiers: Router<AppState> = Router::new()
+        .nest_service("/web", ServeDir::new("web/dist"))
+        .layer(middleware::from_fn(fige));
 
     // Vitrine (voir vitrine/) : la page de présentation occupe la racine
     // exacte, l'application vit derrière `/app`. `vitrine/dist` est versionné
-    // parce que le dyno Heroku ne compile que la crate Rust — aucun Bun ne
-    // tourne au déploiement.
+    // parce que le dyno Heroku ne compile que la crate Rust — rien n'y
+    // fabrique le WebAssembly au déploiement.
     //
     // Trois langues, trois adresses ; le français à la racine, langue du
     // projet. Ces trois-là se revalident à chaque visite : ce sont les seuls
@@ -2935,6 +2946,8 @@ fn build_app(state: AppState) -> Router {
     Router::new()
         .merge(vitrine)
         .merge(vitrine_fichiers)
+        .merge(front)
+        .merge(front_fichiers)
         .route("/health", get(health))
         .route("/positions", get(list_positions).post(add_position))
         .route(
@@ -4718,8 +4731,8 @@ mod tests {
     }
 
     /// Les routes de la vitrine servent des fichiers versionnés de
-    /// `vitrine/dist` : le dyno ne construit que la crate Rust, aucun Bun ne
-    /// tourne au déploiement. Une route ajoutée sans reconstruire la vitrine
+    /// `vitrine/dist` : le dyno ne construit que la crate Rust, aucun
+    /// WebAssembly n'est fabriqué au déploiement. Une route ajoutée sans reconstruire la vitrine
     /// (`cargo run --bin construit`, puis versionner `dist`) servirait un 404 — ce test
     /// l'attrape avant le déploiement.
     /// Le jeton du lien : 32 hexadécimaux minuscules, rien d'autre — ce qui
@@ -4773,6 +4786,33 @@ mod tests {
             assert!(
                 std::path::Path::new(chemin).exists(),
                 "{chemin} manquant : reconstruire la vitrine et versionner dist"
+            );
+        }
+    }
+
+    /// Le front web est servi depuis `web/dist`, versionné pour la même
+    /// raison que la vitrine. Sa coquille lie ses fichiers par leur nom
+    /// empreint : chacun doit exister, sans quoi `/app` chargerait une page
+    /// sans style ni WebAssembly. Ce test-là tourne sans base de données.
+    #[test]
+    fn front_web_construit() {
+        let coquille = std::fs::read_to_string("web/dist/index.html")
+            .expect("web/dist/index.html manquant : reconstruire le front web et versionner dist");
+        // Les avatars voyagent en JSON dans un attribut, guillemets échappés.
+        let coquille = coquille.replace("&quot;", "\"");
+        let noms: Vec<&str> = coquille
+            .split("\"/web/")
+            .skip(1)
+            .filter_map(|m| m.split('"').next())
+            .collect();
+        assert!(
+            noms.len() >= 5,
+            "la coquille doit lier sa feuille, sa colle, son WebAssembly et ses images : {noms:?}"
+        );
+        for nom in noms {
+            assert!(
+                std::path::Path::new("web/dist").join(nom).exists(),
+                "web/dist/{nom} manquant : la coquille est plus récente que ses fichiers"
             );
         }
     }
@@ -6615,12 +6655,38 @@ mod integration {
             "la page doit être revalidée à chaque visite"
         );
 
-        let (statut, front) = corps(&app, "/app").await;
+        let (statut, cache_front, front) = reponse(&app, "/app").await;
         assert_eq!(statut, StatusCode::OK);
         assert!(
             front.contains("<title>MonCap GPS</title>"),
             "/app doit servir le front web"
         );
+        assert_eq!(
+            cache_front.as_deref(),
+            Some("no-cache"),
+            "la coquille du front doit être revalidée à chaque visite"
+        );
+        // Comme pour la vitrine, les fichiers du front sont lus dans le
+        // rendu puis suivis : la feuille, la colle et le WebAssembly.
+        for (debut, fin) in [
+            (r#"<link rel="stylesheet" href=""#, "\""),
+            (r#"import init from ""#, "\""),
+            (r#"module_or_path: ""#, "\""),
+        ] {
+            let lien = front
+                .split(debut)
+                .nth(1)
+                .and_then(|s| s.split(fin).next())
+                .unwrap_or_else(|| panic!("le front doit lier {debut}"));
+            assert!(lien.starts_with("/web/"), "fichier hors de /web : {lien}");
+            let (statut, cache, _) = reponse(&app, lien).await;
+            assert_eq!(statut, StatusCode::OK, "{lien} doit être servi");
+            assert_eq!(
+                cache.as_deref(),
+                Some("public, max-age=31536000, immutable"),
+                "{lien} porte une empreinte : il se garde sans revalider"
+            );
+        }
     }
 
     /// Les trois langues sont servies, chacune dans la sienne. Le risque
