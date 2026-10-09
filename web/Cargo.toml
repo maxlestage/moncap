@@ -1,0 +1,110 @@
+# Le front web de MonCap GPS, en Rust de bout en bout.
+#
+# Remplace l'ancienne application React + Bun. Même API, mêmes écrans, mais
+# un seul langage du serveur au navigateur : les types échangés avec
+# l'API, les règles de la carte et du temps réel se compilent et se testent
+# comme le reste du dépôt.
+#
+# `[workspace]` vide et volontaire : la crate n'appartient pas au paquet du
+# serveur, à la racine, et cargo refuserait sinon de la construire.
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+# Deux cibles, comme la vitrine :
+#   - `app` compile en WebAssembly et tourne dans le navigateur ;
+#   - `construit` compile en natif et fabrique `dist/` — la coquille HTML,
+#     les fichiers empreints, le WebAssembly optimisé.
+[lib]
+name = "web"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "construit"
+path = "src/bin/construit.rs"
+
+[[bin]]
+name = "app"
+path = "src/bin/app.rs"
+
+[dependencies]
+yew = { version = "0.23", features = ["csr"] }
+mouvement = { path = "../mouvement" }
+# Les outils de `construit` : natifs, absents du WebAssembly livré.
+fabrique = { path = "../fabrique" }
+
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+wasm-bindgen = "0.2.129"
+wasm-bindgen-futures = "0.4.79"
+js-sys = "0.3.106"
+
+# Le client HTTP : `fetch` derrière une interface Rust. Seul le module HTTP
+# est demandé — le WebSocket est écrit à la main dans `temps_reel.rs`, pour
+# tenir la reconnexion à notre façon.
+gloo-net = { version = "0.7", default-features = false, features = ["http", "json"] }
+gloo-timers = { version = "0.4", features = ["futures"] }
+
+[dependencies.web-sys]
+version = "0.3.106"
+features = [
+    "AddEventListenerOptions",
+    "Blob",
+    "CloseEvent",
+    "CssStyleDeclaration",
+    "Document",
+    "DomRect",
+    "DomTokenList",
+    "Element",
+    "Event",
+    "EventTarget",
+    "File",
+    "FileList",
+    # `Position`, `Coordinates` et `PositionError` plutôt que leurs noms
+    # modernes (`GeolocationPosition`…), que web-sys réserve encore aux API
+    # instables. Les objets sont les mêmes : on lit leurs champs, pas leur
+    # classe.
+    "Coordinates",
+    "Geolocation",
+    "HtmlElement",
+    "HtmlInputElement",
+    "KeyboardEvent",
+    "Location",
+    "MediaQueryList",
+    "MessageEvent",
+    "MouseEvent",
+    "Navigator",
+    "Node",
+    "Performance",
+    "PointerEvent",
+    "Position",
+    "PositionError",
+    "PositionOptions",
+    "ResizeObserver",
+    "ResizeObserverEntry",
+    "Storage",
+    "SubmitEvent",
+    "WebSocket",
+    "WheelEvent",
+    "Window",
+]
+
+[dev-dependencies]
+# Le rendu côté serveur, pour les tests seulement : relire le HTML que les
+# composants produisent vraiment. Rien de ceci ne part au navigateur.
+yew = { version = "0.23", features = ["ssr"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[profile.release]
+# Comme la vitrine : chaque kilooctet compte davantage que la vitesse
+# d'exécution, sur une page qui attend surtout le réseau.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

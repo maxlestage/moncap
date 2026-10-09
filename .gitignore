@@ -1,9 +1,13 @@
 # Rust
 /target/
-# La vitrine est une crate à part, avec son propre dossier de
-# construction : « /target/ » seul est ancré à la racine et le laissait
-# passer — 1,1 Go qui serait parti dans le dépôt.
+# Les fronts et leurs crates partagées sont des crates à part, chacune avec
+# son propre dossier de construction : « /target/ » seul est ancré à la
+# racine et les laissait passer — 1,1 Go pour la seule vitrine, qui serait
+# parti dans le dépôt.
 vitrine/target/
+web/target/
+mouvement/target/
+fabrique/target/
 **/*.rs.bk
 
 # Env

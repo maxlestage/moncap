@@ -1,6 +1,7 @@
 # MonCap GPS
 
-Application GPS minimale : un backend **Rust + Axum** et un front **Swift / SwiftUI** (iOS).
+Application GPS minimale : un backend **Rust + Axum**, une app **Swift / SwiftUI** (iOS),
+et deux fronts web en **Rust** — Yew + WebAssembly : la vitrine et l'application web.
 
 ## Architecture
 
@@ -10,8 +11,10 @@ moncap/
 ├── src/main.rs
 ├── Procfile        web: ./target/release/moncap-gps
 ├── app.json        buildpack Rust + addon Postgres (bouton « Deploy »)
-├── web/            Front web React + Bun (voir web/README.md)
-├── vitrine/        Page de présentation, rendue à la construction (vitrine/README.md)
+├── web/            Front web, en Rust : Yew + WebAssembly (voir web/README.md)
+├── vitrine/        Page de présentation, en Rust : Yew + WebAssembly (vitrine/README.md)
+├── mouvement/      Les animations des deux fronts (rideau, cascades, molette inertielle…)
+├── fabrique/       Les outils de construction des deux fronts (empreintes, wasm-bindgen, wasm-opt)
 └── frontend/       App iOS SwiftUI
     └── MonCapGPS/
 ```
@@ -346,17 +349,51 @@ Fichiers utilisés :
 | --- | --- |
 | `/`, `/es`, `/en` | la vitrine, en français, espagnol et anglais |
 | `/vitrine/…` | ses fichiers, nommés d'après leur contenu |
-| `/app` | le front web, écran de connexion compris (`web/dist`) |
+| `/app` | le front web, écran de connexion compris (`web/dist/index.html`) |
+| `/web/…` | ses fichiers, nommés d'après leur contenu |
 | le reste | l'API |
 
-Le buildpack ne compile **que** la crate Rust : aucun Bun ne tourne sur le
-dyno. Les deux fronts sont donc versionnés construits (`web/dist`,
-`vitrine/dist`) — sans quoi le serveur n'aurait rien à servir.
+Le buildpack ne compile **que** la crate du serveur : aucun WebAssembly
+n'est fabriqué sur le dyno. Les deux fronts sont donc versionnés construits
+(`web/dist`, `vitrine/dist`) — sans quoi le serveur n'aurait rien à servir.
 
-Pour la vitrine, c'est le CI qui s'en charge : `.github/workflows/vitrine.yml`
-la reconstruit et verse `dist/` dès que `vitrine/src` change sur `master`. La
-poussée qui en résulte déclenche à son tour le déploiement Heroku. Rien à
-lancer depuis un navigateur, ce qui est le seul outil disponible ici.
+C'est le CI qui s'en charge : `.github/workflows/front.yml` vérifie et
+reconstruit les deux fronts, et verse leurs `dist/` dès que leurs sources —
+ou celles de `mouvement/` et `fabrique/`, qu'ils partagent — changent sur
+`master`. La poussée qui en résulte déclenche à son tour le déploiement
+Heroku. Rien à lancer depuis un navigateur, ce qui est le seul outil
+disponible ici.
+
+### Les fronts, et leur mouvement
+
+Les deux fronts sont écrits en **Rust**, avec [Yew](https://yew.rs) 0.23,
+et compilés en WebAssembly : la vitrine depuis #383, le front web depuis
+qu'il a quitté React, Bun et Leaflet — sa carte est écrite en Rust (voir
+`web/README.md`).
+
+Leurs animations suivent [zamocorp.com](https://zamocorp.com) et sont
+jouées par la crate `mouvement`, la même pour les deux. Ce que le site de
+référence obtient avec GSAP, ScrollTrigger et Lenis y est repris en Rust,
+et seulement ces gestes-là :
+
+| Geste | Où |
+| --- | --- |
+| Rideau de chargement qui se lève | les deux, pendant l'arrivée du WebAssembly |
+| Titres qui montent mot à mot derrière leur masque | les deux |
+| Cascades décalées à l'entrée dans l'écran | les deux |
+| Dévoilement par `clip-path` | maquettes, carte, carte de connexion |
+| Nombres qui comptent jusqu'à leur valeur | chiffres, prix, mesure, tableau de bord |
+| Molette inertielle (à la Lenis), progression liée au défilement | les deux ; la carte garde sa molette pour zoomer |
+| Boutons magnétiques | les deux, à la souris seulement |
+| Volet plein écran entre la connexion et le tableau | front web |
+| Route qui se dessine, point GPS qui la parcourt, grain | écran de connexion |
+| Bandeau défilant incliné par l'élan | les deux |
+
+Le moteur ne démarre pas quand le système demande moins de mouvement, et
+tout état caché vit sous la classe qu'il pose : sans lui, la page est
+immobile, jamais vide. Ses règles — amortissement indépendant de la
+fréquence d'écran, cascades plafonnées, compteurs qui finissent sur le
+texte exact — sont des fonctions pures, testées sans navigateur.
 
 Le front web vise la **même origine** par défaut : servi par le dyno, il
 parle à l'API sans configuration.
