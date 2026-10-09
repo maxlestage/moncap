@@ -12,7 +12,7 @@ use yew::prelude::*;
 
 use crate::api;
 use crate::session::{self, Session};
-use crate::ui::Mots;
+use crate::ui::{Lettres, Mots, Roule};
 
 /// Validation volontairement simple — `local@domaine.tld`, la même que
 /// l'app iOS : le seul vrai contrôle d'une adresse, c'est le courriel
@@ -184,8 +184,8 @@ pub fn Porte(p: &Props) -> Html {
             <main class="porte-dedans">
                 <section class="porte-titre">
                     <p class="surtitre" data-mvt="monte">{ "Comparez, puis roulez" }</p>
-                    <h1 data-mvt="mots" aria-label="MonCap GPS">
-                        <Mots texte="MonCap GPS" />
+                    <h1 data-mvt="lettres" aria-label="MonCap GPS">
+                        <Lettres texte="MonCap GPS" />
                     </h1>
                     // Rejoue son entrée quand on change de mode : une phrase
                     // neuve, un élément neuf.
@@ -195,7 +195,7 @@ pub fn Porte(p: &Props) -> Html {
                 </section>
 
                 <div class="porte-cadre" data-mvt="devoile">
-                <form class="porte-carte" onsubmit={soumet} novalidate=true>
+                <form class="porte-carte" onsubmit={soumet} novalidate=true data-incline="3">
                     <label class="champ" style="--i:0">
                         <span>{ "E-mail" }</span>
                         <input type="email" placeholder="toi@exemple.fr" autocapitalize="none"
@@ -222,7 +222,7 @@ pub fn Porte(p: &Props) -> Html {
                         </p>
                     }
 
-                    <button type="submit" class="principal" data-aimant="" style="--i:3"
+                    <button type="submit" class="principal" data-aimant="" data-onde="" style="--i:3"
                             disabled={*occupe || email.is_empty() || mdp.is_empty()}>
                         <span>
                             if *occupe {
@@ -236,7 +236,7 @@ pub fn Porte(p: &Props) -> Html {
                     </button>
 
                     <div class="porte-liens" style="--i:4">
-                        <button type="button" class="lien" onclick={bascule}>
+                        <button type="button" class="lien" data-onde="" onclick={bascule}>
                             { if inscription { "Déjà un compte ? Se connecter" } else { "Pas de compte ? S'inscrire" } }
                         </button>
                         if !inscription {
@@ -256,9 +256,9 @@ pub fn Porte(p: &Props) -> Html {
                 </div>
 
                 <p class="porte-pied" data-mvt="monte">
-                    <a href="/confidentialite">{ "Confidentialité" }</a>
+                    <a href="/confidentialite"><Roule texte="Confidentialité" /></a>
                     { " · " }
-                    <a href="/">{ "Le site" }</a>
+                    <a href="/"><Roule texte="Le site" /></a>
                 </p>
             </main>
 
@@ -274,7 +274,9 @@ fn Decor() -> Html {
                          S 1040 640 1180 470 S 1360 190 1500 230";
     let bouge = mouvement::mouvement_permis();
     html! {
-        <div class="porte-decor" aria-hidden="true">
+        // `data-souris` : les épingles suivent la souris, chacune selon sa
+        // profondeur (`--z`).
+        <div class="porte-decor" aria-hidden="true" data-souris="">
             <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" focusable="false">
                 <path id="route-decor" class="route-ombre" d={ROUTE} />
                 <path class="route-trait" pathLength="1" d={ROUTE} />
@@ -293,10 +295,29 @@ fn Decor() -> Html {
                     </g>
                 }
             </svg>
+            <div class="flottants">
+                { for FLOTTANTS.iter().enumerate().map(|(i, (emoji, x, y, z))| html! {
+                    <span key={i} class="flottant"
+                          style={format!("--x:{x}%;--y:{y}%;--z:{z};--i:{i}")}>
+                        <span>{ *emoji }</span>
+                    </span>
+                }) }
+            </div>
             <div class="grain" />
         </div>
     }
 }
+
+/// Les épingles qui flottent autour de la porte : ce que la communauté
+/// signale sur la route. Emoji, position en pour cent de l'écran, et
+/// profondeur — les plus proches bougent plus avec la souris.
+const FLOTTANTS: [(&str, u8, u8, f32); 5] = [
+    ("🚓", 88, 8, 1.6),
+    ("⛽", 95, 76, 0.9),
+    ("🚧", 6, 64, 1.3),
+    ("📍", 47, 7, 0.7),
+    ("⚠️", 64, 88, 1.1),
+];
 
 /// Le bandeau qui défile en bas de l'écran. Doublé, pour boucler sans
 /// couture : quand la première moitié sort, la seconde est à sa place.

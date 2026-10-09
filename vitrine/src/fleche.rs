@@ -200,7 +200,7 @@ pub fn FlecheNav(p: &Props) -> Html {
     });
 
     html! {
-        <a class="fleche-nav" id="fleche" href="#haut" ref={noeud} data-aimant=""
+        <a class="fleche-nav" id="fleche" href="#haut" ref={noeud} data-aimant="" data-defile=""
            onclick={au_clic} aria-label={c.chevrons.remonter} data-sens="bas">
             { Sens::Bas.glyphe() }
         </a>

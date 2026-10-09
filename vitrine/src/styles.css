@@ -1583,6 +1583,10 @@ html.mvt [data-mvt="monte"][data-vu] {
   overflow: clip;
   padding-block: 0.06em 0.14em;
   margin-block: -0.06em -0.14em;
+  /* Et sur les côtés : un titre serré (`letter-spacing` négatif) laisse sa
+     dernière lettre déborder de sa propre avance, et le masque la rognait. */
+  padding-inline: 0.08em;
+  margin-inline: -0.08em;
 }
 
 .mot > span {
@@ -1797,13 +1801,15 @@ html.mvt .defilant-piste {
   .cartes li {
     transition:
       transform 0.4s var(--courbe),
+      translate 0.4s var(--courbe),
       border-color 0.3s ease,
       box-shadow 0.3s ease,
       opacity 0.8s var(--courbe);
   }
 
+  /* `translate` et non `transform` : celui-ci appartient à l'inclinaison. */
   .cartes li:hover {
-    transform: translateY(-4px);
+    translate: 0 -4px;
     border-color: color-mix(in srgb, var(--accent) 40%, var(--trait));
     box-shadow: 0 10px 28px rgb(0 0 0 / 0.08);
   }
@@ -1824,5 +1830,690 @@ html.mvt .defilant-piste {
       color 0.35s ease,
       border-color 0.35s ease,
       translate 0.5s var(--courbe);
+  }
+}
+
+/* === Plus de mouvement =====================================================
+ * La seconde vague : chaque section a désormais son geste. Mêmes règles que
+ * la première — tout état masqué vit sous `html.mvt`, et la porte de sortie
+ * du mouvement réduit, plus haut, passe devant tout.
+ */
+
+/* Le texte réservé au lecteur d'écran : le titre en un bloc, quand l'œil le
+   reçoit lettre à lettre. */
+.visuel-cache {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Les lettres ------------------------------------------------------------
+ * Les grands titres montent lettre à lettre, chacune derrière le masque de
+ * son mot (`.mot`, plus haut) : `--j`, son rang dans le titre, la décale. */
+@keyframes mvt-lettre {
+  from {
+    transform: translateY(115%) rotate(9deg);
+  }
+}
+
+.lettre {
+  transform-origin: 0 100%;
+}
+
+html.mvt [data-mvt="lettres"]:not([data-vu]) .lettre {
+  transform: translateY(115%);
+}
+
+html.mvt [data-mvt="lettres"][data-vu] .lettre {
+  animation: mvt-lettre 1.1s var(--courbe)
+    calc(var(--retard, 0s) + var(--j, 0) * var(--pas-lettre, 0.028s)) backwards;
+}
+
+/* --- Les numéros de section -------------------------------------------------
+ * « 01 —— » au-dessus de chaque titre : le trait se tire après le chiffre. */
+.numero {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.numero::after {
+  content: "";
+  flex: 0 0 3.2rem;
+  height: 1px;
+  background: currentColor;
+  transform-origin: 0 50%;
+}
+
+@keyframes mvt-trait {
+  from {
+    scale: 0 1;
+  }
+}
+
+html.mvt [data-mvt="trait"]:not([data-vu]) {
+  opacity: 0;
+}
+
+html.mvt [data-mvt="trait"][data-vu] {
+  animation: mvt-monte 0.8s var(--courbe) var(--retard, 0s) backwards;
+}
+
+html.mvt [data-mvt="trait"][data-vu]::after {
+  animation: mvt-trait 1.3s var(--courbe) calc(var(--retard, 0s) + 0.2s) backwards;
+}
+
+/* --- La barre de lecture ------------------------------------------------- */
+.lecture {
+  display: none;
+}
+
+html.mvt .lecture {
+  display: block;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 60;
+  height: 3px;
+  pointer-events: none;
+}
+
+.lecture span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--orange));
+  transform-origin: 0 50%;
+  scale: var(--defile, 0) 1;
+}
+
+/* --- La carte vivante -------------------------------------------------------
+ * Le décor du bandeau. `--sx`, `--sy` : la souris, de −1 à 1, lissée par le
+ * moteur ; `--defile-ecrans` : la page parcourue. Elle part un peu à
+ * l'opposé de la souris — la profondeur — et descend moins vite que la
+ * page. */
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+
+.carte-vivante {
+  position: absolute;
+  inset: -2rem;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.6;
+  -webkit-mask-image: radial-gradient(120% 90% at 70% 30%, #000 30%, transparent 85%);
+  mask-image: radial-gradient(120% 90% at 70% 30%, #000 30%, transparent 85%);
+}
+
+html.mvt .carte-vivante {
+  translate: calc(var(--sx, 0) * -18px) calc(var(--sy, 0) * -12px);
+  transform: translateY(calc(min(var(--defile-ecrans, 0), 1.2) * 22vh));
+}
+
+/* La lueur qui suit la souris, sous les routes. */
+.carte-vivante::before {
+  content: "";
+  position: absolute;
+  left: calc(55% + var(--sx, 0) * 30%);
+  top: calc(35% + var(--sy, 0) * 25%);
+  width: 42rem;
+  height: 42rem;
+  translate: -50% -50%;
+  background: radial-gradient(closest-side, rgb(56 152 200 / 0.4), transparent);
+}
+
+.carte-vivante svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cv-rues path {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.1);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.cv-route {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.cv-route.r1 {
+  stroke: var(--orange);
+}
+
+.cv-route.r2 {
+  stroke: var(--cyan);
+}
+
+.cv-route.r3 {
+  stroke: #7fb0ff;
+}
+
+/* Tracé, puis effacé par la queue : un itinéraire qu'on parcourt. */
+@keyframes cv-trace {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  45%,
+  70% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -1;
+  }
+}
+
+html.mvt .cv-route {
+  stroke-dasharray: 1;
+  animation: cv-trace 10s var(--courbe-volet) infinite;
+}
+
+html.mvt .cv-route.r2 {
+  animation-delay: -3.4s;
+}
+
+html.mvt .cv-route.r3 {
+  animation-delay: -6.8s;
+}
+
+.cv-epingle circle {
+  fill: var(--orange);
+}
+
+.cv-epingle.e2 circle {
+  fill: var(--cyan);
+}
+
+.cv-epingle.e3 circle {
+  fill: #7fb0ff;
+}
+
+.cv-epingle .halo,
+.cv-voiture .halo {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.cv-epingle {
+  color: var(--orange);
+}
+
+.cv-epingle.e2 {
+  color: var(--cyan);
+}
+
+.cv-epingle.e3 {
+  color: #7fb0ff;
+}
+
+@keyframes cv-pouls {
+  from {
+    scale: 0.3;
+    opacity: 1;
+  }
+  to {
+    scale: 1.6;
+    opacity: 0;
+  }
+}
+
+html.mvt .cv-epingle .halo {
+  animation: cv-pouls 2.6s var(--courbe) infinite;
+}
+
+html.mvt .cv-epingle.e2 .halo {
+  animation-delay: -0.9s;
+}
+
+html.mvt .cv-epingle.e3 .halo {
+  animation-delay: -1.7s;
+}
+
+/* La voiture n'existe qu'en mouvement : immobile au départ du trajet, ce
+   serait un point de plus sans raison. */
+.cv-voiture {
+  display: none;
+  color: #ffffff;
+}
+
+.cv-voiture circle:not(.halo) {
+  fill: #ffffff;
+}
+
+html.mvt .cv-voiture {
+  display: inline;
+}
+
+html.mvt .cv-voiture .halo {
+  animation: cv-pouls 1.6s ease-out infinite;
+}
+
+/* --- Les maquettes ----------------------------------------------------------
+ * L'écran se redresse en traversant la page (`--p`, de 0 à 1) : penché en
+ * arrière en entrant, à plat au milieu, penché en avant en sortant.
+ * `rotate`, et non `transform` : ce dernier est au dévoilement. */
+html.mvt .maquette[data-scrub] {
+  perspective: 1200px;
+}
+
+html.mvt .maquette[data-scrub] > :first-child {
+  rotate: x calc((0.5 - var(--p, 0.5)) * 22deg);
+  transform-origin: 50% 60%;
+}
+
+@keyframes mvt-pop {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+
+@keyframes mvt-jauge {
+  from {
+    scale: 0 1;
+  }
+}
+
+/* Une fois l'écran allumé, son contenu arrive à son tour. */
+html.mvt .maquette[data-vu] .routes li,
+html.mvt .maquette[data-vu] .regions li {
+  animation: mvt-monte 0.8s var(--courbe) calc(var(--retard, 0s) + 0.45s) backwards;
+}
+
+html.mvt .maquette[data-vu] :is(.routes, .regions) li:nth-child(2) {
+  animation-delay: calc(var(--retard, 0s) + 0.57s);
+}
+
+html.mvt .maquette[data-vu] :is(.routes, .regions) li:nth-child(3) {
+  animation-delay: calc(var(--retard, 0s) + 0.69s);
+}
+
+html.mvt .maquette[data-vu] :is(.routes, .regions) li:nth-child(n + 4) {
+  animation-delay: calc(var(--retard, 0s) + 0.81s);
+}
+
+html.mvt .maquette[data-vu] :is(.pastilles > span, .lieux li, .demarrer) {
+  animation: mvt-pop 0.7s var(--courbe) calc(var(--retard, 0s) + 0.55s) backwards;
+}
+
+html.mvt .maquette[data-vu] :is(.pastilles > span, .lieux li):nth-child(2) {
+  animation-delay: calc(var(--retard, 0s) + 0.63s);
+}
+
+html.mvt .maquette[data-vu] :is(.pastilles > span, .lieux li):nth-child(3) {
+  animation-delay: calc(var(--retard, 0s) + 0.71s);
+}
+
+html.mvt .maquette[data-vu] .lieux li:nth-child(n + 4) {
+  animation-delay: calc(var(--retard, 0s) + 0.79s);
+}
+
+.jauge span {
+  position: relative;
+  overflow: hidden;
+  transform-origin: 0 50%;
+}
+
+html.mvt .maquette[data-vu] .jauge span {
+  animation: mvt-jauge 1.8s var(--courbe) calc(var(--retard, 0s) + 0.6s) backwards;
+}
+
+/* Le reflet qui parcourt la jauge : le téléchargement avance. */
+@keyframes mvt-reflet {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 250% 0;
+  }
+}
+
+html.mvt .jauge span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  animation: mvt-reflet 1.9s ease-in-out infinite;
+}
+
+/* Le bouton « Démarrer » appelle, la flèche de guidage indique. */
+@keyframes mvt-appel {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(56 152 200 / 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 10px rgb(56 152 200 / 0);
+  }
+}
+
+html.mvt .maquette[data-vu] .demarrer {
+  animation:
+    mvt-pop 0.7s var(--courbe) calc(var(--retard, 0s) + 0.9s) backwards,
+    mvt-appel 2.4s ease-out calc(var(--retard, 0s) + 1.8s) infinite;
+}
+
+@keyframes mvt-indique {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 3px -3px;
+  }
+}
+
+html.mvt .guidage .fleche,
+html.mvt .fleche-poignet {
+  display: inline-block;
+  animation: mvt-indique 1.8s ease-in-out infinite;
+}
+
+/* --- L'inclinaison ----------------------------------------------------------
+ * Les vignettes et les cartes s'inclinent vers la souris (`--rx`, `--ry`,
+ * posés par le moteur à la souris seulement), et une lueur suit le pointeur
+ * dedans (`--mx`, `--my`). */
+@media (hover: hover) {
+  /* La transformation n'existe que pendant le survol : au repos, le texte
+     reste net, sans calque en trois dimensions. */
+  html.mvt [data-incline][data-survol] {
+    transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  }
+
+  html.mvt [data-incline] {
+    position: relative;
+    transition:
+      transform 0.45s var(--courbe),
+      translate 0.4s var(--courbe),
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  html.mvt [data-incline]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+      16rem circle at var(--mx, 50%) var(--my, 50%),
+      color-mix(in srgb, var(--cyan) 22%, transparent),
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  html.mvt [data-incline][data-survol]::after {
+    opacity: 1;
+  }
+}
+
+/* --- La formule vedette -----------------------------------------------------
+ * Son cadre tourne : un dégradé conique, dont l'angle est une propriété
+ * déclarée pour pouvoir s'animer. */
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes mvt-angle {
+  to {
+    --angle: 1turn;
+  }
+}
+
+html.mvt .formule.vedette {
+  border: 2px solid transparent;
+  padding: calc(1.3rem - 1px) calc(1.4rem - 1px);
+  background:
+    linear-gradient(var(--accent-doux), var(--accent-doux)) padding-box,
+    conic-gradient(
+        from var(--angle),
+        var(--accent),
+        var(--cyan),
+        var(--orange),
+        var(--accent)
+      )
+      border-box;
+  animation: mvt-angle 5s linear infinite;
+}
+
+/* La cascade anime aussi la vedette : son entrée passe d'abord. */
+html.mvt [data-mvt="cascade"][data-vu] > .formule.vedette {
+  animation:
+    mvt-monte 0.85s var(--courbe) calc(var(--retard, 0s) + var(--i, 0) * 0.08s) backwards,
+    mvt-angle 5s linear infinite;
+}
+
+/* --- La preuve ---------------------------------------------------------------
+ * Bordeaux → Limoges se trace au défilement. Entièrement tracé sans moteur. */
+.trajet-preuve {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  max-width: 30rem;
+  margin: 1.2rem 0 0.6rem;
+}
+
+.trajet-preuve svg {
+  grid-column: 1 / -1;
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.tp-fond,
+.tp-trace,
+.tp-voiture {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.tp-fond {
+  stroke: color-mix(in srgb, var(--accent) 28%, transparent);
+  stroke-width: 2;
+  stroke-dasharray: 1 7;
+}
+
+.tp-trace {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.tp-ville {
+  fill: var(--accent-doux);
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.tp-voiture {
+  display: none;
+  stroke: var(--orange);
+  stroke-width: 11;
+}
+
+.tp-nom {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--doux);
+}
+
+/* `--p` passe de 0 à 1 pendant la traversée de l'écran : le tracé se fait
+   entre 15 % et 60 %, et reste fait ensuite. */
+html.mvt .trajet-preuve {
+  --trace: clamp(0, (var(--p, 1) - 0.15) / 0.45, 1);
+}
+
+html.mvt .tp-trace {
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - var(--trace));
+}
+
+/* Un tiret de longueur nulle aux bouts ronds : un point, qui glisse. */
+html.mvt .tp-voiture {
+  display: inline;
+  stroke-dasharray: 0 2;
+  stroke-dashoffset: calc(var(--trace) * -1);
+}
+
+/* --- La pile ------------------------------------------------------------------
+ * Chaque outil éclot à son tour dans son domaine (`--k`). */
+html.mvt .pile [data-mvt="cascade"][data-vu] li {
+  animation: mvt-pop 0.6s var(--courbe)
+    calc(var(--retard, 0s) + var(--i, 0) * 0.08s + 0.25s + var(--k, 0) * 0.06s) backwards;
+}
+
+.pile li {
+  transition:
+    color 0.25s ease,
+    border-color 0.25s ease,
+    translate 0.35s var(--courbe);
+}
+
+@media (hover: hover) {
+  .pile li:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    translate: 0 -2px;
+  }
+}
+
+/* --- Le second bandeau --------------------------------------------------------
+ * Les outils, en lettres creuses et en sens inverse, sur le papier. */
+.defilant-outils {
+  margin-top: 0;
+  border-color: var(--trait);
+  color: transparent;
+  -webkit-text-stroke: 1.2px color-mix(in srgb, var(--texte) 60%, transparent);
+  font-size: clamp(1.7rem, 7.5vw, 3.4rem);
+  font-weight: 800;
+  padding-block: 1rem;
+}
+
+.defilant-outils i {
+  -webkit-text-stroke: 0;
+}
+
+html.mvt .defilant-outils {
+  transform: skewX(calc(var(--elan, 0) * 9deg));
+}
+
+html.mvt .defilant-outils .defilant-piste {
+  animation-direction: reverse;
+  animation-duration: 48s;
+}
+
+/* --- Les libellés qui roulent -------------------------------------------------
+ * Au survol, le texte monte et son double prend sa place. */
+/* La marge négative rend la place prise par le masque élargi : la ligne
+   garde sa hauteur, et le libellé reste sur la ligne de base de ses
+   voisins. */
+.roule {
+  display: inline-grid;
+  overflow: clip;
+  padding-block: 0.08em;
+  margin-block: -0.08em;
+}
+
+.roule > span {
+  grid-area: 1 / 1;
+  transition: translate 0.5s var(--courbe);
+}
+
+.roule-double {
+  translate: 0 125%;
+}
+
+@media (hover: hover) {
+  a:hover .roule > span {
+    translate: 0 -125%;
+  }
+
+  a:hover .roule > .roule-double {
+    translate: 0 0;
+  }
+}
+
+/* --- La flèche ----------------------------------------------------------------
+ * Un anneau autour du disque se remplit avec la page parcourue. */
+html.mvt .fleche-nav[data-defile]::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    var(--teinte, var(--accent)) calc(var(--defile, 0) * 1turn),
+    color-mix(in srgb, var(--teinte, var(--accent)) 14%, transparent) 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+}
+
+/* --- La signature géante ------------------------------------------------------
+ * « MonCap GPS » sur toute la largeur, au bas du pied : elle monte lettre à
+ * lettre, s'efface vers le bas et glisse un peu avec la souris. */
+.mot-geant {
+  margin: 1.8rem 0 calc(-1 * env(safe-area-inset-bottom));
+  padding-inline: 1.25rem;
+  overflow: clip;
+  text-align: center;
+  white-space: nowrap;
+  font-size: clamp(2.4rem, 14vw, 12.5rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  color: #eaf1ff;
+  -webkit-mask-image: linear-gradient(180deg, #000 25%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 25%, transparent 100%);
+  --pas-lettre: 0.055s;
+}
+
+html.mvt .mot-geant {
+  translate: calc(var(--sx, 0) * -1.4rem) 0;
+}
+
+/* Le glissement ne doit pas élargir la page : le pied le coupe. */
+footer {
+  overflow-x: clip;
+}
+
+.mot-geant .lettre {
+  transition:
+    translate 0.6s var(--courbe),
+    color 0.3s ease;
+}
+
+@media (hover: hover) {
+  .mot-geant .lettre:hover {
+    translate: 0 -0.07em;
+    color: var(--orange);
   }
 }
