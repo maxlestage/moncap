@@ -1,0 +1,74 @@
+# La vitrine, en Rust de bout en bout.
+#
+# `[workspace]` vide et volontaire : cette crate ne fait pas partie du paquet
+# du serveur, à la racine. Sans cette ligne, cargo croit qu'elle y appartient
+# et refuse de la construire.
+[package]
+name = "vitrine"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+# Deux cibles pour une seule base de code, et c'est tout l'intérêt d'avoir
+# choisi Rust : le contenu, les types et les composants se compilent
+#   - en WebAssembly pour l'application qui tourne dans le navigateur,
+#   - en binaire natif pour l'outil qui fabrique les coquilles HTML (titres,
+#     Open Graph, JSON-LD, repli sans script).
+# Le texte des trois langues n'existe donc qu'une fois, et le compilateur
+# garantit que les deux usages voient exactement le même.
+[lib]
+name = "vitrine"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "construit"
+path = "src/bin/construit.rs"
+
+[[bin]]
+name = "app"
+path = "src/bin/app.rs"
+
+[dependencies]
+yew = { version = "0.23", features = ["csr"] }
+
+# Le navigateur, vu depuis Rust. Les fonctionnalités sont énumérées une par
+# une et non prises en bloc : `web-sys` est immense, et chaque interface non
+# demandée est du code qui ne part pas dans le WebAssembly.
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "Document", "Element", "HtmlElement", "HtmlCollection", "NodeList",
+    "Window", "DomRect", "DomStringMap", "CssStyleDeclaration",
+    "ScrollToOptions", "ScrollBehavior", "ScrollIntoViewOptions",
+    "MediaQueryList", "Event", "EventTarget", "AddEventListenerOptions",
+]
+
+[dev-dependencies]
+# Le rendu côté serveur, **pour les tests seulement**.
+#
+# Les dépendances de développement ne sont pas compilées quand on construit
+# le binaire WebAssembly : rien de ceci ne part au navigateur, et la taille
+# livrée ne bouge pas (vérifié, à l'octet près).
+#
+# Ce qu'il permet : relire le HTML réellement produit par les composants,
+# et non les données qui le nourrissent. C'est ce que faisait l'ancien test
+# des liens, né d'un incident réel — deux liens vers un dépôt devenu privé,
+# qu'aucune construction ni capture n'avait signalés, une adresse morte se
+# rendant exactement comme une adresse valide.
+yew = { version = "0.23", features = ["ssr"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[profile.release]
+# `z` plutôt que `s` : sur une page qui ne calcule rien, chaque kilooctet
+# économisé arrive plus tôt que ce qu'une optimisation de vitesse ferait
+# gagner à l'exécution.
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -58,7 +58,7 @@ formule au mois : MonCap Plus (3,99 €) pour l'app entière, MonCap Pro
 engagement, résiliable dans les réglages iOS.
 ```
 
-(ES et EN : reprendre la traduction des cartes du site — `vitrine/src/langues.ts`
+(ES et EN : reprendre la traduction des cartes du site — `vitrine/src/contenu.rs`
 porte déjà chaque argument dans les trois langues, mêmes mots.)
 
 ## Mots-clés (100 car. max, FR)
@@ -163,7 +163,7 @@ mode « vérifie » qui ne touche à rien et dit ce qui manque.
 ## Référencement : ce qui attend un jeton ou un domaine
 
 Le site est prêt des deux côtés, il ne manque qu'une valeur à chaque fois —
-la construction (`vitrine/build.tsx`) lit deux variables d'environnement :
+la construction (`vitrine/src/bin/construit.rs`) lit deux variables d'environnement :
 
 - `GOOGLE_SITE_VERIFICATION` : le jeton de Google Search Console. Posé, la
   balise `<meta name="google-site-verification">` apparaît sur les neuf
