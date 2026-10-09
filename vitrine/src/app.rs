@@ -22,7 +22,7 @@ use yew::prelude::*;
 use crate::appstrings::app;
 use crate::contenu::{
     Itineraire, Langue, PageLegale, AUTEUR, CONNEXION, LIEUX, MAQUETTE_ITINERAIRES,
-    MAQUETTE_REGIONS, MODES, MODE_ACTIF, SOURCES,
+    MAQUETTE_REGIONS, MODES, MODE_ACTIF, OUTILS, SOURCES,
 };
 use crate::fleche::FlecheNav;
 use crate::traduire::{
@@ -118,6 +118,62 @@ fn mots(texte: &str, depart: usize) -> Html {
         .collect()
 }
 
+/// Le nombre de lettres d'un texte, blancs exclus : le rang de départ de la
+/// ligne suivante dans une cascade de lettres.
+fn nb_lettres(texte: &str) -> usize {
+    calcul::mots(texte).map(|m| m.chars().count()).sum()
+}
+
+/// Un texte découpé en lettres, chacune derrière le masque de son mot. Plus
+/// démonstratif que les mots — réservé aux grands titres.
+///
+/// Rendu pour l'œil seulement (`aria-hidden`) : épelé lettre à lettre, un
+/// titre se lirait mal au lecteur d'écran. Qui l'appelle place le texte
+/// entier à côté, en `visuel-cache`.
+fn lettres(texte: &str, depart: usize) -> Html {
+    let mut rang = depart;
+    let liste: Vec<&str> = calcul::mots(texte).collect();
+    let n = liste.len();
+    let mut rendu = Vec::with_capacity(n);
+    for (i, m) in liste.into_iter().enumerate() {
+        let lettres: Vec<Html> = m
+            .chars()
+            .map(|ch| {
+                let j = rang;
+                rang += 1;
+                html! { <span class="lettre" style={format!("--j:{j}")}>{ ch.to_string() }</span> }
+            })
+            .collect();
+        rendu.push(html! {
+            <>
+                <span class="mot">{ for lettres }</span>
+                if i + 1 < n { { " " } }
+            </>
+        });
+    }
+    rendu.into_iter().collect()
+}
+
+/// Un libellé qui roule au survol : le texte monte et son double le
+/// remplace. Le double est caché aux lecteurs d'écran, qui ne liraient
+/// sinon chaque lien deux fois.
+fn roule(texte: &str) -> Html {
+    html! {
+        <span class="roule">
+            <span>{ texte.to_string() }</span>
+            <span class="roule-double" aria-hidden="true">{ texte.to_string() }</span>
+        </span>
+    }
+}
+
+/// Le numéro d'une section, et le trait qui le suit — l'index des sites
+/// éditoriaux. Décoratif : le titre dit déjà de quoi il s'agit.
+fn numero(n: usize) -> Html {
+    html! {
+        <p class="numero" aria-hidden="true" data-mvt="trait">{ format!("{n:02}") }</p>
+    }
+}
+
 /// Le bandeau qui défile sous le chapeau : les promesses du hors-ligne,
 /// déjà traduites dans les trois langues. Doublé pour boucler sans couture,
 /// et lu une seule fois par les lecteurs d'écran — la seconde moitié leur
@@ -137,6 +193,69 @@ fn Defilant(props: &LangueProps) -> Html {
     html! {
         <div class="defilant" data-defile="">
             <div class="defilant-piste">{ suite(false) }{ suite(true) }</div>
+        </div>
+    }
+}
+
+/// Le second bandeau, en sens inverse et en lettres creuses : les outils
+/// de la pile. Des noms propres, les mêmes dans les trois langues.
+#[function_component]
+fn DefilantOutils() -> Html {
+    let suite = |cachee: bool| {
+        html! {
+            <span class="defilant-suite" aria-hidden={cachee.then_some("true")}>
+                { for OUTILS.iter().flat_map(|g| g.iter()).map(|o| html! {
+                    <span key={*o}>{ *o }<i aria-hidden="true">{ "●" }</i></span>
+                }) }
+            </span>
+        }
+    };
+    html! {
+        <div class="defilant defilant-outils" data-defile="" aria-hidden="true">
+            <div class="defilant-piste">{ suite(false) }{ suite(true) }</div>
+        </div>
+    }
+}
+
+/// Le décor du bandeau : une carte qui vit. Des rues, des itinéraires qui se
+/// tracent et s'effacent en boucle, des épingles qui pulsent, une voiture
+/// qui roule. Elle suit la souris (`data-souris`) et s'éloigne quand on
+/// descend (`data-defile`).
+///
+/// Sans moteur, elle est immobile et entièrement tracée : un dessin, pas un
+/// manque.
+#[function_component]
+fn CarteVivante() -> Html {
+    const R1: &str = "M60 400 C120 310 190 340 250 270 S360 170 430 200 S540 130 585 62";
+    const R2: &str = "M10 150 C110 160 170 96 250 116 S380 226 470 214 S560 300 600 292";
+    const R3: &str = "M300 420 C290 344 342 300 330 232 S262 124 302 42";
+    html! {
+        <div class="carte-vivante" aria-hidden="true" data-souris="" data-defile="">
+            <svg viewBox="0 0 600 420" preserveAspectRatio="xMidYMid slice" focusable="false">
+                <g class="cv-rues">
+                    <path d="M0 84H600M0 196H600M0 308H600M92 0V420M252 0V420M412 0V420M532 0V420" />
+                    <path d="M0 372C150 336 222 254 332 244S520 154 600 126" />
+                    <path d="M0 40C120 70 160 160 230 210S400 300 460 420" />
+                </g>
+                <path class="cv-route r1" pathLength="1" d={R1} />
+                <path class="cv-route r2" pathLength="1" d={R2} />
+                <path class="cv-route r3" pathLength="1" d={R3} />
+                <g class="cv-epingle e1" transform="translate(585 62)">
+                    <circle r="11" class="halo" /><circle r="5" />
+                </g>
+                <g class="cv-epingle e2" transform="translate(600 292)">
+                    <circle r="11" class="halo" /><circle r="5" />
+                </g>
+                <g class="cv-epingle e3" transform="translate(302 42)">
+                    <circle r="11" class="halo" /><circle r="5" />
+                </g>
+                <g class="cv-voiture">
+                    <circle r="9" class="halo" /><circle r="4.5" />
+                    // Le chemin recopié plutôt qu'un `<mpath>` : une
+                    // référence `href="#…"` se lirait comme un lien de plus.
+                    <animateMotion dur="11s" repeatCount="indefinite" path={R1} />
+                </g>
+            </svg>
         </div>
     }
 }
@@ -180,7 +299,7 @@ fn MaquetteComparateur(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette" data-mvt="devoile">
+        <figure class="maquette" data-mvt="devoile" data-scrub="">
             <div class="ecran">
                 <div class="modes" aria-hidden="true">
                     { for MODES.iter().map(|m| html! {
@@ -240,7 +359,7 @@ fn MaquetteGuidage(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette" data-mvt="devoile">
+        <figure class="maquette" data-mvt="devoile" data-scrub="">
             <div class="ecran">
                 <div class="guidage" aria-hidden="true">
                     <span class="fleche">{ "↱" }</span>
@@ -261,7 +380,7 @@ fn MaquetteGuidage(props: &LangueProps) -> Html {
                         { format!("🌤️ 21° {}", app(l, "Éclaircies")) }
                     </span>
                     <span class="vitesse">
-                        <strong>{ "78" }</strong>
+                        <strong data-compte="">{ "78" }</strong>
                         <small>{ "km/h" }</small>
                         <em>{ "90" }</em>
                     </span>
@@ -297,7 +416,7 @@ fn MaquetteMontre(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette montre" data-mvt="devoile">
+        <figure class="maquette montre" data-mvt="devoile" data-scrub="">
             <div class="cadran" aria-hidden="true">
                 <span class="fleche-poignet">{ "↱" }</span>
                 <p class="distance-poignet">{ "400 m" }</p>
@@ -318,7 +437,7 @@ fn MaquetteLieux(props: &LangueProps) -> Html {
     let l = props.langue;
     let c = l.contenu();
     html! {
-        <figure class="maquette" data-mvt="devoile">
+        <figure class="maquette" data-mvt="devoile" data-scrub="">
             <div class="ecran">
                 <ul class="lieux">
                     { for LIEUX.iter().enumerate().map(|(i, lieu)| html! {
@@ -339,7 +458,7 @@ fn MaquetteLieux(props: &LangueProps) -> Html {
 fn MaquetteRegions(props: &LangueProps) -> Html {
     let c = props.langue.contenu();
     html! {
-        <figure class="maquette" data-mvt="devoile">
+        <figure class="maquette" data-mvt="devoile" data-scrub="">
             <div class="ecran">
                 <ul class="regions">
                     { for MAQUETTE_REGIONS.iter().map(|r| html! {
@@ -359,7 +478,7 @@ fn MaquetteRegions(props: &LangueProps) -> Html {
                                         <div class="jauge" aria-hidden="true">
                                             <span style={format!("width: {pct}%")} />
                                         </div>
-                                        <p class="encours">{ format!("{pct} %") }</p>
+                                        <p class="encours" data-compte="">{ format!("{pct} %") }</p>
                                     </>
                                 },
                             } }
@@ -413,7 +532,7 @@ fn Langues(props: &LangueProps) -> Html {
                     html! {
                         <a key={autre.code} href={autre.chemin}
                            hreflang={autre.code} lang={autre.code}>
-                            { autre.nom }
+                            { roule(autre.nom) }
                         </a>
                     }
                 }
@@ -456,8 +575,8 @@ pub fn Pied(p: &PiedProps) -> Html {
                 <p class="slogan" data-mvt="mots">{ mots(c.pied.slogan, 0) }</p>
 
                 <p class="pied-liens" data-mvt="monte">
-                    <a class="bouton" href={CONNEXION} data-aimant="">
-                        <span>{ c.se_connecter }</span>
+                    <a class="bouton" href={CONNEXION} data-aimant="" data-curseur="→">
+                        <span>{ roule(c.se_connecter) }</span>
                     </a>
                 </p>
 
@@ -467,7 +586,7 @@ pub fn Pied(p: &PiedProps) -> Html {
                         <ul>
                             { for c.pied.ancres.iter().map(|a| html! {
                                 <li key={a.id}>
-                                    <a href={format!("{}#{}", c.chemin, a.id)}>{ a.nom }</a>
+                                    <a href={format!("{}#{}", c.chemin, a.id)}>{ roule(a.nom) }</a>
                                 </li>
                             }) }
                         </ul>
@@ -477,7 +596,9 @@ pub fn Pied(p: &PiedProps) -> Html {
                         <ul>
                             { for SOURCES.iter().map(|s| html! {
                                 <li key={s.nom}>
-                                    <a href={s.url} rel="external noopener">{ s.nom }</a>
+                                    <a href={s.url} rel="external noopener" data-curseur="↗">
+                                        { roule(s.nom) }
+                                    </a>
                                 </li>
                             }) }
                         </ul>
@@ -485,10 +606,10 @@ pub fn Pied(p: &PiedProps) -> Html {
                     <div>
                         <h3>{ c.pied.legal_titre }</h3>
                         <ul>
-                            <li><a href={c.mentions.chemin}>{ c.mentions.titre }</a></li>
+                            <li><a href={c.mentions.chemin}>{ roule(c.mentions.titre) }</a></li>
                             <li>
                                 <a href={c.confidentialite.chemin}>
-                                    { c.confidentialite.titre }
+                                    { roule(c.confidentialite.titre) }
                                 </a>
                             </li>
                         </ul>
@@ -503,6 +624,11 @@ pub fn Pied(p: &PiedProps) -> Html {
                     { format!("© {} {}. {}", p.annee, AUTEUR, c.pied.copyright) }
                 </p>
             </div>
+            // La signature en très grand, qui monte lettre à lettre et suit
+            // la souris : la page se ferme sur la marque.
+            <p class="mot-geant" aria-hidden="true" data-mvt="lettres" data-souris="">
+                { lettres("MonCap GPS", 0) }
+            </p>
         </footer>
     }
 }
@@ -522,9 +648,11 @@ fn Accueil(p: &Props) -> Html {
 
     html! {
         <>
+            <Lecture />
             <FilRoute />
 
             <header class="hero" id="haut">
+                <CarteVivante />
                 // Le fond du bandeau va d'un bord à l'autre, mais son texte
                 // doit s'aligner sur celui du corps : d'où ce conteneur, de
                 // la même largeur que `main`. Il s'éloigne quand on descend
@@ -539,15 +667,20 @@ fn Accueil(p: &Props) -> Html {
                         <Langues langue={l} />
                     </div>
 
-                    <h1 data-mvt="mots">
-                        { mots(c.h1[0], 0) }<br />
-                        <em>{ mots(c.h1[1], calcul::mots(c.h1[0]).count()) }</em>
+                    // Lettre à lettre pour l'œil ; le titre entier, d'un bloc,
+                    // pour le lecteur d'écran.
+                    <h1 data-mvt="lettres">
+                        <span class="visuel-cache">{ format!("{} {}", c.h1[0], c.h1[1]) }</span>
+                        <span aria-hidden="true">
+                            { lettres(c.h1[0], 0) }<br />
+                            <em>{ lettres(c.h1[1], nb_lettres(c.h1[0])) }</em>
+                        </span>
                     </h1>
                     <p class="chapeau" data-mvt="monte">{ c.chapeau }</p>
 
                     <div class="actions" data-mvt="monte">
-                        <a class="bouton" href={CONNEXION} data-aimant="">
-                            <span>{ c.se_connecter }</span>
+                        <a class="bouton" href={CONNEXION} data-aimant="" data-curseur="→">
+                            <span>{ roule(c.se_connecter) }</span>
                         </a>
                     </div>
 
@@ -555,7 +688,7 @@ fn Accueil(p: &Props) -> Html {
                     // jusqu'à sa valeur.
                     <dl class="chiffres" data-mvt="cascade">
                         { for c.chiffres.iter().enumerate().map(|(i, n)| html! {
-                            <div key={n.legende} style={format!("--i:{i}")}>
+                            <div key={n.legende} style={format!("--i:{i}")} data-incline="10">
                                 <dt data-compte="">{ n.valeur }</dt>
                                 <dd>{ n.legende }</dd>
                             </div>
@@ -570,6 +703,7 @@ fn Accueil(p: &Props) -> Html {
             <main>
                 <div class="dedans">
                     <section aria-labelledby="comparateur-titre">
+                        { numero(1) }
                         <h2 id="comparateur-titre" data-mvt="mots">{ mots(c.comparateur.titre, 0) }</h2>
                         <p class="intro" data-mvt="monte">{ c.comparateur.intro }</p>
                         <MaquetteComparateur langue={l} />
@@ -577,28 +711,32 @@ fn Accueil(p: &Props) -> Html {
                     </section>
 
                     <section aria-labelledby="guidage-titre">
+                        { numero(2) }
                         <h2 id="guidage-titre" data-mvt="mots">{ mots(c.guidage.titre, 0) }</h2>
                         <p class="intro" data-mvt="monte">{ c.guidage.intro }</p>
                         <MaquetteGuidage langue={l} />
                     </section>
 
                     <section aria-labelledby="montre-titre">
+                        { numero(3) }
                         <h2 id="montre-titre" data-mvt="mots">{ mots(c.montre.titre, 0) }</h2>
                         <p class="intro" data-mvt="monte">{ c.montre.intro }</p>
                         <MaquetteMontre langue={l} />
                     </section>
 
                     <section aria-labelledby="lieux-titre">
+                        { numero(4) }
                         <h2 id="lieux-titre" data-mvt="mots">{ mots(c.lieux.titre, 0) }</h2>
                         <p class="intro" data-mvt="monte">{ c.lieux.intro }</p>
                         <MaquetteLieux langue={l} />
                     </section>
 
                     <section aria-labelledby="atouts-titre">
+                        { numero(5) }
                         <h2 id="atouts-titre" data-mvt="mots">{ mots(c.atouts_titre, 0) }</h2>
                         <ul class="cartes" data-mvt="cascade">
                             { for c.atouts.iter().enumerate().map(|(i, a)| html! {
-                                <li key={a.titre} style={format!("--i:{}", i.min(5))}>
+                                <li key={a.titre} style={format!("--i:{}", i.min(5))} data-incline="">
                                     <span class="emoji" aria-hidden="true">{ a.emoji }</span>
                                     <h3>{ a.titre }</h3>
                                     <p>{ a.texte }</p>
@@ -608,12 +746,13 @@ fn Accueil(p: &Props) -> Html {
                     </section>
 
                     <section aria-labelledby="hors-ligne-titre">
+                        { numero(6) }
                         <h2 id="hors-ligne-titre" data-mvt="mots">{ mots(c.hors_ligne.titre, 0) }</h2>
                         <p class="intro" data-mvt="monte">{ c.hors_ligne.intro }</p>
                         <MaquetteRegions langue={l} />
                         <ul class="cartes" data-mvt="cascade">
                             { for c.hors_ligne_cartes.iter().enumerate().map(|(i, a)| html! {
-                                <li key={a.titre} style={format!("--i:{}", i.min(5))}>
+                                <li key={a.titre} style={format!("--i:{}", i.min(5))} data-incline="">
                                     <span class="emoji" aria-hidden="true">{ a.emoji }</span>
                                     <h3>{ a.titre }</h3>
                                     <p>{ a.texte }</p>
@@ -628,12 +767,13 @@ fn Accueil(p: &Props) -> Html {
                     // L'essai n'a pas de carte : un délai avant paiement n'est
                     // pas une formule, et rien ici ne doit ressembler à du 0 €.
                     <section aria-labelledby="tarifs-titre" class="tarifs">
+                        { numero(7) }
                         <h2 id="tarifs-titre" data-mvt="mots">{ mots(c.tarifs.titre, 0) }</h2>
                         <p class="intro" data-mvt="monte">{ c.tarifs.intro }</p>
                         <div class="formules" data-mvt="cascade">
                             { for [&c.tarifs.plus, &c.tarifs.pro].iter().enumerate()
                                 .map(|(i, f)| html! {
-                                <div key={f.nom} style={format!("--i:{i}")}
+                                <div key={f.nom} style={format!("--i:{i}")} data-incline="4"
                                      class={if i == 0 { "formule vedette" } else { "formule" }}>
                                     <h3>{ f.nom }</h3>
                                     <p class="prix">
@@ -652,16 +792,19 @@ fn Accueil(p: &Props) -> Html {
                     </section>
 
                     <section class="preuve" aria-labelledby="preuve-titre" data-mvt="monte">
+                        { numero(8) }
                         <h2 id="preuve-titre">{ c.preuve.titre }</h2>
                         <p>
                             { avant }
                             <strong data-compte="">{ c.preuve.mesure }</strong>
                             { apres }
                         </p>
+                        <TrajetPreuve />
                         <p class="note">{ c.preuve.note }</p>
                     </section>
 
                     <section aria-labelledby="pile-titre" class="pile">
+                        { numero(9) }
                         <h2 id="pile-titre" data-mvt="mots">{ mots(c.pile_titre, 0) }</h2>
                         <dl data-mvt="cascade">
                             { for c.pile.iter().enumerate().map(|(i, pi)| html! {
@@ -669,8 +812,8 @@ fn Accueil(p: &Props) -> Html {
                                     <dt>{ pi.domaine }</dt>
                                     <dd>
                                         <ul>
-                                            { for pi.outils.iter().map(|o| html! {
-                                                <li key={*o}>{ *o }</li>
+                                            { for pi.outils.iter().enumerate().map(|(k, o)| html! {
+                                                <li key={*o} style={format!("--k:{k}")}>{ *o }</li>
                                             }) }
                                         </ul>
                                     </dd>
@@ -680,6 +823,7 @@ fn Accueil(p: &Props) -> Html {
                     </section>
 
                     <section aria-labelledby="franchise-titre" class="franchise">
+                        { numero(10) }
                         <h2 id="franchise-titre" data-mvt="mots">{ mots(c.franchise_titre, 0) }</h2>
                         <ul data-mvt="cascade">
                             { for c.franchise.iter().enumerate().map(|(i, f)| html! {
@@ -688,6 +832,7 @@ fn Accueil(p: &Props) -> Html {
                         </ul>
                     </section>
                 </div>
+                <DefilantOutils />
             </main>
 
             <Pied langue={l} res={p.res.clone()} annee={p.annee} />
@@ -715,6 +860,7 @@ pub fn Legale(p: &LegaleProps) -> Html {
     let c = p.langue.contenu();
     html! {
         <>
+            <Lecture />
             <header class="hero legale">
                 <div class="dedans" data-defile="">
                     <div class="barre" data-mvt="monte">
@@ -724,9 +870,12 @@ pub fn Legale(p: &LegaleProps) -> Html {
                             { "MonCap GPS" }
                         </p>
                     </div>
-                    <h1 data-mvt="mots">{ mots(p.page.titre, 0) }</h1>
+                    <h1 data-mvt="lettres">
+                        <span class="visuel-cache">{ p.page.titre }</span>
+                        <span aria-hidden="true">{ lettres(p.page.titre, 0) }</span>
+                    </h1>
                     <p class="chapeau" data-mvt="monte">
-                        <a class="retour" href={c.chemin}>{ p.page.retour }</a>
+                        <a class="retour" href={c.chemin}>{ roule(p.page.retour) }</a>
                     </p>
                 </div>
             </header>
@@ -765,5 +914,40 @@ fn FilRoute() -> Html {
             <path pathLength="1"
                   d="M14 0C6 110 22 190 14 300C6 410 24 470 14 560C4 650 22 720 14 830C7 920 18 960 14 1000" />
         </svg>
+    }
+}
+
+/// La barre de lecture : un trait en haut de l'écran, qui s'allonge avec la
+/// page parcourue (`--defile`).
+#[function_component]
+fn Lecture() -> Html {
+    html! {
+        <div class="lecture" aria-hidden="true" data-defile=""><span /></div>
+    }
+}
+
+/// Le trajet de la preuve, Bordeaux → Limoges, qui se trace au défilement
+/// (`--p`) avec une voiture en tête.
+///
+/// La voiture est un tiret de longueur nulle aux bouts arrondis : un point,
+/// que `stroke-dashoffset` fait glisser le long du même chemin. Il suit
+/// ainsi la courbe à toutes les tailles, là où un élément posé par
+/// `offset-path` se compterait en pixels et décrocherait dès que le dessin
+/// est mis à l'échelle.
+#[function_component]
+fn TrajetPreuve() -> Html {
+    const CHEMIN: &str = "M14 70C70 74 92 24 150 30S236 72 286 22";
+    html! {
+        <div class="trajet-preuve" aria-hidden="true" data-scrub="">
+            <svg viewBox="0 0 300 92" focusable="false">
+                <path class="tp-fond" d={CHEMIN} />
+                <path class="tp-trace" pathLength="1" d={CHEMIN} />
+                <path class="tp-voiture" pathLength="1" d={CHEMIN} />
+                <circle class="tp-ville" cx="14" cy="70" r="5" />
+                <circle class="tp-ville" cx="286" cy="22" r="5" />
+            </svg>
+            <span class="tp-nom tp-depart">{ "Bordeaux" }</span>
+            <span class="tp-nom tp-arrivee">{ "Limoges" }</span>
+        </div>
     }
 }

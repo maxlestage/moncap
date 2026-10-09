@@ -387,7 +387,15 @@ et seulement ces gestes-là :
 | Boutons magnétiques | les deux, à la souris seulement |
 | Volet plein écran entre la connexion et le tableau | front web |
 | Route qui se dessine, point GPS qui la parcourt, grain | écran de connexion |
-| Bandeau défilant incliné par l'élan | les deux |
+| Bandeau défilant incliné par l'élan | les deux ; un second, en sens inverse, sur la vitrine |
+| Grands titres lettre à lettre | les deux |
+| Curseur qui suit, avec étiquette sur certains liens | les deux, à la souris seulement |
+| Cartes qui s'inclinent vers la souris, lueur qui suit le pointeur | vignettes, cartes, tarifs, panneaux, connexion |
+| Ondes au point touché | boutons du front web |
+| Volet de sortie avant un lien interne | les deux |
+| Décor qui suit la souris (parallaxe) | carte vivante de la vitrine, épingles de la connexion, signature du pied |
+| Libellés qui roulent au survol, barre de lecture | les deux |
+| Carte qui arrive en vol | front web |
 
 Le moteur ne démarre pas quand le système demande moins de mouvement, et
 tout état caché vit sous la classe qu'il pose : sans lui, la page est
