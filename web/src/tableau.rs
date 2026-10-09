@@ -20,7 +20,7 @@ use crate::nominatim;
 use crate::session::{self, Session};
 use crate::temps_reel::{Connexion, Envoi, Evenement};
 use crate::types::{Coord, Lieu, NouvellePosition, Position};
-use crate::ui::{Compteur, Mots};
+use crate::ui::{Compteur, Lettres, Roule};
 
 #[derive(Properties, PartialEq)]
 pub struct Props {
@@ -629,6 +629,8 @@ pub fn Tableau(p: &Props) -> Html {
 
     html! {
         <div class="tableau">
+            // La barre de lecture : la page parcourue (`--defile`).
+            <div class="lecture" aria-hidden="true" data-defile=""><span /></div>
             <header class="barre" data-mvt="monte">
                 <a class="marque" href="/" aria-label="MonCap GPS — le site">
                     <img src={res.logo.clone()} width="34" height="34" alt="" />
@@ -643,17 +645,22 @@ pub fn Tableau(p: &Props) -> Html {
                 </span>
                 <div class="identite">
                     <span class="pastille">
-                        <img src={res.avatar(&avatar)} alt="" />
+                        // La clé fait renaître l'image quand l'avatar change :
+                        // le nouveau saute à sa place.
+                        <img key={(*avatar).clone()} src={res.avatar(&avatar)} alt="" />
                         <span>{ &utilisateur }</span>
                     </span>
-                    <button type="button" class="fantome" data-aimant="" onclick={deconnexion}>
-                        <span>{ "Déconnexion" }</span>
+                    <button type="button" class="fantome" data-aimant="" data-onde=""
+                            onclick={deconnexion}>
+                        <span><Roule texte="Déconnexion" /></span>
                     </button>
                 </div>
             </header>
 
             <section class="accueil">
-                <h1 data-mvt="mots"><Mots texte="Où va-t-on ?" /></h1>
+                <h1 data-mvt="lettres" aria-label="Où va-t-on ?">
+                    <Lettres texte="Où va-t-on ?" />
+                </h1>
                 <form class="recherche" role="search" data-mvt="monte" onsubmit={cherche}>
                     <span class="recherche-icone" aria-hidden="true">{ "🔎" }</span>
                     <input type="search" enterkeyhint="search"
@@ -668,7 +675,7 @@ pub fn Tableau(p: &Props) -> Html {
                                    resultats.set(None);
                                })
                            }} />
-                    <button type="submit" class="petit" data-aimant=""
+                    <button type="submit" class="petit" data-aimant="" data-onde=""
                             disabled={*cherche_en_cours || recherche.trim().chars().count() < 3}>
                         <span>
                             if *cherche_en_cours { <span class="roue" aria-label="Recherche…" /> }
@@ -735,26 +742,26 @@ pub fn Tableau(p: &Props) -> Html {
             </p>
 
             <dl class="chiffres" data-mvt="cascade">
-                <div style="--i:0">
+                <div style="--i:0" data-incline="8">
                     <dt>{ "positions" }</dt>
                     <dd><Compteur valeur={stats.as_ref().map(|s| s.count as f64).unwrap_or(0.0)} /></dd>
                 </div>
-                <div style="--i:1">
+                <div style="--i:1" data-incline="8">
                     <dt>{ "de tracé" }</dt>
                     <dd><Compteur valeur={stats.as_ref().map(|s| s.total_km).unwrap_or(0.0)}
                                   decimales={1} suffixe=" km" /></dd>
                 </div>
-                <div style="--i:2">
+                <div style="--i:2" data-incline="8">
                     <dt>{ "en direct" }</dt>
                     <dd><Compteur valeur={n_direct as f64} /></dd>
                 </div>
             </dl>
 
             <section class="panneaux">
-                <article class="panneau" data-mvt="monte">
+                <article class="panneau" data-mvt="monte" data-incline="2">
                     <h2>{ "Sur la route" }</h2>
                     <div class="rangee">
-                        <button type="button" data-aimant=""
+                        <button type="button" data-aimant="" data-onde=""
                                 class={classes!(etat.partage.then_some("actif"))}
                                 onclick={bascule_partage}>
                             <span>
@@ -762,7 +769,10 @@ pub fn Tableau(p: &Props) -> Html {
                             </span>
                         </button>
                         if n_direct > 0 {
-                            <span class="badge">{ format!("{n_direct} en direct") }</span>
+                            <span class="badge">
+                                <span class="badge-pouls" aria-hidden="true" />
+                                { format!("{n_direct} en direct") }
+                            </span>
                         }
                     </div>
                     <div class="signalements">
@@ -770,7 +780,8 @@ pub fn Tableau(p: &Props) -> Html {
                             let c = *c;
                             let signale = signale.clone();
                             html! {
-                                <button key={c.id} type="button" class="signaler" style={format!("--i:{i}")}
+                                <button key={c.id} type="button" class="signaler" data-onde=""
+                                        style={format!("--i:{i}")}
                                         onclick={Callback::from(move |_| signale.emit(c))}>
                                     <span class="signaler-emoji" aria-hidden="true">{ c.emoji }</span>
                                     { c.nom }
@@ -780,7 +791,7 @@ pub fn Tableau(p: &Props) -> Html {
                     </div>
                 </article>
 
-                <article class="panneau" data-mvt="monte">
+                <article class="panneau" data-mvt="monte" data-incline="2">
                     <h2>{ "Itinéraire" }</h2>
                     <p class="indice">{ "Posez des positions sur la carte, puis reliez-les." }</p>
                     <div class="rangee">
@@ -798,14 +809,14 @@ pub fn Tableau(p: &Props) -> Html {
                                    }} />
                             { "km/h" }
                         </label>
-                        <button type="button" data-aimant="" onclick={calcule}
+                        <button type="button" data-aimant="" data-onde="" onclick={calcule}
                                 disabled={etat.positions.len() < 2}>
-                            <span>{ "Itinéraire complet" }</span>
+                            <span><Roule texte="Itinéraire complet" /></span>
                         </button>
-                        <a class="bouton secondaire" href={api::url_gpx(&jeton)}
-                           target="_blank" rel="noopener">{ "Exporter GPX" }</a>
-                        <label class="bouton secondaire">
-                            { "Importer GPX" }
+                        <a class="bouton secondaire" href={api::url_gpx(&jeton)} data-onde=""
+                           target="_blank" rel="noopener"><span><Roule texte="Exporter GPX" /></span></a>
+                        <label class="bouton secondaire" data-onde="">
+                            <span><Roule texte="Importer GPX" /></span>
                             <input type="file" accept=".gpx,application/gpx+xml,text/xml"
                                    class="visuel-cache" onchange={importe} />
                         </label>
@@ -875,7 +886,7 @@ pub fn Tableau(p: &Props) -> Html {
                 <details class="panneau avatars" data-mvt="monte">
                     <summary>
                         <h2>{ "Mon avatar" }</h2>
-                        <img src={res.avatar(&avatar)} alt="" />
+                        <img key={(*avatar).clone()} src={res.avatar(&avatar)} alt="" />
                     </summary>
                     <div class="grille-avatars">
                         { for AVATARS.iter().enumerate().map(|(i, a)| {
@@ -883,6 +894,7 @@ pub fn Tableau(p: &Props) -> Html {
                             let id = a.id;
                             html! {
                                 <button key={id} type="button" title={a.nom} aria-label={a.nom}
+                                        data-onde=""
                                         aria-pressed={(*avatar == id).to_string()}
                                         class={classes!("avatar", (*avatar == id).then_some("choisi"))}
                                         style={format!("--i:{i}")}

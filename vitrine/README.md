@@ -89,6 +89,7 @@ mesuré plutôt que deviné.
 | Version précédente, rendue à la construction | **15,8 Ko**, zéro JavaScript |
 | Version Yew/WebAssembly | **128 Ko** — 114 de WebAssembly, 6,7 de colle, 2,2 de HTML, 5 de CSS |
 | Version animée (moteur `mouvement`) | **148 Ko** — 132 de WebAssembly, 8,1 de colle, 2,4 de HTML, 5,5 de CSS |
+| Seconde vague (curseur, inclinaison, lettres, carte vivante…) | **163 Ko** — 144 de WebAssembly, 8,7 de colle, 2,3 de HTML, 7,6 de CSS |
 
 Le texte n'apparaît qu'après téléchargement **et** compilation du
 WebAssembly. Cette attente n'est plus une page blanche : la coquille porte
@@ -156,6 +157,48 @@ pour la molette qui glisse. Les gestes en sont repris, en Rust, par la crate
   traduites) s'incline avec l'élan ;
 - **les boutons sont magnétiques**, à la souris seulement.
 
+**La seconde vague** — « bien plus d'animation sur tout le site » — donne
+un geste à chaque section :
+
+- **les grands titres montent lettre à lettre** (`lettres()`), chacune
+  derrière le masque de son mot ; le lecteur d'écran reçoit le titre d'un
+  bloc (`visuel-cache`), les lettres lui sont cachées ;
+- **une carte vivante** sous le bandeau : des rues, trois itinéraires qui se
+  tracent puis s'effacent en boucle, des épingles qui pulsent, une voiture
+  qui roule, une lueur qui suit la souris ; elle s'éloigne quand on
+  descend ;
+- **un curseur qui suit** — un point exact, un anneau qui le rattrape —, qui
+  grossit sur ce qui se clique et porte une étiquette sur les liens qui en
+  ont une (`data-curseur`). Il s'ajoute à la flèche du système, il ne la
+  remplace pas ;
+- **les vignettes, les cartes et les tarifs s'inclinent** vers la souris,
+  une lueur dedans suit le pointeur ; la formule vedette a un cadre qui
+  tourne ;
+- **les maquettes se redressent** en traversant l'écran, puis leur contenu
+  arrive à son tour : itinéraires, pastilles, catégories, jauge qui se
+  remplit avec son reflet, bouton « Démarrer » qui appelle ;
+- **chaque section a son numéro**, « 01 » suivi d'un trait qui se tire ;
+- **la preuve se trace** : Bordeaux → Limoges se dessine au défilement,
+  une voiture en tête ;
+- **un second bandeau** en lettres creuses, les outils de la pile, défile en
+  sens inverse ;
+- **les liens roulent** au survol — le libellé monte, son double le
+  remplace ;
+- **une barre de lecture** en haut de l'écran, **un anneau de progression**
+  autour de la flèche ;
+- **la signature « MonCap GPS » en très grand** ferme le pied, lettre à
+  lettre ;
+- **un volet monte** avant de suivre un lien interne — vers les pages
+  légales, une autre langue —, et la page d'arrivée lève son rideau de la
+  même couleur : on ne voit jamais de blanc. Nouvel onglet, ancre,
+  téléchargement et site extérieur gardent le comportement du navigateur.
+
+Le curseur, l'inclinaison et la parallaxe n'existent qu'à la souris : au
+doigt, ils suivraient un pouce qui cache déjà ce qu'il touche. Un piège vu
+en regardant : la page qui glisse sous une souris immobile ne déclenche
+aucun `pointermove`, et le curseur gardait l'étiquette d'un bouton parti
+plus haut — le moteur relit ce qui est sous la souris à chaque défilement.
+
 **Pourquoi plus seulement du CSS.** La version précédente liait tout à
 `animation-timeline`, sans un octet de script de plus. Mais la page est
 désormais rendue par le WebAssembly — le moteur n'y coûte que son propre
@@ -165,7 +208,8 @@ visiteurs voyait une page immobile. Les révélations passent maintenant par
 un `IntersectionObserver`, qui marche partout.
 
 **Ce que ça coûte**, mesuré avec `twiggy` : environ 19 Ko gzippés (113 → 132
-Ko de WebAssembly) — 18 Ko bruts pour le moteur, 9 pour le rendu mot à mot,
+Ko de WebAssembly) pour la première vague, 12 de plus pour la seconde
+(132 → 144) — 18 Ko bruts pour le moteur, 9 pour le rendu mot à mot,
 7 de chaînes. Il en coûtait 15 de plus dans une première version : le
 compteur lisait « 3,99 » avec `str::parse::<f64>`, qui embarque les tables
 de l'analyseur de flottants de la bibliothèque standard. Il lit

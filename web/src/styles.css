@@ -304,6 +304,10 @@ html.mvt [data-mvt="monte"][data-vu] {
      déplacer le texte. */
   padding-block: 0.06em 0.14em;
   margin-block: -0.06em -0.14em;
+  /* Et sur les côtés : un titre serré (`letter-spacing` négatif) laisse sa
+     dernière lettre déborder de sa propre avance, et le masque la rognait. */
+  padding-inline: 0.08em;
+  margin-inline: -0.08em;
 }
 
 .mot > span {
@@ -1861,6 +1865,268 @@ button.avatar.choisi {
     opacity: 0;
     transform: translateY(1.5rem) scale(0.96);
   }
+}
+
+/* === Plus de mouvement =====================================================
+ * La seconde vague : lettres, épingles flottantes, inclinaison, ondes,
+ * libellés qui roulent, avatars qui sautent. Tout état masqué vit sous
+ * `html.mvt` ; la porte de sortie du mouvement réduit, plus bas, passe
+ * devant tout. */
+
+/* --- Les lettres ------------------------------------------------------------
+ * Les grands titres montent lettre à lettre, chacune derrière le masque de
+ * son mot : `--j`, son rang dans le titre, la décale. */
+@keyframes mvt-lettre {
+  from {
+    transform: translateY(115%) rotate(9deg);
+  }
+}
+
+.lettre {
+  transform-origin: 0 100%;
+}
+
+html.mvt [data-mvt="lettres"]:not([data-vu]) .lettre {
+  transform: translateY(115%);
+}
+
+html.mvt [data-mvt="lettres"][data-vu] .lettre {
+  animation: mvt-lettre 1.1s var(--courbe)
+    calc(var(--retard, 0s) + var(--j, 0) * var(--pas-lettre, 0.045s)) backwards;
+}
+
+/* --- La barre de lecture ------------------------------------------------- */
+.lecture {
+  display: none;
+}
+
+html.mvt .lecture {
+  display: block;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 70;
+  height: 3px;
+  pointer-events: none;
+}
+
+.lecture span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--orange));
+  transform-origin: 0 50%;
+  scale: var(--defile, 0) 1;
+}
+
+/* --- Les épingles flottantes --------------------------------------------------
+ * Autour de la porte, ce que la communauté signale. Elles flottent, et
+ * suivent la souris selon leur profondeur (`--z`) : `--sx`, `--sy` sont
+ * posés par le moteur sur le décor. Sur téléphone, elles passeraient sur
+ * le titre et le formulaire : elles n'apparaissent qu'avec la place. */
+.flottants {
+  display: none;
+}
+
+@media (min-width: 48rem) {
+  .flottants {
+    display: block;
+    position: absolute;
+    inset: 0;
+  }
+}
+
+.flottant {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  display: grid;
+  place-items: center;
+  width: calc(2.6rem + var(--z) * 0.9rem);
+  height: calc(2.6rem + var(--z) * 0.9rem);
+  margin: calc((2.6rem + var(--z) * 0.9rem) / -2) 0 0 calc((2.6rem + var(--z) * 0.9rem) / -2);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.1);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  box-shadow: 0 14px 34px rgb(2 8 26 / 0.35);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-size: calc(1rem + var(--z) * 0.35rem);
+  opacity: calc(0.45 + var(--z) * 0.3);
+}
+
+@keyframes flotte {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(-6deg);
+  }
+}
+
+@keyframes eclot {
+  from {
+    opacity: 0;
+    scale: 0.2;
+  }
+}
+
+html.mvt .flottant {
+  translate: calc(var(--sx, 0) * var(--z) * -28px) calc(var(--sy, 0) * var(--z) * -20px);
+  animation:
+    eclot 0.9s var(--rebond) calc(0.9s + var(--i) * 0.12s) backwards,
+    flotte calc(5s + var(--i) * 0.7s) ease-in-out calc(var(--i) * -1.3s) infinite;
+}
+
+/* --- L'inclinaison ----------------------------------------------------------
+ * Les vignettes et les panneaux s'inclinent vers la souris (`--rx`, `--ry`)
+ * et une lueur suit le pointeur dedans (`--mx`, `--my`). La transformation
+ * n'existe que pendant le survol : au repos, le texte reste net, sans calque
+ * en trois dimensions. */
+@media (hover: hover) {
+  html.mvt [data-incline] {
+    position: relative;
+    transition:
+      transform 0.5s var(--courbe),
+      box-shadow 0.3s ease;
+  }
+
+  html.mvt [data-incline][data-survol] {
+    transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+    box-shadow: var(--ombre);
+  }
+
+  html.mvt [data-incline]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(
+      18rem circle at var(--mx, 50%) var(--my, 50%),
+      color-mix(in srgb, var(--cyan) 16%, transparent),
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+
+  html.mvt [data-incline][data-survol]::after {
+    opacity: 1;
+  }
+}
+
+/* --- Les libellés qui roulent ------------------------------------------------- */
+.roule {
+  display: inline-grid;
+  overflow: clip;
+  padding-block: 0.08em;
+  margin-block: -0.08em;
+}
+
+.roule > span {
+  grid-area: 1 / 1;
+  transition: translate 0.5s var(--courbe);
+}
+
+.roule-double {
+  translate: 0 125%;
+}
+
+@media (hover: hover) {
+  :is(a, button:not(:disabled), label):hover .roule > span {
+    translate: 0 -125%;
+  }
+
+  :is(a, button:not(:disabled), label):hover .roule > .roule-double {
+    translate: 0 0;
+  }
+}
+
+/* --- Le direct ------------------------------------------------------------------
+ * Le badge « n en direct » bat comme le voyant du temps réel. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.badge-pouls {
+  position: relative;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+@keyframes pouls {
+  from {
+    scale: 1;
+    opacity: 0.7;
+  }
+  to {
+    scale: 3;
+    opacity: 0;
+  }
+}
+
+html.mvt .badge-pouls::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: pouls 1.6s var(--courbe) infinite;
+}
+
+/* --- Les avatars ------------------------------------------------------------------
+ * L'avatar choisi saute à sa place, et une gerbe part de lui. Les images de
+ * l'en-tête et du panneau renaissent à chaque changement (leur clé) : le
+ * nouveau venu fait son entrée. */
+@keyframes saute {
+  0% {
+    scale: 0.4;
+    rotate: -20deg;
+  }
+  60% {
+    scale: 1.18;
+    rotate: 6deg;
+  }
+}
+
+@keyframes gerbe {
+  from {
+    scale: 0.2;
+    opacity: 1;
+  }
+  to {
+    scale: 1.15;
+    opacity: 0;
+  }
+}
+
+html.mvt button.avatar.choisi img,
+html.mvt .pastille img,
+html.mvt .avatars summary img {
+  animation: saute 0.7s var(--rebond) backwards;
+}
+
+html.mvt button.avatar.choisi::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 8%, var(--orange) 0 3px, transparent 4px),
+    radial-gradient(circle at 92% 50%, var(--cyan) 0 3px, transparent 4px),
+    radial-gradient(circle at 50% 92%, var(--bleu) 0 3px, transparent 4px),
+    radial-gradient(circle at 8% 50%, var(--vert) 0 3px, transparent 4px),
+    radial-gradient(circle at 20% 18%, var(--cyan) 0 2px, transparent 3px),
+    radial-gradient(circle at 80% 18%, var(--orange) 0 2px, transparent 3px),
+    radial-gradient(circle at 80% 82%, var(--vert) 0 2px, transparent 3px),
+    radial-gradient(circle at 20% 82%, var(--bleu) 0 2px, transparent 3px);
+  opacity: 0;
+  animation: gerbe 0.75s var(--courbe);
 }
 
 /* === Mouvement réduit ======================================================
