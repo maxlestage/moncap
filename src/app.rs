@@ -60,7 +60,12 @@ fn bouclier(limites: bool) -> Shield {
                 // Chaque page pose sa propre politique (les fronts WebAssembly,
                 // les cartes Leaflet) ; l'API n'en a pas besoin.
                 .csp(None)
-                .cross_origin_resource_policy("cross-origin"),
+                .cross_origin_resource_policy("cross-origin")
+                // Le front web localise l'utilisateur : la géolocalisation
+                // reste permise à la page elle-même.
+                .permissions_policy(
+                    "camera=(), microphone=(), payment=(), usb=(), geolocation=(self)",
+                ),
         )
         .error_format(ErrorFormat::custom(|refus, _ctx| {
             let message = match refus.status().as_u16() {
