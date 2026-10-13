@@ -253,7 +253,7 @@ fn demarre_taches(db: &'static Db, hub: &'static Hub) {
             if let Err(e) = alertes::purge(db).await {
                 tracing::warn!("purge des alertes expirées : {e:?}");
             }
-            if tours % 60 == 0
+            if tours.is_multiple_of(60)
                 && let Err(e) = connexion::menage(db).await
             {
                 tracing::warn!("ménage des sessions : {e:?}");
