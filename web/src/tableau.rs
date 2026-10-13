@@ -460,6 +460,27 @@ pub fn tableau(p: Proprietes) -> Node {
         });
     });
 
+    // --- Au premier point GPS, la carte vient sur nous ------------------------
+    // Sans positions enregistrées pour la cadrer, elle restait sur la France
+    // entière, le point bleu perdu au milieu.
+    let deja_venue = use_state(false);
+    effect(move || {
+        let Some(ici) = moi.get() else {
+            return;
+        };
+        untrack(|| {
+            if deja_venue.get() || !positions.with(|p| p.is_empty()) {
+                return;
+            }
+            deja_venue.set(true);
+            cadrage.update(|c| {
+                c.numero += 1;
+                c.points = Rc::new(vec![ici]);
+                c.zoom_max = 13.0;
+            });
+        });
+    });
+
     // --- La recherche de destination --------------------------------------------
     let cherche = {
         let ctx = ctx.clone();
@@ -472,7 +493,8 @@ pub fn tableau(p: Proprietes) -> Node {
             cherche_en_cours.set(true);
             let ctx = ctx.clone();
             lance(async move {
-                let r = nominatim::cherche(&q).await;
+                let pres_de = untrack(|| moi.get());
+                let r = nominatim::cherche(&q, pres_de).await;
                 if !ctx.vivant() {
                     return;
                 }
