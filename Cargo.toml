@@ -1,59 +1,49 @@
 [package]
 name = "moncap-gps"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
 
 [dependencies]
-axum = { version = "0.7", features = ["ws"] }
-# Features ciblées (au lieu de "full") : évite de compiler fs/process/signal/
-# io-std inutiles ici → build plus léger et binaire un peu plus petit.
-tokio = { version = "1", features = [
-    "rt-multi-thread", "macros", "sync", "time", "net", "signal",
-] }
+# Le framework : serveur (vitesse), bouclier de sécurité (securite), base de
+# données (memoire-orm), le tout derrière une seule `App`. Seul Postgres est
+# compilé : c'est la base de production et celle des tests.
+paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["postgres"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tower-http = { version = "0.5", features = ["cors", "trace", "fs", "compression-gzip", "compression-br", "catch-panic"] }
-sea-orm = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
-sea-orm-migration = { version = "1.1", features = ["sqlx-postgres", "runtime-tokio-rustls"] }
-async-trait = "0.1"
 rayon = "1"
-thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Connexion : Argon2 pour les mots de passe, SHA-256 pour ne stocker que
+# l'empreinte des jetons (sessions et réinitialisations), et jsonwebtoken
+# pour continuer d'accepter les anciens jetons JWT pendant la transition.
 argon2 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+sha2 = "0.10"
 jsonwebtoken = "9"
+
 # Pont pub/sub multi-instances (optionnel : activé si REDIS_URL est défini).
 # rustls + insecure : Heroku Redis impose TLS avec certificat auto-signé.
 redis = { version = "0.27", features = ["tokio-rustls-comp", "tls-rustls-insecure"] }
 futures-util = "0.3"
-# Client HTTP sortant (rustls, sans OpenSSL) : sert à interroger l'API NASA
-# FIRMS côté serveur pour ne pas exposer la clé aux clients.
+# Client HTTP sortant (rustls, sans OpenSSL) : FIRMS, Open-Meteo, Transitous,
+# TomTom, tuiles et archives PMTiles, GitHub.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-# Décompression des répertoires PMTiles (gzip), pour les cartes hors ligne
-# servies depuis une archive auto-hébergée.
+# Décompression des répertoires PMTiles (gzip).
 flate2 = "1"
-# Empreinte des jetons de réinitialisation : le jeton envoyé par courriel
-# n'est jamais stocké, seulement son SHA-256.
-sha2 = "0.10"
 # Envoi des courriels de réinitialisation via le SMTP configuré (SMTP_HOST…).
-# rustls comme partout : pas d'OpenSSL sur le dyno.
 lettre = { version = "0.11", default-features = false, features = [
     "tokio1-rustls-tls", "smtp-transport", "builder", "hostname", "pool",
 ] }
-
-[dev-dependencies]
-# `oneshot` pour tester les handlers Axum sans ouvrir de port réseau.
-tower = { version = "0.5", features = ["util"] }
 
 [[bin]]
 name = "moncap-gps"
 path = "src/main.rs"
 
 # Binaire de production : symboles retirés + optimisations d'édition de liens.
-# LTO « thin » (bon compromis perf / temps de build, contrairement au « fat »
-# qui risquerait de dépasser la limite de build des buildpacks Heroku) et une
-# seule unité de codegen pour un meilleur inlining. opt-level 3 est déjà le
-# défaut en release.
+# LTO « thin » : bon compromis avec la limite de build du buildpack Heroku.
 [profile.release]
 strip = true
 lto = "thin"
