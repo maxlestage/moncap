@@ -17,8 +17,7 @@ use gloo_timers::callback::Timeout;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
-use web_sys::{MessageEvent, WebSocket};
-use yew::Callback;
+use web_sys::{CloseEvent, MessageEvent, WebSocket};
 
 use crate::types::Alerte;
 
@@ -85,7 +84,20 @@ pub fn delai_reconnexion(tentative: u32) -> u32 {
     1000u32.saturating_mul(1 << tentative.min(4)).min(15_000)
 }
 
+/// Une fermeture qui peut venir d'un jeton refusé : la connexion n'a jamais
+/// abouti — un navigateur ne montre pas le statut HTTP d'une poignée de
+/// main refusée, un 401 y ressemble à une coupure —, ou le serveur l'a
+/// fermée en invoquant sa politique (1008) ou un code d'authentification
+/// (4001, 4401, 4403). Le tableau vérifie alors la session avant de
+/// conclure : un réseau coupé ne déconnecte personne.
+pub fn refus_possible(ouverte: bool, code: u16) -> bool {
+    !ouverte || matches!(code, 1008 | 4001 | 4401 | 4403)
+}
+
 type Rappel = Closure<dyn FnMut(web_sys::Event)>;
+type SurEvenement = Rc<dyn Fn(Evenement)>;
+type SurEtat = Rc<dyn Fn(bool)>;
+type SurRefus = Rc<dyn Fn()>;
 
 /// Une connexion qui se rétablit seule. La lâcher la ferme pour de bon.
 pub struct Connexion {
@@ -98,16 +110,22 @@ struct Interne {
     tentative: Cell<u32>,
     fermee: Cell<bool>,
     minuteur: RefCell<Option<Timeout>>,
-    sur_evenement: Callback<Evenement>,
-    sur_etat: Callback<bool>,
+    /// La connexion en cours a-t-elle abouti ?
+    ouverte: Cell<bool>,
+    sur_evenement: SurEvenement,
+    sur_etat: SurEtat,
+    sur_refus: SurRefus,
     rappels: RefCell<Vec<Rappel>>,
 }
 
 impl Connexion {
+    /// Ouvre la connexion. `sur_refus` est appelé quand une fermeture
+    /// pourrait venir d'un jeton refusé (voir [`refus_possible`]).
     pub fn ouvre(
         url: String,
-        sur_evenement: Callback<Evenement>,
-        sur_etat: Callback<bool>,
+        sur_evenement: impl Fn(Evenement) + 'static,
+        sur_etat: impl Fn(bool) + 'static,
+        sur_refus: impl Fn() + 'static,
     ) -> Self {
         let interne = Rc::new(Interne {
             url,
@@ -115,8 +133,10 @@ impl Connexion {
             tentative: Cell::new(0),
             fermee: Cell::new(false),
             minuteur: RefCell::new(None),
-            sur_evenement,
-            sur_etat,
+            ouverte: Cell::new(false),
+            sur_evenement: Rc::new(sur_evenement),
+            sur_etat: Rc::new(sur_etat),
+            sur_refus: Rc::new(sur_refus),
             rappels: RefCell::new(Vec::new()),
         });
         Interne::connecte(&interne);
@@ -160,6 +180,7 @@ impl Interne {
         if moi.fermee.get() {
             return;
         }
+        moi.ouverte.set(false);
         let Ok(ws) = WebSocket::new(&moi.url) else {
             Self::reessaie(moi);
             return;
@@ -170,7 +191,8 @@ impl Interne {
         let ouvert = Rappel::new(move |_| {
             if let Some(i) = f.upgrade() {
                 i.tentative.set(0);
-                i.sur_etat.emit(true);
+                i.ouverte.set(true);
+                (i.sur_etat)(true);
             }
         });
         let f = faible.clone();
@@ -183,7 +205,7 @@ impl Interne {
                 return;
             };
             if let Some(ev) = lis(&texte) {
-                i.sur_evenement.emit(ev);
+                (i.sur_evenement)(ev);
             }
         });
         let ws_erreur = ws.clone();
@@ -191,10 +213,15 @@ impl Interne {
             let _ = ws_erreur.close();
         });
         let f = faible;
-        let ferme = Rappel::new(move |_| {
+        let ferme = Rappel::new(move |e: web_sys::Event| {
             if let Some(i) = f.upgrade() {
-                i.sur_etat.emit(false);
+                let code = e.dyn_ref::<CloseEvent>().map_or(1006, CloseEvent::code);
+                let refus = refus_possible(i.ouverte.get(), code);
+                (i.sur_etat)(false);
                 Self::reessaie(&i);
+                if refus {
+                    (i.sur_refus)();
+                }
             }
         });
 
@@ -226,6 +253,15 @@ impl Interne {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn une_fermeture_suspecte_fait_verifier_la_session() {
+        assert!(refus_possible(false, 1006), "jamais ouverte");
+        assert!(refus_possible(true, 4401));
+        assert!(refus_possible(true, 1008));
+        assert!(!refus_possible(true, 1006), "coupure après ouverture");
+        assert!(!refus_possible(true, 1001));
+    }
 
     #[test]
     fn la_reconnexion_ralentit_puis_plafonne() {
