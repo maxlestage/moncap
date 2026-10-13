@@ -386,4 +386,98 @@ mod connexion {
         assert_eq!(r.status(), 200);
         assert_eq!(r.text(), "ok");
     }
+
+    /// Un ancien jeton JWT, comme ceux de l'ancien serveur.
+    fn ancien_jwt(sub: i32, exp: i64) -> Option<String> {
+        use jsonwebtoken::{EncodingKey, Header, encode};
+        let secret = crate::connexion::secret_jwt()?;
+        Some(
+            encode(
+                &Header::default(),
+                &crate::connexion::Claims { sub, exp },
+                &EncodingKey::from_secret(secret),
+            )
+            .unwrap(),
+        )
+    }
+
+    async fn id_de(c: &TestClient, jeton: &str) -> i32 {
+        // L'export du compte n'est pas encore là : on lit l'id en base.
+        let _ = c;
+        let db = paquets::Db::connect(
+            &std::env::var("TEST_DATABASE_URL")
+                .or_else(|_| std::env::var("DATABASE_URL"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        use paquets::orm::{Executor, params};
+        let lignes: Vec<(i32,)> = db
+            .raw(
+                "SELECT user_id FROM sessions WHERE token_hash = $1",
+                &params![crate::connexion::empreinte(jeton)],
+            )
+            .await
+            .unwrap();
+        lignes[0].0
+    }
+
+    #[tokio::test]
+    async fn les_anciens_jwt_restent_valables_et_revocables() {
+        let c = client_ou_rien!();
+        let (_, jeton) = inscrit(&c, "jwt").await;
+        let id = id_de(&c, &jeton).await;
+        let exp = crate::base::maintenant() + 29 * 24 * 3600;
+        // Sans JWT_SECRET, les anciens jetons sont refusés : rien à essayer.
+        let Some(jwt) = ancien_jwt(id, exp) else {
+            return;
+        };
+        let r = c
+            .get("/auth/me")
+            .header("authorization", &bearer(&jwt))
+            .await;
+        assert_eq!(r.status(), 200, "un ancien jeton doit encore passer");
+        // Se déconnecter avec révoque les anciens jetons du compte…
+        let r = c
+            .post("/auth/logout")
+            .header("authorization", &bearer(&jwt))
+            .await;
+        assert_eq!(r.status(), 204);
+        let r = c
+            .get("/auth/me")
+            .header("authorization", &bearer(&jwt))
+            .await;
+        assert_eq!(r.status(), 401);
+        // … sans toucher aux sessions.
+        let r = c
+            .get("/auth/me")
+            .header("authorization", &bearer(&jeton))
+            .await;
+        assert_eq!(r.status(), 200);
+        // Un JWT d'un compte qui n'existe pas ne passe pas.
+        let fantome = ancien_jwt(i32::MAX, exp).unwrap();
+        let r = c
+            .get("/auth/me")
+            .header("authorization", &bearer(&fantome))
+            .await;
+        assert_eq!(r.status(), 401);
+    }
+
+    #[tokio::test]
+    async fn le_websocket_exige_un_jeton_valide() {
+        let c = client_ou_rien!();
+        let r = c.get("/ws").await;
+        assert_eq!(r.status(), 400);
+        let r = c.get("/ws?token=mc_faux").await;
+        assert_eq!(r.status(), 401);
+        assert_eq!(r.text(), "authentification requise");
+    }
+
+    #[tokio::test]
+    async fn les_erreurs_du_bouclier_sont_du_texte() {
+        let c = client_ou_rien!();
+        let r = c.get("/?q=1%27%20OR%201%3D1--").await;
+        assert_eq!(r.status(), 403);
+        assert_eq!(r.header("content-type"), Some("text/plain; charset=utf-8"));
+    }
 }
