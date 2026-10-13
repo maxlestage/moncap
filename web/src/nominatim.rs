@@ -62,24 +62,20 @@ pub fn url(requete: &str) -> String {
     )
 }
 
-fn maintenant() -> f64 {
-    web_sys::window()
-        .and_then(|f| f.performance())
-        .map(|p| p.now())
-        .unwrap_or(0.0)
-}
-
 /// Cherche un lieu, priorité à la France.
 pub async fn cherche(requete: &str) -> Result<Vec<Lieu>, String> {
     let k = cle(requete);
     if let Some(deja) = MEMOIRE.with(|m| m.borrow().get(&k).cloned()) {
         return Ok(deja);
     }
-    let attendre = attente(DERNIERE.with(|d| *d.borrow()), maintenant());
+    let attendre = attente(
+        DERNIERE.with(|d| *d.borrow()),
+        crate::navigateur::horloge_ms(),
+    );
     if attendre > 0.0 {
         gloo_timers::future::TimeoutFuture::new(attendre.ceil() as u32).await;
     }
-    DERNIERE.with(|d| *d.borrow_mut() = Some(maintenant()));
+    DERNIERE.with(|d| *d.borrow_mut() = Some(crate::navigateur::horloge_ms()));
 
     let reponse = Request::get(&url(requete))
         .send()

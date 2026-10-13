@@ -1,31 +1,46 @@
 # MonCap GPS
 
-Application GPS minimale : un backend **Rust + Axum**, une app **Swift / SwiftUI** (iOS),
-et deux fronts web en **Rust** — Yew + WebAssembly : la vitrine et l'application web.
+Application GPS minimale : un serveur **Rust** sur [**Paquets**](https://github.com/maxlestage/Paquets),
+une app **Swift / SwiftUI** (iOS), et deux fronts web en **Rust** — **active** + WebAssembly,
+le front de la famille Paquets : la vitrine et l'application web.
 
 ## Architecture
 
 ```
 moncap/
-├── Cargo.toml      API Rust + Axum (crate à la racine, pour le buildpack Heroku)
-├── src/main.rs
+├── Cargo.toml      Le serveur, sur Paquets (crate à la racine, pour le buildpack Heroku)
+├── src/
+│   ├── main.rs         Point d'entrée
+│   ├── app.rs          L'application : bouclier de sécurité, CORS, routes, tâches de fond
+│   ├── connexion.rs    Comptes, sessions, mots de passe (voir « Connexion »)
+│   ├── base.rs         Les tables (modèles memoire-orm) et les migrations
+│   ├── erreur.rs       Les erreurs, en texte brut comme l'app iOS les attend
+│   ├── temps_reel.rs   Le WebSocket et le pont Redis
+│   ├── alertes.rs, positions.rs, trajets.rs, compte.rs   L'API REST
+│   ├── externes/       Feux, air, transports, trafic, paquets hors ligne
+│   ├── tuiles.rs, pmtiles.rs   Le relais de tuiles et le lecteur PMTiles
+│   ├── partage.rs      Partage live, itinéraires partagés, confidentialité
+│   └── statique.rs     Les deux fronts
 ├── Procfile        web: ./target/release/moncap-gps
 ├── app.json        buildpack Rust + addon Postgres (bouton « Deploy »)
-├── web/            Front web, en Rust : Yew + WebAssembly (voir web/README.md)
-├── vitrine/        Page de présentation, en Rust : Yew + WebAssembly (vitrine/README.md)
+├── web/            Front web, en Rust : active + WebAssembly (voir web/README.md)
+├── vitrine/        Page de présentation, en Rust : active + WebAssembly (vitrine/README.md)
 ├── mouvement/      Les animations des deux fronts (rideau, cascades, molette inertielle…)
 ├── fabrique/       Les outils de construction des deux fronts (empreintes, wasm-bindgen, wasm-opt)
 └── frontend/       App iOS SwiftUI
     └── MonCapGPS/
 ```
 
-## Backend (Rust + Axum)
+## Serveur (Rust + Paquets)
 
-Les routes sont volontairement aussi simples que possible :
+Paquets réunit le serveur HTTP (**vitesse**), le bouclier de sécurité
+(**securite** : pare-feu applicatif, limitation de débit, en-têtes, blocage
+des robots d'attaque), l'ORM (**memoire-orm**, Postgres) et le front
+(**active**). Les routes sont volontairement aussi simples que possible :
 
 | Méthode | Route         | Rôle                                              |
 |---------|---------------|---------------------------------------------------|
-| GET     | `/health`     | Vérifie que le serveur répond (`ok`)              |
+| GET     | `/health`     | Vérifie que le serveur et la base répondent (`ok`) |
 | GET     | `/positions`  | Liste les positions enregistrées                  |
 | POST    | `/positions`  | Ajoute une position (`{lat, lon, label}`)         |
 | PUT     | `/positions/:id` | Met à jour une position (404 si absente)       |
@@ -38,24 +53,90 @@ Les routes sont volontairement aussi simples que possible :
 | POST    | `/route/multi` | Distance totale + durée estimée d'un itinéraire (`{points:[...], speed_kmh?}`) |
 | GET     | `/ws`         | WebSocket temps réel (positions, voitures live, signalements) |
 
+### Connexion
+
+| Méthode | Route | Rôle |
+|---------|-------|------|
+| POST | `/auth/signup` | Crée un compte `{username, password}` → `{token, username, expires_at}` |
+| POST | `/auth/login` | Ouvre une session → `{token, username, expires_at}` |
+| POST | `/auth/logout` | Ferme la session courante (204) |
+| POST | `/auth/logout-all` | Ferme toutes les sessions du compte (204) |
+| GET | `/auth/me` | La session est-elle valable ? → `{username, created_at}` |
+| GET | `/auth/sessions` | Les appareils connectés `[{id, device, created_at, last_seen_at, current}]` |
+| DELETE | `/auth/sessions/:id` | Déconnecte un appareil (204) |
+| POST | `/auth/password` | Change le mot de passe `{current_password, new_password}` → nouvelle session |
+| POST | `/auth/forgot` | Envoie un lien de réinitialisation par courriel (204 ; 503 sans SMTP) |
+| GET | `/reinitialisation?jeton=` | La page du lien reçu ; son formulaire poste sur `/auth/reset` |
+
+Ce qui la rend fiable :
+
+- **Des sessions côté serveur.** Le jeton remis est opaque (`mc_` + 256 bits
+  aléatoires) ; le serveur n'en garde que l'empreinte SHA-256. Une session
+  vit **180 jours après son dernier usage** : on n'est plus déconnecté au
+  bout d'un mois, ni quand un secret change.
+- **Une vraie déconnexion.** Se déconnecter supprime la session. Changer ou
+  réinitialiser son mot de passe, « déconnecter partout » ou supprimer son
+  compte coupe **toutes** les sessions — un jeton volé ne survit à rien de
+  tout cela. Le WebSocket revérifie sa session toutes les minutes.
+- **Un identifiant insensible à la casse et aux espaces** : la majuscule
+  que le clavier ajoute en début de champ ne fait plus échouer la connexion,
+  et deux comptes ne peuvent plus différer par la seule casse.
+- **Des refus qui disent pourquoi**, en texte (l'app iOS affiche le corps
+  tel quel) : `identifiant ou mot de passe incorrect`, champs trop courts ou
+  trop longs, `trop de tentatives…, réessaie dans N min` avec `Retry-After`.
+- **Un frein aux devinettes par compte** (10 échecs en 15 min → 15 min
+  d'attente), stocké en base : partagé entre dynos, il ne bloque plus tout
+  un réseau mobile derrière une même adresse IP.
+- **Mot de passe oublié** : réponse identique et immédiate que le compte
+  existe ou non (le courriel part en arrière-plan), trois liens par heure
+  au plus, un nouveau lien annule les précédents, et un lien ne sert qu'une
+  fois même sous deux envois simultanés.
+- **Argon2id hors de la boucle d'événements** : un hachage ne gèle plus les
+  autres requêtes.
+- **La transition sans déconnexion** : les jetons JWT de l'ancien serveur
+  restent acceptés jusqu'à leur échéance si `JWT_SECRET` est défini (avec la
+  même valeur qu'avant) — et ils sont révocables eux aussi. Sans
+  `JWT_SECRET`, ils sont refusés : l'ancien secret par défaut était public.
+
+Toutes les routes `positions*`, `stats`, `trips`, `searches`, `alerts`,
+`account`, `prefs` exigent `Authorization: Bearer <jeton>` et sont **isolées
+par utilisateur** ; le WebSocket et l'export GPX acceptent le jeton en query
+(`?token=`). Les erreurs sont du **texte brut** ; un jeton absent, révoqué
+ou expiré donne `401 authentification requise`.
+
 ### Temps réel (WebSocket)
 
 `/ws` diffuse à tous les clients connectés :
 
+- `hello` — l'identifiant de la connexion (pour écarter son propre écho).
 - `positions_changed` — émis à chaque ajout/modif/suppression/import → les
   clients rechargent leur liste automatiquement.
 - `live` / `live_gone` — positions GPS en direct des utilisateurs qui
   partagent leur localisation (marqueurs mobiles), expirées côté client.
-- `alert` / `alerts` — signalements (police, accident, bouchon, danger),
-  diffusés à tous et renvoyés en instantané à la connexion (gardés ~30 min).
+- `alert` / `alerts` / `alert_gone` — signalements (police, accident,
+  bouchon, danger), diffusés à tous et renvoyés en instantané à la connexion
+  (gardés ~30 min).
 
 Le client envoie `{"kind":"live", lat, lon, label}` ou
-`{"kind":"alert", category, lat, lon, label}`.
+`{"kind":"alert", category, lat, lon, label}`. Avec `REDIS_URL`, un pont
+pub/sub relaie les événements entre instances.
 
-Les données sont persistées dans **Postgres** via **SeaORM**. Le schéma est
-géré par des **migrations versionnées** (`sea-orm-migration`, dossier
-`src/migration/`) appliquées automatiquement au démarrage. Le calcul de
-trajet utilise la formule de Haversine pour la distance et le cap initial.
+Les données sont dans **Postgres**, via **memoire-orm**. Les migrations
+(`src/base.rs`) s'appliquent au démarrage et tiennent leur registre dans
+`_memoire_migrations` ; la première rejoue à l'identique le schéma des
+anciennes migrations SeaORM (`IF NOT EXISTS`), sans toucher à
+`seaql_migrations` — l'ancien serveur peut donc redémarrer sur la même base
+en cas de retour arrière.
+
+### Sécurité
+
+Le bouclier de Paquets passe devant chaque requête : identifiant de requête,
+hygiène (taille d'URL, d'en-têtes…), limite de corps, **limitation de débit**
+par IP (300 req/min, 30 req/min sur `/auth`, 6000 req/min sur `/tiles`, IP
+lue sur la dernière entrée de `X-Forwarded-For` derrière Heroku — celle que
+le client ne peut pas falsifier), blocage des scanners, **pare-feu
+applicatif** (injection SQL, XSS, RCE…), en-têtes de sécurité (HSTS,
+`nosniff`, `X-Frame-Options`). Ses refus sont, eux aussi, du texte brut.
 
 ### Lancer le backend
 
@@ -68,24 +149,17 @@ cp .env.example .env            # ou exporter DATABASE_URL
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/moncap"
 cargo run
 # moncap-gps écoute sur http://0.0.0.0:3000
+
+# 3. Les tests (les essais de bout en bout tournent sur cette base)
+TEST_DATABASE_URL="$DATABASE_URL" JWT_SECRET=dev-secret cargo test
 ```
 
 La connexion est configurable via la variable d'environnement
 `DATABASE_URL` (valeur par défaut :
 `postgres://postgres:postgres@localhost:5432/moncap`).
 
-**Comptes** : `POST /auth/signup` et `POST /auth/login` renvoient un jeton
-**JWT** (Bearer) ; toutes les routes `positions*`/`stats` exigent ce jeton et
-sont **isolées par utilisateur**. Définis `JWT_SECRET` en production (Heroku
-config var) ; le WebSocket et l'export GPX acceptent le jeton en query
-(`?token=`).
-
-**Limitation de débit** par IP (clé sur `X-Forwarded-For` derrière Heroku) :
-~300 req/min en général et 20 req/min sur `/auth` (anti brute-force) → `429`
-au-delà.
-
 Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
-(défaut : `info,sqlx=warn`). Les calculs de distances (`/stats`,
+(défaut : `info`). Les calculs de distances (`/stats`,
 `/positions/nearest`, `/route/multi`) sont parallélisés avec **rayon**, et
 le binaire de production est `strip`é pour rester léger.
 
@@ -334,7 +408,9 @@ six zones qui se chevauchent.
 L'app se déploie via un **buildpack Rust** : la crate est à la racine,
 Heroku la compile (`cargo build --release`) et lance le binaire défini dans
 le `Procfile`. L'addon **Heroku Postgres** fournit `DATABASE_URL` ; la table
-`positions` est créée automatiquement au démarrage. Pas de Docker, pas de
+base est créée ou mise à jour automatiquement au démarrage (migrations).
+Définir **`JWT_SECRET`** avec la valeur de l'ancien serveur garde les
+utilisateurs connectés pendant la transition vers les sessions. Pas de Docker, pas de
 GitHub Actions, pas de stack `container`.
 
 Fichiers utilisés :
@@ -351,7 +427,8 @@ Fichiers utilisés :
 | `/vitrine/…` | ses fichiers, nommés d'après leur contenu |
 | `/app` | le front web, écran de connexion compris (`web/dist/index.html`) |
 | `/web/…` | ses fichiers, nommés d'après leur contenu |
-| le reste | l'API |
+| `/auth/…`, `/positions`… | l'API |
+| toute autre adresse en GET | le front web (il route lui-même) |
 
 Le buildpack ne compile **que** la crate du serveur : aucun WebAssembly
 n'est fabriqué sur le dyno. Les deux fronts sont donc versionnés construits
@@ -366,10 +443,9 @@ disponible ici.
 
 ### Les fronts, et leur mouvement
 
-Les deux fronts sont écrits en **Rust**, avec [Yew](https://yew.rs) 0.23,
-et compilés en WebAssembly : la vitrine depuis #383, le front web depuis
-qu'il a quitté React, Bun et Leaflet — sa carte est écrite en Rust (voir
-`web/README.md`).
+Les deux fronts sont écrits en **Rust**, avec **active** — le front de la
+famille Paquets, qui a remplacé Yew — et compilés en WebAssembly. La carte
+du front web est écrite en Rust (voir `web/README.md`).
 
 Leurs animations suivent [zamocorp.com](https://zamocorp.com) et sont
 jouées par la crate `mouvement`, la même pour les deux. Ce que le site de

@@ -10,12 +10,16 @@
 //! au prochain titre de section ; en remontant, ou arrivé en bas, elle
 //! ramène au bandeau. Sa teinte suit la section traversée.
 
+use paquets::active::html::a;
+use paquets::active::{island, Dom, Event, Node};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::{Element, HtmlElement};
-use yew::prelude::*;
 
 use crate::contenu::Langue;
+
+/// Le nom de l'îlot, côté rendu comme côté navigateur.
+pub const ILOT: &str = "fleche";
 
 /// Les trois teintes de la maison, en jetons CSS : elles restent justes dans
 /// les quatre thèmes.
@@ -66,144 +70,138 @@ pub fn teinte(section: usize) -> &'static str {
     TEINTES[section % TEINTES.len()]
 }
 
-#[derive(Clone, PartialEq, Properties)]
-pub struct Props {
-    pub langue: Langue,
+/// La flèche, en îlot : rendue avec la page, réhydratée par le navigateur.
+///
+/// Ses deux libellés voyagent dans les propriétés de l'îlot plutôt que
+/// d'être relus dans `contenu.rs` : le WebAssembly n'embarque ainsi aucun
+/// texte de la page, seulement le comportement de la flèche.
+pub fn ilot(langue: Langue) -> Node {
+    let c = langue.contenu();
+    let props = format!("{}\n{}", c.chevrons.descendre, c.chevrons.remonter);
+    island(ILOT, props, fleche)
 }
 
-#[function_component]
-pub fn FlecheNav(p: &Props) -> Html {
-    let c = p.langue.contenu();
-    let noeud = use_node_ref();
+/// Le composant de l'îlot. `props` : « descendre », un saut de ligne,
+/// « remonter ».
+pub fn fleche(props: &str) -> Node {
+    let (descendre, remonter) = props.split_once('\n').unwrap_or((props, props));
+    let (descendre, remonter) = (descendre.to_string(), remonter.to_string());
+    a().class("fleche-nav")
+        .id("fleche")
+        .href("#haut")
+        .attr("data-aimant", "")
+        .attr("data-defile", "")
+        .attr("aria-label", remonter.clone())
+        .attr("data-sens", "bas")
+        .on_click(au_clic)
+        .on_mount(move |dom| suit_le_defilement(dom, descendre.clone(), remonter.clone()))
+        .text(Sens::Bas.glyphe())
+        .into()
+}
 
-    {
-        let noeud = noeud.clone();
-        let descendre = c.chevrons.descendre;
-        let remonter = c.chevrons.remonter;
+/// Tient la flèche à jour pendant le défilement : glyphe, libellé, sens et
+/// teinte de la section traversée. Navigateur seulement (`on_mount`).
+fn suit_le_defilement(dom: &Dom, descendre: String, remonter: String) {
+    let Some(fenetre) = web_sys::window() else {
+        return;
+    };
+    let Ok(fleche) = dom.clone().dyn_into::<HtmlElement>() else {
+        return;
+    };
+    let dernier = std::rc::Rc::new(std::cell::Cell::new(fenetre.scroll_y().unwrap_or(0.0)));
+    let monte = std::rc::Rc::new(std::cell::Cell::new(false));
 
-        use_effect_with((), move |_| {
-            let fenetre = web_sys::window().expect("une page a toujours une fenêtre");
-            let dernier = std::rc::Rc::new(std::cell::Cell::new(fenetre.scroll_y().unwrap_or(0.0)));
-            let monte = std::rc::Rc::new(std::cell::Cell::new(false));
+    let maj = move || {
+        let Some(f) = web_sys::window() else { return };
+        let y = f.scroll_y().unwrap_or(0.0);
+        // Un seuil de quatre pixels : sans lui, le tremblement d'un
+        // défilement par inertie inverserait le sens sans qu'on ait changé
+        // d'avis.
+        if (y - dernier.get()).abs() > 4.0 {
+            monte.set(y < dernier.get());
+            dernier.set(y);
+        }
+        let hauteur_ecran = f
+            .inner_height()
+            .ok()
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let hauteur_page = f
+            .document()
+            .and_then(|d| d.document_element())
+            .map(|e| e.scroll_height() as f64)
+            .unwrap_or(0.0);
 
-            let maj = {
-                let noeud = noeud.clone();
-                let dernier = dernier.clone();
-                let monte = monte.clone();
-                move || {
-                    let Some(f) = web_sys::window() else { return };
-                    let Some(fleche) = noeud.cast::<HtmlElement>() else {
-                        return;
-                    };
-                    let y = f.scroll_y().unwrap_or(0.0);
-                    // Un seuil de quatre pixels : sans lui, le tremblement
-                    // d'un défilement par inertie inverserait le sens sans
-                    // qu'on ait changé d'avis.
-                    if (y - dernier.get()).abs() > 4.0 {
-                        monte.set(y < dernier.get());
-                        dernier.set(y);
-                    }
-                    let hauteur_ecran = f
-                        .inner_height()
-                        .ok()
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0);
-                    let hauteur_page = f
-                        .document()
-                        .and_then(|d| d.document_element())
-                        .map(|e| e.scroll_height() as f64)
-                        .unwrap_or(0.0);
+        let s = sens(y, hauteur_ecran, hauteur_page, monte.get());
+        fleche.set_text_content(Some(s.glyphe()));
+        let etiquette = match s {
+            Sens::Haut => &remonter,
+            Sens::Bas => &descendre,
+        };
+        let _ = fleche.set_attribute("aria-label", etiquette);
+        let _ = fleche.set_attribute(
+            "data-sens",
+            match s {
+                Sens::Haut => "haut",
+                Sens::Bas => "bas",
+            },
+        );
 
-                    let s = sens(y, hauteur_ecran, hauteur_page, monte.get());
-                    fleche.set_text_content(Some(s.glyphe()));
-                    let etiquette = match s {
-                        Sens::Haut => remonter,
-                        Sens::Bas => descendre,
-                    };
-                    let _ = fleche.set_attribute("aria-label", etiquette);
-                    let _ = fleche.set_attribute(
-                        "data-sens",
-                        match s {
-                            Sens::Haut => "haut",
-                            Sens::Bas => "bas",
-                        },
-                    );
+        let hauts = hauts_des_titres(&f);
+        let _ = fleche
+            .style()
+            .set_property("--teinte", teinte(section_courante(&hauts, hauteur_ecran)));
+    };
 
-                    let hauts = hauts_des_titres(&f);
-                    let _ = fleche
-                        .style()
-                        .set_property("--teinte", teinte(section_courante(&hauts, hauteur_ecran)));
-                }
-            };
+    maj();
+    // L'îlot vit autant que la page : l'écouteur aussi.
+    let rappel = Closure::<dyn Fn()>::new(maj);
+    let _ = fenetre.add_event_listener_with_callback("scroll", rappel.as_ref().unchecked_ref());
+    rappel.forget();
+}
 
-            maj();
-            let rappel = Closure::<dyn Fn()>::new(maj);
-            let _ =
-                fenetre.add_event_listener_with_callback("scroll", rappel.as_ref().unchecked_ref());
+/// Le clic : vers le haut, ou vers le prochain titre.
+fn au_clic(e: Event) {
+    e.prevent_default();
+    let Some(f) = web_sys::window() else { return };
+    let vers_le_haut = e
+        .current_target()
+        .and_then(|el| el.get_attribute("data-sens"))
+        .map(|s| s == "haut")
+        .unwrap_or(true);
 
-            move || {
-                if let Some(f) = web_sys::window() {
-                    let _ = f.remove_event_listener_with_callback(
-                        "scroll",
-                        rappel.as_ref().unchecked_ref(),
-                    );
-                }
-                drop(rappel);
-            }
-        });
+    let doux = f
+        .match_media("(prefers-reduced-motion: reduce)")
+        .ok()
+        .flatten()
+        .map(|m| m.matches())
+        .unwrap_or(false);
+    let comportement = if doux {
+        web_sys::ScrollBehavior::Auto
+    } else {
+        web_sys::ScrollBehavior::Smooth
+    };
+
+    if vers_le_haut {
+        let o = web_sys::ScrollToOptions::new();
+        o.set_top(0.0);
+        o.set_behavior(comportement);
+        f.scroll_to_with_scroll_to_options(&o);
+        return;
     }
 
-    let au_clic = Callback::from(|e: MouseEvent| {
-        e.prevent_default();
-        let Some(f) = web_sys::window() else { return };
-        let cible = e
-            .current_target()
-            .and_then(|t| t.dyn_into::<HtmlElement>().ok());
-        let vers_le_haut = cible
-            .and_then(|el| el.get_attribute("data-sens"))
-            .map(|s| s == "haut")
-            .unwrap_or(true);
-
-        let doux = f
-            .match_media("(prefers-reduced-motion: reduce)")
-            .ok()
-            .flatten()
-            .map(|m| m.matches())
-            .unwrap_or(false);
-        let comportement = if doux {
-            web_sys::ScrollBehavior::Auto
-        } else {
-            web_sys::ScrollBehavior::Smooth
-        };
-
-        if vers_le_haut {
-            let o = web_sys::ScrollToOptions::new();
-            o.set_top(0.0);
-            o.set_behavior(comportement);
-            f.scroll_to_with_scroll_to_options(&o);
-            return;
-        }
-
-        // Le prochain titre encore sous la barre des 80 pixels ; à défaut,
-        // le dernier — on est alors tout en bas.
-        let titres = titres(&f);
-        let suivant = titres
-            .iter()
-            .find(|t| t.get_bounding_client_rect().top() > 80.0)
-            .cloned()
-            .or_else(|| titres.last().cloned());
-        if let Some(t) = suivant {
-            let o = web_sys::ScrollIntoViewOptions::new();
-            o.set_behavior(comportement);
-            t.scroll_into_view_with_scroll_into_view_options(&o);
-        }
-    });
-
-    html! {
-        <a class="fleche-nav" id="fleche" href="#haut" ref={noeud} data-aimant="" data-defile=""
-           onclick={au_clic} aria-label={c.chevrons.remonter} data-sens="bas">
-            { Sens::Bas.glyphe() }
-        </a>
+    // Le prochain titre encore sous la barre des 80 pixels ; à défaut, le
+    // dernier — on est alors tout en bas.
+    let titres = titres(&f);
+    let suivant = titres
+        .iter()
+        .find(|t| t.get_bounding_client_rect().top() > 80.0)
+        .cloned()
+        .or_else(|| titres.last().cloned());
+    if let Some(t) = suivant {
+        let o = web_sys::ScrollIntoViewOptions::new();
+        o.set_behavior(comportement);
+        t.scroll_into_view_with_scroll_into_view_options(&o);
     }
 }
 
@@ -269,6 +267,33 @@ mod tests {
         assert_eq!(teinte(0), teinte(3));
         assert_eq!(teinte(1), teinte(4));
         assert_ne!(teinte(0), teinte(1));
+    }
+
+    /// Rendue avec la page, la flèche est un îlot marqué pour le
+    /// navigateur, et porte ses deux libellés dans ses propriétés.
+    #[test]
+    fn la_fleche_est_un_ilot_qui_porte_ses_libelles() {
+        let c = Langue::Es.contenu();
+        let html = ilot(Langue::Es).render();
+        assert!(html.starts_with(r#"<active-island data-island="fleche" data-props=""#));
+        assert!(html.contains(r##"href="#haut""##));
+        assert!(html.contains(r#"data-sens="bas""#));
+        assert_eq!(
+            fleche(&format!(
+                "{}\n{}",
+                c.chevrons.descendre, c.chevrons.remonter
+            ))
+            .render(),
+            fleche_rendue_dans(&html),
+            "le navigateur doit reconstruire exactement le HTML rendu"
+        );
+    }
+
+    /// Le contenu d'un îlot rendu, sans son enveloppe.
+    fn fleche_rendue_dans(html: &str) -> String {
+        let debut = html.find("<a ").expect("un lien");
+        let fin = html.rfind("</active-island>").expect("une fin d'îlot");
+        html[debut..fin].to_string()
     }
 
     #[test]

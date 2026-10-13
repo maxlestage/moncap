@@ -7,7 +7,7 @@ use web_sys::{PositionError, PositionOptions};
 use crate::types::Coord;
 
 fn geolocalisation() -> Option<web_sys::Geolocation> {
-    web_sys::window()?.navigator().geolocation().ok()
+    crate::navigateur::fenetre()?.navigator().geolocation().ok()
 }
 
 pub fn disponible() -> bool {
