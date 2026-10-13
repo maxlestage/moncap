@@ -31,7 +31,13 @@ name = "app"
 path = "src/bin/app.rs"
 
 [dependencies]
-yew = { version = "0.23", features = ["csr"] }
+# Le front de la famille Paquets : `active`, par sa réexportation. Les vues
+# sont des fonctions qui rendent un `Node` — rendu en HTML à la construction
+# par `construit`, réhydraté dans le navigateur pour ses seuls îlots. Sans les
+# fonctionnalités par défaut (bases de données) : seul le côté navigateur
+# (`client`) sert ici. La même ligne vaut pour les deux cibles : en natif,
+# `client` ne fait que compiler du code qui ne s'exécute jamais.
+paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["client"] }
 
 # Le mouvement de zamocorp.com, en Rust : partagé avec le front web.
 mouvement = { path = "../mouvement" }
@@ -42,7 +48,9 @@ fabrique = { path = "../fabrique" }
 # Le navigateur, vu depuis Rust. Les fonctionnalités sont énumérées une par
 # une et non prises en bloc : `web-sys` est immense, et chaque interface non
 # demandée est du code qui ne part pas dans le WebAssembly.
-wasm-bindgen = "0.2"
+# Verrouillée à la version du front web : la CI refuse deux fronts qui
+# divergent, l'outil `wasm-bindgen` installé ne pouvant en servir qu'une.
+wasm-bindgen = "=0.2.129"
 js-sys = "0.3"
 
 [dependencies.web-sys]
@@ -53,21 +61,6 @@ features = [
     "ScrollToOptions", "ScrollBehavior", "ScrollIntoViewOptions",
     "MediaQueryList", "Event", "EventTarget", "AddEventListenerOptions",
 ]
-
-[dev-dependencies]
-# Le rendu côté serveur, **pour les tests seulement**.
-#
-# Les dépendances de développement ne sont pas compilées quand on construit
-# le binaire WebAssembly : rien de ceci ne part au navigateur, et la taille
-# livrée ne bouge pas (vérifié, à l'octet près).
-#
-# Ce qu'il permet : relire le HTML réellement produit par les composants,
-# et non les données qui le nourrissent. C'est ce que faisait l'ancien test
-# des liens, né d'un incident réel — deux liens vers un dépôt devenu privé,
-# qu'aucune construction ni capture n'avait signalés, une adresse morte se
-# rendant exactement comme une adresse valide.
-yew = { version = "0.23", features = ["ssr"] }
-tokio = { version = "1", features = ["rt", "macros"] }
 
 [profile.release]
 # `z` plutôt que `s` : sur une page qui ne calcule rien, chaque kilooctet

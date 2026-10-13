@@ -5,14 +5,13 @@
 //! appellent les mêmes fonctions que la construction — ce que Google lira
 //! est ce que les tests ont vu.
 //!
-//! **Ce module porte plus de poids qu'avant.** La page est désormais rendue
-//! par le navigateur : le corps part vide, et tout ce qu'un robot ou un
-//! aperçu de lien trouve immédiatement est ce qui est écrit ici. Les aperçus
-//! (messageries, réseaux) ne lisent que la tête et restent donc parfaits ;
-//! l'indexation, elle, dépend de l'exécution du WebAssembly par le moteur.
-//! Le repli `<noscript>` ci-dessous existe pour cette raison.
+//! Le corps de chaque page est rendu à la construction (`src/app.rs`, par
+//! `construit`) : un robot lit le texte sans exécuter quoi que ce soit. La
+//! tête reste écrite ici, à la main, parce qu'elle porte plus que des
+//! balises de titre — hreflang absolus, JSON-LD, Open Graph — et que les
+//! aperçus de liens (messageries, réseaux) ne lisent qu'elle.
 
-use crate::contenu::{Contenu, Langue, PageLegale, AUTEUR, CONNEXION};
+use crate::contenu::{Contenu, Langue, PageLegale, AUTEUR};
 
 /// L'adresse publique canonique du site.
 ///
@@ -374,104 +373,9 @@ pub fn tete_legale(
         .join("\n")
 }
 
-/// Le repli affiché quand le WebAssembly ne s'exécute pas.
-///
-/// La page est rendue par le navigateur : sans WebAssembly, le corps reste
-/// vide. Ce bloc n'est pas un ornement d'accessibilité mais le seul texte
-/// que verront un robot qui n'exécute rien, un navigateur ancien, ou
-/// quelqu'un qui a coupé les scripts.
-///
-/// Il ne refait pas la page : il en donne la substance — ce que l'app fait,
-/// combien elle coûte, et par où continuer. Mieux vaut une page sobre et
-/// vraie qu'un simulacre de la vraie.
-pub fn repli(c: &Contenu, l: Langue) -> String {
-    let p = public();
-    let mut s = String::from("<noscript><div class=\"dedans repli\">");
-    s.push_str(&format!("<h1>{} {}</h1>", texte(c.h1[0]), texte(c.h1[1])));
-    s.push_str(&format!("<p>{}</p>", texte(c.chapeau)));
-    // La porte de l'application. Depuis que la page est rendue par le
-    // WebAssembly, ce repli était le seul HTML lisible sans script — et il
-    // ne menait plus nulle part : le test d'intégration du serveur qui
-    // cherche ce lien échouait depuis.
-    s.push_str(&format!(
-        "<p><a href=\"{CONNEXION}\">{}</a></p>",
-        texte(c.se_connecter)
-    ));
-    for sec in [&c.comparateur.titre, &c.guidage.titre, &c.hors_ligne.titre] {
-        s.push_str(&format!("<h2>{}</h2>", texte(sec)));
-    }
-    for intro in [c.comparateur.intro, c.guidage.intro, c.hors_ligne.intro] {
-        s.push_str(&format!("<p>{}</p>", texte(intro)));
-    }
-    s.push_str(&format!("<h2>{}</h2>", texte(c.tarifs.titre)));
-    for f in [&c.tarifs.plus, &c.tarifs.pro] {
-        s.push_str(&format!(
-            "<p>{} — {} {}</p>",
-            texte(f.nom),
-            texte(f.prix),
-            texte(f.periode)
-        ));
-    }
-    s.push_str("<p>");
-    // Les trois langues, la courante marquée et non liée — comme le
-    // sélecteur de la page rendue : un lien vers soi n'offre rien.
-    for autre in Langue::TOUTES {
-        if autre == l {
-            s.push_str(&format!(
-                "<span aria-current=\"true\">{}</span> ",
-                texte(autre.contenu().nom)
-            ));
-        } else {
-            s.push_str(&format!(
-                "<a href=\"{}\" hreflang=\"{}\">{}</a> ",
-                autre.chemin(),
-                autre.code(),
-                texte(autre.contenu().nom)
-            ));
-        }
-    }
-    s.push_str(&format!(
-        "<a href=\"{}\">{}</a> <a href=\"{}\">{}</a>",
-        c.mentions.chemin,
-        texte(c.mentions.titre),
-        c.confidentialite.chemin,
-        texte(c.confidentialite.titre)
-    ));
-    s.push_str("</p>");
-    s.push_str(&format!(
-        "<p>{} <a href=\"{p}{}\">{}</a></p>",
-        texte(c.signature),
-        c.chemin,
-        texte(AUTEUR)
-    ));
-    s.push_str("</div></noscript>");
-    s
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Sans script, le repli est toute la page : il doit mener à
-    /// l'application et dire dans quelle langue on se trouve. Le serveur le
-    /// vérifie aussi, mais seulement avec une base de données sous la main.
-    #[test]
-    fn le_repli_mene_a_l_application_et_dit_sa_langue() {
-        for l in Langue::TOUTES {
-            let r = repli(l.contenu(), l);
-            assert!(
-                r.contains(&format!("href=\"{CONNEXION}\"")),
-                "{} : pas de lien de connexion",
-                l.code()
-            );
-            assert_eq!(
-                r.matches("aria-current=\"true\"").count(),
-                1,
-                "{} : la langue courante doit être marquée, une fois",
-                l.code()
-            );
-        }
-    }
 
     #[test]
     fn l_adresse_publique_n_a_pas_de_barre_finale() {
@@ -571,7 +475,7 @@ mod tests {
 
     #[test]
     fn la_tete_porte_tout_ce_qu_un_apercu_de_lien_lit() {
-        // Le corps part vide : la tête est tout ce qu'une messagerie voit.
+        // La tête est tout ce qu'une messagerie voit.
         for l in Langue::TOUTES {
             let t = tete(l.contenu(), l, "/f.css", "/logo.webp", "/i.png");
             for balise in [
@@ -589,29 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn le_repli_dit_la_substance_de_la_page() {
-        for l in Langue::TOUTES {
-            let c = l.contenu();
-            let r = repli(c, l);
-            assert!(r.starts_with("<noscript>") && r.ends_with("</noscript>"));
-            assert!(r.contains(&texte(c.chapeau)), "le chapeau doit y être");
-            assert!(
-                r.contains(&texte(c.tarifs.plus.prix)),
-                "le prix doit y être"
-            );
-            assert!(
-                r.contains(c.mentions.chemin),
-                "le légal doit rester joignable"
-            );
-            // Les deux autres langues sont atteignables sans script.
-            for autre in Langue::TOUTES.into_iter().filter(|a| *a != l) {
-                assert!(r.contains(autre.chemin()), "{autre:?} doit être joignable");
-            }
-        }
-    }
-
-    #[test]
-    fn le_repli_echappe_le_texte() {
+    fn le_texte_est_echappe() {
         assert_eq!(texte("a & b <i>"), "a &amp; b &lt;i&gt;");
     }
 }
