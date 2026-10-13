@@ -1821,6 +1821,71 @@ button.avatar.choisi {
   --fond-bouton: var(--accent-doux);
 }
 
+/* --- Le compte : appareils connectés, mot de passe ------------------------------
+ * Replié comme les avatars : on y vient rarement. */
+.panneaux .compte {
+  grid-column: 1 / -1;
+}
+
+.compte summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.compte summary::-webkit-details-marker {
+  display: none;
+}
+
+.compte summary h2 {
+  margin: 0;
+}
+
+.compte-qui {
+  overflow: hidden;
+  font-size: 0.88rem;
+  color: var(--doux);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compte-corps {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.compte-corps h3 {
+  margin: 0.4rem 0 0;
+  font-size: 0.95rem;
+}
+
+.compte-corps .liste {
+  margin: 0;
+}
+
+.appareils li.courant {
+  box-shadow: inset 0 0 0 2px var(--accent-doux);
+}
+
+.appareil-ici {
+  font-weight: 600;
+  color: var(--vert);
+}
+
+.compte-mdp {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 26rem;
+}
+
+.compte-mdp button {
+  justify-self: start;
+}
+
 /* --- Les annonces ------------------------------------------------------------- */
 .annonces {
   position: fixed;

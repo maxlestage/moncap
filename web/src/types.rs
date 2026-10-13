@@ -112,11 +112,43 @@ impl Voiture {
     }
 }
 
-/// La réponse de `/auth/login` et `/auth/signup`.
+/// La réponse de `/auth/login`, `/auth/signup` et `/auth/password` : une
+/// session neuve.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Jeton {
     pub token: String,
+    /// L'identifiant tel que le serveur l'a enregistré. Absent d'une
+    /// réponse plus ancienne : on garde alors celui qu'on a tapé.
+    #[serde(default)]
     pub username: String,
+    /// L'expiration de la session, en secondes Unix (0 si inconnue). Le
+    /// serveur la fait respecter : le client ne s'en sert pas pour décider.
+    #[serde(default)]
+    pub expires_at: i64,
+}
+
+/// La réponse de `GET /auth/me`.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct Moi {
+    pub username: String,
+    #[serde(default)]
+    pub created_at: i64,
+}
+
+/// Une session ouverte sur un appareil (`GET /auth/sessions`).
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub struct Appareil {
+    pub id: i64,
+    #[serde(default)]
+    pub device: String,
+    /// Ouverture et dernière activité, en secondes Unix.
+    #[serde(default)]
+    pub created_at: i64,
+    #[serde(default)]
+    pub last_seen_at: i64,
+    /// La session de cet appareil-ci.
+    #[serde(default)]
+    pub current: bool,
 }
 
 /// Un lieu trouvé par le géocodage.
@@ -160,6 +192,21 @@ mod tests {
                 .unwrap();
         assert_eq!(s.count, 0);
         assert!(s.bbox.is_none());
+    }
+
+    #[test]
+    fn une_session_se_lit_avec_ou_sans_expiration() {
+        let j: Jeton =
+            serde_json::from_str(r#"{"token":"t","username":"a@b.fr","expires_at":1760000000}"#)
+                .unwrap();
+        assert_eq!((j.token.as_str(), j.expires_at), ("t", 1_760_000_000));
+        let ancien: Jeton = serde_json::from_str(r#"{"token":"t"}"#).unwrap();
+        assert_eq!((ancien.username.as_str(), ancien.expires_at), ("", 0));
+        let a: Vec<Appareil> = serde_json::from_str(
+            r#"[{"id":3,"device":"Firefox · Linux","created_at":1,"last_seen_at":2,"current":true}]"#,
+        )
+        .unwrap();
+        assert!(a[0].current);
     }
 
     #[test]

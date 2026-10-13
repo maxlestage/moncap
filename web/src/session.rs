@@ -13,7 +13,7 @@ fn stockage() -> Option<web_sys::Storage> {
     // Le stockage peut manquer — navigation privée stricte, cookies
     // bloqués — et l'accès lui-même peut lever : on traite les deux comme
     // une absence, jamais comme une panne.
-    web_sys::window()?.local_storage().ok().flatten()
+    crate::navigateur::fenetre()?.local_storage().ok().flatten()
 }
 
 fn lis(cle: &str) -> String {
@@ -49,7 +49,8 @@ pub fn normalise_base(url: &str) -> String {
     url.trim().trim_end_matches('/').to_string()
 }
 
-/// Une session ouverte.
+/// Une session ouverte : le jeton que le serveur a remis, et l'identifiant
+/// sous lequel il l'a remis.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Session {
     pub jeton: String,

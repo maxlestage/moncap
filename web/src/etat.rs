@@ -1,14 +1,12 @@
 //! L'état du tableau de bord, et les règles qui le font évoluer.
 //!
 //! Un réducteur : chaque changement est une [`Action`], et la fonction qui
-//! l'applique est pure. Les règles du temps réel — ignorer son propre écho,
+//! l'applique est pure. Le tableau le tient dans un `State` d'`active`. Les règles du temps réel — ignorer son propre écho,
 //! oublier une voiture muette, retirer un signalement infirmé — se testent
 //! donc sans serveur ni navigateur.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
-
-use yew::Reducible;
 
 use crate::temps_reel::Evenement;
 use crate::types::{Alerte, Coord, Itineraire, Position, Stats, Voiture};
@@ -91,10 +89,10 @@ fn memes_lieux(a: &[Position], b: &[Position]) -> bool {
             .all(|(x, y)| x.id == y.id && x.lat == y.lat && x.lon == y.lon)
 }
 
-impl Reducible for Etat {
-    type Action = Action;
-
-    fn reduce(self: Rc<Self>, action: Action) -> Rc<Self> {
+impl Etat {
+    /// Applique une action. Rien de changé : l'état rendu est l'ancien, le
+    /// même `Rc` — et rien ne se met à jour à l'écran.
+    pub fn reduce(self: Rc<Self>, action: Action) -> Rc<Self> {
         let mut e = (*self).clone();
         match action {
             Action::Donnees { positions, stats } => {

@@ -1,10 +1,28 @@
-# MonCap GPS — front web (Yew + WebAssembly)
+# MonCap GPS — front web (active + WebAssembly)
 
 L'interface web qui consomme la même API que l'app iOS, écrite en **Rust**
-avec [Yew](https://yew.rs) et compilée en **WebAssembly**. Elle remplace
-l'ancienne application React + Bun + Leaflet : un seul langage du serveur
-au navigateur, et les types échangés avec l'API vérifiés par le compilateur
-plutôt que recopiés à la main.
+avec [active](https://github.com/maxlestage/Active) — le front de la famille
+[Paquets](https://github.com/maxlestage/Paquets), pris par la crate
+`paquets` sans son serveur — et compilée en **WebAssembly**. Elle remplace
+l'ancienne application React + Bun + Leaflet, puis sa première version en
+Yew : un seul langage du serveur au navigateur, et les types échangés avec
+l'API vérifiés par le compilateur plutôt que recopiés à la main.
+
+### active, en deux mots
+
+Pas de DOM virtuel ni de macro : une vue est une fonction qui construit des
+nœuds (`div().class("x").child(…)`), et l'état tient dans des `State`
+fins. Un `State` lu dans `text_dyn`, `attr_dyn`, `class_if`,
+`children_dyn` ou `keyed` ne met à jour que ce morceau-là de la page ; un
+`memo` ne prévient ses lecteurs que si sa valeur change vraiment. Le
+tableau garde ainsi un seul état (le réducteur d'`etat.rs`) et chaque
+partie de l'écran n'en suit que sa part : une voiture qui avance ne touche
+ni la liste des positions, ni les compteurs.
+
+Le même code se compile en natif, sans la fonctionnalité `client` : les
+effets n'y tournent pas, et `Node::render()` rend le HTML — ce que les
+tests relisent, sans navigateur. Tout ce qui touche au navigateur passe
+par `navigateur.rs`, qui n'y trouve rien en natif.
 
 On y entre par `/app`. Les fichiers vivent sous `/web/…`, nommés d'après
 leur contenu (voir « Les adresses et le cache »).
@@ -16,7 +34,7 @@ rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.129   # la version de Cargo.lock
 npm install -g binaryen                            # fournit wasm-opt (facultatif)
 
-cargo test                                         # 54 tests, sans navigateur
+cargo test                                         # 77 tests, sans navigateur
 cargo fmt --check && cargo clippy --all-targets -- -D warnings
 cargo run --release --bin construit                # écrit dist/
 ```
@@ -50,6 +68,8 @@ Celles de l'ancien front, une par une :
 - Recherche de destination, avec distance et direction depuis sa position.
 - **Avatars** : quatorze véhicules, qui vous représentent sur la carte des
   autres.
+- **Mon compte** : les appareils où le compte est ouvert (en refermer un,
+  ou tous à la fois), et le changement de mot de passe.
 
 ### Ce qui a changé en route
 
@@ -84,6 +104,33 @@ Plusieurs défauts de l'ancien front sont corrigés, et chacun a son test :
 - Les distances s'écrivent comme dans l'app iOS : des mètres sous le
   kilomètre (`Distance.courte`).
 
+### La connexion
+
+Elle suit les sessions du serveur (`/auth/login`, `/auth/me`,
+`/auth/logout`, `/auth/sessions`…) :
+
+- **Ce que dit le serveur se montre tel quel** — identifiants refusés (401),
+  mot de passe refusé (400), trop de tentatives (429). Après un 429, le
+  bouton attend le `Retry-After` et le décompte. Un serveur muet donne
+  « Serveur injoignable », une réponse illisible un message à nous —
+  jamais une erreur de décodage brute, jamais une page HTML.
+- **Une requête à la fois** : le bouton s'éteint tant que la réponse n'est
+  pas revenue. L'identifiant part sans espaces autour ; la casse reste,
+  le serveur compare sans elle.
+- **La session retrouvée est vérifiée** au démarrage (`GET /auth/me`) :
+  refusée, la porte se rouvre sur « Session expirée » ; serveur
+  injoignable, on reste connecté, l'écran reste utilisable.
+- **Tout refus referme proprement** : un 401 de l'API, ou un WebSocket
+  refusé à la poignée de main — le navigateur n'en montre pas le statut,
+  le tableau demande alors `/auth/me` (au plus toutes les dix secondes) et
+  ne déconnecte que sur un vrai refus.
+- **« Déconnexion » prévient le serveur** (`POST /auth/logout`) avant
+  d'oublier la session ici — au mieux : passé 2,5 s, la porte se rouvre
+  quand même.
+- Le stockage garde ses clés (`moncap.token`, `moncap.user`,
+  `moncap.apiBase`, `moncap.avatar`) : une session ouverte avant reste
+  ouverte après.
+
 ## La carte
 
 Elle est écrite en Rust (`src/carte/`), à la place de Leaflet. Leaflet 1.9.4
@@ -98,6 +145,11 @@ tous les points et pas davantage. Le composant ne fait que la brancher sur
 l'écran : glisser, lancer avec inertie, pincer, molette, double toucher,
 clavier (flèches, `+`/`−`, Entrée pour poser une position au centre),
 cadrage animé, bulles qui se recadrent pour rester visibles.
+
+Sans DOM virtuel, la carte tient ce qu'elle montre dans un seul état
+(`Rendu` : la vue, l'origine du plan, la taille). Chaque tuile et chaque
+repère est construit une fois, gardé par sa clé (`keyed`), et seul son
+`style` suit cet état : une image d'animation ne reconstruit rien.
 
 Le plan est un calque unique, déplacé d'un seul `transform` au glissement,
 et arrondi au pixel : translaté d'une fraction, il faisait apparaître un
@@ -159,6 +211,7 @@ Mesuré sur la construction, et non supposé :
 | Ancien front : React (125 Ko) + feuille (2,5 Ko) + Leaflet depuis unpkg (~46 Ko) | **~174 Ko** |
 | Front Yew : WebAssembly (227 Ko) + colle (9,8 Ko) + feuille (7 Ko) + coquille (1 Ko) | **~245 Ko** |
 | Seconde vague d'animation : WebAssembly (238 Ko) + colle (10,4 Ko) + feuille (7,8 Ko) + coquille (0,9 Ko) | **~257 Ko** |
+| active, sessions et compte : WebAssembly (235 Ko) + colle (10,2 Ko) + feuille (8 Ko) + coquille (1 Ko) | **~254 Ko** |
 
 Soit environ 40 % de plus. Le poids est réparti, sans dépendance qui domine
 (relevé avec `twiggy` sur une construction non dépouillée) : le plus gros
@@ -190,11 +243,12 @@ cassée sur la carte.
 
 ## Fichiers
 
-- `src/bin/app.rs` — le point d'entrée du WebAssembly
+- `src/bin/app.rs` — le point d'entrée du WebAssembly : monte l'application, démarre le moteur
 - `src/bin/construit.rs` — fabrique `dist/`
-- `src/app.rs` — la racine : la porte ou le tableau, et le volet entre les deux
+- `src/app.rs` — la racine : la session, la porte ou le tableau, et le volet entre les deux
 - `src/porte.rs` — connexion, inscription, mot de passe oublié
 - `src/tableau.rs` — le tableau de bord
+- `src/compte.rs` — appareils connectés, changement de mot de passe
 - `src/carte/` — la carte (`projection.rs` pour la géométrie)
 - `src/etat.rs` — l'état du tableau et ses règles (réducteur pur)
 - `src/temps_reel.rs` — le WebSocket, avec reconnexion
@@ -204,4 +258,5 @@ cassée sur la carte.
 - `src/localisation.rs` — la géolocalisation du navigateur
 - `src/catalogue.rs` — signalements et avatars
 - `src/ui.rs` — mots masqués, compteur
+- `src/navigateur.rs` — l'accès au navigateur, vide en natif
 - `src/styles.css` — la feuille de style
