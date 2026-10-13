@@ -1,57 +1,151 @@
 //! Le tableau de bord : la carte, la recherche, le temps réel, les
 //! positions et l'itinéraire. Portage de l'ancien `App.tsx`, fonction pour
 //! fonction.
+//!
+//! L'état vit dans un seul `State` — le réducteur d'[`etat`](crate::etat) —
+//! et chaque morceau de l'écran n'en lit que sa part, par un `memo` : une
+//! voiture qui avance ne redessine pas la liste des positions.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gloo_timers::callback::{Interval, Timeout};
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use paquets::active::prelude::*;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
 use web_sys::HtmlInputElement;
-use yew::prelude::*;
 
 use crate::api::{self, Erreur};
-use crate::carte::{Cadrage, Carte};
+use crate::app::FinDeSession;
+use crate::carte::{self, carte, Cadrage};
 use crate::catalogue::{Categorie, Ressources, AVATARS, CATEGORIES};
-use crate::etat::{Action, Etat};
+use crate::compte::{self, compte};
+use crate::etat::{Action, Annonce, Etat};
 use crate::geo;
 use crate::localisation::{self, Surveillance};
+use crate::navigateur::{self, au_montage, brut, fenetre, lance, maintenant_ms};
 use crate::nominatim;
 use crate::session::{self, Session};
 use crate::temps_reel::{Connexion, Envoi, Evenement};
 use crate::types::{Coord, Lieu, NouvellePosition, Position};
-use crate::ui::{Compteur, Lettres, Roule};
+use crate::ui::{compteur, lettres, roule};
 
-#[derive(Properties, PartialEq)]
-pub struct Props {
-    pub session: Session,
-    pub on_deconnexion: Callback<()>,
+/// Ce que le tableau reçoit de la racine.
+pub struct Proprietes {
+    /// La session : son jeton change quand le mot de passe change.
+    pub session: State<Option<Session>>,
+    pub ressources: Rc<Ressources>,
+    pub fin: Rc<dyn Fn(FinDeSession)>,
+    pub renouvelle: Rc<dyn Fn(Session)>,
 }
 
-fn maintenant_ms() -> f64 {
-    js_sys::Date::now()
+/// Ce que les rappels du tableau partagent : l'état, le jeton, et la sortie.
+#[derive(Clone)]
+struct Ctx {
+    etat: State<Rc<Etat>>,
+    jeton: State<String>,
+    fin: Rc<dyn Fn(FinDeSession)>,
+}
+
+impl Ctx {
+    /// Le tableau est-il encore à l'écran ? Une réponse qui arrive après la
+    /// déconnexion n'a plus personne à qui parler.
+    fn vivant(&self) -> bool {
+        self.etat.is_alive()
+    }
+
+    fn envoie(&self, a: Action) {
+        if !self.vivant() {
+            return;
+        }
+        let avant = untrack(|| self.etat.get());
+        let apres = avant.clone().reduce(a);
+        if !Rc::ptr_eq(&avant, &apres) {
+            self.etat.set(apres);
+        }
+    }
+
+    /// Le jeton du moment — lu avant chaque requête, il suit les
+    /// renouvellements.
+    fn jeton(&self) -> Option<String> {
+        if !self.vivant() {
+            return None;
+        }
+        Some(untrack(|| self.jeton.get())).filter(|j| !j.is_empty())
+    }
+
+    /// Une requête a échoué : une session refusée referme la porte, le
+    /// reste s'annonce.
+    fn echec(&self, e: Erreur) {
+        if !self.vivant() {
+            return;
+        }
+        if e == Erreur::NonAutorise {
+            (self.fin)(FinDeSession::Expiree);
+        } else {
+            self.envoie(Action::Erreur(e.message()));
+        }
+    }
+
+    /// Recharge les positions et les chiffres.
+    fn recharge(&self) {
+        let Some(jeton) = self.jeton() else { return };
+        let ctx = self.clone();
+        lance(async move {
+            let r = async {
+                let positions = api::positions(&jeton).await?;
+                let stats = api::stats(&jeton).await?;
+                Ok::<_, Erreur>((positions, stats))
+            }
+            .await;
+            match r {
+                Ok((positions, stats)) => ctx.envoie(Action::Donnees { positions, stats }),
+                Err(e) => ctx.echec(e),
+            }
+        });
+    }
+
+    /// Lance une requête, et annonce son échec.
+    fn requete<F, T>(
+        &self,
+        f: impl FnOnce(String) -> F + 'static,
+        ok: impl FnOnce(&Ctx, T) + 'static,
+    ) where
+        F: std::future::Future<Output = Result<T, Erreur>> + 'static,
+    {
+        let Some(jeton) = self.jeton() else { return };
+        let ctx = self.clone();
+        lance(async move {
+            match f(jeton).await {
+                Ok(v) if ctx.vivant() => ok(&ctx, v),
+                Ok(_) => {}
+                Err(e) => ctx.echec(e),
+            }
+        });
+    }
 }
 
 /// Ce qu'il faut pour dire sa position au temps réel.
 #[derive(Clone)]
 struct Emetteur {
     connexion: Rc<RefCell<Option<Connexion>>>,
-    dernier_envoi: Rc<RefCell<Option<(f64, Coord)>>>,
+    dernier_envoi: Rc<Cell<Option<(f64, Coord)>>>,
     avatar: Rc<RefCell<String>>,
-    nom: String,
+    nom: State<String>,
 }
 
 impl Emetteur {
     /// Envoie la position si la règle de `geo::doit_envoyer` le permet.
     fn propose(&self, c: Coord) {
         let t = maintenant_ms();
-        if !geo::doit_envoyer(*self.dernier_envoi.borrow(), t, c) {
+        if !geo::doit_envoyer(self.dernier_envoi.get(), t, c) || !self.nom.is_alive() {
             return;
         }
+        let nom = untrack(|| self.nom.get());
         let envoi = Envoi::Live {
             lat: c.lat,
             lon: c.lon,
-            label: self.nom.clone(),
+            label: if nom.is_empty() { "Moi".into() } else { nom },
             // Lu à chaque envoi : changer d'avatar se voit tout de suite
             // chez les autres. L'ancien front gardait celui du démarrage du
             // partage.
@@ -63,179 +157,190 @@ impl Emetteur {
             .as_ref()
             .is_some_and(|cx| cx.envoie(&envoi));
         if parti {
-            *self.dernier_envoi.borrow_mut() = Some((t, c));
+            self.dernier_envoi.set(Some((t, c)));
         }
     }
 }
 
-#[function_component]
-pub fn Tableau(p: &Props) -> Html {
-    let etat = use_reducer(Etat::default);
-    let res = use_context::<Rc<Ressources>>().unwrap_or_default();
-    let jeton = p.session.jeton.clone();
-    let utilisateur = p.session.utilisateur.clone();
+/// L'élément `<p>`.
+fn p_() -> Element {
+    el("p")
+}
 
-    let connexion: Rc<RefCell<Option<Connexion>>> = use_mut_ref(|| None);
-    let surveillance: Rc<RefCell<Option<Surveillance>>> = use_mut_ref(|| None);
-    let dernier_envoi = use_mut_ref(|| None::<(f64, Coord)>);
-    let avatar = use_state(session::avatar);
-    let avatar_courant = use_mut_ref(session::avatar);
+/// Le champ qui a déclenché un événement.
+fn champ_de(e: &Event) -> Option<HtmlInputElement> {
+    brut(e)?.target()?.dyn_into().ok()
+}
 
-    let cadrage = use_state(Cadrage::default);
-    let destination = use_state(|| None::<Lieu>);
-    let recherche = use_state(String::new);
-    let resultats = use_state(|| None::<Vec<Lieu>>);
-    let cherche_en_cours = use_state_eq(|| false);
-    let brouillon = use_state(|| None::<Coord>);
-    let nom_brouillon = use_state(String::new);
-    let champ_brouillon = use_node_ref();
-    let edition = use_state(|| None::<(i64, String)>);
-    let vitesse = use_state(|| 50.0f64);
-
-    // --- Erreurs : une session expirée referme la porte ---------------------
-    let echec = {
-        let d = etat.dispatcher();
-        let deco = p.on_deconnexion.clone();
-        Callback::from(move |e: Erreur| {
-            if e == Erreur::NonAutorise {
-                deco.emit(());
-            } else {
-                d.dispatch(Action::Erreur(e.message()));
-            }
+/// Le tableau de bord.
+pub fn tableau(p: Proprietes) -> Node {
+    let session = p.session;
+    let res = p.ressources;
+    let etat = use_state(Rc::new(Etat::default()));
+    let jeton =
+        memo(move || session.with(|s| s.as_ref().map(|s| s.jeton.clone()).unwrap_or_default()));
+    let utilisateur = memo(move || {
+        session.with(|s| {
+            s.as_ref()
+                .map(|s| s.utilisateur.clone())
+                .unwrap_or_default()
         })
+    });
+    let ctx = Ctx {
+        etat,
+        jeton,
+        fin: p.fin.clone(),
     };
 
-    // --- Chargement des positions et des chiffres --------------------------
-    let recharge = {
-        let d = etat.dispatcher();
-        let echec = echec.clone();
-        use_callback(jeton.clone(), move |_: (), jeton: &String| {
-            let d = d.clone();
-            let echec = echec.clone();
-            let jeton = jeton.clone();
-            spawn_local(async move {
-                let r = async {
-                    let positions = api::positions(&jeton).await?;
-                    let stats = api::stats(&jeton).await?;
-                    Ok::<_, Erreur>((positions, stats))
-                }
-                .await;
-                match r {
-                    Ok((positions, stats)) => d.dispatch(Action::Donnees { positions, stats }),
-                    Err(e) => echec.emit(e),
-                }
-            });
-        })
-    };
+    // Les parts de l'état que l'écran lit.
+    let positions = memo(move || etat.with(|e| e.positions.clone()));
+    let alertes = memo(move || etat.with(|e| e.alertes.clone()));
+    let voitures = memo(move || etat.with(|e| Rc::new(e.voitures())));
+    let moi = memo(move || etat.with(|e| e.moi));
+    let partage = memo(move || etat.with(|e| e.partage));
+    let connecte = memo(move || etat.with(|e| e.connecte));
+    let stats = memo(move || etat.with(|e| e.stats.clone()));
+    let itineraire = memo(move || etat.with(|e| e.itineraire.clone()));
+    let annonce = memo(move || etat.with(|e| e.annonce.clone()));
+    let cadrages = memo(move || etat.with(|e| e.cadrages));
+    let n_direct = memo(move || voitures.with(|v| v.len()));
+    let en_direct = memo(move || n_direct.get() > 0);
 
-    {
-        let recharge = recharge.clone();
-        use_effect_with((), move |_| recharge.emit(()));
-    }
+    let connexion: Rc<RefCell<Option<Connexion>>> = Rc::default();
+    let surveillance: Rc<RefCell<Option<Surveillance>>> = Rc::default();
+    let horloges: Rc<RefCell<Vec<Interval>>> = Rc::default();
+    let avatar = use_state(session::avatar());
+    let avatar_courant = Rc::new(RefCell::new(session::avatar()));
 
-    // --- Le temps réel ---------------------------------------------------------
+    let cadrage = use_state(Cadrage::default());
+    let destination = use_state(None::<Lieu>);
+    let recherche = use_state(String::new());
+    let resultats = use_state(None::<Vec<Lieu>>);
+    let cherche_en_cours = use_state(false);
+    let brouillon = use_state(None::<Coord>);
+    let nom_brouillon = use_state(String::new());
+    let edition = use_state(None::<(i64, String)>);
+    let edition_id = memo(move || edition.with(|e| e.as_ref().map(|(id, _)| *id)));
+    let vitesse = use_state(50.0f64);
+    let sortie_demandee = use_state(false);
+
+    // Ce qui tourne en dehors de la vue s'arrête avec elle.
     {
-        let connexion = connexion.clone();
-        let d = etat.dispatcher();
-        let recharge = recharge.clone();
-        use_effect_with(jeton.clone(), move |jeton| {
-            let lieu = web_sys::window().map(|f| f.location());
-            let protocole = lieu
-                .as_ref()
-                .and_then(|l| l.protocol().ok())
-                .unwrap_or_default();
-            let hote = lieu
-                .as_ref()
-                .and_then(|l| l.host().ok())
-                .unwrap_or_default();
-            let url = api::url_ws(&session::base_api(), &protocole, &hote, jeton);
-            let d2 = d.clone();
-            let sur_evenement = Callback::from(move |ev: Evenement| match ev {
-                Evenement::PositionsChanged => recharge.emit(()),
-                evenement => d.dispatch(Action::Recu {
-                    evenement,
-                    maintenant_ms: maintenant_ms(),
-                }),
-            });
-            let sur_etat = Callback::from(move |c: bool| d2.dispatch(Action::Connexion(c)));
-            *connexion.borrow_mut() = Some(Connexion::ouvre(url, sur_evenement, sur_etat));
-            move || {
-                connexion.borrow_mut().take();
-            }
+        let (connexion, surveillance, horloges) =
+            (connexion.clone(), surveillance.clone(), horloges.clone());
+        on_cleanup(move || {
+            connexion.borrow_mut().take();
+            surveillance.borrow_mut().take();
+            horloges.borrow_mut().clear();
         });
     }
 
-    // --- Les horloges : purge des voitures muettes, resynchronisation des
-    // signalements (le serveur purge les expirés sans le dire à personne).
+    // --- Chargement des positions et des chiffres --------------------------
     {
-        let d = etat.dispatcher();
-        let jeton = jeton.clone();
-        use_effect_with((), move |_| {
-            let d1 = d.clone();
-            let purge = Interval::new(3000, move || {
-                d1.dispatch(Action::Purge {
-                    maintenant_ms: maintenant_ms(),
-                })
+        let ctx = ctx.clone();
+        au_montage(move || ctx.recharge());
+    }
+
+    // --- Le temps réel ---------------------------------------------------------
+    // Rouvert quand le jeton change : un nouveau mot de passe rend une
+    // session neuve, l'ancienne ne vaut plus rien.
+    {
+        let ctx = ctx.clone();
+        let connexion = connexion.clone();
+        let derniere_verification = Rc::new(Cell::new(f64::NEG_INFINITY));
+        effect(move || {
+            let j = jeton.get();
+            untrack(|| {
+                connexion.borrow_mut().take();
+                if j.is_empty() {
+                    ctx.envoie(Action::Connexion(false));
+                    return;
+                }
+                let lieu = fenetre().map(|f| f.location());
+                let protocole = lieu
+                    .as_ref()
+                    .and_then(|l| l.protocol().ok())
+                    .unwrap_or_default();
+                let hote = lieu
+                    .as_ref()
+                    .and_then(|l| l.host().ok())
+                    .unwrap_or_default();
+                let url = api::url_ws(&session::base_api(), &protocole, &hote, &j);
+                let (c1, c2, c3) = (ctx.clone(), ctx.clone(), ctx.clone());
+                let derniere = derniere_verification.clone();
+                *connexion.borrow_mut() = Some(Connexion::ouvre(
+                    url,
+                    move |ev| match ev {
+                        Evenement::PositionsChanged => c1.recharge(),
+                        evenement => c1.envoie(Action::Recu {
+                            evenement,
+                            maintenant_ms: maintenant_ms(),
+                        }),
+                    },
+                    move |c| c2.envoie(Action::Connexion(c)),
+                    // Une poignée de main refusée ressemble à une coupure :
+                    // on demande au serveur si la session vit encore, au
+                    // plus toutes les dix secondes.
+                    move || {
+                        let t = maintenant_ms();
+                        if t - derniere.get() < 10_000.0 {
+                            return;
+                        }
+                        derniere.set(t);
+                        // Seul un refus compte : un serveur injoignable
+                        // ne déconnecte personne, et ne s'annonce pas
+                        // toutes les dix secondes.
+                        let Some(j) = c3.jeton() else { return };
+                        let c = c3.clone();
+                        lance(async move {
+                            if let Err(Erreur::NonAutorise) = api::moi(&j).await {
+                                c.echec(Erreur::NonAutorise);
+                            }
+                        });
+                    },
+                ));
             });
-            let resync = Interval::new(60_000, move || {
-                let d = d.clone();
-                let jeton = jeton.clone();
-                spawn_local(async move {
-                    if let Ok(a) = api::alertes(&jeton).await {
-                        d.dispatch(Action::Alertes(a));
-                    }
-                });
-            });
-            move || {
-                drop(purge);
-                drop(resync);
-            }
         });
     }
 
     // --- Le partage de position ------------------------------------------------
     let emetteur = Emetteur {
         connexion: connexion.clone(),
-        dernier_envoi: dernier_envoi.clone(),
+        dernier_envoi: Rc::new(Cell::new(None)),
         avatar: avatar_courant.clone(),
-        nom: if utilisateur.is_empty() {
-            "Moi".to_string()
-        } else {
-            utilisateur.clone()
-        },
+        nom: utilisateur,
     };
-    let derniere_position = use_mut_ref(|| None::<Coord>);
+    let derniere_position = Rc::new(Cell::new(None::<Coord>));
 
-    let demarre_partage = {
+    let demarre_partage: Rc<dyn Fn()> = {
         let surveillance = surveillance.clone();
         let emetteur = emetteur.clone();
         let derniere_position = derniere_position.clone();
-        let d = etat.dispatcher();
-        Callback::from(move |_: ()| {
+        let ctx = ctx.clone();
+        Rc::new(move || {
             if surveillance.borrow().is_some() {
                 return;
             }
             let emetteur = emetteur.clone();
             let derniere_position = derniere_position.clone();
-            let d_pos = d.clone();
-            let d_err = d.clone();
+            let (c_pos, c_err) = (ctx.clone(), ctx.clone());
             let s = localisation::surveille(
                 move |c| {
-                    d_pos.dispatch(Action::Moi(c));
-                    *derniere_position.borrow_mut() = Some(c);
+                    c_pos.envoie(Action::Moi(c));
+                    derniere_position.set(Some(c));
                     emetteur.propose(c);
                 },
                 move |m| {
-                    d_err.dispatch(Action::Erreur(m.into()));
-                    d_err.dispatch(Action::Partage(false));
+                    c_err.envoie(Action::Erreur(m.into()));
+                    c_err.envoie(Action::Partage(false));
                 },
             );
             match s {
                 Some(s) => {
                     *surveillance.borrow_mut() = Some(s);
-                    d.dispatch(Action::Partage(true));
+                    ctx.envoie(Action::Partage(true));
                 }
-                None => d.dispatch(Action::Erreur("Géolocalisation indisponible.".into())),
+                None => ctx.envoie(Action::Erreur("Géolocalisation indisponible.".into())),
             }
         })
     };
@@ -243,55 +348,63 @@ pub fn Tableau(p: &Props) -> Html {
     // Le partage démarre seul, comme avant : tout le monde apparaît sur la
     // carte des autres. Le navigateur demande d'abord la permission.
     //
-    // Le battement tourne à côté : le GPS d'un appareil immobile peut se
-    // taire, et c'est justement là qu'il faut redire qu'on est là.
+    // Les horloges tournent à côté : le battement — le GPS d'un appareil
+    // immobile peut se taire, et c'est justement là qu'il faut redire qu'on
+    // est là —, la purge des voitures muettes, et la resynchronisation des
+    // signalements (le serveur purge les expirés sans le dire à personne).
     {
         let demarre = demarre_partage.clone();
         let surveillance = surveillance.clone();
         let emetteur = emetteur.clone();
         let derniere_position = derniere_position.clone();
-        use_effect_with((), move |_| {
-            demarre.emit(());
-            let s = surveillance.clone();
+        let horloges = horloges.clone();
+        let ctx = ctx.clone();
+        au_montage(move || {
+            demarre();
             let battement = Interval::new((geo::BATTEMENT_MS / 2.0) as u32, move || {
-                let position = *derniere_position.borrow();
-                if let (true, Some(c)) = (s.borrow().is_some(), position) {
+                if let (true, Some(c)) = (surveillance.borrow().is_some(), derniere_position.get())
+                {
                     emetteur.propose(c);
                 }
             });
-            move || {
-                drop(battement);
-                surveillance.borrow_mut().take();
-            }
+            let c = ctx.clone();
+            let purge = Interval::new(3000, move || {
+                c.envoie(Action::Purge {
+                    maintenant_ms: maintenant_ms(),
+                })
+            });
+            let resync = Interval::new(60_000, move || {
+                ctx.requete(
+                    |j| async move { api::alertes(&j).await },
+                    |ctx, a| ctx.envoie(Action::Alertes(a)),
+                );
+            });
+            horloges.borrow_mut().extend([battement, purge, resync]);
         });
     }
 
     let bascule_partage = {
         let surveillance = surveillance.clone();
         let demarre = demarre_partage.clone();
-        let d = etat.dispatcher();
-        let partage = etat.partage;
-        Callback::from(move |_| {
-            if partage {
+        let ctx = ctx.clone();
+        move |_: Event| {
+            if untrack(|| partage.get()) {
                 surveillance.borrow_mut().take();
-                d.dispatch(Action::Partage(false));
+                ctx.envoie(Action::Partage(false));
             } else {
-                demarre.emit(());
+                demarre();
             }
-        })
+        }
     };
 
     // --- Les signalements --------------------------------------------------------
     let signale = {
         let connexion = connexion.clone();
-        let d = etat.dispatcher();
-        let moi = etat.moi;
-        Callback::from(move |c: Categorie| {
+        let ctx = ctx.clone();
+        move |c: Categorie| {
             let connexion = connexion.clone();
-            let d = d.clone();
-            let d_envoi = d.clone();
+            let c_envoi = ctx.clone();
             let envoie = move |ici: Coord| {
-                let d = d_envoi;
                 let envoi = Envoi::Alert {
                     category: c.id.into(),
                     lat: ici.lat,
@@ -302,625 +415,871 @@ pub fn Tableau(p: &Props) -> Html {
                     .borrow()
                     .as_ref()
                     .is_some_and(|cx| cx.envoie(&envoi));
-                d.dispatch(if parti {
+                c_envoi.envoie(if parti {
                     Action::Info(format!("{} {} : signalé, merci.", c.emoji, c.nom))
                 } else {
                     Action::Erreur("Hors ligne : le signalement n'est pas parti.".into())
                 });
             };
-            match moi {
+            match untrack(|| moi.get()) {
                 Some(ici) => envoie(ici),
                 None => {
-                    let d_err = d.clone();
+                    let c_err = ctx.clone();
                     if !localisation::une_fois(envoie, move |_| {
-                        d_err.dispatch(Action::Erreur("Position requise pour signaler.".into()))
+                        c_err.envoie(Action::Erreur("Position requise pour signaler.".into()))
                     }) {
-                        d.dispatch(Action::Erreur("Géolocalisation indisponible.".into()));
+                        ctx.envoie(Action::Erreur("Géolocalisation indisponible.".into()));
                     }
                 }
             }
-        })
+        }
     };
 
-    let vote = {
-        let jeton = jeton.clone();
-        let echec = echec.clone();
-        Callback::from(move |(id, oui): (i64, bool)| {
-            let jeton = jeton.clone();
-            let echec = echec.clone();
-            spawn_local(async move {
-                if let Err(e) = api::vote(&jeton, id, oui).await {
-                    echec.emit(e);
-                }
-            });
+    let vote: Rc<dyn Fn(i64, bool)> = {
+        let ctx = ctx.clone();
+        Rc::new(move |id, oui| {
+            ctx.requete(
+                move |j| async move { api::vote(&j, id, oui).await },
+                |_, ()| {},
+            );
         })
     };
 
     // --- La carte se recadre quand les positions changent de place ----------
-    {
-        let cadrage = cadrage.clone();
-        let positions = etat.positions.clone();
-        use_effect_with(etat.cadrages, move |n| {
-            if *n > 0 && !positions.is_empty() {
-                cadrage.set(Cadrage {
-                    numero: cadrage.numero + 1,
-                    points: Rc::new(positions.iter().map(Position::coord).collect()),
-                    zoom_max: if positions.len() == 1 { 12.0 } else { 16.0 },
+    effect(move || {
+        let n = cadrages.get();
+        untrack(|| {
+            let liste = positions.get();
+            if n > 0 && !liste.is_empty() {
+                cadrage.update(|c| {
+                    c.numero += 1;
+                    c.points = Rc::new(liste.iter().map(Position::coord).collect());
+                    c.zoom_max = if liste.len() == 1 { 12.0 } else { 16.0 };
                 });
             }
         });
-    }
+    });
 
     // --- La recherche de destination --------------------------------------------
     let cherche = {
-        let recherche = recherche.clone();
-        let resultats = resultats.clone();
-        let en_cours = cherche_en_cours.clone();
-        let d = etat.dispatcher();
-        Callback::from(move |e: SubmitEvent| {
+        let ctx = ctx.clone();
+        move |e: Event| {
             e.prevent_default();
-            let q = recherche.trim().to_string();
-            if q.chars().count() < 3 || *en_cours {
+            let q = untrack(|| recherche.get()).trim().to_string();
+            if q.chars().count() < 3 || untrack(|| cherche_en_cours.get()) {
                 return;
             }
-            en_cours.set(true);
-            let resultats = resultats.clone();
-            let en_cours = en_cours.clone();
-            let d = d.clone();
-            spawn_local(async move {
-                match nominatim::cherche(&q).await {
-                    Ok(l) => resultats.set(Some(l)),
-                    Err(m) => d.dispatch(Action::Erreur(m)),
+            cherche_en_cours.set(true);
+            let ctx = ctx.clone();
+            lance(async move {
+                let r = nominatim::cherche(&q).await;
+                if !ctx.vivant() {
+                    return;
                 }
-                en_cours.set(false);
+                match r {
+                    Ok(l) => resultats.set(Some(l)),
+                    Err(m) => ctx.envoie(Action::Erreur(m)),
+                }
+                cherche_en_cours.set(false);
             });
-        })
+        }
     };
 
-    let choisit = {
-        let destination = destination.clone();
-        let resultats = resultats.clone();
-        let recherche = recherche.clone();
-        let cadrage = cadrage.clone();
-        let moi = etat.moi;
-        Callback::from(move |l: Lieu| {
-            let mut points = vec![l.coord];
-            points.extend(moi);
-            cadrage.set(Cadrage {
-                numero: cadrage.numero + 1,
-                points: Rc::new(points),
-                zoom_max: 13.0,
-            });
-            destination.set(Some(l));
-            resultats.set(None);
-            recherche.set(String::new());
-        })
+    let choisit = move |l: Lieu| {
+        let mut points = vec![l.coord];
+        points.extend(untrack(|| moi.get()));
+        cadrage.update(|c| {
+            c.numero += 1;
+            c.points = Rc::new(points);
+            c.zoom_max = 13.0;
+        });
+        destination.set(Some(l));
+        resultats.set(None);
+        recherche.set(String::new());
     };
 
     // --- Poser une position --------------------------------------------------------
-    let pose = {
-        let brouillon = brouillon.clone();
-        let nom = nom_brouillon.clone();
-        let champ = champ_brouillon.clone();
-        Callback::from(move |c: Coord| {
-            brouillon.set(Some(c));
-            nom.set(String::new());
-            // Le champ vient d'être rendu dans la bulle : on lui donne la
-            // main au tour suivant, une fois qu'il existe.
-            let champ = champ.clone();
-            Timeout::new(30, move || {
-                if let Some(i) = champ.cast::<HtmlInputElement>() {
-                    let _ = i.focus();
-                }
-            })
-            .forget();
-        })
-    };
-
-    let annule_brouillon = {
-        let brouillon = brouillon.clone();
-        Callback::from(move |_: ()| brouillon.set(None))
-    };
+    let pose: Rc<dyn Fn(Coord)> = Rc::new(move |c: Coord| {
+        nom_brouillon.set(String::new());
+        brouillon.set(Some(c));
+    });
 
     let ajoute = {
-        let brouillon = brouillon.clone();
-        let nom = nom_brouillon.clone();
-        let jeton = jeton.clone();
-        let echec = echec.clone();
-        let recharge = recharge.clone();
-        let d = etat.dispatcher();
-        Callback::from(move |e: SubmitEvent| {
+        let ctx = ctx.clone();
+        move |e: Event| {
             e.prevent_default();
-            let Some(c) = *brouillon else { return };
-            let label = match nom.trim() {
+            let Some(c) = untrack(|| brouillon.get()) else {
+                return;
+            };
+            let label = match untrack(|| nom_brouillon.get()).trim() {
                 "" => "Point".to_string(),
                 t => t.to_string(),
             };
             brouillon.set(None);
-            let jeton = jeton.clone();
-            let echec = echec.clone();
-            let recharge = recharge.clone();
-            let d = d.clone();
-            spawn_local(async move {
-                let p = NouvellePosition {
-                    lat: c.lat,
-                    lon: c.lon,
-                    label: label.clone(),
-                };
-                match api::ajoute(&jeton, &p).await {
-                    Ok(_) => {
-                        d.dispatch(Action::Info(format!("« {label} » ajoutée.")));
-                        recharge.emit(());
-                    }
-                    Err(e) => echec.emit(e),
-                }
-            });
-        })
-    };
-
-    let bulle_brouillon = {
-        let nom = nom_brouillon.clone();
-        let annule = annule_brouillon.clone();
-        html! {
-            <form class="nommer" onsubmit={ajoute}>
-                <label for="nom-position">{ "Nom de la position" }</label>
-                <input id="nom-position" ref={champ_brouillon.clone()} maxlength="120"
-                       placeholder="Point" value={(*nom).clone()}
-                       oninput={Callback::from(move |e: InputEvent| {
-                           nom.set(e.target_unchecked_into::<HtmlInputElement>().value())
-                       })} />
-                <div class="nommer-actions">
-                    <button type="submit" class="petit">{ "Ajouter" }</button>
-                    <button type="button" class="petit secondaire"
-                            onclick={Callback::from(move |_| annule.emit(()))}>
-                        { "Annuler" }
-                    </button>
-                </div>
-            </form>
+            let p = NouvellePosition {
+                lat: c.lat,
+                lon: c.lon,
+                label: label.clone(),
+            };
+            ctx.requete(
+                move |j| async move { api::ajoute(&j, &p).await },
+                move |ctx, _| {
+                    ctx.envoie(Action::Info(format!("« {label} » ajoutée.")));
+                    ctx.recharge();
+                },
+            );
         }
     };
 
+    let bulle_brouillon: Rc<dyn Fn() -> Node> = Rc::new(move || {
+        let ajoute = ajoute.clone();
+        form()
+            .class("nommer")
+            .on("submit", ajoute)
+            .child(
+                label()
+                    .attr("for", "nom-position")
+                    .text("Nom de la position"),
+            )
+            .child(
+                input()
+                    .id("nom-position")
+                    .attr("maxlength", "120")
+                    .attr("placeholder", "Point")
+                    .attr_dyn("value", move || nom_brouillon.get())
+                    .on_input(move |e| nom_brouillon.set(e.value()))
+                    // Le champ vient d'être posé dans la bulle : on lui
+                    // donne la main au tour suivant, une fois la bulle en
+                    // place.
+                    .on_mount(|dom| {
+                        if let Some(el) = navigateur::element(dom) {
+                            Timeout::new(30, move || {
+                                if let Some(i) = el.dyn_ref::<HtmlInputElement>() {
+                                    let _ = i.focus();
+                                }
+                            })
+                            .forget();
+                        }
+                    }),
+            )
+            .child(
+                div()
+                    .class("nommer-actions")
+                    .child(
+                        button()
+                            .attr("type", "submit")
+                            .class("petit")
+                            .text("Ajouter"),
+                    )
+                    .child(
+                        button()
+                            .attr("type", "button")
+                            .class("petit secondaire")
+                            .on_click(move |_| brouillon.set(None))
+                            .text("Annuler"),
+                    ),
+            )
+            .into()
+    });
+
     // --- La liste des positions -----------------------------------------------------
     let supprime = {
-        let jeton = jeton.clone();
-        let echec = echec.clone();
-        let recharge = recharge.clone();
-        Callback::from(move |id: i64| {
-            let jeton = jeton.clone();
-            let echec = echec.clone();
-            let recharge = recharge.clone();
-            spawn_local(async move {
-                match api::supprime(&jeton, id).await {
-                    Ok(()) => recharge.emit(()),
-                    Err(e) => echec.emit(e),
-                }
-            });
-        })
+        let ctx = ctx.clone();
+        move |id: i64| {
+            ctx.requete(
+                move |j| async move { api::supprime(&j, id).await },
+                |ctx, ()| ctx.recharge(),
+            );
+        }
     };
 
     let renomme = {
-        let jeton = jeton.clone();
-        let echec = echec.clone();
-        let recharge = recharge.clone();
-        let edition = edition.clone();
-        let positions = etat.positions.clone();
-        Callback::from(move |e: SubmitEvent| {
+        let ctx = ctx.clone();
+        move |e: Event| {
             e.prevent_default();
-            let Some((id, texte)) = (*edition).clone() else {
+            let Some((id, texte)) = untrack(|| edition.get()) else {
                 return;
             };
             edition.set(None);
-            let Some(q) = positions.iter().find(|q| q.id == id).cloned() else {
+            let Some(q) = untrack(|| positions.with(|v| v.iter().find(|q| q.id == id).cloned()))
+            else {
                 return;
             };
             let label = texte.trim().to_string();
             if label.is_empty() || label == q.label {
                 return;
             }
-            let jeton = jeton.clone();
-            let echec = echec.clone();
-            let recharge = recharge.clone();
-            spawn_local(async move {
-                let p = NouvellePosition {
-                    lat: q.lat,
-                    lon: q.lon,
-                    label,
-                };
-                match api::modifie(&jeton, id, &p).await {
-                    Ok(_) => recharge.emit(()),
-                    Err(e) => echec.emit(e),
-                }
-            });
-        })
+            let p = NouvellePosition {
+                lat: q.lat,
+                lon: q.lon,
+                label,
+            };
+            ctx.requete(
+                move |j| async move { api::modifie(&j, id, &p).await },
+                |ctx, _| ctx.recharge(),
+            );
+        }
     };
 
     let calcule = {
-        let jeton = jeton.clone();
-        let echec = echec.clone();
-        let d = etat.dispatcher();
-        let positions = etat.positions.clone();
-        let vitesse = *vitesse;
-        Callback::from(move |_| {
-            if positions.len() < 2 {
+        let ctx = ctx.clone();
+        move |_: Event| {
+            let points: Vec<Coord> =
+                untrack(|| positions.with(|v| v.iter().map(Position::coord).collect()));
+            if points.len() < 2 {
                 return;
             }
-            let points: Vec<Coord> = positions.iter().map(Position::coord).collect();
-            let jeton = jeton.clone();
-            let echec = echec.clone();
-            let d = d.clone();
-            spawn_local(async move {
-                match api::itineraire(&jeton, &points, vitesse).await {
-                    Ok(r) => d.dispatch(Action::Itineraire(Some((r, vitesse)))),
-                    Err(e) => echec.emit(e),
-                }
-            });
-        })
+            let v = untrack(|| vitesse.get());
+            ctx.requete(
+                move |j| async move { api::itineraire(&j, &points, v).await },
+                move |ctx, r| ctx.envoie(Action::Itineraire(Some((r, v)))),
+            );
+        }
     };
 
     let importe = {
-        let jeton = jeton.clone();
-        let echec = echec.clone();
-        let recharge = recharge.clone();
-        let d = etat.dispatcher();
-        Callback::from(move |e: Event| {
-            let entree: HtmlInputElement = e.target_unchecked_into();
+        let ctx = ctx.clone();
+        move |e: Event| {
+            let Some(entree) = champ_de(&e) else { return };
             let fichier = entree.files().and_then(|f| f.get(0));
             entree.set_value("");
             let Some(fichier) = fichier else { return };
-            let jeton = jeton.clone();
-            let echec = echec.clone();
-            let recharge = recharge.clone();
-            let d = d.clone();
-            spawn_local(async move {
+            let ctx = ctx.clone();
+            lance(async move {
                 let texte = JsFuture::from(fichier.text())
                     .await
                     .ok()
                     .and_then(|v| v.as_string());
                 let Some(texte) = texte else {
-                    d.dispatch(Action::Erreur("Fichier illisible.".into()));
+                    ctx.envoie(Action::Erreur("Fichier illisible.".into()));
                     return;
                 };
-                match api::importe_gpx(&jeton, texte).await {
-                    Ok(v) => {
-                        let n = v.len();
-                        d.dispatch(Action::Info(match n {
+                ctx.requete(
+                    move |j| async move { api::importe_gpx(&j, texte).await },
+                    |ctx, v| {
+                        ctx.envoie(Action::Info(match v.len() {
                             0 => "Aucun point trouvé dans ce fichier.".into(),
                             1 => "1 position importée.".into(),
                             n => format!("{n} positions importées."),
                         }));
-                        recharge.emit(());
-                    }
-                    Err(e) => echec.emit(e),
-                }
+                        ctx.recharge();
+                    },
+                );
             });
-        })
-    };
-
-    let choisit_avatar = {
-        let avatar = avatar.clone();
-        let avatar_courant = avatar_courant.clone();
-        Callback::from(move |id: &'static str| {
-            session::ecris_avatar(id);
-            *avatar_courant.borrow_mut() = id.to_string();
-            avatar.set(id.to_string());
-        })
+        }
     };
 
     // --- Les annonces s'effacent seules -----------------------------------------------
     {
-        let d = etat.dispatcher();
-        let numero = etat.annonce.as_ref().map(|a| a.numero);
-        use_effect_with(numero, move |n| {
-            let minuteur =
-                n.map(|n| Timeout::new(5000, move || d.dispatch(Action::EffaceAnnonce(n))));
-            move || drop(minuteur)
+        let ctx = ctx.clone();
+        let minuteur: Rc<RefCell<Option<Timeout>>> = Rc::default();
+        let numero = memo(move || annonce.with(|a| a.as_ref().map(|a| a.numero)));
+        {
+            let minuteur = minuteur.clone();
+            on_cleanup(move || drop(minuteur.borrow_mut().take()));
+        }
+        effect(move || {
+            let n = numero.get();
+            untrack(|| {
+                let ctx = ctx.clone();
+                *minuteur.borrow_mut() =
+                    n.map(|n| Timeout::new(5000, move || ctx.envoie(Action::EffaceAnnonce(n))));
+            });
         });
     }
 
     let deconnexion = {
-        let deco = p.on_deconnexion.clone();
-        Callback::from(move |_| deco.emit(()))
+        let fin = p.fin.clone();
+        move |_: Event| {
+            if untrack(|| sortie_demandee.get()) {
+                return;
+            }
+            sortie_demandee.set(true);
+            fin(FinDeSession::Volontaire);
+        }
     };
 
     // --- Le rendu ---------------------------------------------------------------------
-    let voitures = Rc::new(etat.voitures());
-    let n_direct = voitures.len();
-    let stats = etat.stats.clone();
+    let etat_direct = move || {
+        if connecte.get() {
+            "Temps réel connecté"
+        } else {
+            "Temps réel déconnecté"
+        }
+        .to_string()
+    };
 
-    html! {
-        <div class="tableau">
-            // La barre de lecture : la page parcourue (`--defile`).
-            <div class="lecture" aria-hidden="true" data-defile=""><span /></div>
-            <header class="barre" data-mvt="monte">
-                <a class="marque" href="/" aria-label="MonCap GPS — le site">
-                    <img src={res.logo.clone()} width="34" height="34" alt="" />
-                    <span>{ "MonCap GPS" }</span>
-                </a>
-                <span class={classes!("direct", etat.connecte.then_some("on"))}
-                      role="status"
-                      title={if etat.connecte { "Temps réel connecté" } else { "Temps réel déconnecté" }}>
-                    <span class="visuel-cache">
-                        { if etat.connecte { "Temps réel connecté" } else { "Temps réel déconnecté" } }
-                    </span>
-                </span>
-                <div class="identite">
-                    <span class="pastille">
-                        // La clé fait renaître l'image quand l'avatar change :
-                        // le nouveau saute à sa place.
-                        <img key={(*avatar).clone()} src={res.avatar(&avatar)} alt="" />
-                        <span>{ &utilisateur }</span>
-                    </span>
-                    <button type="button" class="fantome" data-aimant="" data-onde=""
-                            onclick={deconnexion}>
-                        <span><Roule texte="Déconnexion" /></span>
-                    </button>
-                </div>
-            </header>
-
-            <section class="accueil">
-                <h1 data-mvt="lettres" aria-label="Où va-t-on ?">
-                    <Lettres texte="Où va-t-on ?" />
-                </h1>
-                <form class="recherche" role="search" data-mvt="monte" onsubmit={cherche}>
-                    <span class="recherche-icone" aria-hidden="true">{ "🔎" }</span>
-                    <input type="search" enterkeyhint="search"
-                           aria-label="Adresse ou lieu"
-                           placeholder="Adresse ou lieu, puis Entrée"
-                           value={(*recherche).clone()}
-                           oninput={{
-                               let recherche = recherche.clone();
-                               let resultats = resultats.clone();
-                               Callback::from(move |e: InputEvent| {
-                                   recherche.set(e.target_unchecked_into::<HtmlInputElement>().value());
-                                   resultats.set(None);
-                               })
-                           }} />
-                    <button type="submit" class="petit" data-aimant="" data-onde=""
-                            disabled={*cherche_en_cours || recherche.trim().chars().count() < 3}>
-                        <span>
-                            if *cherche_en_cours { <span class="roue" aria-label="Recherche…" /> }
-                            else { { "Chercher" } }
-                        </span>
-                    </button>
-                </form>
-
-                if let Some(liste) = (*resultats).clone() {
-                    <ul class="resultats">
-                        if liste.is_empty() {
-                            <li class="vide">{ "Aucun lieu trouvé." }</li>
-                        }
-                        { for liste.into_iter().enumerate().map(|(i, l)| {
-                            let choisit = choisit.clone();
-                            let nom = l.nom.clone();
-                            html! {
-                                <li key={i} style={format!("--i:{i}")}>
-                                    <button type="button" onclick={Callback::from(move |_| choisit.emit(l.clone()))}>
-                                        { "📍 " }{ nom }
-                                    </button>
-                                </li>
+    let barre = header()
+        .class("barre")
+        .attr("data-mvt", "monte")
+        .child(
+            a().class("marque")
+                .href("/")
+                .attr("aria-label", "MonCap GPS — le site")
+                .child(
+                    img()
+                        .attr("src", res.logo.clone())
+                        .attr("width", "34")
+                        .attr("height", "34")
+                        .attr("alt", ""),
+                )
+                .child(span().text("MonCap GPS")),
+        )
+        .child(
+            span()
+                .class("direct")
+                .class_if("on", move || connecte.get())
+                .attr("role", "status")
+                .attr_dyn("title", etat_direct)
+                .child(span().class("visuel-cache").text_dyn(etat_direct)),
+        )
+        .child(
+            div()
+                .class("identite")
+                .child(
+                    span()
+                        .class("pastille")
+                        // Une image neuve quand l'avatar change : la
+                        // nouvelle saute à sa place.
+                        .children_dyn({
+                            let res = res.clone();
+                            move || {
+                                let a = avatar.get();
+                                vec![img().attr("src", res.avatar(&a)).attr("alt", "").into()]
                             }
-                        }) }
-                    </ul>
-                }
+                        })
+                        .child(span().text_dyn(move || utilisateur.get())),
+                )
+                .child(
+                    button()
+                        .attr("type", "button")
+                        .class("fantome")
+                        .attr("data-aimant", "")
+                        .attr("data-onde", "")
+                        .bool_attr("disabled", move || sortie_demandee.get())
+                        .on_click(deconnexion)
+                        .child(span().child(roule("Déconnexion"))),
+                ),
+        );
 
-                if let Some(d) = (*destination).clone() {
-                    <p class="cap" key={d.nom.clone()}>
-                        <span>{ "🎯 " }<strong>{ "Vers : " }</strong>{ d.nom_court() }</span>
-                        if let Some(moi) = etat.moi {
-                            <span class="cap-mesure">
-                                { format!(
-                                    "{} · direction {}",
-                                    geo::distance_courte(geo::distance_km(moi, d.coord) * 1000.0),
-                                    geo::boussole(geo::cap(moi, d.coord)),
-                                ) }
-                            </span>
-                        }
-                        <button type="button" class="effacer" aria-label="Effacer la destination"
-                                onclick={{
-                                    let destination = destination.clone();
-                                    Callback::from(move |_| destination.set(None))
-                                }}>{ "✕" }</button>
-                    </p>
-                }
-            </section>
-
-            <div class="carte-cadre" data-mvt="devoile">
-                <Carte positions={etat.positions.clone()}
-                       voitures={voitures}
-                       alertes={etat.alertes.clone()}
-                       moi={etat.moi}
-                       destination={(*destination).clone()}
-                       brouillon={*brouillon}
-                       bulle_brouillon={bulle_brouillon}
-                       cadrage={(*cadrage).clone()}
-                       on_clic={pose}
-                       on_vote={vote}
-                       on_echap={annule_brouillon} />
-            </div>
-            <p class="astuce">
-                { "Touchez la carte pour poser une position. Double-touchez pour zoomer." }
-            </p>
-
-            <dl class="chiffres" data-mvt="cascade">
-                <div style="--i:0" data-incline="8">
-                    <dt>{ "positions" }</dt>
-                    <dd><Compteur valeur={stats.as_ref().map(|s| s.count as f64).unwrap_or(0.0)} /></dd>
-                </div>
-                <div style="--i:1" data-incline="8">
-                    <dt>{ "de tracé" }</dt>
-                    <dd><Compteur valeur={stats.as_ref().map(|s| s.total_km).unwrap_or(0.0)}
-                                  decimales={1} suffixe=" km" /></dd>
-                </div>
-                <div style="--i:2" data-incline="8">
-                    <dt>{ "en direct" }</dt>
-                    <dd><Compteur valeur={n_direct as f64} /></dd>
-                </div>
-            </dl>
-
-            <section class="panneaux">
-                <article class="panneau" data-mvt="monte" data-incline="2">
-                    <h2>{ "Sur la route" }</h2>
-                    <div class="rangee">
-                        <button type="button" data-aimant="" data-onde=""
-                                class={classes!(etat.partage.then_some("actif"))}
-                                onclick={bascule_partage}>
-                            <span>
-                                { if etat.partage { "🟢 Partage en direct…" } else { "📍 Partager ma position" } }
-                            </span>
-                        </button>
-                        if n_direct > 0 {
-                            <span class="badge">
-                                <span class="badge-pouls" aria-hidden="true" />
-                                { format!("{n_direct} en direct") }
-                            </span>
-                        }
-                    </div>
-                    <div class="signalements">
-                        { for CATEGORIES.iter().enumerate().map(|(i, c)| {
-                            let c = *c;
-                            let signale = signale.clone();
-                            html! {
-                                <button key={c.id} type="button" class="signaler" data-onde=""
-                                        style={format!("--i:{i}")}
-                                        onclick={Callback::from(move |_| signale.emit(c))}>
-                                    <span class="signaler-emoji" aria-hidden="true">{ c.emoji }</span>
-                                    { c.nom }
-                                </button>
+    let accueil = section()
+        .class("accueil")
+        .child(
+            h1().attr("data-mvt", "lettres")
+                .attr("aria-label", "Où va-t-on ?")
+                .child(lettres("Où va-t-on ?")),
+        )
+        .child(
+            form()
+                .class("recherche")
+                .attr("role", "search")
+                .attr("data-mvt", "monte")
+                .on("submit", cherche)
+                .child(
+                    span()
+                        .class("recherche-icone")
+                        .attr("aria-hidden", "true")
+                        .text("🔎"),
+                )
+                .child(
+                    input()
+                        .attr("type", "search")
+                        .attr("enterkeyhint", "search")
+                        .attr("aria-label", "Adresse ou lieu")
+                        .attr("placeholder", "Adresse ou lieu, puis Entrée")
+                        .attr_dyn("value", move || recherche.get())
+                        .on_input(move |e| {
+                            recherche.set(e.value());
+                            if untrack(|| resultats.with(Option::is_some)) {
+                                resultats.set(None);
                             }
-                        }) }
-                    </div>
-                </article>
+                        }),
+                )
+                .child(
+                    button()
+                        .attr("type", "submit")
+                        .class("petit")
+                        .attr("data-aimant", "")
+                        .attr("data-onde", "")
+                        .bool_attr("disabled", move || {
+                            cherche_en_cours.get()
+                                || recherche.with(|r| r.trim().chars().count() < 3)
+                        })
+                        .child(span().children_dyn(move || {
+                            vec![if cherche_en_cours.get() {
+                                span().class("roue").attr("aria-label", "Recherche…").into()
+                            } else {
+                                "Chercher".into()
+                            }]
+                        })),
+                ),
+        )
+        .children_dyn(move || {
+            let Some(liste) = resultats.get() else {
+                return Vec::new();
+            };
+            untrack(|| {
+                let mut lignes: Vec<Node> = Vec::new();
+                if liste.is_empty() {
+                    lignes.push(li().class("vide").text("Aucun lieu trouvé.").into());
+                }
+                for (i, l) in liste.into_iter().enumerate() {
+                    let nom = l.nom.clone();
+                    lignes.push(
+                        li().style(format!("--i:{i}"))
+                            .child(
+                                button()
+                                    .attr("type", "button")
+                                    .on_click(move |_| choisit(l.clone()))
+                                    .text("📍 ")
+                                    .text(nom),
+                            )
+                            .into(),
+                    );
+                }
+                vec![ul().class("resultats").children(lignes).into()]
+            })
+        })
+        .children_dyn(move || {
+            let Some(d) = destination.get() else {
+                return Vec::new();
+            };
+            untrack(|| {
+                let cible = d.coord;
+                vec![p_()
+                    .class("cap")
+                    .child(
+                        span()
+                            .text("🎯 ")
+                            .child(strong().text("Vers : "))
+                            .text(d.nom_court()),
+                    )
+                    .children_dyn(move || {
+                        if !moi.with(Option::is_some) {
+                            return Vec::new();
+                        }
+                        vec![span()
+                            .class("cap-mesure")
+                            .text_dyn(move || {
+                                moi.get()
+                                    .map(|m| {
+                                        format!(
+                                            "{} · direction {}",
+                                            geo::distance_courte(
+                                                geo::distance_km(m, cible) * 1000.0
+                                            ),
+                                            geo::boussole(geo::cap(m, cible)),
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                            })
+                            .into()]
+                    })
+                    .child(
+                        button()
+                            .attr("type", "button")
+                            .class("effacer")
+                            .attr("aria-label", "Effacer la destination")
+                            .on_click(move |_| destination.set(None))
+                            .text("✕"),
+                    )
+                    .into()]
+            })
+        });
 
-                <article class="panneau" data-mvt="monte" data-incline="2">
-                    <h2>{ "Itinéraire" }</h2>
-                    <p class="indice">{ "Posez des positions sur la carte, puis reliez-les." }</p>
-                    <div class="rangee">
-                        <label class="vitesse">
-                            { "Vitesse" }
-                            <input type="number" min="1" max="300" inputmode="numeric"
-                                   value={vitesse.to_string()}
-                                   oninput={{
-                                       let vitesse = vitesse.clone();
-                                       Callback::from(move |e: InputEvent| {
-                                           let v = e.target_unchecked_into::<HtmlInputElement>()
-                                               .value_as_number();
-                                           vitesse.set(if v.is_finite() && v >= 1.0 { v } else { 1.0 });
-                                       })
-                                   }} />
-                            { "km/h" }
-                        </label>
-                        <button type="button" data-aimant="" data-onde="" onclick={calcule}
-                                disabled={etat.positions.len() < 2}>
-                            <span><Roule texte="Itinéraire complet" /></span>
-                        </button>
-                        <a class="bouton secondaire" href={api::url_gpx(&jeton)} data-onde=""
-                           target="_blank" rel="noopener"><span><Roule texte="Exporter GPX" /></span></a>
-                        <label class="bouton secondaire" data-onde="">
-                            <span><Roule texte="Importer GPX" /></span>
-                            <input type="file" accept=".gpx,application/gpx+xml,text/xml"
-                                   class="visuel-cache" onchange={importe} />
-                        </label>
-                    </div>
+    let la_carte = carte(carte::Proprietes {
+        positions,
+        voitures,
+        alertes,
+        moi,
+        destination,
+        brouillon,
+        bulle_brouillon,
+        cadrage,
+        on_clic: pose,
+        on_vote: vote,
+        on_echap: Rc::new(move || brouillon.set(None)),
+        ressources: res.clone(),
+    });
 
-                    if let Some((r, v)) = etat.itineraire.clone() {
-                        <p class="resultat-itineraire" key={format!("{}-{v}", r.total_km)}>
-                            <strong>{ geo::distance_courte(r.total_km * 1000.0) }</strong>
-                            { format!(" · {} à {v:.0} km/h", geo::duree_courte(r.duration_min)) }
-                        </p>
+    let chiffres = dl()
+        .class("chiffres")
+        .attr("data-mvt", "cascade")
+        .child(
+            div()
+                .style("--i:0")
+                .attr("data-incline", "8")
+                .child(dt().text("positions"))
+                .child(dd().child(compteur(
+                    move || stats.with(|s| s.as_ref().map_or(0.0, |s| s.count as f64)),
+                    0,
+                    "",
+                ))),
+        )
+        .child(
+            div()
+                .style("--i:1")
+                .attr("data-incline", "8")
+                .child(dt().text("de tracé"))
+                .child(dd().child(compteur(
+                    move || stats.with(|s| s.as_ref().map_or(0.0, |s| s.total_km)),
+                    1,
+                    " km",
+                ))),
+        )
+        .child(
+            div()
+                .style("--i:2")
+                .attr("data-incline", "8")
+                .child(dt().text("en direct"))
+                .child(dd().child(compteur(move || n_direct.get() as f64, 0, ""))),
+        );
+
+    let sur_la_route = article()
+        .class("panneau")
+        .attr("data-mvt", "monte")
+        .attr("data-incline", "2")
+        .child(h2().text("Sur la route"))
+        .child(
+            div()
+                .class("rangee")
+                .child(
+                    button()
+                        .attr("type", "button")
+                        .attr("data-aimant", "")
+                        .attr("data-onde", "")
+                        .class_if("actif", move || partage.get())
+                        .on_click(bascule_partage)
+                        .child(span().text_dyn(move || {
+                            if partage.get() {
+                                "🟢 Partage en direct…"
+                            } else {
+                                "📍 Partager ma position"
+                            }
+                            .to_string()
+                        })),
+                )
+                .children_dyn(move || {
+                    if !en_direct.get() {
+                        return Vec::new();
                     }
+                    vec![span()
+                        .class("badge")
+                        .child(span().class("badge-pouls").attr("aria-hidden", "true"))
+                        .text_dyn(move || format!("{} en direct", n_direct.get()))
+                        .into()]
+                }),
+        )
+        .child(
+            div().class("signalements").children(
+                CATEGORIES
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        let c = *c;
+                        let signale = signale.clone();
+                        button()
+                            .attr("type", "button")
+                            .class("signaler")
+                            .attr("data-onde", "")
+                            .style(format!("--i:{i}"))
+                            .on_click(move |_| signale(c))
+                            .child(
+                                span()
+                                    .class("signaler-emoji")
+                                    .attr("aria-hidden", "true")
+                                    .text(c.emoji),
+                            )
+                            .text(c.nom)
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        );
 
-                    <ol class="liste">
-                        { for etat.positions.iter().enumerate().map(|(i, q)| {
-                            let id = q.id;
-                            let en_edition = edition.as_ref().filter(|(e, _)| *e == id).map(|(_, t)| t.clone());
-                            html! {
-                                <li key={id} style={format!("--i:{}", i.min(8))}>
-                                    <span class="numero" aria-hidden="true">{ i + 1 }</span>
-                                    if let Some(texte) = en_edition {
-                                        <form class="renommer" onsubmit={renomme.clone()}>
-                                            <input aria-label="Nouveau nom" value={texte} maxlength="120"
-                                                   oninput={{
-                                                       let edition = edition.clone();
-                                                       Callback::from(move |e: InputEvent| {
-                                                           let v = e.target_unchecked_into::<HtmlInputElement>().value();
-                                                           edition.set(Some((id, v)));
-                                                       })
-                                                   }} />
-                                            <button type="submit" class="petit">{ "OK" }</button>
-                                            <button type="button" class="petit secondaire"
-                                                    onclick={{
-                                                        let edition = edition.clone();
-                                                        Callback::from(move |_| edition.set(None))
-                                                    }}>{ "Annuler" }</button>
-                                        </form>
-                                    } else {
-                                        <span class="etiquette">
-                                            <strong>{ &q.label }</strong>
-                                            <em>{ format!("{:.4}, {:.4}", q.lat, q.lon) }</em>
-                                        </span>
-                                        <span class="actions">
-                                            <button type="button" class="petit secondaire"
-                                                    onclick={{
-                                                        let edition = edition.clone();
-                                                        let label = q.label.clone();
-                                                        Callback::from(move |_| edition.set(Some((id, label.clone()))))
-                                                    }}>{ "Renommer" }</button>
-                                            <button type="button" class="petit danger"
-                                                    onclick={{
-                                                        let supprime = supprime.clone();
-                                                        Callback::from(move |_| supprime.emit(id))
-                                                    }}>{ "Supprimer" }</button>
-                                        </span>
-                                    }
-                                </li>
-                            }
-                        }) }
-                        if etat.positions.is_empty() {
-                            <li class="vide">{ "Aucune position pour l'instant." }</li>
-                        }
-                    </ol>
-                </article>
-
-                // Quatorze voitures, c'est un mur d'images : replié par
-                // défaut, l'avatar courant en montre déjà la couleur en haut.
-                <details class="panneau avatars" data-mvt="monte">
-                    <summary>
-                        <h2>{ "Mon avatar" }</h2>
-                        <img key={(*avatar).clone()} src={res.avatar(&avatar)} alt="" />
-                    </summary>
-                    <div class="grille-avatars">
-                        { for AVATARS.iter().enumerate().map(|(i, a)| {
-                            let choisit = choisit_avatar.clone();
-                            let id = a.id;
-                            html! {
-                                <button key={id} type="button" title={a.nom} aria-label={a.nom}
-                                        data-onde=""
-                                        aria-pressed={(*avatar == id).to_string()}
-                                        class={classes!("avatar", (*avatar == id).then_some("choisi"))}
-                                        style={format!("--i:{i}")}
-                                        onclick={Callback::from(move |_| choisit.emit(id))}>
-                                    <img src={res.avatar(id)} alt="" loading="lazy" />
-                                </button>
-                            }
-                        }) }
-                    </div>
-                </details>
-            </section>
-
-            <div class="annonces" aria-live="polite">
-                if let Some(a) = etat.annonce.clone() {
-                    <p key={a.numero} class={classes!("annonce", a.erreur.then_some("erreur"))}
-                       role={if a.erreur { "alert" } else { "status" }}>
-                        { a.texte }
-                        <button type="button" aria-label="Fermer"
-                                onclick={{
-                                    let d = etat.dispatcher();
-                                    let n = a.numero;
-                                    Callback::from(move |_| d.dispatch(Action::EffaceAnnonce(n)))
-                                }}>{ "✕" }</button>
-                    </p>
+    let liste_positions = ol()
+        .class("liste")
+        .child(keyed(
+            move || {
+                let en_edition = edition_id.get();
+                positions.with(|v| {
+                    v.iter()
+                        .cloned()
+                        .enumerate()
+                        .map(|(i, q)| (i, en_edition == Some(q.id), q))
+                        .collect::<Vec<_>>()
+                })
+            },
+            |(_, _, q)| q.id,
+            move |(i, en_edition, q)| {
+                let id = q.id;
+                let ligne = li().style(format!("--i:{}", (*i).min(8))).child(
+                    span()
+                        .class("numero")
+                        .attr("aria-hidden", "true")
+                        .text((i + 1).to_string()),
+                );
+                if *en_edition {
+                    let depart = untrack(|| edition.get())
+                        .map(|(_, t)| t)
+                        .unwrap_or_default();
+                    ligne
+                        .child(
+                            form()
+                                .class("renommer")
+                                .on("submit", renomme.clone())
+                                .child(
+                                    input()
+                                        .attr("aria-label", "Nouveau nom")
+                                        .attr("value", depart)
+                                        .attr("maxlength", "120")
+                                        .on_input(move |e| edition.set(Some((id, e.value())))),
+                                )
+                                .child(button().attr("type", "submit").class("petit").text("OK"))
+                                .child(
+                                    button()
+                                        .attr("type", "button")
+                                        .class("petit secondaire")
+                                        .on_click(move |_| edition.set(None))
+                                        .text("Annuler"),
+                                ),
+                        )
+                        .into()
+                } else {
+                    let label = q.label.clone();
+                    let supprime = supprime.clone();
+                    ligne
+                        .child(
+                            span()
+                                .class("etiquette")
+                                .child(strong().text(q.label.clone()))
+                                .child(em().text(format!("{:.4}, {:.4}", q.lat, q.lon))),
+                        )
+                        .child(
+                            span()
+                                .class("actions")
+                                .child(
+                                    button()
+                                        .attr("type", "button")
+                                        .class("petit secondaire")
+                                        .on_click(move |_| edition.set(Some((id, label.clone()))))
+                                        .text("Renommer"),
+                                )
+                                .child(
+                                    button()
+                                        .attr("type", "button")
+                                        .class("petit danger")
+                                        .on_click(move |_| supprime(id))
+                                        .text("Supprimer"),
+                                ),
+                        )
+                        .into()
                 }
-            </div>
-        </div>
-    }
+            },
+        ))
+        .children_dyn(move || {
+            if !positions.with(|v| v.is_empty()) {
+                return Vec::new();
+            }
+            vec![li()
+                .class("vide")
+                .text("Aucune position pour l'instant.")
+                .into()]
+        });
+
+    let itineraire_panneau = article()
+        .class("panneau")
+        .attr("data-mvt", "monte")
+        .attr("data-incline", "2")
+        .child(h2().text("Itinéraire"))
+        .child(
+            p_().class("indice")
+                .text("Posez des positions sur la carte, puis reliez-les."),
+        )
+        .child(
+            div()
+                .class("rangee")
+                .child(
+                    label()
+                        .class("vitesse")
+                        .text("Vitesse")
+                        .child(
+                            input()
+                                .attr("type", "number")
+                                .attr("min", "1")
+                                .attr("max", "300")
+                                .attr("inputmode", "numeric")
+                                .attr("value", "50")
+                                .on_input(move |e| {
+                                    let v = champ_de(&e)
+                                        .map(|i| i.value_as_number())
+                                        .unwrap_or(f64::NAN);
+                                    vitesse.set(if v.is_finite() && v >= 1.0 { v } else { 1.0 });
+                                }),
+                        )
+                        .text("km/h"),
+                )
+                .child(
+                    button()
+                        .attr("type", "button")
+                        .attr("data-aimant", "")
+                        .attr("data-onde", "")
+                        .bool_attr("disabled", move || positions.with(|v| v.len() < 2))
+                        .on_click(calcule)
+                        .child(span().child(roule("Itinéraire complet"))),
+                )
+                .child(
+                    a().class("bouton secondaire")
+                        .attr_dyn("href", move || api::url_gpx(&jeton.get()))
+                        .attr("data-onde", "")
+                        .attr("target", "_blank")
+                        .attr("rel", "noopener")
+                        .child(span().child(roule("Exporter GPX"))),
+                )
+                .child(
+                    label()
+                        .class("bouton secondaire")
+                        .attr("data-onde", "")
+                        .child(span().child(roule("Importer GPX")))
+                        .child(
+                            input()
+                                .attr("type", "file")
+                                .attr("accept", ".gpx,application/gpx+xml,text/xml")
+                                .class("visuel-cache")
+                                .on("change", importe),
+                        ),
+                ),
+        )
+        .children_dyn(move || {
+            let Some((r, v)) = itineraire.get() else {
+                return Vec::new();
+            };
+            vec![p_()
+                .class("resultat-itineraire")
+                .child(strong().text(geo::distance_courte(r.total_km * 1000.0)))
+                .text(format!(
+                    " · {} à {v:.0} km/h",
+                    geo::duree_courte(r.duration_min)
+                ))
+                .into()]
+        })
+        .child(liste_positions);
+
+    // Quatorze voitures, c'est un mur d'images : replié par défaut,
+    // l'avatar courant en montre déjà la couleur en haut.
+    let avatars = details()
+        .class("panneau avatars")
+        .attr("data-mvt", "monte")
+        .child(summary().child(h2().text("Mon avatar")).children_dyn({
+            let res = res.clone();
+            move || {
+                let a = avatar.get();
+                vec![img().attr("src", res.avatar(&a)).attr("alt", "").into()]
+            }
+        }))
+        .child(
+            div().class("grille-avatars").children(
+                AVATARS
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| {
+                        let id = a.id;
+                        let avatar_courant = avatar_courant.clone();
+                        button()
+                            .attr("type", "button")
+                            .attr("title", a.nom)
+                            .attr("aria-label", a.nom)
+                            .attr("data-onde", "")
+                            .attr_dyn("aria-pressed", move || avatar.with(|x| x == id).to_string())
+                            .class("avatar")
+                            .class_if("choisi", move || avatar.with(|x| x == id))
+                            .style(format!("--i:{i}"))
+                            .on_click(move |_| {
+                                session::ecris_avatar(id);
+                                *avatar_courant.borrow_mut() = id.to_string();
+                                avatar.set(id.to_string());
+                            })
+                            .child(
+                                img()
+                                    .attr("src", res.avatar(id))
+                                    .attr("alt", "")
+                                    .attr("loading", "lazy"),
+                            )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        );
+
+    let mon_compte = compte(compte::Proprietes {
+        jeton,
+        utilisateur,
+        fin: p.fin.clone(),
+        renouvelle: p.renouvelle.clone(),
+    });
+
+    let annonces = div()
+        .class("annonces")
+        .attr("aria-live", "polite")
+        .children_dyn({
+            let ctx = ctx.clone();
+            move || {
+                let Some(a) = annonce.get() else {
+                    return Vec::new();
+                };
+                untrack(|| vec![bandeau(a, ctx.clone())])
+            }
+        });
+
+    div()
+        .class("tableau")
+        // La barre de lecture : la page parcourue (`--defile`).
+        .child(
+            div()
+                .class("lecture")
+                .attr("aria-hidden", "true")
+                .attr("data-defile", "")
+                .child(span()),
+        )
+        .child(barre)
+        .child(accueil)
+        .child(
+            div()
+                .class("carte-cadre")
+                .attr("data-mvt", "devoile")
+                .child(la_carte),
+        )
+        .child(
+            p_().class("astuce")
+                .text("Touchez la carte pour poser une position. Double-touchez pour zoomer."),
+        )
+        .child(chiffres)
+        .child(
+            section()
+                .class("panneaux")
+                .child(sur_la_route)
+                .child(itineraire_panneau)
+                .child(avatars)
+                .child(mon_compte),
+        )
+        .child(annonces)
+        .into()
+}
+
+/// Une annonce, avec de quoi la fermer.
+fn bandeau(a: Annonce, ctx: Ctx) -> Node {
+    let n = a.numero;
+    p_().class("annonce")
+        .class_if("erreur", {
+            let erreur = a.erreur;
+            move || erreur
+        })
+        .attr("role", if a.erreur { "alert" } else { "status" })
+        .text(a.texte)
+        .child(
+            button()
+                .attr("type", "button")
+                .attr("aria-label", "Fermer")
+                .on_click(move |_| ctx.envoie(Action::EffaceAnnonce(n)))
+                .text("✕"),
+        )
+        .into()
 }

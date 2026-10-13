@@ -12,37 +12,30 @@
 //! `contenu.rs` — le serveur doit servir chacune, voir la vitrine dans
 //! `src/main.rs` —, les externes de `SOURCES`.
 //!
-//! Il rend les composants côté serveur, ce que permet la fonctionnalité
-//! `ssr` activée en dépendance de développement seulement. Rien de ceci ne
-//! part au navigateur.
+//! Il rend les vues exactement comme `construit` les écrit dans `dist/` :
+//! une même fonction, `vitrine::vitrine`, rendue en HTML par `active`. Ce
+//! que ce test lit est donc ce que le visiteur reçoit, au caractère près.
 
 use std::collections::HashSet;
 
-use vitrine::app::{App, Page, Props, Ressources};
+use vitrine::app::{vitrine, Page, Props, Ressources};
 use vitrine::contenu::{Langue, CONNEXION, SOURCES};
 
 /// Rend une page en HTML, hors de tout navigateur.
-async fn rendu(langue: Langue, page: Page) -> String {
-    let props = Props {
+fn rendu(langue: Langue, page: Page) -> String {
+    vitrine(&Props {
         langue,
         page,
         res: Ressources {
             logo: "/vitrine/logo.webp".into(),
         },
         annee: 2026,
-    };
-    // `LocalServerRenderer` et non `ServerRenderer` : les propriétés portent
-    // un `AttrValue`, c'est-à-dire un `Rc<str>`, qui ne traverse pas les
-    // fils d'exécution. Le rendu local n'en demande pas la permission, et
-    // rien ici n'a besoin de parallélisme.
-    yew::LocalServerRenderer::<App>::with_props(props)
-        .hydratable(false)
-        .render()
-        .await
+    })
+    .render()
 }
 
 /// Les neuf pages, dans les trois langues.
-async fn toutes() -> Vec<(String, String)> {
+fn toutes() -> Vec<(String, String)> {
     let mut v = Vec::new();
     for l in Langue::TOUTES {
         for (page, nom) in [
@@ -50,7 +43,7 @@ async fn toutes() -> Vec<(String, String)> {
             (Page::Mentions, "mentions"),
             (Page::Confidentialite, "confidentialité"),
         ] {
-            v.push((format!("{} {nom}", l.code()), rendu(l, page).await));
+            v.push((format!("{} {nom}", l.code()), rendu(l, page)));
         }
     }
     v
@@ -95,10 +88,10 @@ fn autorisees() -> HashSet<String> {
     a
 }
 
-#[tokio::test]
-async fn les_pages_ne_pointent_que_vers_des_adresses_que_ce_serveur_sert() {
+#[test]
+fn les_pages_ne_pointent_que_vers_des_adresses_que_ce_serveur_sert() {
     let permises = autorisees();
-    for (quoi, html) in toutes().await {
+    for (quoi, html) in toutes() {
         let liens = adresses(&html);
         assert!(!liens.is_empty(), "{quoi} : aucun lien, le rendu a échoué");
         for lien in liens {
@@ -112,9 +105,9 @@ async fn les_pages_ne_pointent_que_vers_des_adresses_que_ce_serveur_sert() {
 
 /// Chaque page doit pouvoir mener aux deux autres langues : c'est le seul
 /// chemin vers une traduction, et il n'existe qu'au pied et au bandeau.
-#[tokio::test]
-async fn chaque_page_mene_aux_autres_langues() {
-    for (quoi, html) in toutes().await {
+#[test]
+fn chaque_page_mene_aux_autres_langues() {
+    for (quoi, html) in toutes() {
         let liens = adresses(&html);
         let code = quoi.split(' ').next().unwrap_or("");
         for autre in Langue::TOUTES.iter().filter(|l| l.code() != code) {
@@ -129,9 +122,9 @@ async fn chaque_page_mene_aux_autres_langues() {
 
 /// Les pages légales doivent rester joignables depuis n'importe où : c'est
 /// une obligation, pas un confort.
-#[tokio::test]
-async fn le_legal_est_joignable_depuis_chaque_page() {
-    for (quoi, html) in toutes().await {
+#[test]
+fn le_legal_est_joignable_depuis_chaque_page() {
+    for (quoi, html) in toutes() {
         let liens = adresses(&html);
         let code = quoi.split(' ').next().unwrap_or("");
         let l = Langue::depuis_code(code).expect("langue connue");
@@ -147,10 +140,10 @@ async fn le_legal_est_joignable_depuis_chaque_page() {
 
 /// Le texte de la page doit être dans la langue de la page. Un bloc recopié
 /// d'une langue à l'autre se verrait ici, et nulle part ailleurs.
-#[tokio::test]
-async fn chaque_page_est_dans_sa_langue() {
+#[test]
+fn chaque_page_est_dans_sa_langue() {
     for l in Langue::TOUTES {
-        let html = rendu(l, Page::Accueil).await;
+        let html = rendu(l, Page::Accueil);
         let c = l.contenu();
         assert!(
             html.contains(c.chapeau),
@@ -171,11 +164,11 @@ async fn chaque_page_est_dans_sa_langue() {
 
 /// Les maquettes doivent dire ce que l'application dit, dans la langue de la
 /// page. C'est la raison d'être de `appstrings.rs`.
-#[tokio::test]
-async fn les_maquettes_parlent_la_langue_de_la_page() {
+#[test]
+fn les_maquettes_parlent_la_langue_de_la_page() {
     use vitrine::appstrings::app;
     for l in Langue::TOUTES {
-        let html = rendu(l, Page::Accueil).await;
+        let html = rendu(l, Page::Accueil);
         for cle in ["Voiture", "Démarrer", "Quitter"] {
             let attendu = app(l, cle);
             assert!(
@@ -190,10 +183,10 @@ async fn les_maquettes_parlent_la_langue_de_la_page() {
 /// Le comparateur ne doit jamais laisser croire qu'il propose moins
 /// d'itinéraires qu'annoncé : la maquette en montre trois, et la ligne
 /// « ⌄ … » dit qu'il y en a d'autres.
-#[tokio::test]
-async fn la_maquette_ne_dement_pas_le_chiffre_annonce() {
+#[test]
+fn la_maquette_ne_dement_pas_le_chiffre_annonce() {
     for l in Langue::TOUTES {
-        let html = rendu(l, Page::Accueil).await;
+        let html = rendu(l, Page::Accueil);
         let c = l.contenu();
         assert!(
             html.contains(c.reste),

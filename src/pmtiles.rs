@@ -65,6 +65,18 @@ impl Header {
             _ => "application/octet-stream",
         }
     }
+
+    /// `Content-Encoding` des tuiles telles que stockées (2 = gzip,
+    /// 3 = brotli, 4 = zstd) ; `None` pour des tuiles non compressées (1) ou
+    /// de compression inconnue (0).
+    pub fn content_encoding(&self) -> Option<&'static str> {
+        match self.tile_compression {
+            2 => Some("gzip"),
+            3 => Some("br"),
+            4 => Some("zstd"),
+            _ => None,
+        }
+    }
 }
 
 /// Une entrée de répertoire.
@@ -406,5 +418,23 @@ mod tests {
         assert_eq!(decompress(&raw, 1).as_deref(), Some(raw.as_slice()));
         // Compression non gérée (brotli, zstd) : refus explicite.
         assert!(decompress(&raw, 3).is_none());
+    }
+
+    #[test]
+    fn le_codage_des_tuiles_suit_leur_compression() {
+        let mut bytes = vec![0u8; HEADER_LEN];
+        bytes[0..7].copy_from_slice(b"PMTiles");
+        bytes[7] = 3;
+        for (compression, codage) in [
+            (0, None),
+            (1, None),
+            (2, Some("gzip")),
+            (3, Some("br")),
+            (4, Some("zstd")),
+        ] {
+            bytes[98] = compression;
+            let h = Header::parse(&bytes).unwrap();
+            assert_eq!(h.content_encoding(), codage, "{compression}");
+        }
     }
 }

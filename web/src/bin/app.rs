@@ -4,12 +4,13 @@
 //! des fichiers — que seule la construction connaît, puisqu'elles portent
 //! une empreinte.
 
-use std::rc::Rc;
-
-use web::app::{App, Props};
-use web::catalogue::Ressources;
-
+#[cfg(target_arch = "wasm32")]
 fn main() {
+    use std::rc::Rc;
+
+    use mouvement::{Moteur, Reglages};
+    use web::catalogue::Ressources;
+
     let Some(racine) = web_sys::window()
         .and_then(|f| f.document())
         .and_then(|d| d.get_element_by_id("racine"))
@@ -22,9 +23,16 @@ fn main() {
         .get_attribute("data-ressources")
         .and_then(|j| serde_json::from_str(&j).ok())
         .unwrap_or_default();
-    let props = Props {
-        ressources: Rc::new(ressources),
-        session: web::session::session(),
-    };
-    yew::Renderer::<App>::with_root_and_props(racine, props).render();
+    let vue = web::app(Rc::new(ressources), web::session::session());
+    paquets::mount_to("#racine", vue);
+
+    // Le moteur démarre sur la page montée, et tourne aussi longtemps
+    // qu'elle : il suit ensuite seul ce qui y entre. Puis le rideau se lève.
+    std::mem::forget(Moteur::demarre(Reglages::default()));
+    mouvement::leve_rideau();
 }
+
+/// En natif, ce binaire n'a rien à faire : il n'existe que pour le
+/// navigateur. Il se compile quand même, pour les vérifications.
+#[cfg(not(target_arch = "wasm32"))]
+fn main() {}

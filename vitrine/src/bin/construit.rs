@@ -1,10 +1,11 @@
-//! Fabrique le site : les neuf coquilles HTML, le WebAssembly, la feuille de
+//! Fabrique le site : les neuf pages HTML, le WebAssembly, la feuille de
 //! style, les images, le plan du site et les consignes aux robots.
 //!
-//! Remplace l'ancien `build.tsx`. Il compile en natif et partage le contenu,
-//! les types et le module de référencement avec l'application qui tourne
-//! dans le navigateur : le texte n'existe qu'une fois, et le compilateur
-//! garantit que les deux en voient la même version.
+//! Remplace l'ancien `build.tsx`. Il compile en natif et **rend chaque page
+//! en entier** avec les vues `active` de `src/app.rs` : la tête et le corps
+//! partent complets, le WebAssembly ne fait plus que réhydrater les îlots et
+//! animer. Le texte n'existe qu'une fois, et ce que le navigateur réhydrate
+//! est ce que le rendu a écrit — mêmes fonctions, mêmes propriétés.
 //!
 //! Chaque fichier servi porte l'empreinte de son contenu dans son nom. C'est
 //! la seule façon de corriger un cache déjà pris : un en-tête ne s'applique
@@ -20,6 +21,7 @@ use std::path::{Path, PathBuf};
 use fabrique::{ko, nom_fichier, Sortie};
 use vitrine::contenu::Langue;
 use vitrine::seo::{self, Groupe};
+use vitrine::{vitrine, Page, Props, Ressources};
 
 /// Le dossier produit.
 const SORTIE: &str = "dist";
@@ -51,31 +53,38 @@ fn construit() -> Result<(), String> {
     let (wasm, colle) = fabrique::construit_wasm(&racine, &sortie)?;
 
     // --- Pages -----------------------------------------------------------
+    let res = Ressources { logo: logo.clone() };
+    let annee = annee_courante();
     let mut pages: Vec<(String, usize)> = Vec::new();
     for l in Langue::TOUTES {
         let c = l.contenu();
+        let corps = |page| {
+            vitrine(&Props {
+                langue: l,
+                page,
+                res: res.clone(),
+                annee,
+            })
+            .render()
+        };
 
         let tete = seo::tete(c, l, &feuille, &logo, &favicon);
-        let page = coquille(l, "accueil", &tete, &seo::repli(c, l), &wasm, &colle, &logo);
+        let page = coquille(l, &tete, &corps(Page::Accueil), &wasm, &colle, &logo);
         pages.push((
             c.chemin.to_string(),
             ecrit_page(&sortie.dossier, c.chemin, &page)?,
         ));
 
-        for (g, pg, nom) in [
-            (Groupe::Mentions, &c.mentions, "mentions"),
+        for (g, pg, quoi) in [
+            (Groupe::Mentions, &c.mentions, Page::Mentions),
             (
                 Groupe::Confidentialite,
                 &c.confidentialite,
-                "confidentialite",
+                Page::Confidentialite,
             ),
         ] {
             let tete = seo::tete_legale(c, l, pg, g, &feuille, &favicon);
-            // Le repli d'une page légale est son texte même : il est court,
-            // il doit rester lisible sans script, et c'est justement la page
-            // qu'on vient chercher quand on en a besoin.
-            let repli = repli_legale(pg);
-            let page = coquille(l, nom, &tete, &repli, &wasm, &colle, &logo);
+            let page = coquille(l, &tete, &corps(quoi), &wasm, &colle, &logo);
             pages.push((
                 pg.chemin.to_string(),
                 ecrit_page(&sortie.dossier, pg.chemin, &page)?,
@@ -98,32 +107,20 @@ fn construit() -> Result<(), String> {
         println!("{:<24} {:>6} Ko", nom_fichier(f), ko(sortie.poids(f)));
     }
     println!();
-    println!("rendu par le navigateur : le corps part vide, la tête est complète,");
-    println!("et chaque page garde un repli <noscript> lisible sans WebAssembly.");
+    println!("rendu à la construction : chaque page part complète, tête et corps ;");
+    println!("le WebAssembly réhydrate les îlots et anime, il ne peint rien.");
     Ok(())
 }
 
-/// La coquille HTML d'une page.
+/// La page HTML complète.
 ///
-/// Le corps ne contient que le rideau, le point de montage et le repli :
-/// c'est le WebAssembly qui peint la page. Le rideau couvre l'écran pendant
-/// qu'il arrive — une marque plutôt qu'une page blanche — et l'application
-/// le lève une fois montée. Sans script, il ne s'affiche pas. La tête, elle, est complète — titres, Open
-/// Graph, données structurées, alternates — parce qu'un aperçu de lien ne
-/// lit rien d'autre, et qu'il n'a aucune raison d'attendre un moteur.
-///
-/// La langue et la page voyagent en attributs `data-` plutôt qu'en code
-/// compilé : un seul WebAssembly sert les neuf pages, et le serveur peut
-/// changer la langue d'une adresse sans recompiler quoi que ce soit.
-fn coquille(
-    l: Langue,
-    page: &str,
-    tete: &str,
-    repli: &str,
-    wasm: &str,
-    colle: &str,
-    logo: &str,
-) -> String {
+/// Le corps est le rendu des vues, écrit dans le point de montage : lisible
+/// tel quel, sans script, par un visiteur, un robot ou un aperçu de lien. Le
+/// rideau le couvre pendant que le WebAssembly arrive — le temps que le
+/// moteur de mouvement prenne la main, sans quoi les titres apparaîtraient
+/// d'abord immobiles puis rejoueraient leur entrée — et le moteur le lève.
+/// Sans script, il ne s'affiche pas : la page est alors simplement immobile.
+fn coquille(l: Langue, tete: &str, corps: &str, wasm: &str, colle: &str, logo: &str) -> String {
     format!(
         r#"<!doctype html>
 <html lang="{code}">
@@ -141,8 +138,7 @@ fn coquille(
       <img class="logo" src="{logo}" width="88" height="88" alt="" />
       <span class="rideau-barre"><span></span></span>
     </div>
-    <div id="racine" data-langue="{code}" data-page="{page}" data-logo="{logo}"></div>
-{repli}
+    <div id="racine">{corps}</div>
     <script type="module">
       import init from "{colle}";
       init({{ module_or_path: "{wasm}" }});
@@ -154,18 +150,27 @@ fn coquille(
     )
 }
 
-/// Le repli d'une page légale : son texte, en entier.
-fn repli_legale(pg: &vitrine::contenu::PageLegale) -> String {
-    let mut s = String::from("<noscript><div class=\"dedans juridique repli\">");
-    s.push_str(&format!("<h1>{}</h1>", seo::texte(pg.titre)));
-    for sec in pg.sections {
-        s.push_str(&format!("<h2>{}</h2>", seo::texte(sec.titre)));
-        for para in sec.corps {
-            s.push_str(&format!("<p>{}</p>", seo::texte(para)));
-        }
-    }
-    s.push_str("</div></noscript>");
-    s
+/// L'année courante, en temps universel, sans dépendance de calendrier :
+/// le nombre de jours depuis 1970 converti en date civile (l'algorithme
+/// `civil_from_days` de Howard Hinnant). Le navigateur la remplace de toute
+/// façon par la sienne ; celle-ci sert au HTML de départ.
+fn annee_courante() -> i32 {
+    let secondes = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    annee_du_jour((secondes / 86_400) as i64)
+}
+
+fn annee_du_jour(jours: i64) -> i32 {
+    let z = jours + 719_468;
+    let ere = z.div_euclid(146_097);
+    let jde = z.rem_euclid(146_097);
+    let ade = (jde - jde / 1460 + jde / 36_524 - jde / 146_096) / 365;
+    let jda = jde - (365 * ade + ade / 4 - ade / 100);
+    let mp = (5 * jda + 2) / 153;
+    let mois = if mp < 10 { mp + 3 } else { mp - 9 };
+    (ade + ere * 400 + i64::from(mois <= 2)) as i32
 }
 
 /// Le français occupe la racine ; tout le reste, un sous-dossier.
@@ -187,27 +192,106 @@ fn ecrit_page(sortie: &Path, chemin: &str, page: &str) -> Result<usize, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use paquets::active::html::h2;
+    use paquets::active::Node;
+
+    fn page(l: Langue, quoi: Page) -> String {
+        let corps = vitrine(&Props {
+            langue: l,
+            page: quoi,
+            res: Ressources {
+                logo: "/v/l.webp".into(),
+            },
+            annee: 2026,
+        })
+        .render();
+        coquille(l, "", &corps, "/v/a.wasm", "/v/a.js", "/v/l.webp")
+    }
 
     /// Le rideau couvre la page pendant l'arrivée du WebAssembly, et c'est
-    /// l'application qui le lève. Sans script, personne ne le lèverait : il
-    /// ne doit alors pas s'afficher du tout, sans quoi le repli `<noscript>`
-    /// — tout ce qu'un tel visiteur peut lire — resterait caché dessous.
+    /// le moteur qui le lève. Sans script, personne ne le lèverait : il ne
+    /// doit alors pas s'afficher du tout, sans quoi la page — complète dans
+    /// le HTML — resterait cachée dessous.
     #[test]
     fn sans_script_le_rideau_ne_cache_rien() {
-        let html = coquille(
-            Langue::Fr,
-            "accueil",
-            "",
-            "<noscript>repli</noscript>",
-            "/v/a.wasm",
-            "/v/a.js",
-            "/v/l.webp",
-        );
+        let html = page(Langue::Fr, Page::Accueil);
         assert!(html.contains(r#"id="rideau""#));
         let tete = html.split("</head>").next().unwrap_or_default();
         assert!(
             tete.contains("<noscript><style>.rideau{display:none}</style></noscript>"),
             "la tête doit masquer le rideau quand le script ne tourne pas"
         );
+    }
+
+    /// Ce que le test d'intégration du serveur lit dans le HTML brut — sans
+    /// base de données, il ne tourne qu'à la main : gardé ici aussi. La page
+    /// part complète, ces phrases n'attendent donc aucun script.
+    #[test]
+    fn le_html_brut_porte_ce_que_le_serveur_verifie() {
+        for (l, phrase) in [
+            (Langue::Fr, "Comparez, puis roulez"),
+            (Langue::Es, "Compara y conduce"),
+            (Langue::En, "Compare, then drive"),
+        ] {
+            let html = page(l, Page::Accueil);
+            assert!(html.contains(&format!(r#"<html lang="{}">"#, l.code())));
+            assert!(html.contains(phrase), "{phrase} absent");
+            assert!(html.contains(r#"href="/app""#), "pas de lien de connexion");
+            assert!(html.contains("Maxime Nathan Lestage"), "pas de signature");
+            assert!(html.contains(r#"<img class="logo" src="/v/l.webp""#));
+            assert!(html.contains(r#"aria-current="true""#));
+            for autre in Langue::TOUTES.into_iter().filter(|a| *a != l) {
+                assert!(
+                    html.contains(&format!(r#"href="{}""#, autre.chemin())),
+                    "{} doit mener à {}",
+                    l.code(),
+                    autre.code()
+                );
+            }
+        }
+    }
+
+    /// Chaque sélecteur de langue — bandeau et pied — marque la courante, et
+    /// une seule : un lien vers soi n'offre rien.
+    #[test]
+    fn chaque_selecteur_marque_une_seule_langue() {
+        for l in Langue::TOUTES {
+            for quoi in [Page::Accueil, Page::Mentions] {
+                let html = page(l, quoi);
+                let selecteurs = html.matches(r#"<nav class="langues""#).count();
+                assert!(selecteurs >= 1);
+                assert_eq!(
+                    html.matches(r#"aria-current="true""#).count(),
+                    selecteurs,
+                    "{} : une langue courante par sélecteur",
+                    l.code()
+                );
+            }
+        }
+    }
+
+    /// Le texte d'une page légale est dans son HTML, en entier : c'est la
+    /// page qu'on vient chercher quand on en a besoin, script ou pas.
+    #[test]
+    fn le_texte_legal_est_dans_le_html() {
+        for l in Langue::TOUTES {
+            let c = l.contenu();
+            let html = page(l, Page::Confidentialite);
+            for sec in c.confidentialite.sections {
+                let titre = Node::from(h2().text(sec.titre)).render();
+                assert!(html.contains(&titre), "{} : {titre} absent", l.code());
+            }
+        }
+    }
+
+    #[test]
+    fn l_annee_se_lit_dans_le_nombre_de_jours() {
+        assert_eq!(annee_du_jour(0), 1970);
+        assert_eq!(annee_du_jour(364), 1970);
+        assert_eq!(annee_du_jour(365), 1971);
+        // 2024-12-31 et 2025-01-01 : une année bissextile se ferme au bon jour.
+        assert_eq!(annee_du_jour(20_088), 2024);
+        assert_eq!(annee_du_jour(20_089), 2025);
+        assert!(annee_courante() >= 2026);
     }
 }

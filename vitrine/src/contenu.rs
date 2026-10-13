@@ -1,7 +1,7 @@
 //! Le contenu de la vitrine : trois langues, et rien d'autre.
 //!
-//! Écrit une fois en Rust et compilé dans les deux cibles — le WebAssembly
-//! qui rend la page, et le binaire natif qui fabrique les coquilles HTML.
+//! Écrit une fois en Rust, et lu par le binaire natif qui rend les neuf
+//! pages en HTML à la construction (`construit`).
 //! C'est ce que le passage à Rust achète : le texte n'existe qu'ici, et le
 //! compilateur refuse qu'une langue oublie un champ que les autres ont.
 //!
@@ -548,7 +548,14 @@ pub const OUTILS: &[&[&str]] = &[
         "AVFoundation",
         "WatchConnectivity",
     ],
-    &["Rust", "Axum", "Tokio", "SeaORM", "PostgreSQL", "Redis"],
+    &[
+        "Rust",
+        "Paquets",
+        "Tokio",
+        "memoire-orm",
+        "PostgreSQL",
+        "Redis",
+    ],
     &[
         "Valhalla",
         "OpenStreetMap",
@@ -563,7 +570,7 @@ pub const OUTILS: &[&[&str]] = &[
         "NASA FIRMS",
         "data.economie.gouv.fr",
     ],
-    &["Rust", "Yew", "WebAssembly"],
+    &["Rust", "Paquets", "WebAssembly"],
     &["Heroku", "GitHub Actions", "Docker"],
 ];
 
@@ -865,10 +872,10 @@ pub const FR: Contenu = Contenu {
     pile_titre: "Ce qu'il y a dessous",
     pile: &[
         Pile { domaine: "Application iOS", outils: &["Swift", "SwiftUI", "MapKit", "MapLibre", "Core Location", "AVFoundation", "WatchConnectivity"] },
-        Pile { domaine: "Serveur", outils: &["Rust", "Axum", "Tokio", "SeaORM", "PostgreSQL", "Redis"] },
+        Pile { domaine: "Serveur", outils: &["Rust", "Paquets", "Tokio", "memoire-orm", "PostgreSQL", "Redis"] },
         Pile { domaine: "Cartes et itinéraires", outils: &["Valhalla", "OpenStreetMap", "Overpass", "Osmium", "PMTiles", "IGN"] },
         Pile { domaine: "Données en direct", outils: &["TomTom", "open-meteo", "NASA FIRMS", "data.economie.gouv.fr"] },
-        Pile { domaine: "Web", outils: &["Rust", "Yew", "WebAssembly"] },
+        Pile { domaine: "Web", outils: &["Rust", "Paquets", "WebAssembly"] },
         Pile { domaine: "Déploiement", outils: &["Heroku", "GitHub Actions", "Docker"] },
     ],
     franchise_titre: "Ce qu'elle ne fait pas",
@@ -1240,10 +1247,10 @@ pub const ES: Contenu = Contenu {
     pile_titre: "Lo que hay debajo",
     pile: &[
         Pile { domaine: "Aplicación iOS", outils: &["Swift", "SwiftUI", "MapKit", "MapLibre", "Core Location", "AVFoundation", "WatchConnectivity"] },
-        Pile { domaine: "Servidor", outils: &["Rust", "Axum", "Tokio", "SeaORM", "PostgreSQL", "Redis"] },
+        Pile { domaine: "Servidor", outils: &["Rust", "Paquets", "Tokio", "memoire-orm", "PostgreSQL", "Redis"] },
         Pile { domaine: "Mapas y rutas", outils: &["Valhalla", "OpenStreetMap", "Overpass", "Osmium", "PMTiles", "IGN"] },
         Pile { domaine: "Datos en directo", outils: &["TomTom", "open-meteo", "NASA FIRMS", "data.economie.gouv.fr"] },
-        Pile { domaine: "Web", outils: &["Rust", "Yew", "WebAssembly"] },
+        Pile { domaine: "Web", outils: &["Rust", "Paquets", "WebAssembly"] },
         Pile { domaine: "Despliegue", outils: &["Heroku", "GitHub Actions", "Docker"] },
     ],
     franchise_titre: "Lo que no hace",
@@ -1615,10 +1622,10 @@ pub const EN: Contenu = Contenu {
     pile_titre: "What's underneath",
     pile: &[
         Pile { domaine: "iOS app", outils: &["Swift", "SwiftUI", "MapKit", "MapLibre", "Core Location", "AVFoundation", "WatchConnectivity"] },
-        Pile { domaine: "Server", outils: &["Rust", "Axum", "Tokio", "SeaORM", "PostgreSQL", "Redis"] },
+        Pile { domaine: "Server", outils: &["Rust", "Paquets", "Tokio", "memoire-orm", "PostgreSQL", "Redis"] },
         Pile { domaine: "Maps and routing", outils: &["Valhalla", "OpenStreetMap", "Overpass", "Osmium", "PMTiles", "IGN"] },
         Pile { domaine: "Live data", outils: &["TomTom", "open-meteo", "NASA FIRMS", "data.economie.gouv.fr"] },
-        Pile { domaine: "Web", outils: &["Rust", "Yew", "WebAssembly"] },
+        Pile { domaine: "Web", outils: &["Rust", "Paquets", "WebAssembly"] },
         Pile { domaine: "Deployment", outils: &["Heroku", "GitHub Actions", "Docker"] },
     ],
     franchise_titre: "What it doesn't do",
