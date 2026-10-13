@@ -271,7 +271,7 @@ async fn depuis_session(db: &Db, jeton: &str) -> Resultat<Authentifie> {
 /// Le secret des anciens jetons JWT. Sans `JWT_SECRET`, ils sont refusés :
 /// le secret par défaut de l'ancien serveur était public, n'importe qui
 /// pouvait forger un jeton avec.
-fn secret_jwt() -> Option<&'static [u8]> {
+pub(crate) fn secret_jwt() -> Option<&'static [u8]> {
     static SECRET: OnceLock<Option<Vec<u8>>> = OnceLock::new();
     SECRET
         .get_or_init(|| {
@@ -284,9 +284,9 @@ fn secret_jwt() -> Option<&'static [u8]> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Claims {
-    sub: i32,
-    exp: i64,
+pub(crate) struct Claims {
+    pub(crate) sub: i32,
+    pub(crate) exp: i64,
 }
 
 /// L'identifiant et la date d'émission d'un ancien JWT valide.

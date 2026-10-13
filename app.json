@@ -1,8 +1,8 @@
 {
   "name": "moncap-gps",
-  "description": "API GPS (Rust + Axum) avec Postgres — déploiement buildpack.",
+  "description": "API GPS (Rust + Paquets) avec Postgres — déploiement buildpack.",
   "repository": "https://github.com/maxlestage/moncap",
-  "keywords": ["rust", "axum", "gps", "postgres"],
+  "keywords": ["rust", "paquets", "gps", "postgres"],
   "buildpacks": [
     { "url": "https://github.com/emk/heroku-buildpack-rust.git" }
   ],
