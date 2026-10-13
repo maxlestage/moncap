@@ -3,29 +3,35 @@
 Page de présentation de MonCap GPS, en **français, espagnol et anglais**,
 pensée pour le téléphone d'abord.
 
-Écrite en **Rust**, avec [Yew](https://yew.rs) : les composants compilent
-en WebAssembly pour le navigateur, et le même code compile en natif pour
-fabriquer les coquilles HTML. Le texte des trois langues n'existe donc
-qu'une fois.
+Écrite en **Rust**, avec [Paquets](https://github.com/maxlestage/Paquets) —
+plus précisément sa partie front, `active`, prise par la fonctionnalité
+`client` de `paquets`. Les vues sont des fonctions qui rendent un `Node` :
+compilées en natif, elles écrivent **chaque page en HTML complet** à la
+construction ; compilées en WebAssembly, elles réhydratent les deux îlots
+interactifs de la page. Le texte des trois langues n'existe qu'une fois.
 
 ```sh
 rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli   # la version doit suivre celle de la crate
+cargo install wasm-bindgen-cli --version 0.2.129   # celle du Cargo.lock
 npm install -g binaryen          # fournit wasm-opt (facultatif)
 
-cargo test                       # 39 tests
+cargo test                       # 47 tests
 cargo fmt --check && cargo clippy --all-targets -- -D warnings
 cargo run --release --bin construit   # écrit dist/
 ```
 
 `construit` enchaîne tout : il compile le WebAssembly, le passe à
-`wasm-bindgen` puis `wasm-opt`, empreinte les fichiers, écrit les neuf pages,
+`wasm-bindgen` puis `wasm-opt`, empreinte les fichiers, rend les neuf pages,
 le plan du site et les consignes aux robots. Ses outils — empreinte,
 allègement de la feuille, chaîne WebAssembly — vivent dans `../fabrique`,
 partagés avec le front web ; les animations dans `../mouvement`.
 
 `wasm-opt` est un confort : absent, la construction le dit et livre un
 WebAssembly plus gros, ce qui ne l'empêche pas de fonctionner.
+
+`wasm-bindgen` est verrouillé à la version exacte du front web (`=0.2.129`
+dans `Cargo.toml`) : la CI n'installe qu'un outil `wasm-bindgen-cli` pour
+les deux fronts, et refuse deux `Cargo.lock` qui divergent.
 
 ## Où elle est servie
 
@@ -43,7 +49,8 @@ Le front web — écran de connexion compris — vit derrière `/app` ; le bouto
 compile que la crate du serveur : rien ne fabrique le WebAssembly sur le
 dyno, donc le résultat de la construction doit être dans le dépôt.
 
-Il n'y a rien à lancer à la main pour autant : `.github/workflows/vitrine.yml`
+Il n'y a rien à lancer à la main pour autant : le workflow « Front »
+(`.github/workflows/front.yml`, partagé avec le front web) vérifie,
 reconstruit et verse `dist/` à chaque changement de `src/`, poussé sur
 `master`. Ce dépôt se tient depuis un navigateur — un « n'oublie pas de
 reconstruire » y serait un piège, pas une consigne.
@@ -78,11 +85,23 @@ sans revalidation. Seule la page garde une adresse fixe — c'est le seul
 document qui ne peut pas en changer — et se revalide à chaque visite, sans
 quoi le navigateur ne verrait jamais la nouvelle empreinte.
 
-## Rendue par le navigateur, et ce que ça coûte
+## Rendue à la construction, réhydratée par îlots
 
-La page est une application WebAssembly : le corps part vide et Yew le
-peint. C'est un choix assumé, pas un défaut — mais il a un prix, et le voici
-mesuré plutôt que deviné.
+La page a été rendue à la construction (HTML pur, zéro JavaScript), puis
+par le navigateur (Yew : le corps partait vide et le WebAssembly le
+peignait). Elle est désormais **les deux à la fois**, comme `active` le
+propose : `construit` rend chaque page en entier avec les vues de
+`src/app.rs`, et le navigateur ne repeint rien. Le WebAssembly fait trois
+gestes, dans `src/bin/app.rs` :
+
+- **réhydrater les îlots** (`vitrine::ILOTS`) — les deux seules parties
+  interactives : la flèche de défilement (`src/fleche.rs`) et l'année du
+  copyright, que le navigateur remplace par la sienne. Le rendu les
+  enveloppe d'un `<active-island data-island=… data-props=…>` ; le
+  navigateur reconstruit la même vue à partir des mêmes propriétés et
+  s'accroche au HTML existant, sans rien recréer ;
+- **démarrer le moteur de mouvement** (`../mouvement`) ;
+- **lever le rideau**.
 
 | | poids livré (gzip) |
 | --- | --- |
@@ -90,37 +109,43 @@ mesuré plutôt que deviné.
 | Version Yew/WebAssembly | **128 Ko** — 114 de WebAssembly, 6,7 de colle, 2,2 de HTML, 5 de CSS |
 | Version animée (moteur `mouvement`) | **148 Ko** — 132 de WebAssembly, 8,1 de colle, 2,4 de HTML, 5,5 de CSS |
 | Seconde vague (curseur, inclinaison, lettres, carte vivante…) | **163 Ko** — 144 de WebAssembly, 8,7 de colle, 2,3 de HTML, 7,6 de CSS |
+| Paquets (`active`), rendue à la construction et réhydratée | **83 Ko** — 56 de WebAssembly, 7 de colle, 12,6 de HTML, 7,6 de CSS |
 
-Le texte n'apparaît qu'après téléchargement **et** compilation du
-WebAssembly. Cette attente n'est plus une page blanche : la coquille porte
-un rideau aux couleurs de la marque, écrit en HTML et CSS, que
-l'application lève une fois montée. Sans script, il ne s'affiche pas — il
-cacherait le repli. Deux conséquences qu'il faut connaître :
+Le WebAssembly a fondu (352 → 117 Ko bruts, après `wasm-opt`) parce qu'il
+n'embarque plus **aucun texte** ni aucune vue de la page : le contenu est
+déjà dans le HTML, et les deux îlots reçoivent ce qu'il leur faut — les
+libellés de la flèche, l'année — par leurs propriétés. Il ne reste que le
+moteur de mouvement, la flèche et la réhydratation. Le HTML, lui, grossit
+d'autant : c'est le texte, qui ne voyage plus deux fois.
 
-- **Les aperçus de liens restent parfaits.** Messageries et réseaux ne
-  lisent que la tête du document, qui est complète et statique — titres,
-  Open Graph, Twitter, données structurées, alternates.
-- **L'indexation dépend du moteur.** Google exécute le JavaScript et le
-  WebAssembly, mais plus tard et moins sûrement qu'il ne lit du HTML. Les
-  robots qui n'exécutent rien ne voient que le repli.
+Conséquences :
 
-D'où le repli `<noscript>` que chaque page embarque (`seo::repli`) : le
-chapeau, le lien de connexion, les titres de section, les prix, les trois
-langues — la courante marquée — et les pages légales. Le lien de connexion
-et la marque de langue y manquaient depuis le passage au WebAssembly : deux
-tests d'intégration du serveur échouaient depuis sans que personne le voie,
-leur job ne se lançant qu'à la main. Un test de la vitrine, sans base de
-données, les garde désormais. Il ne refait pas la page — il en donne la substance, et reste vrai
-sans entretien.
+- **Tout est lisible sans script.** Robots qui n'exécutent rien, aperçus
+  de liens, navigateurs anciens, scripts coupés : chacun reçoit la page
+  entière, maquettes comprises. Le repli `<noscript>` de la version Yew,
+  qui n'en donnait que la substance, n'a plus de raison d'être.
+- **Le rideau reste.** Il couvre la page pendant que le WebAssembly
+  arrive : sans lui, les titres paraîtraient immobiles puis rejoueraient
+  leur entrée quand le moteur prend la main. Sans script il ne s'affiche
+  pas (`<noscript><style>.rideau{display:none}</style></noscript>`), et la
+  page est simplement immobile.
+- **Ce que les tests lisent est ce que le visiteur reçoit.** `tests/liens.rs`
+  et les tests de `construit` rendent les mêmes fonctions que la
+  construction, sans moteur de rendu de test à part.
+
+Le passage de Yew à `active` n'a rien changé au document : rendus et
+normalisés (commentaires et enveloppes d'îlots ôtés), les neuf pages ont
+le même arbre, nœud pour nœud, que celles de la version Yew — hormis la pile
+technique, qui dit désormais « Paquets ».
 
 ## Ce que Rust achète ici
 
 Ce n'est pas la vitesse : la page ne calcule rien.
 
-- **Une seule source pour le texte.** `src/contenu.rs` compile dans les deux
-  cibles — le WebAssembly du navigateur et le binaire qui fabrique les
-  coquilles. Avant, le contenu était en TypeScript et le serveur en Rust ;
-  le référencement recopiait des chaînes d'un monde à l'autre.
+- **Une seule source pour le texte.** `src/contenu.rs` nourrit le rendu
+  des pages, leur tête et le plan du site, depuis le même binaire. Avant,
+  le contenu était en TypeScript et le serveur en Rust ; le référencement
+  recopiait des chaînes d'un monde à l'autre.
 - **Le dernier script est passé sous contrôle.** La flèche de défilement
   était cinquante lignes de JavaScript dans une chaîne de caractères,
   qu'aucun outil ne relisait. C'est désormais `src/fleche.rs`, que le
@@ -141,8 +166,8 @@ pour la molette qui glisse. Les gestes en sont repris, en Rust, par la crate
 
 - **le rideau** de chargement, qui se lève quand la page est montée ;
 - **les titres montent mot à mot** derrière leur masque (le « yPercent »
-  de GSAP), découpés au rendu par `mots()` — le DOM n'est jamais retouché
-  après coup, et le rendu des tests voit le même HTML ;
+  de GSAP), découpés au rendu par `mots()` — à la construction, donc : le
+  DOM n'est jamais retouché après coup, et les tests voient le même HTML ;
 - **les cascades** : cartes, tarifs, pile, pied — chaque élément entre à
   son tour, avec un retard plafonné ;
 - **les maquettes s'allument** par le bas (`clip-path`) ;
@@ -200,9 +225,9 @@ aucun `pointermove`, et le curseur gardait l'étiquette d'un bouton parti
 plus haut — le moteur relit ce qui est sous la souris à chaque défilement.
 
 **Pourquoi plus seulement du CSS.** La version précédente liait tout à
-`animation-timeline`, sans un octet de script de plus. Mais la page est
-désormais rendue par le WebAssembly — le moteur n'y coûte que son propre
-code — et Firefox n'a toujours pas activé `animation-timeline` par défaut
+`animation-timeline`, sans un octet de script de plus. Mais la page charge
+de toute façon un WebAssembly — le moteur n'y coûte que son propre code —
+et Firefox n'a toujours pas activé `animation-timeline` par défaut
 (encore derrière un drapeau en version 152, juin 2026) : une part des
 visiteurs voyait une page immobile. Les révélations passent maintenant par
 un `IntersectionObserver`, qui marche partout.
