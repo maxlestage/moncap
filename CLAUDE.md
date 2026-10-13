@@ -38,10 +38,9 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/moncap \
 JWT_SECRET=dev-secret cargo test
 ```
 
-`tests::style_json_adds_labels_with_glyphs` échoue parfois : il se dispute
-des variables d'environnement avec un test voisin qui tourne en parallèle.
-Un échec isolé de ce test-là, qui passe en relançant, n'est pas une
-régression.
+Les essais de bout en bout (`src/essais.rs` et les modules) tournent sur
+cette base ; sans `DATABASE_URL` ni `TEST_DATABASE_URL`, ils se taisent.
+`JWT_SECRET` active les essais des anciens jetons JWT.
 
 L'app iOS (`frontend/`, Swift) a ses propres workflows ; elle ne se
 construit pas ici.

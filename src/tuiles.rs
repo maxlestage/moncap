@@ -10,7 +10,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
 
 use paquets::prelude::*;
 use serde_json::{Value, json};
@@ -107,17 +106,7 @@ impl ConfigTuiles {
     }
 }
 
-/// Client HTTP sortant des tuiles (pool de connexions et pile TLS construits
-/// une seule fois), 15 s au plus par requête.
-fn client_http() -> &'static reqwest::Client {
-    static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
-    HTTP.get_or_init(|| {
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(15))
-            .build()
-            .unwrap_or_default()
-    })
-}
+use crate::externes::client_http;
 
 // ---------------------------------------------------------------------------
 // Feuille de style.

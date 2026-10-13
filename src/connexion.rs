@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::base::{Utilisateur, maintenant};
-use crate::erreur::{AUTH_REQUISE, Erreur, Resultat, corps_json, param, texte};
+use crate::erreur::{Erreur, Resultat, corps_json, param};
 
 /// Une session vit 180 jours après son dernier usage.
 pub const DUREE_SESSION: i64 = 180 * 24 * 3600;
@@ -963,11 +963,6 @@ async fn reinitialise(req: Request) -> Resultat<Response> {
          appareils ont été déconnectés. Retourne dans l'application et \
          connecte-toi avec le nouveau.</p>",
     ))
-}
-
-/// Le 401 du WebSocket et des routes en `?token=`, en texte comme les autres.
-pub fn refus() -> Response {
-    texte(StatusCode::UNAUTHORIZED, AUTH_REQUISE)
 }
 
 #[cfg(test)]
