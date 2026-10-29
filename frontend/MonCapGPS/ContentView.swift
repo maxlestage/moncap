@@ -3979,153 +3979,6 @@ struct MapHomeView: View {
                         }
                     }
                 }
-                // Notifications d'alertes à proximité.
-                Section("Alertes") {
-                    Toggle(isOn: $notifyNearbyAlerts) {
-                        Label("Alertes à proximité", systemImage: "bell.badge")
-                    }
-                    Text("Reçois une notification quand un signalement (police, accident, danger…) se trouve à moins de 600 m, même écran verrouillé.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                // Incendies (NASA FIRMS) : clé optionnelle saisie sur l'appareil
-                // (sinon le serveur fournit les feux si configuré).
-                Section("Incendies 🔥 (NASA FIRMS)") {
-                    TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .monospaced))
-                    Link(
-                        destination: URL(
-                            string: "https://firms.modaps.eosdis.nasa.gov/api/map_key/")!
-                    ) {
-                        Label("Obtenir une clé", systemImage: "link")
-                    }
-                    .font(.footnote)
-                    Text(
-                        "Colle ta clé FIRMS pour afficher les vrais foyers (carte des feux, menu) sans attendre le serveur. \(fires.fires.count) foyer(s) actuellement."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-                Section("Fond de carte 🗺️") {
-                    Picker("Pour me déplacer", selection: $fondDeCarte) {
-                        ForEach(FondDeCarte.allCases) { fond in
-                            Text(fond.libelle).tag(fond.rawValue)
-                        }
-                    }
-                    Text(
-                        "Apple Plans a des commerces à jour et le trafic, mais ne garde aucune carte : sans réseau, l'app repasse seule sur OpenStreetMap, qui sait se télécharger. Les cartes hors ligne, des feux et de l'air restent toujours sur OpenStreetMap."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    if fondDeCarte == FondDeCarte.apple.rawValue, fondEffectif == .osm {
-                        Label(
-                            horsLigne
-                                ? "Navigation hors ligne active : OpenStreetMap est affiché."
-                                : "Pas de réseau : OpenStreetMap est affiché.",
-                            systemImage: "info.circle"
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                    }
-                }
-                Section("Hors ligne 🗺️") {
-                    Button {
-                        showPlaces = false
-                        showOfflineMap = true
-                    } label: {
-                        Label("Préparer une zone hors ligne", systemImage: "arrow.down.circle")
-                    }
-                    // Un seul écran, un seul geste. Les deux téléchargements y
-                    // portent sur la même zone : les images pour voir la carte,
-                    // le graphe routier pour y calculer une route. Séparés, on
-                    // en prenait un et on découvrait l'autre en panne de
-                    // réseau.
-                    Text(
-                        "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    if router.ready {
-                        Toggle("Naviguer hors ligne", isOn: $horsLigne)
-                        Text("\(router.installees.count) région(s) · \(router.poidsTotal)")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    DisclosureGroup("Serveur de cartes personnel") {
-                        TextField("https://exemple.fr/style.json", text: $styleURL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .font(.system(.footnote, design: .monospaced))
-                        if !styleURL.isEmpty {
-                            Button(role: .destructive) {
-                                styleURL = ""
-                                tileURL = ""
-                            } label: {
-                                Label("Revenir au fond par défaut", systemImage: "arrow.uturn.backward")
-                            }
-                        }
-                        Text(
-                            "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut."
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                // Une trace GPX venue d'ailleurs — Komoot, Strava, un ami —
-                // devient un itinéraire suivable. Tout est local : le fichier,
-                // le parseur, le guidage. C'est le trajet qui marche le mieux
-                // en mode avion, parce qu'il n'a jamais eu besoin de réseau.
-                Section("Trace GPX 🥾") {
-                    Button {
-                        if plus.accesPlus {
-                            importeGPX = true
-                        } else {
-                            showPaywallRecherche = true
-                        }
-                    } label: {
-                        Label("Importer une trace GPX", systemImage: "square.and.arrow.down")
-                    }
-                    .fileImporter(
-                        isPresented: $importeGPX,
-                        allowedContentTypes: [
-                            UTType(filenameExtension: "gpx") ?? .xml, .xml,
-                        ]
-                    ) { resultat in
-                        chargeGPX(resultat)
-                    }
-                    Text(
-                        "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau."
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                }
-                // Trafic temps réel TomTom : clé optionnelle saisie sur
-                // l'appareil (sinon le serveur fournit le trafic si configuré).
-                Section("Trafic 🚦 (TomTom)") {
-                    TextField("Clé API TomTom", text: $tomtomKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .monospaced))
-                    Link(destination: URL(string: "https://developer.tomtom.com/user/me/apps")!) {
-                        Label("Obtenir une clé (2 500 req./jour)", systemImage: "link")
-                    }
-                    .font(.footnote)
-                    if tomtomKey.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Text(
-                            "Colle ta clé TomTom pour activer les vrais bouchons en temps réel : la navigation contournera automatiquement les embouteillages sur ta route."
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    } else {
-                        Text("\(traffic.jams.count) bouchon(s) détecté(s) autour de toi (temps réel).")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
                 // Raccourcis Domicile / Travail — poussés au compte à chaque
                 // changement : ils suivent l'utilisateur, pas l'appareil.
                 Section("Favoris") {
@@ -4186,10 +4039,44 @@ struct MapHomeView: View {
                         }
                     }
                 }
+                // Une trace GPX venue d'ailleurs — Komoot, Strava, un ami —
+                // devient un itinéraire suivable. Tout est local : le fichier,
+                // le parseur, le guidage. C'est le trajet qui marche le mieux
+                // en mode avion, parce qu'il n'a jamais eu besoin de réseau.
+                Section("Trace GPX 🥾") {
+                    Button {
+                        if plus.accesPlus {
+                            importeGPX = true
+                        } else {
+                            showPaywallRecherche = true
+                        }
+                    } label: {
+                        Label("Importer une trace GPX", systemImage: "square.and.arrow.down")
+                    }
+                    .fileImporter(
+                        isPresented: $importeGPX,
+                        allowedContentTypes: [
+                            UTType(filenameExtension: "gpx") ?? .xml, .xml,
+                        ]
+                    ) { resultat in
+                        chargeGPX(resultat)
+                    }
+                    Text(
+                        "Une randonnée, un parcours vélo exporté d'une autre app : la trace s'affiche sur la carte et se laisse suivre pas à pas, même sans réseau."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
                 }
             }
             .navigationTitle("Où allez-vous ?")
             .navigationBarTitleDisplayMode(.inline)
+            // L'en-tête reste opaque : sous le verre d'iOS 26+, la liste
+            // glissait derrière le champ de recherche et s'y lisait en
+            // transparence, à moitié floue (constaté sur TestFlight).
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+            .modifier(EnteteNette())
             .searchable(
                 text: $destQuery,
                 placement: .navigationBarDrawer(displayMode: .always),
@@ -4556,6 +4443,129 @@ struct MapHomeView: View {
                     .onDelete(perform: deletePositions)
                     if positions.isEmpty {
                         Text("Aucune position — utilise « Enregistrer ma position ».")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                // Les réglages vivent ici, avec le compte. La feuille
+                // « Où allez-vous ? » les affichait au-dessus des favoris et
+                // des destinations : on y cherchait un lieu, on y trouvait
+                // des clés d'API.
+                // Notifications d'alertes à proximité.
+                Section("Alertes") {
+                    Toggle(isOn: $notifyNearbyAlerts) {
+                        Label("Alertes à proximité", systemImage: "bell.badge")
+                    }
+                    Text("Reçois une notification quand un signalement (police, accident, danger…) se trouve à moins de 600 m, même écran verrouillé.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                // Incendies (NASA FIRMS) : clé optionnelle saisie sur l'appareil
+                // (sinon le serveur fournit les feux si configuré).
+                Section("Incendies 🔥 (NASA FIRMS)") {
+                    TextField("Clé FIRMS (MAP_KEY)", text: $firmsKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    Link(
+                        destination: URL(
+                            string: "https://firms.modaps.eosdis.nasa.gov/api/map_key/")!
+                    ) {
+                        Label("Obtenir une clé", systemImage: "link")
+                    }
+                    .font(.footnote)
+                    Text(
+                        "Colle ta clé FIRMS pour afficher les vrais foyers (carte des feux, menu) sans attendre le serveur. \(fires.fires.count) foyer(s) actuellement."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+                Section("Fond de carte 🗺️") {
+                    Picker("Pour me déplacer", selection: $fondDeCarte) {
+                        ForEach(FondDeCarte.allCases) { fond in
+                            Text(fond.libelle).tag(fond.rawValue)
+                        }
+                    }
+                    Text(
+                        "Apple Plans a des commerces à jour et le trafic, mais ne garde aucune carte : sans réseau, l'app repasse seule sur OpenStreetMap, qui sait se télécharger. Les cartes hors ligne, des feux et de l'air restent toujours sur OpenStreetMap."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    if fondDeCarte == FondDeCarte.apple.rawValue, fondEffectif == .osm {
+                        Label(
+                            horsLigne
+                                ? "Navigation hors ligne active : OpenStreetMap est affiché."
+                                : "Pas de réseau : OpenStreetMap est affiché.",
+                            systemImage: "info.circle"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    }
+                }
+                Section("Hors ligne 🗺️") {
+                    Button {
+                        showPlaces = false
+                        showOfflineMap = true
+                    } label: {
+                        Label("Préparer une zone hors ligne", systemImage: "arrow.down.circle")
+                    }
+                    // Un seul écran, un seul geste. Les deux téléchargements y
+                    // portent sur la même zone : les images pour voir la carte,
+                    // le graphe routier pour y calculer une route. Séparés, on
+                    // en prenait un et on découvrait l'autre en panne de
+                    // réseau.
+                    Text(
+                        "Les fonds de carte et le calcul d'itinéraire se téléchargent ensemble, sur la zone que tu regardes. Aucune clé n'est nécessaire : tout vient d'OpenStreetMap, libre et sans inscription."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    if router.ready {
+                        Toggle("Naviguer hors ligne", isOn: $horsLigne)
+                        Text("\(router.installees.count) région(s) · \(router.poidsTotal)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    DisclosureGroup("Serveur de cartes personnel") {
+                        TextField("https://exemple.fr/style.json", text: $styleURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .font(.system(.footnote, design: .monospaced))
+                        if !styleURL.isEmpty {
+                            Button(role: .destructive) {
+                                styleURL = ""
+                                tileURL = ""
+                            } label: {
+                                Label("Revenir au fond par défaut", systemImage: "arrow.uturn.backward")
+                            }
+                        }
+                        Text(
+                            "Laisse vide si tu n'héberges rien. Une adresse qui ne répond pas est ignorée : la carte reste affichée avec le fond par défaut."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                // Trafic temps réel TomTom : clé optionnelle saisie sur
+                // l'appareil (sinon le serveur fournit le trafic si configuré).
+                Section("Trafic 🚦 (TomTom)") {
+                    TextField("Clé API TomTom", text: $tomtomKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .monospaced))
+                    Link(destination: URL(string: "https://developer.tomtom.com/user/me/apps")!) {
+                        Label("Obtenir une clé (2 500 req./jour)", systemImage: "link")
+                    }
+                    .font(.footnote)
+                    if tomtomKey.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text(
+                            "Colle ta clé TomTom pour activer les vrais bouchons en temps réel : la navigation contournera automatiquement les embouteillages sur ta route."
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    } else {
+                        Text("\(traffic.jams.count) bouchon(s) détecté(s) autour de toi (temps réel).")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -6482,5 +6492,17 @@ struct MapHomeView: View {
         showPlaces = false
         pendingDestination = dest
         Task { await presentRouteOptions(to: dest) }
+    }
+}
+
+/// Sous iOS 26+, un bord de défilement net plutôt que fondu : le contenu
+/// d'une liste ne transparaît plus sous la barre de recherche.
+private struct EnteteNette: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            content
+        }
     }
 }
