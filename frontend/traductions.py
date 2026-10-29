@@ -17,6 +17,8 @@ import glob
 import json
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 
 # clé française -> (espagnol, anglais)
@@ -1234,6 +1236,13 @@ def exporte_vitrine(chemin: pathlib.Path) -> None:
         "",
     ]
     chemin.write_text("\n".join(lignes), encoding="utf-8")
+    # Le module doit passer `cargo fmt --check` (workflow Front) : une
+    # traduction longue dépasse les cent colonnes, et rustfmt la coupe. On le
+    # laisse donc mettre en forme lui-même, pour que les deux vérifications —
+    # « fichiers engendrés à jour » et « code formaté » — disent la même chose.
+    # Les runners Ubuntu de GitHub ont rustfmt ; sans lui, rien ne change.
+    if shutil.which("rustfmt"):
+        subprocess.run(["rustfmt", "--edition", "2021", str(chemin)], check=True)
     print(f"{chemin.name} : {len(VITRINE)} libellés × 3 langues")
 
 
