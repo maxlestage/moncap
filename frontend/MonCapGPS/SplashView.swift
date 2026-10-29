@@ -27,7 +27,7 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            fond
+            FondDeMarque()
             VStack(spacing: 24) {
                 boussole
                 titres
@@ -36,40 +36,6 @@ struct SplashView: View {
             signature
         }
         .onAppear(perform: demarre)
-    }
-
-    // MARK: - Fond
-
-    /// Le dégradé de marque, réchauffé de deux halos.
-    ///
-    /// Le haut reprend la couleur du launch screen natif (`LaunchBackground`)
-    /// pour que le passage de l'écran système au nôtre ne se voie pas. Les
-    /// halos sont flous et très peu opaques : ils donnent de la profondeur sans
-    /// qu'on puisse les nommer, et surtout sans concurrencer le logo.
-    private var fond: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color("LaunchBackground"),
-                    Color(red: 0.10, green: 0.34, blue: 0.90),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            Circle()
-                .fill(Color(red: 0.35, green: 0.72, blue: 1).opacity(0.30))
-                .frame(width: 340, height: 340)
-                .blur(radius: 90)
-                .offset(x: -110, y: -180)
-
-            Circle()
-                .fill(Color(red: 0.55, green: 0.35, blue: 1).opacity(0.24))
-                .frame(width: 300, height: 300)
-                .blur(radius: 90)
-                .offset(x: 130, y: 160)
-        }
-        .ignoresSafeArea()
     }
 
     // MARK: - Boussole
@@ -185,5 +151,42 @@ struct SplashView: View {
         withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
             respire = true
         }
+    }
+}
+
+/// Le dégradé de marque, réchauffé de deux halos.
+///
+/// Le haut reprend la couleur du launch screen natif (`LaunchBackground`)
+/// pour que le passage de l'écran système au nôtre ne se voie pas. Les
+/// halos sont flous et très peu opaques : ils donnent de la profondeur sans
+/// qu'on puisse les nommer, et surtout sans concurrencer le logo.
+///
+/// Partagé avec l'écran de connexion, qui suit l'écran de garde : l'un
+/// se fond dans l'autre sans changer de décor.
+struct FondDeMarque: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color("LaunchBackground"),
+                    Color(red: 0.10, green: 0.34, blue: 0.90),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Circle()
+                .fill(Color(red: 0.35, green: 0.72, blue: 1).opacity(0.30))
+                .frame(width: 340, height: 340)
+                .blur(radius: 90)
+                .offset(x: -110, y: -180)
+
+            Circle()
+                .fill(Color(red: 0.55, green: 0.35, blue: 1).opacity(0.24))
+                .frame(width: 300, height: 300)
+                .blur(radius: 90)
+                .offset(x: 130, y: 160)
+        }
+        .ignoresSafeArea()
     }
 }

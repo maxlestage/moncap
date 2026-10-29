@@ -176,16 +176,35 @@ struct APIClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONEncoder().encode(["username": email])
-        let (_, resp) = try await URLSession.shared.data(for: req)
+        let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else {
-            throw APIError.server("Serveur injoignable")
+            throw APIError.server("Serveur injoignable. Réessaie.")
         }
-        if http.statusCode == 503 {
+        // Notre 503 à nous a un corps vide ; celui d'Heroku (dyno à l'arrêt)
+        // est une page HTML — c'est alors le serveur entier qui manque.
+        if http.statusCode == 503 && data.isEmpty {
             throw APIError.server("La réinitialisation n'est pas encore configurée.")
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.server("Échec")
+            throw APIError.server(Self.messageDeRefus(data, http))
         }
+    }
+
+    /// Ce qu'on peut montrer d'un refus. Nos erreurs sont du texte brut court,
+    /// en français, affichable tel quel ; tout le reste — page HTML d'Heroku
+    /// quand le dyno est arrêté, 5xx, corps vide — devient un message clair
+    /// plutôt qu'un pavé de balises à l'écran.
+    static func messageDeRefus(_ data: Data, _ http: HTTPURLResponse) -> String {
+        if http.statusCode >= 500 {
+            return "Serveur indisponible pour le moment. Réessaie dans quelques minutes."
+        }
+        let type = http.value(forHTTPHeaderField: "Content-Type") ?? ""
+        if type.hasPrefix("text/plain"), let texte = String(data: data, encoding: .utf8),
+            !texte.isEmpty, texte.count <= 200
+        {
+            return texte
+        }
+        return "Échec de l'authentification"
     }
 
     private func authenticate(_ path: String, _ username: String, _ password: String) async throws
@@ -197,12 +216,12 @@ struct APIClient {
         req.httpBody = try JSONEncoder().encode(["username": username, "password": password])
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse else {
-            throw APIError.server("Serveur injoignable")
+            throw APIError.server("Serveur injoignable. Réessaie.")
         }
         // 401 sur /login = identifiants incorrects (message clair côté vue).
         if http.statusCode == 401 { throw APIError.unauthorized }
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.server(String(data: data, encoding: .utf8) ?? "Échec")
+            throw APIError.server(Self.messageDeRefus(data, http))
         }
         let auth = try JSONDecoder().decode(AuthResponse.self, from: data)
         Session.save(token: auth.token, username: auth.username)
