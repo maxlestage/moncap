@@ -737,6 +737,22 @@
         }
       }
     },
+    "Afficher le mot de passe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show password"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar la contraseña"
+          }
+        }
+      }
+    },
     "Afficher les trajets cochés (%lld)": {
       "localizations": {
         "en": {
@@ -2257,6 +2273,22 @@
         }
       }
     },
+    "Connexion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar sesión"
+          }
+        }
+      }
+    },
     "Consommation": {
       "localizations": {
         "en": {
@@ -2397,6 +2429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cubre tu posición"
+          }
+        }
+      }
+    },
+    "Créer mon compte": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create my account"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crear mi cuenta"
           }
         }
       }
@@ -3649,6 +3697,22 @@
         }
       }
     },
+    "Inscription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign up"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrarse"
+          }
+        }
+      }
+    },
     "Itinéraire": {
       "localizations": {
         "en": {
@@ -4365,6 +4429,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mercado"
+          }
+        }
+      }
+    },
+    "Masquer le mot de passe": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide password"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar la contraseña"
           }
         }
       }
@@ -6593,6 +6673,22 @@
         }
       }
     },
+    "Se connecter": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar sesión"
+          }
+        }
+      }
+    },
     "Serveur de cartes personnel": {
       "localizations": {
         "en": {
@@ -6605,6 +6701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Servidor de mapas propio"
+          }
+        }
+      }
+    },
+    "Serveur indisponible pour le moment. Réessaie dans quelques minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server unavailable right now. Try again in a few minutes."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor no disponible por ahora. Reintenta en unos minutos."
           }
         }
       }
@@ -6845,6 +6957,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tu fórmula actual"
+          }
+        }
+      }
+    },
+    "Tape ton adresse e-mail ci-dessus, puis touche « Mot de passe oublié ? ».": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type your email above, then tap “Forgot your password?”."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escribe tu correo arriba y luego toca «¿Contraseña olvidada?»."
           }
         }
       }

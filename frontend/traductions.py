@@ -777,6 +777,20 @@ T: dict[str, tuple[str, str]] = {
     ),
     "Échec de l'authentification": ("Fallo de autenticación", "Authentication failed"),
     "Saisie invalide.": ("Entrada no válida.", "Invalid input."),
+    "Connexion": ("Iniciar sesión", "Sign in"),
+    "Inscription": ("Registrarse", "Sign up"),
+    "Se connecter": ("Iniciar sesión", "Sign in"),
+    "Créer mon compte": ("Crear mi cuenta", "Create my account"),
+    "Afficher le mot de passe": ("Mostrar la contraseña", "Show password"),
+    "Masquer le mot de passe": ("Ocultar la contraseña", "Hide password"),
+    "Tape ton adresse e-mail ci-dessus, puis touche « Mot de passe oublié ? ».": (
+        "Escribe tu correo arriba y luego toca «¿Contraseña olvidada?».",
+        "Type your email above, then tap “Forgot your password?”.",
+    ),
+    "Serveur indisponible pour le moment. Réessaie dans quelques minutes.": (
+        "Servidor no disponible por ahora. Reintenta en unos minutos.",
+        "Server unavailable right now. Try again in a few minutes.",
+    ),
     # Messages renvoyés par le serveur, affichés tels quels par l'écran de
     # connexion (LocalizedStringKey) : présents ici, ils se traduisent.
     "nom d'utilisateur déjà pris": (
