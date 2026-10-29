@@ -197,16 +197,17 @@ enum Formules {
 /// rien de gratuit passé quatorze jours, pour personne.
 struct PaywallView: View {
     var bloquant = false
-    /// En mode bloquant, la seule sortie honnête : se déconnecter pour
-    /// entrer avec un autre compte (l'invité, le bon abonné). Sans elle,
-    /// un mauvais compte serait un piège sans porte.
-    var surChangeCompte: (() -> Void)? = nil
+    /// En mode bloquant, la seule sortie honnête : entrer avec un autre
+    /// compte (l'invité, le bon abonné). Sans elle, un mauvais compte serait
+    /// un piège sans porte.
+    var auth: AuthStore? = nil
 
     @ObservedObject private var plus = MonCapPlus.shared
     @Environment(\.dismiss) private var ferme
     @State private var enCours = false
     /// Feuille système des codes promo App Store.
     @State private var montreCode = false
+    @State private var montreConnexion = false
 
     var body: some View {
         NavigationStack {
@@ -252,8 +253,8 @@ struct PaywallView: View {
                                 }
                             }
                             Button("J'ai un code") { montreCode = true }
-                            if bloquant, let surChangeCompte {
-                                Button("Changer de compte") { surChangeCompte() }
+                            if bloquant, auth != nil {
+                                Button("Changer de compte") { montreConnexion = true }
                             }
                         }
                         .font(.caption)
@@ -299,6 +300,9 @@ struct PaywallView: View {
                 await plus.rafraichitDroit()
                 if plus.niveau != .aucun, !bloquant { ferme() }
             }
+        }
+        .sheet(isPresented: $montreConnexion) {
+            if let auth { LoginView(auth: auth) }
         }
     }
 
