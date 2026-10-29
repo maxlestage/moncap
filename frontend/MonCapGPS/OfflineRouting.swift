@@ -223,7 +223,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         var trouvee: Installee?
         for region in installees {
             guard let moteur = moteur(region.id) else { continue }
-            if !OfflineRoute.toutes(json: moteur.route(rawRequest: texte)).isEmpty {
+            if !OfflineRoute.toutes(json: Self.calcule(moteur, texte)).isEmpty {
                 trouvee = region
                 break
             }
@@ -795,7 +795,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                 retiens(.paquetIllisible(region: region.nom))
                 continue
             }
-            let brut = moteur.route(rawRequest: texte)
+            let brut = Self.calcule(moteur, texte)
             let trouves = OfflineRoute.toutes(json: brut)
             if !trouves.isEmpty {
                 dernierEchec = nil
@@ -861,7 +861,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                     continue
                 }
                 let texte = String(decoding: json, as: UTF8.self)
-                for r in OfflineRoute.toutes(json: moteur.route(rawRequest: texte)) {
+                for r in OfflineRoute.toutes(json: Self.calcule(moteur, texte)) {
                     if vues.insert(Self.empreinte(r)).inserted {
                         routes.append(r)
                     }
@@ -1023,6 +1023,27 @@ final class OfflineRouter: NSObject, ObservableObject {
         else { return nil }
         moteurs[id] = neuf
         return neuf
+    }
+}
+
+extension OfflineRouter {
+    /// Une requête brute au moteur, et sa réponse JSON — refus compris.
+    ///
+    /// Depuis valhalla-mobile 0.6, un refus du moteur (« No suitable edges
+    /// near location »…) arrive en erreur Swift et non plus dans le JSON.
+    /// On le remet dans la forme d'avant, `{"error", "error_code"}`, que
+    /// `OfflineRoute.erreur(json:)` sait lire : l'écran continue de dire
+    /// pourquoi le calcul a échoué au lieu de rester muet.
+    static func calcule(_ moteur: Valhalla, _ requete: String) -> String {
+        do {
+            return try moteur.route(rawRequest: requete)
+        } catch ValhallaError.valhallaError(let code, let message) {
+            let refus: [String: Any] = ["error": message, "error_code": code]
+            guard let json = try? JSONSerialization.data(withJSONObject: refus) else { return "" }
+            return String(decoding: json, as: UTF8.self)
+        } catch {
+            return ""
+        }
     }
 }
 
