@@ -2,3 +2,4 @@ target/
 .git/
 frontend/
 .env
+data/

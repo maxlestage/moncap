@@ -1,10 +1,11 @@
 //! Le temps réel : le WebSocket `/ws` et la diffusion des événements.
 //!
-//! Chaque événement part à tous les clients connectés à cette instance, et
-//! aux autres instances par le pont Redis s'il est configuré. Les messages
-//! sont du JSON étiqueté par `"kind"` (snake_case), comme avant.
+//! Chaque événement part à tous les clients connectés. Le serveur tourne en
+//! une seule instance (sa base est un fichier) : le canal de diffusion est
+//! partagé par tous ses fils, et il n'y a plus d'autres instances à
+//! prévenir — le pont Redis d'avant n'a plus lieu d'être. Les messages sont
+//! du JSON étiqueté par `"kind"` (snake_case), comme avant.
 
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -15,7 +16,6 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
 use crate::alertes::{self, Alerte};
-use crate::base::maintenant_ms;
 use crate::commun::{coord_valide, nettoie_label};
 use crate::connexion;
 use crate::erreur::{Erreur, Resultat};
@@ -23,8 +23,9 @@ use crate::erreur::{Erreur, Resultat};
 /// Le canal de diffusion de l'instance, rangé dans l'état de l'application.
 pub struct Hub {
     tx: broadcast::Sender<String>,
-    /// Préfixe des identifiants de connexion propre à l'instance : deux
-    /// dynos ne donnent plus le même identifiant à deux clients différents.
+    /// Préfixe aléatoire des identifiants de connexion : un client resté
+    /// connecté à travers un redémarrage ne retrouve pas l'identifiant d'un
+    /// autre.
     prefixe: u64,
     suivant: AtomicU64,
 }
@@ -46,13 +47,9 @@ impl Hub {
         self.prefixe | (self.suivant.fetch_add(1, Ordering::Relaxed) & 0xFFFF_FFFF)
     }
 
-    /// Diffuse un événement à tous les clients — de cette instance, et des
-    /// autres via le pont Redis s'il est actif.
+    /// Diffuse un événement à tous les clients connectés.
     pub fn diffuse(&self, ev: &Evenement) {
         if let Ok(json) = serde_json::to_string(ev) {
-            if let Some(publication) = REDIS_PUB.get() {
-                let _ = publication.send(json.clone());
-            }
             let _ = self.tx.send(json);
         }
     }
@@ -121,102 +118,6 @@ enum MessageClient {
         #[serde(default)]
         label: String,
     },
-}
-
-// ---------------------------------------------------------------------------
-// Le pont Redis.
-// ---------------------------------------------------------------------------
-
-/// Canal vers la tâche de publication Redis (absent : mono-instance).
-static REDIS_PUB: OnceLock<tokio::sync::mpsc::UnboundedSender<String>> = OnceLock::new();
-
-const REDIS_CANAL: &str = "moncap:events";
-
-/// URL Redis : REDIS_TLS_URL, sinon REDIS_URL. Heroku Redis a un certificat
-/// auto-signé : `#insecure` coupe la vérification du certificat, pas le TLS.
-fn url_redis() -> Option<String> {
-    let url = std::env::var("REDIS_TLS_URL")
-        .or_else(|_| std::env::var("REDIS_URL"))
-        .ok()
-        .filter(|u| !u.trim().is_empty())?;
-    if url.starts_with("rediss://") && !url.contains('#') {
-        Some(format!("{url}#insecure"))
-    } else {
-        Some(url)
-    }
-}
-
-/// Démarre le pont Redis pub/sub (si REDIS_URL est défini) : les événements
-/// d'ici partent vers les autres instances, ceux des autres sont rediffusés
-/// ici. Anti-écho par identifiant d'instance ; reconnexion automatique.
-pub fn demarre_pont_redis(hub: &'static Hub) {
-    let Some(url) = url_redis() else {
-        tracing::info!("Redis non configuré : temps réel mono-instance");
-        return;
-    };
-    let client = match redis::Client::open(url) {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!("Redis ignoré (URL invalide) : {e}");
-            return;
-        }
-    };
-    let instance = format!("{}-{}", std::process::id(), maintenant_ms());
-    let (pub_tx, mut pub_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-    if REDIS_PUB.set(pub_tx).is_err() {
-        return;
-    }
-
-    let client_pub = client.clone();
-    let instance_pub = instance.clone();
-    tokio::spawn(async move {
-        loop {
-            match client_pub.get_multiplexed_async_connection().await {
-                Ok(mut conn) => {
-                    while let Some(json) = pub_rx.recv().await {
-                        let charge = format!("{instance_pub}|{json}");
-                        let envoye: Result<(), _> = redis::cmd("PUBLISH")
-                            .arg(REDIS_CANAL)
-                            .arg(&charge)
-                            .query_async(&mut conn)
-                            .await;
-                        if envoye.is_err() {
-                            break;
-                        }
-                    }
-                }
-                Err(e) => tracing::warn!("Redis (publication) indisponible : {e}"),
-            }
-            tokio::time::sleep(Duration::from_secs(3)).await;
-        }
-    });
-
-    tokio::spawn(async move {
-        use futures_util::StreamExt;
-        loop {
-            match client.get_async_pubsub().await {
-                Ok(mut pubsub) => {
-                    if pubsub.subscribe(REDIS_CANAL).await.is_ok() {
-                        tracing::info!("pont Redis pub/sub actif (multi-instances)");
-                        let mut flux = pubsub.on_message();
-                        while let Some(msg) = flux.next().await {
-                            let Ok(charge) = msg.get_payload::<String>() else {
-                                continue;
-                            };
-                            if let Some((source, json)) = charge.split_once('|')
-                                && source != instance
-                                && !json.is_empty()
-                            {
-                                let _ = hub.tx.send(json.to_owned());
-                            }
-                        }
-                    }
-                }
-                Err(e) => tracing::warn!("Redis (abonnement) indisponible : {e}"),
-            }
-            tokio::time::sleep(Duration::from_secs(3)).await;
-        }
-    });
 }
 
 // ---------------------------------------------------------------------------

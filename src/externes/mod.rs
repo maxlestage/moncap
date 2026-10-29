@@ -5,7 +5,11 @@
 //!
 //! Les clés et le jeton restent **sur le serveur** : aucun client ne les voit,
 //! et chacun profite des données sans rien configurer. Chaque source a son
-//! cache mémoire, borné, pour ne pas payer l'amont à chaque requête.
+//! cache mémoire, borné, pour ne pas payer l'amont à chaque requête. Les
+//! feux, l'air et la liste des régions sont aussi gardés dans le cache SQLite
+//! (voir `crate::cache`) : après un redémarrage, la carte se remplit aussitôt
+//! de la dernière donnée connue, rafraîchie derrière. Le trafic et les
+//! horaires vivent une minute ou deux : la mémoire leur suffit.
 
 mod air;
 mod feux;
@@ -19,6 +23,10 @@ use std::sync::{LazyLock, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use paquets::prelude::*;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+use crate::cache;
 
 pub fn routes(app: &mut App) {
     app.get("/fires", feux::liste);
@@ -32,8 +40,8 @@ pub fn routes(app: &mut App) {
 /// Les tâches de fond des données externes : avec une clé FIRMS, le monde
 /// entier est mis en cache dès le démarrage, pour que le premier visiteur ne
 /// trouve pas une carte vide.
-pub fn demarre(_db: &'static Db) {
-    feux::demarre();
+pub fn demarre(cache: &'static Db) {
+    feux::demarre(cache);
 }
 
 /// Client HTTP sortant partagé (pool de connexions + pile TLS construits une
@@ -81,16 +89,27 @@ struct Entree<T> {
 
 /// Un cache par zone demandée. Le verrou n'est jamais tenu pendant un appel
 /// réseau : on lit, on relâche, on va chercher, on range.
-struct Zones<T>(LazyLock<Mutex<HashMap<String, Entree<T>>>>);
+struct Zones<T> {
+    table: LazyLock<Mutex<HashMap<String, Entree<T>>>>,
+    /// Le nom de la source, qui préfixe ses clés dans le cache SQLite.
+    nom: &'static str,
+}
+
+/// Une zone gardée sur disque depuis plus d'un jour ne vaut plus d'être
+/// montrée, même le temps d'un rafraîchissement.
+const AGE_MAX_DISQUE: i64 = 24 * 3600;
 
 impl<T: Clone> Zones<T> {
-    const fn new() -> Self {
-        Zones(LazyLock::new(|| Mutex::new(HashMap::new())))
+    const fn new(nom: &'static str) -> Self {
+        Zones {
+            table: LazyLock::new(|| Mutex::new(HashMap::new())),
+            nom,
+        }
     }
 
     /// Les données d'une zone, et si elles sont périmées.
     fn lit(&self, zone: &str, ttl: Duration) -> Option<(Vec<T>, bool)> {
-        verrou(&self.0)
+        verrou(&self.table)
             .get(zone)
             .map(|c| (c.data.clone(), c.fetched_at.elapsed() >= ttl))
     }
@@ -99,7 +118,12 @@ impl<T: Clone> Zones<T> {
     /// carte parcourue longuement finirait par tout garder en mémoire. La
     /// plus ancienne entrée cède la sienne.
     fn range(&self, max: usize, zone: &str, data: Vec<T>) {
-        let mut table = verrou(&self.0);
+        self.range_du(max, zone, data, Instant::now());
+    }
+
+    /// Range une zone relevée à `fetched_at`.
+    fn range_du(&self, max: usize, zone: &str, data: Vec<T>, fetched_at: Instant) {
+        let mut table = verrou(&self.table);
         if table.len() >= max
             && !table.contains_key(zone)
             && let Some(vieille) = table
@@ -109,13 +133,41 @@ impl<T: Clone> Zones<T> {
         {
             table.remove(&vieille);
         }
-        table.insert(
-            zone.to_owned(),
-            Entree {
-                fetched_at: Instant::now(),
-                data,
-            },
-        );
+        table.insert(zone.to_owned(), Entree { fetched_at, data });
+    }
+
+    fn cle(&self, zone: &str) -> String {
+        format!("{}:{zone}", self.nom)
+    }
+}
+
+impl<T: Clone + Serialize + DeserializeOwned> Zones<T> {
+    /// Les données d'une zone, de la mémoire ou à défaut du cache SQLite (et
+    /// alors remises en mémoire avec leur âge), et si elles sont périmées.
+    async fn lit_ou_disque(
+        &self,
+        disque: &Db,
+        max: usize,
+        zone: &str,
+        ttl: Duration,
+    ) -> Option<(Vec<T>, bool)> {
+        if let Some(trouve) = self.lit(zone, ttl) {
+            return Some(trouve);
+        }
+        let (data, age) = cache::lit_json::<Vec<T>>(disque, &self.cle(zone)).await?;
+        if age > AGE_MAX_DISQUE {
+            return None;
+        }
+        let age = Duration::from_secs(age.max(0) as u64);
+        let fetched_at = Instant::now().checked_sub(age).unwrap_or_else(Instant::now);
+        self.range_du(max, zone, data.clone(), fetched_at);
+        Some((data, age >= ttl))
+    }
+
+    /// Range une zone en mémoire et dans le cache SQLite.
+    async fn range_et_disque(&self, disque: &Db, max: usize, zone: &str, data: Vec<T>) {
+        cache::range_json(disque, &self.cle(zone), &data).await;
+        self.range(max, zone, data);
     }
 }
 
@@ -222,7 +274,7 @@ mod tests {
 
     #[test]
     fn le_cache_evince_la_plus_ancienne_zone() {
-        static ZONES: Zones<u8> = Zones::new();
+        static ZONES: Zones<u8> = Zones::new("essai");
         ZONES.range(2, "a", vec![1]);
         ZONES.range(2, "b", vec![2]);
         // Remplacer une zone connue ne chasse personne.
@@ -240,14 +292,59 @@ mod tests {
         assert_eq!(ZONES.lit("c", Duration::ZERO), Some((vec![4], true)));
     }
 
+    /// Une zone gardée sur disque revient en mémoire avec son âge : périmée
+    /// si elle a passé sa durée de vie, ignorée au-delà d'un jour.
+    #[tokio::test]
+    async fn une_zone_revient_du_disque_avec_son_age() {
+        static ZONES: Zones<u8> = Zones::new("essai-disque");
+        let disque = cache::ouvre("sqlite::memory:");
+        cache::prepare(&disque).await.unwrap();
+        assert!(
+            ZONES
+                .lit_ou_disque(&disque, 4, "z", Duration::from_secs(60))
+                .await
+                .is_none()
+        );
+        ZONES.range_et_disque(&disque, 4, "z", vec![7]).await;
+        // La mémoire perdue (un redémarrage), le disque répond.
+        verrou(&ZONES.table).clear();
+        assert_eq!(
+            ZONES
+                .lit_ou_disque(&disque, 4, "z", Duration::from_secs(60))
+                .await,
+            Some((vec![7], false))
+        );
+        verrou(&ZONES.table).clear();
+        assert_eq!(
+            ZONES.lit_ou_disque(&disque, 4, "z", Duration::ZERO).await,
+            Some((vec![7], true))
+        );
+        // Vieille de deux jours : plus montrée.
+        verrou(&ZONES.table).clear();
+        use paquets::orm::{Executor, params};
+        disque
+            .raw_execute(
+                "UPDATE cache SET range_a = ?1",
+                &params![crate::base::maintenant() - 2 * AGE_MAX_DISQUE],
+            )
+            .await
+            .unwrap();
+        assert!(
+            ZONES
+                .lit_ou_disque(&disque, 4, "z", Duration::from_secs(60))
+                .await
+                .is_none()
+        );
+    }
+
     // --- De bout en bout, sans réseau ------------------------------------
 
-    use crate::essais::client_ou_rien;
+    use crate::essais::client;
     use serde_json::Value;
 
     #[tokio::test]
     async fn une_zone_mal_formee_est_refusee() {
-        let c = client_ou_rien!();
+        let c = client().await;
         for route in ["/fires", "/air"] {
             let r = c.get(&format!("{route}?bbox=10,41,-5,51")).await;
             assert_eq!(r.status(), 400, "{route}");
@@ -257,7 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn sans_cle_les_feux_sont_vides() {
-        let c = client_ou_rien!();
+        let c = client().await;
         if feux::fires_key().is_some() {
             return;
         }
@@ -268,7 +365,7 @@ mod tests {
 
     #[tokio::test]
     async fn le_transit_exige_deux_points() {
-        let c = client_ou_rien!();
+        let c = client().await;
         for q in ["", "?from=44.88,-0.6", "?from=91,0&to=44.8,-0.6"] {
             let r = c.get(&format!("/transit{q}")).await;
             assert_eq!(r.status(), 400, "{q}");
@@ -278,7 +375,7 @@ mod tests {
 
     #[tokio::test]
     async fn le_trafic_exige_une_emprise_et_se_tait_sans_cle() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.get("/traffic").await;
         assert_eq!(r.status(), 400);
         if trafic::tomtom_key().is_some() {
@@ -299,7 +396,7 @@ mod tests {
         if hors_ligne::paquets_token().is_some() {
             return;
         }
-        let c = client_ou_rien!();
+        let c = client().await;
         for chemin in [
             "/offline/regions",
             "/offline/regions/tuiles-eu-monaco/archive",
@@ -313,7 +410,7 @@ mod tests {
     /// Une nature de fichier inconnue ne doit pas atteindre GitHub.
     #[tokio::test]
     async fn une_nature_inconnue_est_refusee() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.get("/offline/regions/tuiles-eu-monaco/README").await;
         // Sans jeton la route s'arrête avant ; avec jeton, la nature est
         // refusée. Dans les deux cas, rien n'est servi.

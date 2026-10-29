@@ -21,6 +21,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/moncap-gps /usr/local/bin/moncap-gps
+# La base et le cache SQLite vivent dans /app/data : un volume les garde.
+WORKDIR /app
+VOLUME /app/data
 
 EXPOSE 3000
 CMD ["moncap-gps"]

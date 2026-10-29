@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::feux::{BBOX_ATTENDUE, FiresQuery, fires_zone};
 use super::{EnCours, Zones, attends, client_http, lance_unique};
+use crate::cache::cache;
 use crate::erreur::{Erreur, Resultat, requete_query};
 
 /// Un point de mesure de la grille.
@@ -55,7 +56,7 @@ pub(super) struct AirPoint {
     ny: usize,
 }
 
-static AIR_CACHE: Zones<AirPoint> = Zones::new();
+static AIR_CACHE: Zones<AirPoint> = Zones::new("air");
 
 /// Les zones dont le rafraîchissement est en cours.
 static EN_COURS: EnCours = EnCours::new();
@@ -163,11 +164,15 @@ fn air_maille(zone: &str) -> (f64, f64) {
 pub(super) async fn liste(req: Request) -> Resultat<Response> {
     let q: FiresQuery = requete_query(&req)?;
     let zone = fires_zone(q.bbox.as_deref()).ok_or_else(|| Erreur::requete(BBOX_ATTENDUE))?;
+    let disque = cache(&req);
 
-    match AIR_CACHE.lit(&zone, AIR_TTL) {
+    match AIR_CACHE
+        .lit_ou_disque(disque, AIR_MAX_ZONES, &zone, AIR_TTL)
+        .await
+    {
         Some((data, stale)) => {
             if stale {
-                spawn_air_refresh(zone);
+                spawn_air_refresh(disque, zone);
             }
             Ok(Response::new().json(data))
         }
@@ -175,7 +180,9 @@ pub(super) async fn liste(req: Request) -> Resultat<Response> {
         // s'afficher désert le temps d'un aller-retour.
         None => match attends(fetch_air(&zone)).await {
             Some(data) => {
-                AIR_CACHE.range(AIR_MAX_ZONES, &zone, data.clone());
+                AIR_CACHE
+                    .range_et_disque(disque, AIR_MAX_ZONES, &zone, data.clone())
+                    .await;
                 Ok(Response::new().json(data))
             }
             // Pas de liste vide ici : une liste vide veut dire « rien à
@@ -183,7 +190,7 @@ pub(super) async fn liste(req: Request) -> Resultat<Response> {
             // point on ne sait rien — l'amont a refusé, ou n'a pas répondu
             // à temps. Un 503 le dit, et l'app en tire la bonne phrase.
             None => {
-                spawn_air_refresh(zone);
+                spawn_air_refresh(disque, zone);
                 Err(Erreur::Indisponible(INDISPONIBLE.to_owned()))
             }
         },
@@ -191,13 +198,15 @@ pub(super) async fn liste(req: Request) -> Resultat<Response> {
 }
 
 /// Rafraîchit la grille d'une zone en tâche de fond, une par une.
-fn spawn_air_refresh(zone: String) {
+fn spawn_air_refresh(disque: &'static Db, zone: String) {
     let z = zone.clone();
     lance_unique(&EN_COURS, &z, async move {
         match fetch_air(&zone).await {
             Some(data) => {
                 tracing::info!("Air : {} points en cache pour {zone}", data.len());
-                AIR_CACHE.range(AIR_MAX_ZONES, &zone, data);
+                AIR_CACHE
+                    .range_et_disque(disque, AIR_MAX_ZONES, &zone, data)
+                    .await;
             }
             None => tracing::warn!("Air : rafraîchissement impossible pour {zone}"),
         }

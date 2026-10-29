@@ -18,6 +18,7 @@ use paquets::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::verrou;
+use crate::cache;
 use crate::erreur::{Erreur, Resultat};
 
 /// Étiquette des Releases publiées par le workflow des tuiles.
@@ -62,6 +63,9 @@ static PAQUETS_CACHE: Mutex<Option<PaquetsCache>> = Mutex::new(None);
 /// Deux cents Releases coûtent trois appels à l'API GitHub, et elles ne
 /// changent qu'à une reconstruction des tuiles.
 const PAQUETS_TTL: Duration = Duration::from_secs(3600);
+
+/// La clé de la liste dans le cache SQLite.
+const CLE_DISQUE: &str = "regions";
 
 /// Le jeton tel que collé, sans espaces ni guillemets autour.
 ///
@@ -187,10 +191,25 @@ fn passerelle(message: impl Into<String>) -> Erreur {
 }
 
 /// GET /offline/regions — les régions d'itinéraires téléchargeables.
-pub(super) async fn liste(_req: Request) -> Resultat<Response> {
+pub(super) async fn liste(req: Request) -> Resultat<Response> {
     let Some(token) = paquets_token() else {
         return Err(Erreur::Indisponible(SANS_JETON.to_owned()));
     };
+    let disque = cache::cache(&req);
+
+    // Mémoire vide (un redémarrage) : la dernière liste gardée sur disque y
+    // revient avec son âge — fraîche, elle évite trois appels à GitHub ;
+    // périmée, elle sert encore de repli.
+    let vide = verrou(&PAQUETS_CACHE).is_none();
+    if vide
+        && let Some((data, age)) = cache::lit_json::<Vec<RegionPubliee>>(disque, CLE_DISQUE).await
+    {
+        let age = Duration::from_secs(age.max(0) as u64);
+        *verrou(&PAQUETS_CACHE) = Some(PaquetsCache {
+            fetched_at: Instant::now().checked_sub(age).unwrap_or_else(Instant::now),
+            data,
+        });
+    }
 
     if let Some(c) = verrou(&PAQUETS_CACHE).as_ref()
         && c.fetched_at.elapsed() < PAQUETS_TTL
@@ -200,6 +219,7 @@ pub(super) async fn liste(_req: Request) -> Resultat<Response> {
 
     match releases_publiees(&token).await {
         Ok(regions) => {
+            cache::range_json(disque, CLE_DISQUE, &regions).await;
             *verrou(&PAQUETS_CACHE) = Some(PaquetsCache {
                 fetched_at: Instant::now(),
                 data: regions.clone(),

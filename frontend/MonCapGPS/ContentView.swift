@@ -4291,15 +4291,14 @@ struct MapHomeView: View {
         }
     }
 
-    /// Charge les recherches récentes depuis le serveur, avec repli sur le cache
-    /// local si le réseau est indisponible.
+    /// Charge les destinations : celles de l'appareil, où se fusionne la liste
+    /// du serveur quand le réseau le permet. L'appareil fait foi — un serveur
+    /// reparti de zéro n'efface rien.
     private func loadRecents() async {
         if let remote = try? await api.searches() {
-            recents = remote
-            Session.recentSearches = remote
-        } else {
-            recents = Session.recentSearches
+            Session.mergeRecents(remote)
         }
+        recents = Session.recentSearches
     }
 
     /// Mémorise une recherche : mise à jour locale immédiate + envoi au serveur,
@@ -4320,7 +4319,7 @@ struct MapHomeView: View {
         let removed = offsets.map { recents[$0] }
         var list = recents
         list.remove(atOffsets: offsets)
-        Session.recentSearches = list
+        removed.forEach(Session.removeRecent)
         recents = list
         Task {
             for r in removed {
@@ -5213,6 +5212,8 @@ struct MapHomeView: View {
     /// Démarre la navigation depuis ma position vers une destination.
     private func startNavigation(to dest: Position) async {
         guard let from = location.coordinate else { return }
+        noteDestination(
+            CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon), nom: dest.label)
         multiRoutes = []
         let to = CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon)
         if horsLigne, let local = router.route(from: from, to: to,
@@ -5997,9 +5998,35 @@ struct MapHomeView: View {
         }
     }
 
+    /// Retient la destination d'un guidage qui démarre — d'où qu'elle vienne :
+    /// recherche, favori, appui long sur la carte, lien partagé, raccourci.
+    /// Une destination tout juste enregistrée (choisie dans la recherche) ne
+    /// compte pas deux fois ; une autre sans nom prend celui du lieu, quand le
+    /// réseau permet de le demander.
+    private func noteDestination(_ dest: CLLocationCoordinate2D, nom: String? = nil) {
+        let ici = CLLocation(latitude: dest.latitude, longitude: dest.longitude)
+        if let tete = recents.first,
+            CLLocation(latitude: tete.lat, longitude: tete.lon).distance(from: ici) < 50
+        {
+            return
+        }
+        Task {
+            var titre = nom ?? ""
+            var sousTitre = ""
+            if titre.isEmpty, let lieu = try? await CLGeocoder().reverseGeocodeLocation(ici).first {
+                titre = lieu.name ?? ""
+                sousTitre = [lieu.postalCode, lieu.locality].compactMap { $0 }.joined(separator: " ")
+            }
+            if titre.isEmpty { titre = "Destination" }
+            saveRecent(NewSearch(
+                name: titre, subtitle: sousTitre, lat: dest.latitude, lon: dest.longitude))
+        }
+    }
+
     /// Lance la navigation sur l'option d'itinéraire choisie.
     private func startNavigation(option: RouteOption) {
         guard let dest = pendingDestination else { return }
+        noteDestination(dest)
         previewTask?.cancel()
         previewing = false
         followsRoute = true

@@ -1,8 +1,7 @@
 //! Les trajets parcourus (et leur requalification après coup) et les
-//! recherches de destination récentes.
+//! destinations choisies — toutes, sans plafond.
 
-use std::collections::HashSet;
-
+use paquets::orm::params;
 use paquets::prelude::*;
 use serde::Deserialize;
 
@@ -14,8 +13,6 @@ use crate::positions::{Coord, route_legs_km};
 
 /// Au plus tant de points par trajet enregistré.
 const MAX_POINTS: usize = 10_000;
-/// Nombre maximal de recherches récentes conservées par utilisateur.
-const MAX_RECENTS: usize = 12;
 
 pub fn routes(app: &mut App) {
     app.get("/trips", liste_trajets);
@@ -184,10 +181,10 @@ fn encode_polyline(points: &[Coord]) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Les recherches récentes.
+// Les destinations.
 // ---------------------------------------------------------------------------
 
-/// Recherche de destination envoyée par le client pour être mémorisée.
+/// Destination choisie, envoyée par le client pour être enregistrée.
 #[derive(Deserialize)]
 struct NewSearch {
     name: String,
@@ -197,23 +194,38 @@ struct NewSearch {
     lon: f64,
 }
 
-/// Les recherches d'un compte, les plus récentes d'abord.
-async fn recherches_de(db: &Db, uid: i32) -> Resultat<Vec<Recherche>> {
-    Ok(Recherche::query()
+/// Les destinations d'un compte, les plus récentes d'abord (`limite` : les
+/// N premières seulement).
+async fn recherches_de(db: &Db, uid: i32, limite: Option<u64>) -> Resultat<Vec<Recherche>> {
+    let mut requete = Recherche::query()
         .filter(Recherche::USER_ID.eq(uid))
-        .order_by(Recherche::CREATED_AT.desc())
-        .order_by(Recherche::ID.desc())
-        .all(db)
-        .await?)
+        .order_by(Recherche::RANG.desc());
+    if let Some(n) = limite {
+        requete = requete.limit(n);
+    }
+    Ok(requete.all(db).await?)
 }
 
-/// GET /searches — recherches de destination récentes de l'utilisateur.
+/// GET /searches[?limit=N] — toutes les destinations de l'utilisateur, les
+/// plus récentes d'abord ; `limit` n'en rend que les N premières.
 async fn liste_recherches(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
-    Ok(Response::new().json(recherches_de(req.db(), qui.user_id).await?))
+    let limite = match req.query("limit") {
+        None => None,
+        Some(v) => Some(
+            v.trim()
+                .parse::<u64>()
+                .map_err(|_| Erreur::requete("limit attendu : un entier"))?,
+        ),
+    };
+    Ok(Response::new().json(recherches_de(req.db(), qui.user_id, limite).await?))
 }
 
-/// POST /searches — mémorise une recherche (dédoublonne et plafonne la liste).
+/// POST /searches — enregistre une destination. **Toutes** sont gardées : un
+/// lieu déjà choisi (même nom, à une dizaine de mètres près) remonte en tête
+/// et compte une visite de plus, au lieu de faire un doublon. Une seule
+/// requête, atomique : deux envois simultanés du même lieu font deux visites
+/// d'une même ligne.
 async fn ajoute_recherche(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
     let s: NewSearch = corps_json(&req).await?;
@@ -222,32 +234,37 @@ async fn ajoute_recherche(req: Request) -> Resultat<Response> {
     if name.is_empty() {
         return Err(Erreur::requete("nom de recherche vide"));
     }
-    let db = req.db();
-    let mut recherche = Recherche {
-        id: 0,
-        name,
-        subtitle: nettoie_label(&s.subtitle),
-        lat: s.lat,
-        lon: s.lon,
-        created_at: maintenant(),
-        user_id: qui.user_id,
-    };
-    recherche.insert(db).await?;
-
-    // Dédoublonne (même lieu) et ne garde que les MAX_RECENTS plus récentes.
-    let toutes = recherches_de(db, qui.user_id).await?;
-    let elaguees = recents_to_prune(&toutes, recherche.id, MAX_RECENTS);
-    if !elaguees.is_empty() {
-        Recherche::delete_many()
-            .filter(Recherche::USER_ID.eq(qui.user_id))
-            .filter(Recherche::ID.is_in(elaguees))
-            .execute(db)
-            .await?;
-    }
+    let cle = recent_key(&name, s.lat, s.lon);
+    let lignes: Vec<Recherche> = req
+        .db()
+        .raw(
+            "INSERT INTO searches \
+             (name, subtitle, lat, lon, created_at, user_id, cle, fois, rang) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, \
+             (SELECT coalesce(max(rang), 0) + 1 FROM searches WHERE user_id = ?6)) \
+             ON CONFLICT (user_id, cle) DO UPDATE SET name = excluded.name, \
+             subtitle = excluded.subtitle, lat = excluded.lat, lon = excluded.lon, \
+             created_at = excluded.created_at, fois = fois + 1, rang = excluded.rang \
+             RETURNING id, name, subtitle, lat, lon, created_at, user_id, cle, fois, rang",
+            &params![
+                name,
+                nettoie_label(&s.subtitle),
+                s.lat,
+                s.lon,
+                maintenant(),
+                qui.user_id,
+                cle
+            ],
+        )
+        .await?;
+    let recherche = lignes
+        .into_iter()
+        .next()
+        .ok_or_else(|| Erreur::interne("destination non enregistrée"))?;
     Ok(Response::new().json(recherche))
 }
 
-/// DELETE /searches/:id — supprime une recherche récente de l'utilisateur.
+/// DELETE /searches/:id — supprime une destination de l'utilisateur.
 async fn supprime_recherche(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
     let id: i32 = param(&req, "id")?;
@@ -262,7 +279,7 @@ async fn supprime_recherche(req: Request) -> Resultat<Response> {
     Ok(Response::new().status(204))
 }
 
-/// DELETE /searches — efface toutes les recherches récentes de l'utilisateur.
+/// DELETE /searches — efface toutes les destinations de l'utilisateur.
 async fn efface_recherches(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
     Recherche::delete_many()
@@ -272,9 +289,9 @@ async fn efface_recherches(req: Request) -> Resultat<Response> {
     Ok(Response::new().status(204))
 }
 
-/// Clé de dédoublonnage d'une recherche : nom normalisé (minuscules, espaces
-/// internes réduits) + coordonnées arrondies (~10 m). Deux recherches de même
-/// clé désignent le même lieu.
+/// Clé de dédoublonnage d'une destination : nom normalisé (minuscules,
+/// espaces internes réduits) + coordonnées arrondies (~10 m). Deux
+/// destinations de même clé désignent le même lieu.
 fn recent_key(name: &str, lat: f64, lon: f64) -> String {
     let norm = name
         .split_whitespace()
@@ -284,95 +301,17 @@ fn recent_key(name: &str, lat: f64, lon: f64) -> String {
     format!("{norm}|{lat:.4},{lon:.4}")
 }
 
-/// À partir des recherches d'un utilisateur (les plus récentes d'abord),
-/// renvoie les identifiants à supprimer : doublons d'un lieu déjà vu et tout
-/// ce qui dépasse `max`. L'entrée `keep_id` (celle qu'on vient d'insérer) est
-/// toujours conservée et fait autorité : un doublon plus ancien du même lieu
-/// est élagué, quel que soit l'ordre des égalités de date.
-fn recents_to_prune(items: &[Recherche], keep_id: i32, max: usize) -> Vec<i32> {
-    let mut seen = HashSet::new();
-    let mut kept = 0usize;
-    // On amorce avec l'entrée conservée pour que ses doublons plus anciens
-    // soient élagués même si l'ordre par date les place avant elle.
-    if let Some(k) = items.iter().find(|i| i.id == keep_id) {
-        seen.insert(recent_key(&k.name, k.lat, k.lon));
-        kept = 1;
-    }
-    let mut prune = Vec::new();
-    for it in items {
-        if it.id == keep_id {
-            continue;
-        }
-        let key = recent_key(&it.name, it.lat, it.lon);
-        // Doublon d'un lieu déjà retenu, ou dépassement du plafond → à élaguer.
-        if !seen.insert(key) || kept >= max {
-            prune.push(it.id);
-        } else {
-            kept += 1;
-        }
-    }
-    prune
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn mk_search(id: i32, name: &str, lat: f64, lon: f64) -> Recherche {
-        Recherche {
-            id,
-            name: name.to_string(),
-            subtitle: String::new(),
-            lat,
-            lon,
-            created_at: id as i64,
-            user_id: 1,
-        }
-    }
-
     #[test]
-    fn recents_prune_removes_duplicate_place() {
-        // Plus récentes d'abord ; id=5 vient d'être inséré (keep_id).
-        let items = vec![
-            mk_search(5, "124 Rue Billaudel", 44.83, -0.57),
-            mk_search(4, "Gare", 44.82, -0.55),
-            mk_search(3, " 124  RUE  billaudel ", 44.83, -0.57), // doublon (casse + espaces)
-            mk_search(2, "Parc", 44.84, -0.58),
-        ];
-        // Le doublon plus ancien (id=3) est supprimé ; le neuf (id=5) reste.
-        assert_eq!(recents_to_prune(&items, 5, 12), vec![3]);
-    }
-
-    #[test]
-    fn recents_prune_caps_to_max() {
-        let items = vec![
-            mk_search(3, "A", 1.0, 1.0),
-            mk_search(2, "B", 2.0, 2.0),
-            mk_search(1, "C", 3.0, 3.0),
-        ];
-        // max=2 : on garde le neuf (id=3) + un autre, on élague le plus ancien.
-        assert_eq!(recents_to_prune(&items, 3, 2), vec![1]);
-    }
-
-    #[test]
-    fn recents_prune_keeps_new_entry_even_if_old_duplicate() {
-        // L'entrée fraîche (keep_id=2) est un doublon d'une plus ancienne (id=1).
-        let items = vec![
-            mk_search(2, "Lieu", 10.0, 10.0),
-            mk_search(1, "lieu", 10.0, 10.0),
-        ];
-        // C'est l'ancienne (id=1) qui part, pas la nouvelle.
-        assert_eq!(recents_to_prune(&items, 2, 12), vec![1]);
-    }
-
-    #[test]
-    fn recents_prune_nothing_when_all_unique_under_cap() {
-        let items = vec![
-            mk_search(3, "A", 1.0, 1.0),
-            mk_search(2, "B", 2.0, 2.0),
-            mk_search(1, "C", 3.0, 3.0),
-        ];
-        assert!(recents_to_prune(&items, 3, 12).is_empty());
+    fn la_cle_d_un_lieu_ignore_casse_espaces_et_quelques_metres() {
+        let k = recent_key("124 Rue Billaudel", 44.83001, -0.57002);
+        assert_eq!(k, "124 rue billaudel|44.8300,-0.5700");
+        assert_eq!(recent_key(" 124  RUE  billaudel ", 44.83004, -0.57), k);
+        assert_ne!(recent_key("124 Rue Billaudel", 44.832, -0.57), k);
+        assert_ne!(recent_key("Gare", 44.83, -0.57), k);
     }
 
     #[test]
@@ -395,11 +334,11 @@ mod tests {
 mod essais {
     use serde_json::{Value, json};
 
-    use crate::essais::{bearer, client_ou_rien, inscrit};
+    use crate::essais::{bearer, client, inscrit};
 
     #[tokio::test]
     async fn trips_round_trip() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "trip").await;
         let r = c
             .post("/trips")
@@ -438,7 +377,7 @@ mod essais {
 
     #[tokio::test]
     async fn un_trajet_sans_nom_ni_points_suffisants() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "trip-nom").await;
         let r = c
             .post("/trips")
@@ -462,7 +401,7 @@ mod essais {
     /// la liste — et jamais à la place de quelqu'un.
     #[tokio::test]
     async fn un_trajet_se_requalifie_apres_coup() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "requal").await;
         let r = c
             .post("/trips")
@@ -517,7 +456,7 @@ mod essais {
     /// Le trajet d'autrui se comporte comme un trajet qui n'existe pas.
     #[tokio::test]
     async fn on_ne_requalifie_pas_le_trajet_d_autrui() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, sien) = inscrit(&c, "proprio").await;
         let (_, autre) = inscrit(&c, "voisin").await;
         let r = c
@@ -552,8 +491,8 @@ mod essais {
     }
 
     #[tokio::test]
-    async fn les_recherches_se_dedoublonnent_et_se_plafonnent() {
-        let c = client_ou_rien!();
+    async fn toutes_les_destinations_sont_gardees_sans_doublon() {
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "rech").await;
         let r = c
             .post("/searches")
@@ -569,15 +508,17 @@ mod essais {
             .await;
         assert_eq!(r.text(), "coordonnées invalides");
 
-        for i in 0..14 {
+        // Bien plus que les douze d'avant : aucune ne se perd.
+        for i in 0..30 {
             let r = c
                 .post("/searches")
                 .header("authorization", &bearer(&jeton))
                 .json(&json!({"name": format!("Lieu {i}"), "lat": 44.0 + f64::from(i) * 0.01, "lon": -0.5}))
                 .await;
             assert_eq!(r.status(), 200);
+            assert_eq!(r.json::<Value>()["fois"], 1);
         }
-        // Le même lieu, autrement écrit : l'ancien part.
+        // Le même lieu, autrement écrit : la même ligne remonte, une visite de plus.
         let r = c
             .post("/searches")
             .header("authorization", &bearer(&jeton))
@@ -585,22 +526,56 @@ mod essais {
                 &json!({"name": "  lieu   13 ", "subtitle": "Bordeaux", "lat": 44.13, "lon": -0.5}),
             )
             .await;
-        let neuf: Value = r.json();
-        assert_eq!(neuf["subtitle"], "Bordeaux");
+        let revu: Value = r.json();
+        assert_eq!(revu["subtitle"], "Bordeaux");
+        assert_eq!(revu["name"], "lieu   13");
+        assert_eq!(revu["fois"], 2);
         let r = c
             .get("/searches")
             .header("authorization", &bearer(&jeton))
             .await;
         let liste: Vec<Value> = r.json();
-        assert_eq!(liste.len(), 12);
-        assert_eq!(liste[0]["id"], neuf["id"]);
+        assert_eq!(liste.len(), 30);
+        assert_eq!(liste[0]["id"], revu["id"]);
+        for cache in ["user_id", "cle", "rang"] {
+            assert!(liste[0].get(cache).is_none(), "{cache}");
+        }
         assert_eq!(
             liste.iter().filter(|s| s["lat"] == 44.13).count(),
             1,
             "un seul exemplaire du même lieu"
         );
+        let r = c
+            .get("/searches?limit=5")
+            .header("authorization", &bearer(&jeton))
+            .await;
+        let cinq: Vec<Value> = r.json();
+        assert_eq!(cinq.len(), 5);
+        assert_eq!(cinq[0]["id"], revu["id"]);
+        let r = c
+            .get("/searches?limit=beaucoup")
+            .header("authorization", &bearer(&jeton))
+            .await;
+        assert_eq!(r.status(), 400);
+
+        // Les destinations des autres ne se voient pas.
+        let (_, autre) = inscrit(&c, "rech-autre").await;
+        let r = c
+            .get("/searches")
+            .header("authorization", &bearer(&autre))
+            .await;
+        assert_eq!(r.json::<Value>(), json!([]));
 
         let id = liste[1]["id"].as_i64().unwrap();
+        let r = c
+            .delete(&format!("/searches/{id}"))
+            .header("authorization", &bearer(&autre))
+            .await;
+        assert_eq!(
+            r.status(),
+            404,
+            "on ne supprime pas la destination d'autrui"
+        );
         let r = c
             .delete(&format!("/searches/{id}"))
             .header("authorization", &bearer(&jeton))

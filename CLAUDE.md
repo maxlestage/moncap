@@ -30,17 +30,15 @@ done
 Puis reconstruire ce qui a changé (`cargo run --release --bin construit`
 dans `vitrine/` ou `web/`) et committer les `dist/`.
 
-Le serveur, à la racine, avec un Postgres local — sa CI (`ci.yml`) ne se
-lance qu'à la main :
+Le serveur, à la racine — sa CI (`ci.yml`) ne se lance qu'à la main :
 
 ```sh
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/moncap \
-JWT_SECRET=dev-secret cargo test
+cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-Les essais de bout en bout (`src/essais.rs` et les modules) tournent sur
-cette base ; sans `DATABASE_URL` ni `TEST_DATABASE_URL`, ils se taisent.
-`JWT_SECRET` active les essais des anciens jetons JWT.
+La base est SQLite (`data/moncap.db`, le cache dans `data/cache.db`) : rien
+à installer. Les essais de bout en bout (`src/essais.rs` et les modules)
+tournent toujours, chacun sur sa propre base SQLite en mémoire.
 
 L'app iOS (`frontend/`, Swift) a ses propres workflows ; elle ne se
 construit pas ici.

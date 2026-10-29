@@ -712,3 +712,40 @@ final class PlansAppleCadrageTests: XCTestCase {
         XCTAssertEqual(mpp(-5, 44.84), mpp(0, 44.84), accuracy: 1e-9)
     }
 }
+
+/// Toutes les destinations, gardées sur l'appareil : sans plafond, sans
+/// doublon, et jamais effacées par la liste du serveur.
+final class DestinationsTests: XCTestCase {
+    /// La clé est celle du serveur (`trajets::recent_key`) : sans quoi un même
+    /// lieu ferait deux lignes, une par côté.
+    func testLaCleEstCelleDuServeur() {
+        XCTAssertEqual(
+            Destinations.cle(nom: " 124  RUE  billaudel ", lat: 44.83001, lon: -0.57002),
+            "124 rue billaudel|44.8300,-0.5700")
+    }
+
+    func testToutesGardeesSansDoublonEtFusionSansPerte() {
+        let d = Destinations.shared
+        d.efface()
+        defer { d.efface() }
+        for i in 0..<30 {
+            d.enregistre(RecentSearch(
+                name: "Lieu \(i)", subtitle: "", lat: 44 + Double(i) / 100, lon: -0.5))
+        }
+        // Le même lieu, autrement écrit : il remonte, sans doublon.
+        d.enregistre(RecentSearch(name: "lieu   3", subtitle: "Bordeaux", lat: 44.03, lon: -0.5))
+        var toutes = d.toutes()
+        XCTAssertEqual(toutes.count, 30)
+        XCTAssertEqual(toutes.first?.subtitle, "Bordeaux")
+
+        // Un serveur reparti de zéro ne fait rien perdre ; ce qu'il connaît
+        // gagne son identifiant.
+        d.fusionne([RecentSearch(serverId: 7, name: "Lieu 5", subtitle: "", lat: 44.05, lon: -0.5)])
+        toutes = d.toutes()
+        XCTAssertEqual(toutes.count, 30)
+        XCTAssertEqual(toutes.first { $0.name == "Lieu 5" }?.serverId, 7)
+
+        d.supprime(toutes[0])
+        XCTAssertEqual(d.toutes().count, 29)
+    }
+}

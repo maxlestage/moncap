@@ -1,6 +1,7 @@
 //! Les positions enregistrées, leur import et export GPX, leurs
 //! statistiques, et les calculs de trajet (distance, cap, itinéraire).
 
+use paquets::orm::{Database, Transaction};
 use paquets::prelude::*;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -110,7 +111,7 @@ struct Stats {
 }
 
 /// Les positions d'un compte, dans l'ordre d'enregistrement : la liste,
-/// l'export et les statistiques ne dépendent plus de l'humeur de Postgres.
+/// l'export et les statistiques ne dépendent pas de l'humeur de la base.
 async fn positions_de(db: &Db, uid: i32) -> Resultat<Vec<Position>> {
     Ok(Position::query()
         .filter(Position::USER_ID.eq(uid))
@@ -152,8 +153,8 @@ async fn modifie(req: Request) -> Resultat<Response> {
     let maj: Vec<Position> = req
         .db()
         .raw(
-            "UPDATE positions SET lat = $1, lon = $2, label = $3 \
-             WHERE id = $4 AND user_id = $5 RETURNING id, lat, lon, label, user_id",
+            "UPDATE positions SET lat = ?1, lon = ?2, label = ?3 \
+             WHERE id = ?4 AND user_id = ?5 RETURNING id, lat, lon, label, user_id",
             &paquets::orm::params![p.lat, p.lon, nettoie_label(&p.label), id, qui.user_id],
         )
         .await?;
@@ -225,7 +226,10 @@ async fn plus_proche(req: Request) -> Resultat<Response> {
 async fn import_gpx(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
     let corps = req.text().await?;
-    let db = req.db();
+    // Une seule transaction : un millier d'écritures SQLite valent alors une
+    // seule synchronisation du disque, et un import interrompu ne laisse pas
+    // la moitié des points derrière lui.
+    let tx = req.db().begin().await?;
     let mut crees = Vec::new();
     // On ignore les waypoints invalides et on plafonne à 1000 imports.
     for wpt in parse_gpx_waypoints(&corps)
@@ -240,9 +244,10 @@ async fn import_gpx(req: Request) -> Resultat<Response> {
             label: nettoie_label(&wpt.label),
             user_id: qui.user_id,
         };
-        position.insert(db).await?;
+        position.insert(&tx).await?;
         crees.push(position);
     }
+    tx.commit().await?;
     if !crees.is_empty() {
         hub(&req).diffuse(&Evenement::PositionsChanged);
     }
@@ -644,11 +649,11 @@ mod tests {
 mod essais {
     use serde_json::{Value, json};
 
-    use crate::essais::{bearer, client_ou_rien, inscrit};
+    use crate::essais::{bearer, client, inscrit};
 
     #[tokio::test]
     async fn positions_persist_and_are_scoped_to_user() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "pos").await;
         let r = c
             .post("/positions")
@@ -680,7 +685,7 @@ mod essais {
 
     #[tokio::test]
     async fn sans_jeton_401_avant_le_corps() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.post("/positions").body("pas du json").await;
         assert_eq!(r.status(), 401);
         assert_eq!(r.text(), "authentification requise");
@@ -690,7 +695,7 @@ mod essais {
 
     #[tokio::test]
     async fn modifier_et_supprimer_seulement_les_siennes() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "posmaj").await;
         let (_, autre) = inscrit(&c, "posmaj-autre").await;
         let r = c
@@ -748,7 +753,7 @@ mod essais {
 
     #[tokio::test]
     async fn la_plus_proche_et_les_stats() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "proche").await;
         let r = c
             .get("/positions/nearest?lat=48.85&lon=2.35")
@@ -794,7 +799,7 @@ mod essais {
 
     #[tokio::test]
     async fn import_puis_export_gpx() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "gpx").await;
         let gpx = "<?xml version=\"1.0\"?><gpx>\
                    <wpt lat=\"48.0\" lon=\"2.0\"><name>Chez Paul &amp; Marie</name></wpt>\
@@ -839,7 +844,7 @@ mod essais {
 
     #[tokio::test]
     async fn les_calculs_de_trajet_sans_compte() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c
             .post("/route")
             .json(&json!({"from": {"lat": 48.8566, "lon": 2.3522}, "to": {"lat": 45.764, "lon": 4.8357}}))

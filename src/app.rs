@@ -5,6 +5,7 @@ use std::time::Duration;
 use paquets::prelude::*;
 use paquets::securite::prelude::*;
 
+use crate::cache::{self, CacheRef};
 use crate::erreur::texte;
 use crate::temps_reel::{self, Hub, HubRef};
 use crate::{
@@ -13,19 +14,25 @@ use crate::{
 
 /// Les réglages qui changent entre la production et les tests.
 pub struct Reglages {
-    /// L'URL Postgres.
-    pub base: String,
+    /// La base : une URL SQLite, ou une base déjà ouverte (les essais).
+    pub base: paquets::DbSource,
+    /// Le cache, une autre base SQLite (voir `cache`).
+    pub cache: Db,
     /// La limitation de débit par adresse IP (coupée dans les tests, où
     /// toutes les requêtes viennent de la même adresse).
     pub limites: bool,
-    /// Les tâches de fond (purges, pont Redis, rafraîchissement des feux).
+    /// Les tâches de fond (purges, ménage, rafraîchissement des feux).
     pub taches: bool,
 }
 
 impl Reglages {
     pub fn production() -> Self {
+        let base = base::url_base();
+        let cache = cache::url_cache();
+        tracing::info!("base {base}, cache {cache}");
         Reglages {
-            base: base::url_base(),
+            base: base.into(),
+            cache: cache::ouvre(&cache),
             limites: true,
             taches: true,
         }
@@ -186,7 +193,7 @@ async fn sante(req: Request) -> Response {
 /// L'application complète.
 pub fn application(reglages: Reglages) -> App {
     let mut app = App::new();
-    app.database(reglages.base.as_str());
+    app.database(reglages.base);
     app.security(bouclier(reglages.limites));
     app.on_error(|e: paquets::Error| {
         let statut = e.status();
@@ -200,6 +207,8 @@ pub fn application(reglages: Reglages) -> App {
 
     let hub: &'static Hub = Box::leak(Box::new(Hub::new()));
     app.state(HubRef(hub));
+    let cache: &'static Db = Box::leak(Box::new(reglages.cache));
+    app.state(CacheRef(cache));
 
     app.get("/health", sante);
     connexion::routes(&mut app);
@@ -215,36 +224,30 @@ pub fn application(reglages: Reglages) -> App {
 
     let taches = reglages.taches;
     app.on_start(move |db| async move {
-        // Deux instances qui démarrent ensemble peuvent se disputer la même
-        // migration : la perdante échoue sur un conflit, attend et relit
-        // l'état (la migration est alors faite).
-        let mut essai = 0;
-        loop {
-            match base::migrations().run(db).await {
-                Ok(faites) => {
-                    if !faites.is_empty() {
-                        tracing::info!(?faites, "migrations appliquées");
-                    }
-                    break;
-                }
-                Err(e) if essai < 5 => {
-                    essai += 1;
-                    tracing::warn!("migrations, essai {essai} : {e}");
-                    tokio::time::sleep(Duration::from_millis(200 * essai)).await;
-                }
-                Err(e) => return Err(e.into()),
-            }
+        // Une seule instance écrit dans le fichier : pas de course entre
+        // serveurs qui démarrent ensemble, la migration passe ou échoue.
+        let faites = base::migrations().run(db).await?;
+        if !faites.is_empty() {
+            tracing::info!(?faites, "migrations appliquées");
+        }
+        // Un cache en panne ne doit pas empêcher de servir : sans sa table,
+        // chaque lecture est un défaut de cache, et rien de plus.
+        if let Err(e) = cache::prepare(cache).await {
+            tracing::warn!("cache indisponible : {e}");
         }
         if taches {
-            demarre_taches(db, hub);
+            demarre_taches(db, cache);
         }
         Ok(())
     });
     app
 }
 
-fn demarre_taches(db: &'static Db, hub: &'static Hub) {
-    temps_reel::demarre_pont_redis(hub);
+/// Les tâches de fond, sur le fil que Paquets garde pour elles : la purge des
+/// alertes chaque minute, et chaque heure le ménage des sessions et du cache,
+/// puis `PRAGMA optimize`, qui tient à jour les statistiques dont SQLite se
+/// sert pour choisir ses index.
+fn demarre_taches(db: &'static Db, cache: &'static Db) {
     tokio::spawn(async move {
         let mut minute = tokio::time::interval(Duration::from_secs(60));
         let mut tours: u64 = 0;
@@ -253,15 +256,25 @@ fn demarre_taches(db: &'static Db, hub: &'static Hub) {
             if let Err(e) = alertes::purge(db).await {
                 tracing::warn!("purge des alertes expirées : {e:?}");
             }
-            if tours.is_multiple_of(60)
-                && let Err(e) = connexion::menage(db).await
-            {
-                tracing::warn!("ménage des sessions : {e:?}");
+            if tours.is_multiple_of(60) {
+                if let Err(e) = connexion::menage(db).await {
+                    tracing::warn!("ménage des sessions : {e:?}");
+                }
+                match cache::menage(cache, cache::AGE_MAX, cache::octets_max()).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!("cache : {n} entrées retirées"),
+                    Err(e) => tracing::warn!("ménage du cache : {e}"),
+                }
+                for base in [db, cache] {
+                    if let Err(e) = base.raw_execute("PRAGMA optimize", &[]).await {
+                        tracing::warn!("PRAGMA optimize : {e}");
+                    }
+                }
             }
             tours += 1;
         }
     });
-    externes::demarre(db);
+    externes::demarre(cache);
 }
 
 #[cfg(test)]

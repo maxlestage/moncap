@@ -1,31 +1,48 @@
-//! Essais de bout en bout, contre un vrai Postgres.
+//! Essais de bout en bout, sur une vraie base SQLite.
 //!
-//! Ils tournent dès que `TEST_DATABASE_URL` (ou à défaut `DATABASE_URL`) est
-//! défini, et se taisent sinon (utile en local sans base). Chaque essai crée
-//! ses propres comptes, aux noms uniques : ils peuvent tourner en parallèle
-//! sur la même base.
+//! Chaque essai a la sienne, en mémoire, toute neuve, avec ses migrations :
+//! rien à installer, rien à configurer, et ils tournent tous, en parallèle,
+//! à chaque `cargo test`.
 
+use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use paquets::test::TestClient;
 use serde_json::{Value, json};
 
 use crate::app::{Reglages, application};
+use crate::cache;
 
-/// Un client de test sur la base d'essai, ou `None` sans base.
-pub async fn client() -> Option<TestClient> {
-    let url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .ok()?;
-    Some(
-        application(Reglages {
-            base: url,
-            limites: false,
-            taches: false,
-        })
-        .test()
-        .await,
-    )
+/// Un client sur une application neuve, et la base qu'elle utilise — les
+/// essais y lisent ou y préparent ce que l'API ne montre pas.
+pub struct Essai {
+    client: TestClient,
+    pub db: paquets::Db,
+}
+
+impl Deref for Essai {
+    type Target = TestClient;
+
+    fn deref(&self) -> &TestClient {
+        &self.client
+    }
+}
+
+/// Une application neuve, sur une base SQLite en mémoire qui n'appartient
+/// qu'à cet essai.
+pub async fn client() -> Essai {
+    let db = paquets::Db::connect("sqlite::memory:")
+        .await
+        .expect("SQLite en mémoire");
+    let client = application(Reglages {
+        base: db.clone().into(),
+        cache: cache::ouvre("sqlite::memory:"),
+        limites: false,
+        taches: false,
+    })
+    .test()
+    .await;
+    Essai { client, db }
 }
 
 /// Un nom de compte que personne d'autre n'a.
@@ -57,22 +74,12 @@ pub fn bearer(jeton: &str) -> String {
     format!("Bearer {jeton}")
 }
 
-macro_rules! client_ou_rien {
-    () => {
-        match crate::essais::client().await {
-            Some(c) => c,
-            None => return,
-        }
-    };
-}
-pub(crate) use client_ou_rien;
-
 mod connexion {
     use super::*;
 
     #[tokio::test]
     async fn inscription_puis_compte_puis_401_sans_jeton() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "insc").await;
         let r = c
             .get("/auth/me")
@@ -92,7 +99,7 @@ mod connexion {
 
     #[tokio::test]
     async fn la_connexion_ignore_la_casse_et_les_espaces() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, _) = inscrit(&c, "Casse").await;
         let r = c
             .post("/auth/login")
@@ -107,7 +114,7 @@ mod connexion {
 
     #[tokio::test]
     async fn un_doublon_a_la_casse_pres_est_refuse() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, _) = inscrit(&c, "dup").await;
         let r = c
             .post("/auth/signup")
@@ -119,7 +126,7 @@ mod connexion {
 
     #[tokio::test]
     async fn mauvais_mot_de_passe_refuse_avec_un_message_clair() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, _) = inscrit(&c, "mdp").await;
         let r = c
             .post("/auth/login")
@@ -136,7 +143,7 @@ mod connexion {
 
     #[tokio::test]
     async fn les_devinettes_sont_freinees_par_compte() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, _) = inscrit(&c, "frein").await;
         let mut dernier = 0;
         for _ in 0..10 {
@@ -166,7 +173,7 @@ mod connexion {
 
     #[tokio::test]
     async fn champs_invalides() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c
             .post("/auth/signup")
             .json(&json!({"username": "ab", "password": "secret1"}))
@@ -193,7 +200,7 @@ mod connexion {
 
     #[tokio::test]
     async fn la_deconnexion_revoque_vraiment_le_jeton() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "logout").await;
         let r = c
             .post("/auth/login")
@@ -220,7 +227,7 @@ mod connexion {
 
     #[tokio::test]
     async fn sessions_listees_revoquees_et_deconnexion_partout() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "sessions").await;
         let r = c
             .post("/auth/login")
@@ -263,7 +270,7 @@ mod connexion {
 
     #[tokio::test]
     async fn changer_de_mot_de_passe_coupe_les_autres_sessions() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "chg").await;
         let r = c
             .post("/auth/password")
@@ -298,7 +305,7 @@ mod connexion {
 
     #[tokio::test]
     async fn forgot_sans_smtp_repond_503() {
-        let c = client_ou_rien!();
+        let c = client().await;
         if crate::connexion::smtp_configure() {
             return;
         }
@@ -309,20 +316,13 @@ mod connexion {
     #[tokio::test]
     async fn la_reinitialisation_change_le_mot_de_passe_une_seule_fois() {
         use paquets::orm::{Executor, params};
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton_session) = inscrit(&c, "reinit").await;
         // Le lien qu'aurait reçu le courriel.
-        let db = paquets::Db::connect(
-            &std::env::var("TEST_DATABASE_URL")
-                .or_else(|_| std::env::var("DATABASE_URL"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
         let jeton = crate::connexion::jeton_aleatoire();
-        db.raw_execute(
+        c.db.raw_execute(
             "INSERT INTO reset_tokens (user_id, token_hash, expires_at, used) \
-             SELECT id, $2, $3, FALSE FROM users WHERE username = $1",
+             SELECT id, ?2, ?3, FALSE FROM users WHERE username = ?1",
             &params![
                 nom.clone(),
                 crate::connexion::empreinte(&jeton),
@@ -381,91 +381,124 @@ mod connexion {
 
     #[tokio::test]
     async fn health_ok_quand_la_base_repond() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.get("/health").await;
         assert_eq!(r.status(), 200);
         assert_eq!(r.text(), "ok");
     }
 
-    /// Un ancien jeton JWT, comme ceux de l'ancien serveur.
-    fn ancien_jwt(sub: i32, exp: i64) -> Option<String> {
-        use jsonwebtoken::{EncodingKey, Header, encode};
-        let secret = crate::connexion::secret_jwt()?;
-        Some(
-            encode(
-                &Header::default(),
-                &crate::connexion::Claims { sub, exp },
-                &EncodingKey::from_secret(secret),
-            )
-            .unwrap(),
-        )
+    /// Un jeton qui n'est pas une session — un ancien JWT, par exemple — ne
+    /// passe jamais : la base d'avant n'existe plus, et ses identifiants
+    /// désigneraient aujourd'hui d'autres comptes.
+    #[tokio::test]
+    async fn un_jeton_qui_n_est_pas_une_session_est_refuse() {
+        let c = client().await;
+        inscrit(&c, "jwt").await;
+        let ancien = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOjEsImV4cCI6OTk5OTk5OTk5OX0.c2lnbmF0dXJl";
+        let r = c
+            .get("/auth/me")
+            .header("authorization", &bearer(ancien))
+            .await;
+        assert_eq!(r.status(), 401);
+        assert_eq!(r.text(), "authentification requise");
     }
 
-    async fn id_de(c: &TestClient, jeton: &str) -> i32 {
-        // L'export du compte n'est pas encore là : on lit l'id en base.
-        let _ = c;
-        let db = paquets::Db::connect(
-            &std::env::var("TEST_DATABASE_URL")
-                .or_else(|_| std::env::var("DATABASE_URL"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-        use paquets::orm::{Executor, params};
-        let lignes: Vec<(i32,)> = db
-            .raw(
-                "SELECT user_id FROM sessions WHERE token_hash = $1",
-                &params![crate::connexion::empreinte(jeton)],
-            )
-            .await
-            .unwrap();
-        lignes[0].0
+    /// Le frein aux devinettes : au dixième échec en un quart d'heure, le
+    /// compte attend, même avec le bon mot de passe ; une inscription
+    /// simultanée du même nom ne crée qu'un compte.
+    #[tokio::test]
+    async fn le_frein_aux_devinettes_bloque_au_dixieme_echec() {
+        let c = client().await;
+        let (nom, _) = inscrit(&c, "frein").await;
+        for i in 1..=9 {
+            let r = c
+                .post("/auth/login")
+                .json(&json!({"username": nom, "password": "mauvais"}))
+                .await;
+            assert_eq!(r.status(), 401, "échec {i}");
+        }
+        let r = c
+            .post("/auth/login")
+            .json(&json!({"username": nom.to_uppercase(), "password": "mauvais"}))
+            .await;
+        assert_eq!(r.status(), 429);
+        assert!(r.header("retry-after").is_some());
+        let r = c
+            .post("/auth/login")
+            .json(&json!({"username": nom, "password": "secret1"}))
+            .await;
+        assert_eq!(r.status(), 429, "le bon mot de passe attend aussi");
     }
 
     #[tokio::test]
-    async fn les_anciens_jwt_restent_valables_et_revocables() {
-        let c = client_ou_rien!();
-        let (_, jeton) = inscrit(&c, "jwt").await;
-        let id = id_de(&c, &jeton).await;
-        let exp = crate::base::maintenant() + 29 * 24 * 3600;
-        // Sans JWT_SECRET, les anciens jetons sont refusés : rien à essayer.
-        let Some(jwt) = ancien_jwt(id, exp) else {
-            return;
-        };
+    async fn deux_inscriptions_simultanees_ne_font_qu_un_compte() {
+        let c = client().await;
+        let nom = nom_unique("course");
+        let corps = json!({"username": nom, "password": "secret1"});
+        let (a, b) = tokio::join!(
+            c.post("/auth/signup").json(&corps),
+            c.post("/auth/signup").json(&corps)
+        );
+        let mut statuts = [a.status(), b.status()];
+        statuts.sort();
+        assert_eq!(statuts, [200, 400]);
+        use paquets::orm::{Executor, params};
+        let n: Vec<(i64,)> =
+            c.db.raw(
+                "SELECT count(*) FROM users WHERE cle = ?1",
+                &params![crate::connexion::cle_identifiant(&nom)],
+            )
+            .await
+            .unwrap();
+        assert_eq!(n[0].0, 1);
+    }
+
+    #[tokio::test]
+    async fn les_sessions_se_listent_et_se_revoquent() {
+        let c = client().await;
+        let (nom, un) = inscrit(&c, "sessions").await;
         let r = c
-            .get("/auth/me")
-            .header("authorization", &bearer(&jwt))
+            .post("/auth/login")
+            .header("user-agent", "MonCapGPS/2 iPad")
+            .json(&json!({"username": nom, "password": "secret1"}))
             .await;
-        assert_eq!(r.status(), 200, "un ancien jeton doit encore passer");
-        // Se déconnecter avec révoque les anciens jetons du compte…
+        let deux = r.json::<Value>()["token"].as_str().unwrap().to_owned();
         let r = c
-            .post("/auth/logout")
-            .header("authorization", &bearer(&jwt))
+            .get("/auth/sessions")
+            .header("authorization", &bearer(&un))
+            .await;
+        let liste: Vec<Value> = r.json();
+        assert_eq!(liste.len(), 2);
+        assert_eq!(liste.iter().filter(|s| s["current"] == true).count(), 1);
+        let ipad = liste
+            .iter()
+            .find(|s| s["device"] == "MonCapGPS/2 iPad")
+            .expect("la session de l'iPad");
+        let r = c
+            .delete(&format!("/auth/sessions/{}", ipad["id"]))
+            .header("authorization", &bearer(&un))
             .await;
         assert_eq!(r.status(), 204);
         let r = c
             .get("/auth/me")
-            .header("authorization", &bearer(&jwt))
+            .header("authorization", &bearer(&deux))
             .await;
         assert_eq!(r.status(), 401);
-        // … sans toucher aux sessions.
         let r = c
-            .get("/auth/me")
-            .header("authorization", &bearer(&jeton))
+            .post("/auth/logout")
+            .header("authorization", &bearer(&un))
             .await;
-        assert_eq!(r.status(), 200);
-        // Un JWT d'un compte qui n'existe pas ne passe pas.
-        let fantome = ancien_jwt(i32::MAX, exp).unwrap();
+        assert_eq!(r.status(), 204);
         let r = c
             .get("/auth/me")
-            .header("authorization", &bearer(&fantome))
+            .header("authorization", &bearer(&un))
             .await;
         assert_eq!(r.status(), 401);
     }
 
     #[tokio::test]
     async fn le_websocket_exige_un_jeton_valide() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.get("/ws").await;
         assert_eq!(r.status(), 400);
         let r = c.get("/ws?token=mc_faux").await;
@@ -475,7 +508,7 @@ mod connexion {
 
     #[tokio::test]
     async fn les_erreurs_du_bouclier_sont_du_texte() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.get("/?q=1%27%20OR%201%3D1--").await;
         assert_eq!(r.status(), 403);
         assert_eq!(r.header("content-type"), Some("text/plain; charset=utf-8"));
