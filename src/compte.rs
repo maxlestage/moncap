@@ -87,14 +87,14 @@ async fn compte(req: &Request) -> Resultat<Utilisateur> {
 /// GET /account — infos du compte et points de contribution.
 async fn infos(req: Request) -> Resultat<Response> {
     let u = compte(&req).await?;
-    // Les quatre décomptes en un seul aller-retour vers Postgres.
+    // Les quatre décomptes en une seule requête, chacun sur son index.
     let comptes: Vec<(i64, i64, i64, i64)> = req
         .db()
         .raw(
-            "SELECT (SELECT count(*) FROM alerts WHERE user_id = $1), \
-             (SELECT count(*) FROM trips WHERE user_id = $1), \
-             (SELECT count(*) FROM positions WHERE user_id = $1), \
-             (SELECT count(*) FROM searches WHERE user_id = $1)",
+            "SELECT (SELECT count(*) FROM alerts WHERE user_id = ?1), \
+             (SELECT count(*) FROM trips WHERE user_id = ?1), \
+             (SELECT count(*) FROM positions WHERE user_id = ?1), \
+             (SELECT count(*) FROM searches WHERE user_id = ?1)",
             &params![u.id],
         )
         .await?;
@@ -120,28 +120,27 @@ async fn infos(req: Request) -> Resultat<Response> {
 /// DELETE /account — supprime le compte et TOUTES ses données (RGPD /
 /// exigence App Store), d'un seul tenant : une panne au milieu ne laisse
 /// plus un compte à moitié effacé. Ses sessions et liens de
-/// réinitialisation partent avec lui ; les anciens JWT tombent d'eux-mêmes,
-/// le compte n'existant plus. Les signalements supprimés sont notifiés en
-/// direct, une fois la suppression acquise.
+/// réinitialisation partent avec lui. Les signalements supprimés sont
+/// notifiés en direct, une fois la suppression acquise.
 async fn supprime(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
     let uid = qui.user_id;
     let tx = req.db().begin().await?;
     let alertes: Vec<(i32,)> = tx
         .raw(
-            "DELETE FROM alerts WHERE user_id = $1 RETURNING id",
+            "DELETE FROM alerts WHERE user_id = ?1 RETURNING id",
             &params![uid],
         )
         .await?;
     let positions = tx
-        .raw_execute("DELETE FROM positions WHERE user_id = $1", &params![uid])
+        .raw_execute("DELETE FROM positions WHERE user_id = ?1", &params![uid])
         .await?;
-    tx.raw_execute("DELETE FROM trips WHERE user_id = $1", &params![uid])
+    tx.raw_execute("DELETE FROM trips WHERE user_id = ?1", &params![uid])
         .await?;
-    tx.raw_execute("DELETE FROM searches WHERE user_id = $1", &params![uid])
+    tx.raw_execute("DELETE FROM searches WHERE user_id = ?1", &params![uid])
         .await?;
     connexion::efface_traces(&tx, uid).await?;
-    tx.raw_execute("DELETE FROM users WHERE id = $1", &params![uid])
+    tx.raw_execute("DELETE FROM users WHERE id = ?1", &params![uid])
         .await?;
     tx.commit().await?;
 
@@ -222,7 +221,7 @@ async fn ecrit_prefs(req: Request) -> Resultat<Response> {
     let n = req
         .db()
         .raw_execute(
-            "UPDATE users SET prefs = $1 WHERE id = $2",
+            "UPDATE users SET prefs = ?1 WHERE id = ?2",
             &params![corps, qui.user_id],
         )
         .await?;
@@ -242,19 +241,25 @@ struct LeaderEntry {
 /// GET /leaderboard — top 10 des contributeurs (noms pseudonymisés).
 async fn classement(req: Request) -> Resultat<Response> {
     connexion::utilisateur(&req).await?;
+    // Le score se calcule en SQL et seuls les dix premiers sortent de la
+    // base (à égalité, les comptes les plus anciens d'abord) : plus besoin de
+    // rapatrier tous les comptes pour en garder dix.
     let lignes: Vec<(String, i64, i64, i64, i64)> = req
         .db()
         .raw(
-            "SELECT u.username, \
-               (SELECT count(*) FROM alerts a WHERE a.user_id = u.id), \
-               (SELECT count(*) FROM trips t WHERE t.user_id = u.id), \
-               (SELECT count(*) FROM positions p WHERE p.user_id = u.id), \
-               (SELECT count(*) FROM searches s WHERE s.user_id = u.id) \
-             FROM users u ORDER BY u.id",
+            "SELECT username, alerts, trips, positions, searches FROM (\
+               SELECT u.id, u.username, \
+                 (SELECT count(*) FROM alerts a WHERE a.user_id = u.id) AS alerts, \
+                 (SELECT count(*) FROM trips t WHERE t.user_id = u.id) AS trips, \
+                 (SELECT count(*) FROM positions p WHERE p.user_id = u.id) AS positions, \
+                 (SELECT count(*) FROM searches s WHERE s.user_id = u.id) AS searches \
+               FROM users u) \
+             ORDER BY alerts * 10 + trips * 5 + positions * 2 + searches DESC, id \
+             LIMIT 10",
             &[],
         )
         .await?;
-    let mut entries: Vec<LeaderEntry> = lignes
+    let entries: Vec<LeaderEntry> = lignes
         .iter()
         .map(
             |(username, alerts, trips, positions, searches)| LeaderEntry {
@@ -268,9 +273,6 @@ async fn classement(req: Request) -> Resultat<Response> {
             },
         )
         .collect();
-    // Tri stable : à égalité, les comptes les plus anciens d'abord.
-    entries.sort_by_key(|e| std::cmp::Reverse(e.points));
-    entries.truncate(10);
     Ok(Response::new().json(entries))
 }
 
@@ -325,21 +327,11 @@ mod essais {
     use paquets::orm::{Executor, params};
     use serde_json::{Value, json};
 
-    use crate::essais::{bearer, client_ou_rien, inscrit};
-
-    async fn base() -> paquets::Db {
-        paquets::Db::connect(
-            &std::env::var("TEST_DATABASE_URL")
-                .or_else(|_| std::env::var("DATABASE_URL"))
-                .unwrap(),
-        )
-        .await
-        .unwrap()
-    }
+    use crate::essais::{bearer, client, inscrit};
 
     #[tokio::test]
     async fn signup_then_authed_and_401_without_token() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "acct-auth").await;
         let r = c
             .get("/account")
@@ -357,7 +349,7 @@ mod essais {
 
     #[tokio::test]
     async fn account_info_counts_are_correct() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "acct").await;
         // Deux positions ajoutées, aucun trajet.
         for i in 0..2 {
@@ -381,7 +373,7 @@ mod essais {
 
     #[tokio::test]
     async fn account_deletion_removes_data_and_frees_email() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "del").await;
         // Un deuxième appareil, et un peu de tout rattaché au compte.
         let r = c
@@ -401,10 +393,10 @@ mod essais {
             .header("authorization", &bearer(&jeton))
             .json(&json!({"name": "Gare", "lat": 1.0, "lon": 2.0}))
             .await;
-        let db = base().await;
+        let db = &c.db;
         let uid: Vec<(i32,)> = db
             .raw(
-                "SELECT id FROM users WHERE username = $1",
+                "SELECT id FROM users WHERE username = ?1",
                 &params![nom.clone()],
             )
             .await
@@ -412,7 +404,7 @@ mod essais {
         let uid = uid[0].0;
         db.raw_execute(
             "INSERT INTO alerts (category, label, lat, lon, created_at, expires_at, user_id) \
-             VALUES ('police', '', 1.0, 2.0, $2, $3, $1)",
+             VALUES ('police', '', 1.0, 2.0, ?2, ?3, ?1)",
             &params![
                 uid,
                 crate::base::maintenant(),
@@ -422,7 +414,7 @@ mod essais {
         .await
         .unwrap();
         db.raw_execute(
-            "INSERT INTO reset_tokens (user_id, token_hash, expires_at, used) VALUES ($1, $2, $3, FALSE)",
+            "INSERT INTO reset_tokens (user_id, token_hash, expires_at, used) VALUES (?1, ?2, ?3, FALSE)",
             &params![
                 uid,
                 crate::connexion::empreinte(&crate::connexion::jeton_aleatoire()),
@@ -443,13 +435,13 @@ mod essais {
         // Plus rien du compte en base.
         let restes: Vec<(i64,)> = db
             .raw(
-                "SELECT (SELECT count(*) FROM positions WHERE user_id = $1) \
-                 + (SELECT count(*) FROM trips WHERE user_id = $1) \
-                 + (SELECT count(*) FROM searches WHERE user_id = $1) \
-                 + (SELECT count(*) FROM alerts WHERE user_id = $1) \
-                 + (SELECT count(*) FROM sessions WHERE user_id = $1) \
-                 + (SELECT count(*) FROM reset_tokens WHERE user_id = $1) \
-                 + (SELECT count(*) FROM users WHERE id = $1)",
+                "SELECT (SELECT count(*) FROM positions WHERE user_id = ?1) \
+                 + (SELECT count(*) FROM trips WHERE user_id = ?1) \
+                 + (SELECT count(*) FROM searches WHERE user_id = ?1) \
+                 + (SELECT count(*) FROM alerts WHERE user_id = ?1) \
+                 + (SELECT count(*) FROM sessions WHERE user_id = ?1) \
+                 + (SELECT count(*) FROM reset_tokens WHERE user_id = ?1) \
+                 + (SELECT count(*) FROM users WHERE id = ?1)",
                 &params![uid],
             )
             .await
@@ -478,7 +470,7 @@ mod essais {
 
     #[tokio::test]
     async fn leaderboard_returns_array() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "leader").await;
         c.post("/positions")
             .header("authorization", &bearer(&jeton))
@@ -503,7 +495,7 @@ mod essais {
 
     #[tokio::test]
     async fn export_du_compte_complet_et_sans_secret() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (nom, jeton) = inscrit(&c, "export").await;
         c.post("/positions")
             .header("authorization", &bearer(&jeton))
@@ -528,7 +520,7 @@ mod essais {
 
     #[tokio::test]
     async fn prefs_aller_retour() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let (_, jeton) = inscrit(&c, "prefs").await;
 
         // Vide au départ : un objet, pas une erreur.
@@ -573,7 +565,7 @@ mod essais {
 
     #[tokio::test]
     async fn diagnostics_sans_compte() {
-        let c = client_ou_rien!();
+        let c = client().await;
         let r = c.post("/diagnostics").body("pile d'appels").await;
         assert_eq!(r.status(), 204);
     }

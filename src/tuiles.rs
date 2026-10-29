@@ -1,6 +1,8 @@
 //! Les tuiles de carte (cartes hors ligne de l'app) : la feuille de style
-//! MapLibre, le relais vers un serveur amont avec cache mémoire, et la lecture
-//! d'une archive PMTiles auto-hébergée.
+//! MapLibre, le relais vers un serveur amont, et la lecture d'une archive
+//! PMTiles auto-hébergée. Les tuiles servies, des deux sources, sont gardées
+//! dans le cache SQLite (voir `crate::cache`) : une zone téléchargée deux fois
+//! ne coûte qu'une fois à l'amont ou à l'hébergeur de l'archive.
 //!
 //! Tout se règle par l'environnement (`TILES_PMTILES`, `TILES_UPSTREAM`,
 //! `TILES_GLYPHS`, `TILES_USER_AGENT`), lu dans un [`ConfigTuiles`] que les
@@ -13,15 +15,15 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use paquets::prelude::*;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
+use crate::cache::{self, cache};
 use crate::erreur::{Resultat, param, texte};
 use crate::pmtiles;
 
 /// Zoom maximal servi. Au-delà, une zone téléchargée pèserait très lourd et
 /// la charge amont exploserait.
 const TILES_MAX_ZOOM: u32 = 17;
-/// Nombre de tuiles gardées en mémoire (~18 Ko pièce, soit ~27 Mo au plus).
-const TILES_CACHE_MAX: usize = 1500;
 /// Nombre de répertoires feuilles PMTiles gardés en mémoire. Une feuille
 /// pèse quelques dizaines de Ko décodée : borner évite qu'un parcours de
 /// toute la planète ne fasse gonfler la mémoire sans fin.
@@ -36,7 +38,7 @@ pub fn routes(app: &mut App) {
         style(&req, &ConfigTuiles::depuis_env())
     });
     app.get("/tiles/:z/:x/:y", |req: Request| async move {
-        tuile(&req, &ConfigTuiles::depuis_env()).await
+        tuile(&req, &ConfigTuiles::depuis_env(), cache(&req)).await
     });
 }
 
@@ -221,7 +223,7 @@ fn coordonnees(z: u32, x: u32, y: &str) -> Result<(u32, u32, u32), &'static str>
 ///
 /// **La licence applicable est celle de l'amont** : ce relais ne rend pas
 /// légitime une source qui interdirait le téléchargement de zones.
-async fn tuile(req: &Request, cfg: &ConfigTuiles) -> Resultat<Response> {
+async fn tuile(req: &Request, cfg: &ConfigTuiles, disque: &Db) -> Resultat<Response> {
     let z: u32 = param(req, "z")?;
     let x: u32 = param(req, "x")?;
     // Non configuré : la fonction est simplement inactive, avant toute
@@ -240,12 +242,26 @@ async fn tuile(req: &Request, cfg: &ConfigTuiles) -> Resultat<Response> {
             url,
             agent: &cfg.agent,
         };
-        return Ok(tuile_archive(archive_globale(), url, &lecteur, z, x, y).await);
+        return Ok(tuile_archive(archive_globale(), url, &lecteur, disque, z, x, y).await);
     }
     let Some(amont) = &cfg.amont else {
         return Ok(texte(StatusCode::NOT_FOUND, "tuiles non configurées"));
     };
-    Ok(tuile_amont(amont, &cfg.agent, z, x, y).await)
+    Ok(tuile_amont(disque, amont, &cfg.agent, z, x, y).await)
+}
+
+/// Seize hexadécimaux de SHA-256 : de quoi distinguer deux sources (deux
+/// amonts, deux constructions d'une archive) dans les clés du cache.
+fn empreinte_courte(octets: &[u8]) -> String {
+    Sha256::digest(octets)[..8]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// La clé d'une tuile dans le cache : sa source, puis ses coordonnées.
+fn cle_tuile(source: &str, z: u32, x: u32, y: u32) -> String {
+    format!("tuile:{source}:{z}/{x}/{y}")
 }
 
 /// Réponse tuile : cache long côté client.
@@ -292,22 +308,11 @@ impl<K: Hash + Eq + Clone, V: Clone, const MAX: usize> Fifo<K, V, MAX> {
     }
 }
 
-/// Les tuiles déjà relayées : (z, x, y) → (octets, type MIME).
-type TileCache = Fifo<(u32, u32, u32), (Vec<u8>, String), TILES_CACHE_MAX>;
-
-/// Cache mémoire des tuiles déjà servies. Le disque de Heroku étant éphémère,
-/// un cache mémoire borné est le meilleur compromis : il absorbe les
-/// re-demandes d'une même session sans rien promettre de durable.
-fn cache_tuiles() -> &'static Mutex<TileCache> {
-    static CACHE: OnceLock<Mutex<TileCache>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(TileCache::default()))
-}
-
-/// Relaie une tuile depuis l'amont, avec le cache mémoire.
-async fn tuile_amont(amont: &str, agent: &str, z: u32, x: u32, y: u32) -> Response {
-    let key = (z, x, y);
-    if let Some((octets, mime)) = cache_tuiles().lock().ok().and_then(|c| c.get(&key)) {
-        return reponse_tuile(octets, &mime);
+/// Relaie une tuile depuis l'amont, à travers le cache SQLite.
+async fn tuile_amont(disque: &Db, amont: &str, agent: &str, z: u32, x: u32, y: u32) -> Response {
+    let cle = cle_tuile(&empreinte_courte(amont.as_bytes()), z, x, y);
+    if let Some(e) = cache::lit(disque, &cle).await {
+        return reponse_tuile(e.octets, &e.genre);
     }
     let url = amont
         .replace("{z}", &z.to_string())
@@ -334,9 +339,7 @@ async fn tuile_amont(amont: &str, agent: &str, z: u32, x: u32, y: u32) -> Respon
         return texte(StatusCode::BAD_GATEWAY, "tuile illisible");
     };
     let octets = octets.to_vec();
-    if let Ok(mut c) = cache_tuiles().lock() {
-        c.put(key, (octets.clone(), mime.clone()));
-    }
+    cache::range(disque, &cle, octets.clone(), &mime).await;
     reponse_tuile(octets, &mime)
 }
 
@@ -385,6 +388,10 @@ impl LecteurPlages for LecteurHttp<'_> {
 struct PmArchive {
     header: pmtiles::Header,
     root: Vec<pmtiles::Entry>,
+    /// L'empreinte de l'en-tête, qui change à chaque construction de
+    /// l'archive (décalages, longueurs, nombres de tuiles) : ses tuiles en
+    /// cache ne survivent pas à une archive refaite à la même adresse.
+    empreinte: String,
 }
 
 /// Répertoires feuilles déjà lus, repérés par (décalage, longueur).
@@ -423,7 +430,11 @@ async fn charge_archive<L: LecteurPlages>(
         .plage(header.root_offset, header.root_length as u32)
         .await?;
     let root = pmtiles::parse_directory(&pmtiles::decompress(&raw, header.internal_compression)?)?;
-    let archive = Arc::new(PmArchive { header, root });
+    let archive = Arc::new(PmArchive {
+        header,
+        root,
+        empreinte: empreinte_courte(&head),
+    });
     if let Ok(mut f) = etat.feuilles.lock() {
         // Une autre archive : ses feuilles ne sont plus les nôtres.
         *f = LeafCache::default();
@@ -432,11 +443,23 @@ async fn charge_archive<L: LecteurPlages>(
     Some(archive)
 }
 
-/// Sert une tuile depuis l'archive auto-hébergée.
+/// Une tuile de l'archive, avec le type et le codage que dit son en-tête.
+fn reponse_archive(archive: &PmArchive, octets: Vec<u8>) -> Response {
+    let mut res = reponse_tuile(octets, archive.header.content_type());
+    // Les tuiles vectorielles sont stockées compressées : on relaie le codage
+    // tel quel plutôt que de décompresser pour rien.
+    if let Some(codage) = archive.header.content_encoding() {
+        res.set_header("content-encoding", codage);
+    }
+    res
+}
+
+/// Sert une tuile depuis l'archive auto-hébergée, à travers le cache SQLite.
 async fn tuile_archive<L: LecteurPlages>(
     etat: &EtatArchive,
     cle: &str,
     lecteur: &L,
+    disque: &Db,
     z: u32,
     x: u32,
     y: u32,
@@ -446,6 +469,10 @@ async fn tuile_archive<L: LecteurPlages>(
     };
     if z as u8 > archive.header.max_zoom || (z as u8) < archive.header.min_zoom {
         return texte(StatusCode::NOT_FOUND, "zoom absent de l'archive");
+    }
+    let cle_cache = cle_tuile(&archive.empreinte, z, x, y);
+    if let Some(e) = cache::lit(disque, &cle_cache).await {
+        return reponse_archive(&archive, e.octets);
     }
     let id = pmtiles::tile_id(z as u8, x, y);
 
@@ -488,14 +515,14 @@ async fn tuile_archive<L: LecteurPlages>(
     else {
         return texte(StatusCode::BAD_GATEWAY, "tuile illisible");
     };
-
-    let mut res = reponse_tuile(octets, archive.header.content_type());
-    // Les tuiles vectorielles sont stockées compressées : on relaie le codage
-    // tel quel plutôt que de décompresser pour rien.
-    if let Some(codage) = archive.header.content_encoding() {
-        res.set_header("content-encoding", codage);
-    }
-    res
+    cache::range(
+        disque,
+        &cle_cache,
+        octets.clone(),
+        archive.header.content_type(),
+    )
+    .await;
+    reponse_archive(&archive, octets)
 }
 
 #[cfg(test)]
@@ -514,15 +541,23 @@ mod tests {
         )
     }
 
+    /// Un cache neuf, en mémoire.
+    fn disque() -> Db {
+        let db = cache::ouvre("sqlite::memory:");
+        paquets::orm::block_on(cache::prepare(&db)).unwrap();
+        db
+    }
+
     /// Un client sur les deux routes, avec cette configuration.
     fn client(cfg: ConfigTuiles) -> TestClient {
         let cfg: &'static ConfigTuiles = Box::leak(Box::new(cfg));
+        let disque: &'static Db = Box::leak(Box::new(disque()));
         let mut app = vitesse::App::new();
         app.get("/tiles/style.json", move |req: Request| async move {
             style(&req, cfg)
         });
         app.get("/tiles/:z/:x/:y", move |req: Request| async move {
-            tuile(&req, cfg).await
+            tuile(&req, cfg, disque).await
         });
         TestClient::new(app)
     }
@@ -682,21 +717,6 @@ mod tests {
         assert_eq!(r.text(), "amont injoignable");
     }
 
-    /// Le cache borné évince bien les plus anciennes tuiles.
-    #[test]
-    fn tile_cache_evicts_oldest() {
-        let mut cache = TileCache::default();
-        for i in 0..(TILES_CACHE_MAX as u32 + 10) {
-            cache.put((10, i, 0), (vec![1, 2, 3], "image/png".into()));
-        }
-        assert_eq!(cache.map.len(), TILES_CACHE_MAX);
-        assert!(
-            cache.get(&(10, 0, 0)).is_none(),
-            "la plus ancienne doit sortir"
-        );
-        assert!(cache.get(&(10, TILES_CACHE_MAX as u32 + 5, 0)).is_some());
-    }
-
     #[test]
     fn le_cache_des_feuilles_est_borne() {
         let mut cache = LeafCache::default();
@@ -819,8 +839,9 @@ mod tests {
     #[tokio::test]
     async fn l_archive_sert_racine_et_feuille() {
         let etat = EtatArchive::default();
+        let d = disque();
         let a = archive(2);
-        let r = tuile_archive(&etat, "a", &a, 0, 0, 0).await;
+        let r = tuile_archive(&etat, "a", &a, &d, 0, 0, 0).await;
         assert_eq!(r.status_code(), 200);
         assert_eq!(
             r.get_header("content-type"),
@@ -832,25 +853,31 @@ mod tests {
         assert_eq!(&corps[..], b"aaa");
 
         // 1/1/1 vit dans la feuille.
-        let r = tuile_archive(&etat, "a", &a, 1, 1, 1).await;
+        let r = tuile_archive(&etat, "a", &a, &d, 1, 1, 1).await;
         assert_eq!(r.status_code(), 200);
         assert_eq!(&r.into_body().to_bytes().await.unwrap()[..], b"ccc");
 
-        // L'en-tête, la racine et la feuille ne se relisent pas : seule la
-        // tuile coûte une lecture.
+        // Plus rien ne se relit : ni l'en-tête, ni la racine, ni la feuille
+        // (en mémoire), ni la tuile elle-même (dans le cache SQLite), qui
+        // garde son type et son codage.
         let avant = a.lectures.load(std::sync::atomic::Ordering::Relaxed);
-        let r = tuile_archive(&etat, "a", &a, 1, 1, 1).await;
+        let r = tuile_archive(&etat, "a", &a, &d, 1, 1, 1).await;
         assert_eq!(r.status_code(), 200);
-        assert_eq!(
-            a.lectures.load(std::sync::atomic::Ordering::Relaxed),
-            avant + 1
-        );
+        assert_eq!(r.get_header("content-encoding"), Some("gzip"));
+        assert_eq!(&r.into_body().to_bytes().await.unwrap()[..], b"ccc");
+        assert_eq!(a.lectures.load(std::sync::atomic::Ordering::Relaxed), avant);
+
+        // Une autre construction de l'archive ne reprend pas ses tuiles.
+        let etat2 = EtatArchive::default();
+        let r = tuile_archive(&etat2, "a", &archive(1), &d, 1, 1, 1).await;
+        assert_eq!(r.status_code(), 200);
+        assert_eq!(r.get_header("content-encoding"), None);
 
         // 1/1/0 (id 4) n'est nulle part.
-        let r = tuile_archive(&etat, "a", &a, 1, 1, 0).await;
+        let r = tuile_archive(&etat, "a", &a, &d, 1, 1, 0).await;
         assert_eq!(r.status_code(), 404);
         // Zoom 2 hors de l'archive.
-        let r = tuile_archive(&etat, "a", &a, 2, 0, 0).await;
+        let r = tuile_archive(&etat, "a", &a, &d, 2, 0, 0).await;
         assert_eq!(r.status_code(), 404);
     }
 
@@ -858,7 +885,7 @@ mod tests {
     async fn brotli_et_zstd_disent_leur_codage() {
         for (compression, codage) in [(1, None), (3, Some("br")), (4, Some("zstd"))] {
             let etat = EtatArchive::default();
-            let r = tuile_archive(&etat, "a", &archive(compression), 0, 0, 0).await;
+            let r = tuile_archive(&etat, "a", &archive(compression), &disque(), 0, 0, 0).await;
             assert_eq!(r.status_code(), 200);
             assert_eq!(r.get_header("content-encoding"), codage, "{compression}");
         }
@@ -871,10 +898,11 @@ mod tests {
             octets: b"pas une archive".to_vec(),
             lectures: Default::default(),
         };
-        let r = tuile_archive(&etat, "a", &vide, 0, 0, 0).await;
+        let d = disque();
+        let r = tuile_archive(&etat, "a", &vide, &d, 0, 0, 0).await;
         assert_eq!(r.status_code(), 502);
         // L'échec n'est pas gardé : la bonne archive se charge ensuite.
-        let r = tuile_archive(&etat, "a", &archive(1), 0, 0, 0).await;
+        let r = tuile_archive(&etat, "a", &archive(1), &d, 0, 0, 0).await;
         assert_eq!(r.status_code(), 200);
     }
 }

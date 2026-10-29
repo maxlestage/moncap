@@ -7,6 +7,7 @@ use paquets::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::{EnCours, Zones, attends, client_http, lance_unique};
+use crate::cache::cache;
 use crate::erreur::{Erreur, Resultat, requete_query};
 
 /// Le refus d'une zone illisible, pour les feux comme pour l'air.
@@ -14,7 +15,7 @@ pub(super) const BBOX_ATTENDUE: &str = "bbox attendue : ouest,sud,est,nord";
 
 /// Un foyer d'incendie détecté par satellite (NASA FIRMS), tel qu'exposé aux
 /// clients.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct FirePoint {
     lat: f64,
     lon: f64,
@@ -35,7 +36,7 @@ pub(super) struct FirePoint {
 /// Un cache par zone demandée. La France tenait dans une seule entrée ;
 /// le monde se regarde par morceaux, et deux visiteurs qui consultent deux
 /// continents ne doivent pas se chasser mutuellement du cache.
-static FIRES_CACHE: Zones<FirePoint> = Zones::new();
+static FIRES_CACHE: Zones<FirePoint> = Zones::new("feux");
 
 /// Les zones dont le rafraîchissement est en cours.
 static EN_COURS: EnCours = EnCours::new();
@@ -112,9 +113,9 @@ pub(super) fn fires_key() -> Option<String> {
 }
 
 /// Au démarrage, avec une clé : le monde entier part en cache.
-pub(super) fn demarre() {
+pub(super) fn demarre(disque: &'static Db) {
     if let Some(key) = fires_key() {
-        spawn_fires_refresh(key, FIRES_MONDE.to_string());
+        spawn_fires_refresh(disque, key, FIRES_MONDE.to_string());
     }
 }
 
@@ -134,12 +135,16 @@ pub(super) async fn liste(req: Request) -> Resultat<Response> {
     let Some(key) = fires_key() else {
         return Ok(Response::new().json(Vec::<FirePoint>::new()));
     };
+    let disque = cache(&req);
 
-    match FIRES_CACHE.lit(&zone, FIRES_TTL) {
+    match FIRES_CACHE
+        .lit_ou_disque(disque, FIRES_MAX_ZONES, &zone, FIRES_TTL)
+        .await
+    {
         // Zone déjà vue : on répond tout de suite, quitte à rafraîchir derrière.
         Some((data, stale)) => {
             if stale {
-                spawn_fires_refresh(key, zone);
+                spawn_fires_refresh(disque, key, zone);
             }
             Ok(Response::new().json(data))
         }
@@ -153,17 +158,19 @@ pub(super) async fn liste(req: Request) -> Resultat<Response> {
             // qu'on s'accorde. On montre donc vite ce qu'on a.
             let data = attends(fetch_fires_days(&key, 1, &zone)).await;
             if let Some(data) = data {
-                FIRES_CACHE.range(FIRES_MAX_ZONES, &zone, data.clone());
+                FIRES_CACHE
+                    .range_et_disque(disque, FIRES_MAX_ZONES, &zone, data.clone())
+                    .await;
                 // …puis on va chercher les sept jours derrière. Sans cela, le
                 // cache gardait sa version courte un quart d'heure entier
                 // (FIRES_TTL) : la carte restait sans âges ni cicatrices tout
                 // ce temps, alors que personne n'attendait plus.
-                spawn_fires_refresh(key, zone);
+                spawn_fires_refresh(disque, key, zone);
                 Ok(Response::new().json(data))
             } else {
                 // Trop long ou en échec : le rafraîchissement continue en fond,
                 // la prochaine demande trouvera le résultat.
-                spawn_fires_refresh(key, zone);
+                spawn_fires_refresh(disque, key, zone);
                 Ok(Response::new().json(Vec::<FirePoint>::new()))
             }
         }
@@ -174,7 +181,7 @@ pub(super) async fn liste(req: Request) -> Resultat<Response> {
 /// feux en tâche de fond. Essaie d'abord 7 jours d'historique (pour « Créé il
 /// y a X j ») ; si la NASA ne répond pas, repli sur 2 jours, puis sur 1, bien
 /// plus légers, pour que la carte reste alimentée quoi qu'il arrive.
-fn spawn_fires_refresh(key: String, zone: String) {
+fn spawn_fires_refresh(disque: &'static Db, key: String, zone: String) {
     let z = zone.clone();
     lance_unique(&EN_COURS, &z, async move {
         // Sept jours, et non plus un. La profondeur ne sert pas à montrer de
@@ -197,7 +204,9 @@ fn spawn_fires_refresh(key: String, zone: String) {
         match profond {
             Some(data) => {
                 tracing::info!("FIRMS : {} cellules en cache pour {zone}", data.len());
-                FIRES_CACHE.range(FIRES_MAX_ZONES, &zone, data);
+                FIRES_CACHE
+                    .range_et_disque(disque, FIRES_MAX_ZONES, &zone, data)
+                    .await;
             }
             // Échec total : cache inchangé (re-tentative à la prochaine requête).
             None => tracing::warn!("FIRMS : rafraîchissement impossible pour {zone}"),

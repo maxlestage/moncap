@@ -24,3 +24,6 @@ DerivedData/
 # Caches Python des scripts (asc_*, heroku_config)
 __pycache__/
 *.pyc
+
+# La base et le cache SQLite locaux
+/data/

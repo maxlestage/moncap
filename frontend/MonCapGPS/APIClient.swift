@@ -41,35 +41,51 @@ enum Session {
         set { setFavorite(newValue, forKey: "moncap.work") }
     }
 
-    // MARK: - Recherches récentes
+    // MARK: - Destinations
 
+    /// L'ancienne liste des réglages (douze au plus), reprise une fois.
     private static let recentsKey = "moncap.recents"
-    private static let maxRecents = 12
 
-    /// Recherches de destination récentes (les plus récentes d'abord).
+    /// Toutes les destinations choisies, les plus récentes d'abord — gardées
+    /// sur l'appareil dans SQLite (voir `Destinations`).
     static var recentSearches: [RecentSearch] {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: recentsKey),
-                let list = try? JSONDecoder().decode([RecentSearch].self, from: data)
-            else { return [] }
-            return list
-        }
-        set {
-            if let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: recentsKey)
-            }
-        }
+        repriseAnciennes()
+        return Destinations.shared.toutes()
     }
 
-    /// Ajoute une recherche en tête, sans doublon, et plafonne la liste.
+    /// Enregistre une destination : en tête, sans doublon, sans plafond.
     static func addRecent(_ r: RecentSearch) {
-        var list = recentSearches.filter { $0.id != r.id }
-        list.insert(r, at: 0)
-        recentSearches = Array(list.prefix(maxRecents))
+        repriseAnciennes()
+        Destinations.shared.enregistre(r)
+    }
+
+    /// Fusionne la liste du serveur, sans rien effacer de l'appareil.
+    static func mergeRecents(_ distantes: [RecentSearch]) {
+        repriseAnciennes()
+        Destinations.shared.fusionne(distantes)
+    }
+
+    static func removeRecent(_ r: RecentSearch) {
+        Destinations.shared.supprime(r)
     }
 
     static func clearRecents() {
         UserDefaults.standard.removeObject(forKey: recentsKey)
+        Destinations.shared.efface()
+    }
+
+    /// Les douze de l'ancienne version passent dans SQLite, une seule fois.
+    private static func repriseAnciennes() {
+        guard let data = UserDefaults.standard.data(forKey: recentsKey) else { return }
+        UserDefaults.standard.removeObject(forKey: recentsKey)
+        if let anciennes = try? JSONDecoder().decode([RecentSearch].self, from: data) {
+            // Les plus anciennes d'abord, sans leur identifiant : il venait
+            // de l'ancien serveur.
+            for r in anciennes.reversed() {
+                Destinations.shared.enregistre(RecentSearch(
+                    name: r.name, subtitle: r.subtitle, lat: r.lat, lon: r.lon))
+            }
+        }
     }
 
     static func save(token: String, username: String) {
