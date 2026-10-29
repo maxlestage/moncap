@@ -1,17 +1,18 @@
 import SwiftUI
 
-/// Écran de connexion / inscription.
+/// Connexion à un compte e-mail existant, ouverte depuis les réglages.
 ///
-/// Il prend la suite de l'écran de garde dans le même décor (`FondDeMarque`) :
-/// le logo et le nom restent sur le bleu, le formulaire vient dans une carte
-/// claire. Le clavier enchaîne les champs — « suivant » puis « aller » — et
-/// le trousseau d'iOS reconnaît la paire identifiant / mot de passe.
+/// L'app n'en a plus besoin pour démarrer : elle tourne sur le compte
+/// anonyme de l'appareil (voir `AuthStore`). Cette feuille sert à qui a déjà
+/// un compte e-mail et veut retrouver ses trajets et son abonnement. Même
+/// décor que l'écran de garde (`FondDeMarque`), formulaire dans une carte
+/// claire ; le trousseau d'iOS reconnaît la paire identifiant / mot de passe.
 struct LoginView: View {
     @ObservedObject var auth: AuthStore
+    @Environment(\.dismiss) private var ferme
 
     private enum Champ { case email, motDePasse }
 
-    @State private var signupMode = false
     @State private var username = ""
     @State private var password = ""
     @State private var motDePasseVisible = false
@@ -41,6 +42,19 @@ struct LoginView: View {
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
         }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                ferme()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.18), in: Circle())
+            }
+            .accessibilityLabel(Text("Fermer"))
+            .padding(16)
+        }
     }
 
     // MARK: - En-tête
@@ -58,9 +72,10 @@ struct LoginView: View {
                 Text("MonCap GPS")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                Text("Navigation en temps réel")
+                Text("Retrouve tes trajets et ton abonnement sur ce téléphone.")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.85))
+                    .multilineTextAlignment(.center)
             }
         }
     }
@@ -69,21 +84,12 @@ struct LoginView: View {
 
     private var carte: some View {
         VStack(spacing: 14) {
-            Picker("Mode", selection: $signupMode) {
-                Text("Connexion").tag(false)
-                Text("Inscription").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .padding(.bottom, 4)
-            .onChange(of: signupMode) {
-                errorMessage = ""
-                infoMessage = ""
-            }
+            Text("Se connecter à un compte existant")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            // L'e-mail comme identifiant — choix de produit assumé, et la
-            // politique de confidentialité le dit avec ses limites : aucun
-            // envoi, aucune revente. `.username` et non `.emailAddress` : c'est
-            // ce que le trousseau apparie au mot de passe pour le proposer.
+            // `.username` et non `.emailAddress` : c'est ce que le trousseau
+            // apparie au mot de passe pour le proposer.
             champ(icone: "envelope") {
                 TextField("e-mail", text: $username)
                     .textInputAutocapitalization(.never)
@@ -95,9 +101,6 @@ struct LoginView: View {
                     .onSubmit { focus = .motDePasse }
             }
 
-            // `.newPassword` à l'inscription : le trousseau propose un mot de
-            // passe fort et le retient — `.password` à la connexion pour
-            // qu'il ressorte le bon.
             champ(icone: "lock") {
                 Group {
                     if motDePasseVisible {
@@ -108,7 +111,7 @@ struct LoginView: View {
                         SecureField("mot de passe", text: $password)
                     }
                 }
-                .textContentType(signupMode ? .newPassword : .password)
+                .textContentType(.password)
                 .focused($focus, equals: .motDePasse)
                 .submitLabel(.go)
                 .onSubmit { if peutValider { submit() } }
@@ -125,13 +128,6 @@ struct LoginView: View {
                         ? Text("Masquer le mot de passe") : Text("Afficher le mot de passe"))
             }
 
-            if signupMode {
-                Text("Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
             if !errorMessage.isEmpty {
                 message(errorMessage, icone: "exclamationmark.triangle.fill", couleur: .red)
             }
@@ -141,7 +137,7 @@ struct LoginView: View {
 
             Button(action: submit) {
                 ZStack {
-                    (signupMode ? Text("Créer mon compte") : Text("Se connecter"))
+                    Text("Se connecter")
                         .font(.headline)
                         .opacity(busy ? 0 : 1)
                     if busy { ProgressView().tint(.white) }
@@ -156,18 +152,15 @@ struct LoginView: View {
             // Le lien de réinitialisation part par courriel : l'adresse tapée
             // au-dessus suffit. La réponse est la même que le compte existe
             // ou non — l'écran ne peut pas servir à deviner qui est inscrit.
-            if !signupMode {
-                Button("Mot de passe oublié ?") { motDePasseOublie() }
-                    .font(.subheadline)
-                    .disabled(busy)
-            }
+            Button("Mot de passe oublié ?") { motDePasseOublie() }
+                .font(.subheadline)
+                .disabled(busy)
         }
         .padding(20)
         .background(
             .background, in: RoundedRectangle(cornerRadius: 24, style: .continuous)
         )
         .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
-        .animation(.easeInOut(duration: 0.2), value: signupMode)
         .animation(.easeInOut(duration: 0.2), value: errorMessage)
         .animation(.easeInOut(duration: 0.2), value: infoMessage)
     }
@@ -236,17 +229,12 @@ struct LoginView: View {
         infoMessage = ""
         Task {
             do {
-                if signupMode {
-                    try await auth.signup(username, password)
-                } else {
-                    try await auth.login(username, password)
-                }
+                try await auth.login(username, password)
+                ferme()
             } catch let e as AuthError {
                 errorMessage = e.errorDescription ?? "Saisie invalide."
             } catch APIError.unauthorized {
-                errorMessage = signupMode
-                    ? "Impossible de créer le compte."
-                    : "E-mail ou mot de passe incorrect."
+                errorMessage = "E-mail ou mot de passe incorrect."
             } catch APIError.server(let msg) {
                 errorMessage = msg.isEmpty ? "Échec de l'authentification" : msg
             } catch {
