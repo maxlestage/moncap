@@ -639,9 +639,9 @@ figurer aussi : un graphe partiel échoue exactement comme un graphe absent.
 
 | Paquet | Version | Déclaré par |
 | --- | --- | --- |
-| `maplibre-gl-native-distribution` | 6.28.0 | le projet |
-| `valhalla-mobile` | 0.5.1 | le projet |
-| `valhalla-openapi-models-swift` | 0.2.2 | valhalla-mobile |
+| `maplibre-gl-native-distribution` | 7.0.0 | le projet |
+| `valhalla-mobile` | 0.6.4 | le projet |
+| `valhalla-openapi-models-swift` | 0.6.0 | valhalla-mobile |
 | `light-swift-untar` | 1.0.4 | valhalla-mobile |
 | `swift-docc-plugin` | 1.5.0 | valhalla-mobile |
 | `swift-docc-symbolkit` | 1.0.0 | swift-docc-plugin |
