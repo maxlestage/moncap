@@ -884,7 +884,7 @@
 			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 6.28.0;
+				minimumVersion = 7.0.0;
 			};
 		};
 		AA0000000000000000000041 /* XCRemoteSwiftPackageReference "valhalla-mobile" */ = {
@@ -892,7 +892,7 @@
 			repositoryURL = "https://github.com/Rallista/valhalla-mobile";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 0.5.1;
+				minimumVersion = 0.6.4;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
