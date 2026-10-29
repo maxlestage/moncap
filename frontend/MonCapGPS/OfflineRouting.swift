@@ -58,8 +58,8 @@ final class OfflineRouter: NSObject, ObservableObject {
         /// Date de la dernière construction (ISO), absente d'un vieux serveur.
         let construit: String?
 
-        var archive: URL { URL(string: "\(Region.base)/\(id)/archive")! }
-        var config: URL { URL(string: "\(Region.base)/\(id)/config")! }
+        var archive: URL { Region.fichier(id, "archive") }
+        var config: URL { Region.fichier(id, "config") }
 
         /// Premier segment du nom : de quoi regrouper deux cents régions.
         var pays: String { nom.components(separatedBy: " · ").first ?? nom }
@@ -85,6 +85,34 @@ final class OfflineRouter: NSObject, ObservableObject {
         /// dyno.
         static let base = APIClient().baseURL.appendingPathComponent("offline/regions")
             .absoluteString
+
+        /// Le dépôt qui publie les paquets. **Public** désormais : la liste se
+        /// lit sur l'API GitHub et les fichiers se téléchargent sur les
+        /// Releases, sans jeton et sans passer par le serveur — qui peut être
+        /// arrêté (heures de dyno épuisées : la liste répondait 503) sans que
+        /// les itinéraires hors réseau en souffrent.
+        static let depot = "maxlestage/moncap"
+        /// Préfixe des étiquettes publiées par le workflow des tuiles.
+        static let prefixe = "tuiles-eu-"
+
+        /// Suffixe de pièce jointe de chaque nature de fichier, comme sur le
+        /// serveur (`nature_suffixe`).
+        static func suffixe(_ nature: String) -> String? {
+            switch nature {
+            case "archive": return ".tar"
+            case "config": return ".json"
+            case "lieux": return ".lieux.zz"
+            case "rues": return ".rues.zz"
+            case "vitesses": return ".vitesses.zz"
+            default: return nil
+            }
+        }
+
+        /// L'adresse d'un fichier d'une région, sur les Releases.
+        static func fichier(_ id: String, _ nature: String) -> URL {
+            let suffixe = suffixe(nature) ?? ""
+            return URL(string: "https://github.com/\(depot)/releases/download/\(id)/\(id)\(suffixe)")!
+        }
     }
 
     /// Une région gardée sur l'appareil.
@@ -364,6 +392,16 @@ final class OfflineRouter: NSObject, ObservableObject {
         defer { chargement = false }
         message = nil
 
+        // Les Releases d'abord : publiques, elles ne dépendent pas du serveur.
+        if let publiees = await Self.regionsGitHub(), !publiees.isEmpty {
+            regions = publiees.sorted {
+                $0.nom.localizedStandardCompare($1.nom) == .orderedAscending
+            }
+            return
+        }
+
+        // Repli sur le serveur (GitHub limite les appels sans jeton à
+        // soixante par heure et par adresse).
         let url = URL(string: Region.base)!
         let data: Data
         let reponse: URLResponse
@@ -392,6 +430,43 @@ final class OfflineRouter: NSObject, ObservableObject {
         regions = recues.sorted {
             $0.nom.localizedStandardCompare($1.nom) == .orderedAscending
         }
+    }
+
+    /// Les régions publiées, lues sur l'API GitHub : une Release par région,
+    /// retenue si son étiquette porte le préfixe et qu'elle a son archive.
+    /// `nil` si GitHub ne répond pas ou refuse.
+    nonisolated static func regionsGitHub() async -> [Region]? {
+        var trouvees: [Region] = []
+        // Cent par page, et l'Europe en remplit trois.
+        for page in 1...5 {
+            guard let url = URL(string:
+                "https://api.github.com/repos/\(Region.depot)/releases?per_page=100&page=\(page)")
+            else { return nil }
+            var requete = URLRequest(url: url)
+            requete.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            guard let (data, reponse) = try? await URLSession.shared.data(for: requete),
+                (reponse as? HTTPURLResponse)?.statusCode == 200,
+                let liste = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            else { return nil }
+            for release in liste {
+                guard let tag = release["tag_name"] as? String,
+                    tag.hasPrefix(Region.prefixe),
+                    let pieces = release["assets"] as? [[String: Any]],
+                    let tar = pieces.first(where: {
+                        ($0["name"] as? String)?.hasSuffix(".tar") == true
+                    })
+                else { continue }
+                let titre = (release["name"] as? String ?? "")
+                    .trimmingCharacters(in: .whitespaces)
+                trouvees.append(Region(
+                    id: tag,
+                    nom: titre.isEmpty ? tag : titre,
+                    octets: tar["size"] as? Int ?? 0,
+                    construit: tar["updated_at"] as? String))
+            }
+            if liste.count < 100 { break }
+        }
+        return trouvees
     }
 
     // MARK: - Installation
@@ -518,9 +593,8 @@ final class OfflineRouter: NSObject, ObservableObject {
             ("lieux", lieuxPath(id)), ("rues", ruesPath(id)),
             ("vitesses", vitessesPath(id)),
         ] {
-            guard !FileManager.default.fileExists(atPath: chemin.path),
-                let url = URL(string: "\(Region.base)/\(id)/\(nature)")
-            else { continue }
+            guard !FileManager.default.fileExists(atPath: chemin.path) else { continue }
+            let url = Region.fichier(id, nature)
             guard let (data, resp) = try? await URLSession.shared.data(from: url),
                 (resp as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty
             else { continue }
