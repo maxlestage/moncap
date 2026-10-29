@@ -6011,15 +6011,15 @@ struct MapHomeView: View {
             return
         }
         Task {
-            var nom = nom ?? ""
+            var titre = nom ?? ""
             var sousTitre = ""
-            if nom.isEmpty, let lieu = try? await CLGeocoder().reverseGeocodeLocation(ici).first {
-                nom = lieu.name ?? ""
+            if titre.isEmpty, let lieu = try? await CLGeocoder().reverseGeocodeLocation(ici).first {
+                titre = lieu.name ?? ""
                 sousTitre = [lieu.postalCode, lieu.locality].compactMap { $0 }.joined(separator: " ")
             }
-            if nom.isEmpty { nom = "Destination" }
+            if titre.isEmpty { titre = "Destination" }
             saveRecent(NewSearch(
-                name: nom, subtitle: sousTitre, lat: dest.latitude, lon: dest.longitude))
+                name: titre, subtitle: sousTitre, lat: dest.latitude, lon: dest.longitude))
         }
     }
 
