@@ -8,7 +8,10 @@ Consigne du propriétaire du dépôt : chaque changement terminé est mergé sur
 1. Partir du dernier `origin/master` : la CI « Front » y pousse elle-même un
    commit « Reconstruit les fronts » après chaque merge qui touche un front.
 2. Travailler sur une branche, la pousser, ouvrir la pull request.
-3. Merger en **squash** dès que les vérifications ci-dessous passent.
+   **Regrouper le travail** : plusieurs commits (un par sujet) dans une
+   même pull request, plutôt qu'une pull request par petit changement.
+3. Merger en **squash** dès que les vérifications ci-dessous passent —
+   pour l'app iOS, le workflow « Tests iOS » lancé sur la branche.
 4. Après le merge, suivre le workflow « Front » sur `master` ; s'il échoue,
    corriger sur une nouvelle branche et merger de la même façon.
 
