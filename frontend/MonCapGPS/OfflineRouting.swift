@@ -86,12 +86,29 @@ final class OfflineRouter: NSObject, ObservableObject {
         static let base = APIClient().baseURL.appendingPathComponent("offline/regions")
             .absoluteString
 
-        /// Le dépôt qui publie les paquets. **Public** désormais : la liste se
-        /// lit sur l'API GitHub et les fichiers se téléchargent sur les
-        /// Releases, sans jeton et sans passer par le serveur — qui peut être
-        /// arrêté (heures de dyno épuisées : la liste répondait 503) sans que
-        /// les itinéraires hors réseau en souffrent.
-        static let depot = "maxlestage/moncap"
+        /// Le dépôt qui publie les paquets : `MonCapMaps`, **public** et dédié
+        /// à cela — le code de l'app reste privé. La liste se lit sur l'API
+        /// GitHub et les fichiers se téléchargent sur les Releases, sans jeton
+        /// et sans passer par le serveur, qui peut être arrêté (heures de dyno
+        /// épuisées : la liste répondait 503) sans que les itinéraires hors
+        /// réseau en souffrent.
+        static let depot = "maxlestage/MonCapMaps"
+
+        /// La date de construction d'une Release : la ligne `construit: …`
+        /// de ses notes quand elle y est, sinon la date de son archive. Les
+        /// régions recopiées depuis l'ancien dépôt portent leur date d'origine
+        /// dans les notes ; leur archive, datée du jour de la copie, aurait
+        /// fait proposer une mise à jour de chaque région installée.
+        static func dateDeConstruction(notes: String?, archive: String?) -> String? {
+            for ligne in (notes ?? "").split(whereSeparator: \.isNewline) {
+                if ligne.hasPrefix("construit: ") {
+                    let date = ligne.dropFirst("construit: ".count)
+                        .trimmingCharacters(in: .whitespaces)
+                    if !date.isEmpty { return date }
+                }
+            }
+            return archive
+        }
         /// Préfixe des étiquettes publiées par le workflow des tuiles.
         static let prefixe = "tuiles-eu-"
 
@@ -462,7 +479,9 @@ final class OfflineRouter: NSObject, ObservableObject {
                     id: tag,
                     nom: titre.isEmpty ? tag : titre,
                     octets: tar["size"] as? Int ?? 0,
-                    construit: tar["updated_at"] as? String))
+                    construit: Region.dateDeConstruction(
+                        notes: release["body"] as? String,
+                        archive: tar["updated_at"] as? String)))
             }
             if liste.count < 100 { break }
         }
