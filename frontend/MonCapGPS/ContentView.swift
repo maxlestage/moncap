@@ -577,11 +577,12 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            if auth.isAuthenticated {
-                MapHomeView(auth: auth)
-            } else {
-                LoginView(auth: auth)
-            }
+            // Plus d'écran de connexion : la carte tout de suite, sur le
+            // compte anonyme de l'appareil. Reconstruite quand le compte
+            // change (session ouverte, connexion à un compte e-mail), pour que
+            // le temps réel et les données partent du bon jeton.
+            MapHomeView(auth: auth)
+                .id(auth.username)
             if showSplash {
                 SplashView()
                     // L'écran de garde s'efface en s'élargissant un peu : on
@@ -592,6 +593,7 @@ struct ContentView: View {
             }
         }
         .task {
+            auth.assureSession()
             // Laisse l'écran de garde s'afficher un court instant, puis fond
             // vers l'application. Le délai laisse à l'aiguille le temps de se
             // poser : elle atteint le nord vers 1,25 s, et partir avant
@@ -670,8 +672,11 @@ struct MapHomeView: View {
     @State private var shareError: String?
     // Partagé automatiquement pour que tout le monde apparaisse sur la carte.
     @State private var sharing = true
-    // Nom affiché aux autres : l'e-mail de connexion.
-    @State private var driverName = Session.username.isEmpty ? "Moi" : Session.username
+    // Nom affiché aux autres : l'e-mail de connexion — jamais l'identifiant
+    // tiré au hasard du compte anonyme.
+    @State private var driverName =
+        Session.username.isEmpty || CompteAnonyme.estAnonyme(Session.username)
+        ? "Moi" : Session.username
     @State private var avatar = Session.avatar
     /// Un avatar retenu **par mode** : la voiture garde sa Ferrari pendant
     /// que la marche garde son randonneur. Sans cela, le mode changeant tout
@@ -729,6 +734,8 @@ struct MapHomeView: View {
     @State private var leaders: [LeaderEntry] = []
     /// Confirmation de suppression du compte.
     @State private var confirmDelete = false
+    /// La feuille « se connecter à un compte existant ».
+    @State private var montreConnexion = false
     /// Préférences d'itinéraire voiture.
     @AppStorage("moncap.avoidTolls") private var avoidTolls = false
     @AppStorage("moncap.avoidHighways") private var avoidHighways = false
@@ -1029,7 +1036,7 @@ struct MapHomeView: View {
         .fullScreenCover(
             isPresented: Binding(get: { !plus.accesPlus }, set: { _ in })
         ) {
-            PaywallView(bloquant: true, surChangeCompte: { auth.logout() })
+            PaywallView(bloquant: true, auth: auth)
         }
         .alert(
             "Aucun itinéraire", isPresented: Binding(
@@ -1663,7 +1670,9 @@ struct MapHomeView: View {
     /// Démarre le partage de position en direct, puis présente le lien à envoyer.
     private func startLiveShare() {
         Task {
-            let name = Session.username.isEmpty ? "Un ami" : Session.username
+            let name =
+                Session.username.isEmpty || CompteAnonyme.estAnonyme(Session.username)
+                ? "Un ami" : Session.username
             // Le lien s'obtient d'abord, le menu se ferme ensuite : le
             // partage part dans onDismiss, quand la feuille est vraiment
             // partie — deviner la durée de l'animation ne marche plus sur
@@ -4700,7 +4709,11 @@ struct MapHomeView: View {
                     }
                 }
                 Section("Compte") {
-                    Label(auth.username, systemImage: "person.crop.circle")
+                    if auth.estAnonyme || auth.username.isEmpty {
+                        Label("Compte de cet appareil", systemImage: "iphone")
+                    } else {
+                        Label(auth.username, systemImage: "person.crop.circle")
+                    }
                     if let info = accountInfo {
                         HStack {
                             Label("\(info.points) points · \(rankName(info.points))",
@@ -4720,11 +4733,21 @@ struct MapHomeView: View {
                     } label: {
                         Label("Exporter mes données", systemImage: "square.and.arrow.up.on.square")
                     }
-                    Button(role: .destructive) {
-                        showPlaces = false
-                        auth.logout()
-                    } label: {
-                        Label("Déconnexion", systemImage: "rectangle.portrait.and.arrow.right")
+                    if auth.estAnonyme || auth.username.isEmpty {
+                        Button {
+                            montreConnexion = true
+                        } label: {
+                            Label(
+                                "Se connecter à un compte existant",
+                                systemImage: "person.crop.circle.badge.checkmark")
+                        }
+                    } else {
+                        Button(role: .destructive) {
+                            showPlaces = false
+                            auth.logout()
+                        } label: {
+                            Label("Déconnexion", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
                     }
                     Button(role: .destructive) {
                         confirmDelete = true
@@ -4739,7 +4762,7 @@ struct MapHomeView: View {
                             Task {
                                 try? await api.deleteAccount()
                                 showPlaces = false
-                                auth.logout()
+                                auth.compteSupprime()
                             }
                         }
                         Button("Annuler", role: .cancel) {}
@@ -4768,6 +4791,7 @@ struct MapHomeView: View {
         // La feuille système de gestion d'abonnement (résilier, changer) :
         // celle d'Apple, par-dessus le menu.
         .manageSubscriptionsSheet(isPresented: $gereAbonnement)
+        .sheet(isPresented: $montreConnexion) { LoginView(auth: auth) }
     }
 
     /// Une date courte dans la langue de l'app (« 3 sept. 2026 »).

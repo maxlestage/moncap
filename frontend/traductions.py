@@ -754,10 +754,6 @@ T: dict[str, tuple[str, str]] = {
         "Correo o contraseña incorrectos.",
         "Wrong email or password.",
     ),
-    "Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.": (
-        "Tu correo sirve de identificador — solo para eso, y para recuperar tu contraseña.",
-        "Your email is your login — used only for that, and to recover your password.",
-    ),
     "Mot de passe oublié ?": ("¿Contraseña olvidada?", "Forgot your password?"),
     "Si un compte existe avec cette adresse, un lien vient d'être envoyé. Regarde ta boîte (et les indésirables).": (
         "Si existe una cuenta con esa dirección, se acaba de enviar un enlace. Mira tu buzón (y el correo no deseado).",
@@ -767,20 +763,22 @@ T: dict[str, tuple[str, str]] = {
         "La recuperación aún no está configurada.",
         "Password recovery isn't configured yet.",
     ),
-    "Impossible de créer le compte.": (
-        "No se pudo crear la cuenta.",
-        "Couldn't create the account.",
-    ),
     "Serveur injoignable. Réessaie.": (
         "Servidor inalcanzable. Reintenta.",
         "Server unreachable. Try again.",
     ),
     "Échec de l'authentification": ("Fallo de autenticación", "Authentication failed"),
     "Saisie invalide.": ("Entrada no válida.", "Invalid input."),
-    "Connexion": ("Iniciar sesión", "Sign in"),
-    "Inscription": ("Registrarse", "Sign up"),
     "Se connecter": ("Iniciar sesión", "Sign in"),
-    "Créer mon compte": ("Crear mi cuenta", "Create my account"),
+    "Se connecter à un compte existant": (
+        "Iniciar sesión en una cuenta existente",
+        "Sign in to an existing account",
+    ),
+    "Compte de cet appareil": ("Cuenta de este dispositivo", "This device's account"),
+    "Retrouve tes trajets et ton abonnement sur ce téléphone.": (
+        "Recupera tus viajes y tu suscripción en este teléfono.",
+        "Get your trips and subscription back on this phone.",
+    ),
     "Afficher le mot de passe": ("Mostrar la contraseña", "Show password"),
     "Masquer le mot de passe": ("Ocultar la contraseña", "Hide password"),
     "Tape ton adresse e-mail ci-dessus, puis touche « Mot de passe oublié ? ».": (
@@ -1101,10 +1099,6 @@ T: dict[str, tuple[str, str]] = {
     "Itinéraire": ("Ruta", "Route"),
     # Messages de validation : affichés par `Text(String)`, donc passés par
     # `LocalizedStringKey` au site d'appel.
-    "Mot de passe : 6 caractères minimum.": (
-        "Contraseña: 6 caracteres como mínimo.",
-        "Password: 6 characters minimum.",
-    ),
     "À pied": ("A pie", "On foot"),
     "Vélo": ("Bici", "Bike"),
     "Voiture": ("Coche", "Car"),

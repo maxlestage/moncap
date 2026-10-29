@@ -2209,6 +2209,22 @@
         }
       }
     },
+    "Compte de cet appareil": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device's account"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuenta de este dispositivo"
+          }
+        }
+      }
+    },
     "Compteur du journal": {
       "localizations": {
         "en": {
@@ -2269,22 +2285,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Confirmado %lld veces · desmentido %lld veces"
-          }
-        }
-      }
-    },
-    "Connexion": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign in"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Iniciar sesión"
           }
         }
       }
@@ -2429,22 +2429,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cubre tu posición"
-          }
-        }
-      }
-    },
-    "Créer mon compte": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Create my account"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Crear mi cuenta"
           }
         }
       }
@@ -3633,22 +3617,6 @@
         }
       }
     },
-    "Impossible de créer le compte.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't create the account."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No se pudo crear la cuenta."
-          }
-        }
-      }
-    },
     "Incendies 🔥 (NASA FIRMS)": {
       "localizations": {
         "en": {
@@ -3693,22 +3661,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Índice europeo"
-          }
-        }
-      }
-    },
-    "Inscription": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign up"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Registrarse"
           }
         }
       }
@@ -4861,22 +4813,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "MonCap también existe en el reloj — instálala desde la app Watch."
-          }
-        }
-      }
-    },
-    "Mot de passe : 6 caractères minimum.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Password: 6 characters minimum."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Contraseña: 6 caracteres como mínimo."
           }
         }
       }
@@ -6369,6 +6305,22 @@
         }
       }
     },
+    "Retrouve tes trajets et ton abonnement sur ce téléphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get your trips and subscription back on this phone."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recupera tus viajes y tu suscripción en este teléfono."
+          }
+        }
+      }
+    },
     "Revenir au fond par défaut": {
       "localizations": {
         "en": {
@@ -6685,6 +6637,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Iniciar sesión"
+          }
+        }
+      }
+    },
+    "Se connecter à un compte existant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to an existing account"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar sesión en una cuenta existente"
           }
         }
       }
@@ -7037,22 +7005,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aseos"
-          }
-        }
-      }
-    },
-    "Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your email is your login — used only for that, and to recover your password."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tu correo sirve de identificador — solo para eso, y para recuperar tu contraseña."
           }
         }
       }
