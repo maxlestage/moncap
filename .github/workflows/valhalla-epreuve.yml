@@ -167,4 +167,4 @@ jobs:
           # l'ouverture du paquet. À monter en même temps que valhalla-mobile,
           # jamais séparément.
           docker run --rm -v "$PWD/data:/data" -w /data \
-            ghcr.io/valhalla/valhalla:3.6.3 bash /data/epreuve.sh
+            ghcr.io/valhalla/valhalla:3.9.1 bash /data/epreuve.sh
