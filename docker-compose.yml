@@ -1,19 +1,12 @@
+# Le serveur et sa base SQLite, gardée dans un volume : les données
+# survivent aux redémarrages du conteneur.
 services:
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: moncap
+  app:
+    build: .
     ports:
-      - "5432:5432"
+      - "3000:3000"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - donnees:/app/data
 
 volumes:
-  pgdata:
+  donnees:

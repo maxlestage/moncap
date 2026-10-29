@@ -54,7 +54,7 @@ pub(super) struct TransitItineraire {
     legs: Vec<TransitLeg>,
 }
 
-static TRANSIT_CACHE: Zones<TransitItineraire> = Zones::new();
+static TRANSIT_CACHE: Zones<TransitItineraire> = Zones::new("transit");
 
 /// Quatre-vingt-dix secondes : un horaire de passage est une donnée du moment,
 /// mais deux appuis successifs sur le même trajet n'ont pas à payer deux fois.

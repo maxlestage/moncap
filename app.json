@@ -1,12 +1,9 @@
 {
   "name": "moncap-gps",
-  "description": "API GPS (Rust + Paquets) avec Postgres — déploiement buildpack.",
+  "description": "API GPS (Rust + Paquets) sur SQLite — déploiement buildpack, sans addon.",
   "repository": "https://github.com/maxlestage/moncap",
-  "keywords": ["rust", "paquets", "gps", "postgres"],
+  "keywords": ["rust", "paquets", "gps", "sqlite"],
   "buildpacks": [
     { "url": "https://github.com/emk/heroku-buildpack-rust.git" }
-  ],
-  "addons": [
-    "heroku-postgresql:essential-0"
   ]
 }

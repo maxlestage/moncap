@@ -13,16 +13,17 @@ moncap/
 │   ├── main.rs         Point d'entrée
 │   ├── app.rs          L'application : bouclier de sécurité, CORS, routes, tâches de fond
 │   ├── connexion.rs    Comptes, sessions, mots de passe (voir « Connexion »)
-│   ├── base.rs         Les tables (modèles memoire-orm) et les migrations
+│   ├── base.rs         La base SQLite : tables (modèles memoire-orm), migrations
+│   ├── cache.rs        Le cache SQLite : tuiles, feux, air, régions hors ligne
 │   ├── erreur.rs       Les erreurs, en texte brut comme l'app iOS les attend
-│   ├── temps_reel.rs   Le WebSocket et le pont Redis
+│   ├── temps_reel.rs   Le WebSocket
 │   ├── alertes.rs, positions.rs, trajets.rs, compte.rs   L'API REST
 │   ├── externes/       Feux, air, transports, trafic, paquets hors ligne
 │   ├── tuiles.rs, pmtiles.rs   Le relais de tuiles et le lecteur PMTiles
 │   ├── partage.rs      Partage live, itinéraires partagés, confidentialité
 │   └── statique.rs     Les deux fronts
 ├── Procfile        web: ./target/release/moncap-gps
-├── app.json        buildpack Rust + addon Postgres (bouton « Deploy »)
+├── app.json        buildpack Rust (bouton « Deploy ») — aucun addon
 ├── web/            Front web, en Rust : active + WebAssembly (voir web/README.md)
 ├── vitrine/        Page de présentation, en Rust : active + WebAssembly (vitrine/README.md)
 ├── mouvement/      Les animations des deux fronts (rideau, cascades, molette inertielle…)
@@ -35,7 +36,7 @@ moncap/
 
 Paquets réunit le serveur HTTP (**vitesse**), le bouclier de sécurité
 (**securite** : pare-feu applicatif, limitation de débit, en-têtes, blocage
-des robots d'attaque), l'ORM (**memoire-orm**, Postgres) et le front
+des robots d'attaque), l'ORM (**memoire-orm**, SQLite) et le front
 (**active**). Les routes sont volontairement aussi simples que possible :
 
 | Méthode | Route         | Rôle                                              |
@@ -85,7 +86,7 @@ Ce qui la rend fiable :
   tel quel) : `identifiant ou mot de passe incorrect`, champs trop courts ou
   trop longs, `trop de tentatives…, réessaie dans N min` avec `Retry-After`.
 - **Un frein aux devinettes par compte** (10 échecs en 15 min → 15 min
-  d'attente), stocké en base : partagé entre dynos, il ne bloque plus tout
+  d'attente), stocké en base (il survit aux redémarrages), il ne bloque plus tout
   un réseau mobile derrière une même adresse IP.
 - **Mot de passe oublié** : réponse identique et immédiate que le compte
   existe ou non (le courriel part en arrière-plan), trois liens par heure
@@ -93,10 +94,10 @@ Ce qui la rend fiable :
   fois même sous deux envois simultanés.
 - **Argon2id hors de la boucle d'événements** : un hachage ne gèle plus les
   autres requêtes.
-- **La transition sans déconnexion** : les jetons JWT de l'ancien serveur
-  restent acceptés jusqu'à leur échéance si `JWT_SECRET` est défini (avec la
-  même valeur qu'avant) — et ils sont révocables eux aussi. Sans
-  `JWT_SECRET`, ils sont refusés : l'ancien secret par défaut était public.
+- **Plus de jetons JWT** : ceux de l'ancien serveur désignaient des comptes
+  d'une base qui n'existe plus, et la nouvelle numérote à partir de 1 — un
+  vieux jeton aurait ouvert le compte de quelqu'un d'autre. Un jeton inconnu
+  donne 401, et l'app rouvre une session d'elle-même.
 
 Toutes les routes `positions*`, `stats`, `trips`, `searches`, `alerts`,
 `account`, `prefs` exigent `Authorization: Bearer <jeton>` et sont **isolées
@@ -118,15 +119,43 @@ ou expiré donne `401 authentification requise`.
   (gardés ~30 min).
 
 Le client envoie `{"kind":"live", lat, lon, label}` ou
-`{"kind":"alert", category, lat, lon, label}`. Avec `REDIS_URL`, un pont
-pub/sub relaie les événements entre instances.
+`{"kind":"alert", category, lat, lon, label}`. Le serveur tourne en une
+seule instance (sa base est un fichier) : plus de Redis ni de pont entre
+instances, le canal de diffusion est partagé par tous ses fils.
 
-Les données sont dans **Postgres**, via **memoire-orm**. Les migrations
-(`src/base.rs`) s'appliquent au démarrage et tiennent leur registre dans
-`_memoire_migrations` ; la première rejoue à l'identique le schéma des
-anciennes migrations SeaORM (`IF NOT EXISTS`), sans toucher à
-`seaql_migrations` — l'ancien serveur peut donc redémarrer sur la même base
-en cas de retour arrière.
+### Données et cache : SQLite, sans serveur de base
+
+Plus de Postgres ni de Redis : tout tient dans deux fichiers SQLite, ouverts
+par Paquets dans le processus même — pas de connexion réseau à payer à
+chaque requête, rien à installer ni à facturer.
+
+| Fichier | Variable | Contenu |
+| --- | --- | --- |
+| `data/moncap.db` | `DATABASE_URL` (`sqlite://…`) | comptes, sessions, positions, trajets, destinations, signalements |
+| `data/cache.db` | `CACHE_URL` | tuiles, feux, qualité de l'air, liste des régions — jetable |
+
+- **Le mode WAL** laisse lire pendant qu'on écrit ; le schéma
+  (`src/base.rs`) se crée au premier démarrage et les migrations tiennent
+  leur registre dans `_memoire_migrations`. Les données d'un compte partent
+  avec lui (`ON DELETE CASCADE`).
+- **Le cache est un fichier à part** : ses écritures (une tuile par requête)
+  ne prennent pas le verrou de la base des comptes, et on peut l'effacer à
+  tout moment. Il garde 30 jours au plus et `CACHE_MAX_MO` (512 par défaut) ;
+  le ménage passe chaque heure, suivi de `PRAGMA optimize` sur les deux bases.
+- **Toutes les destinations sont gardées** (`/searches`), une ligne par lieu :
+  y retourner la remonte en tête et compte la visite (`fois`). Plus de
+  plafond à douze. `GET /searches?limit=N` n'en rend que les N premières.
+- **Les tâches de fond** (purge des signalements, ménage) tournent sur un fil
+  que Paquets garde pour elles, à côté des fils du serveur.
+
+> ⚠️ **Le disque d'un dyno Heroku est éphémère** : il repart de zéro à chaque
+> déploiement et au redémarrage quotidien. Sur Heroku, la base SQLite oublie
+> donc comptes, trajets et destinations au moins une fois par jour. L'app
+> s'en remet seule (le compte de l'appareil se recrée, et **les destinations
+> restent sur le téléphone**, dans sa propre base SQLite), mais pour garder
+> les données du serveur, il faut un disque qui dure : un volume (Fly.io,
+> Railway, Render, un VPS, Docker) monté sur `data/`, ou `DATABASE_URL`
+> pointé dessus, par exemple `sqlite:///data/moncap.db`.
 
 ### Sécurité
 
@@ -141,22 +170,13 @@ applicatif** (injection SQL, XSS, RCE…), en-têtes de sécurité (HSTS,
 ### Lancer le backend
 
 ```bash
-# 1. Démarrer Postgres (via Docker)
-docker compose up -d db
-
-# 2. Lancer l'API (depuis la racine du dépôt)
-cp .env.example .env            # ou exporter DATABASE_URL
-export DATABASE_URL="postgres://postgres:postgres@localhost:5432/moncap"
+# Rien à installer : la base est un fichier, créé au premier démarrage.
 cargo run
-# moncap-gps écoute sur http://0.0.0.0:3000
+# moncap-gps écoute sur http://0.0.0.0:3000, données dans data/moncap.db
 
-# 3. Les tests (les essais de bout en bout tournent sur cette base)
-TEST_DATABASE_URL="$DATABASE_URL" JWT_SECRET=dev-secret cargo test
+# Les tests : chaque essai de bout en bout a sa propre base SQLite en mémoire.
+cargo test
 ```
-
-La connexion est configurable via la variable d'environnement
-`DATABASE_URL` (valeur par défaut :
-`postgres://postgres:postgres@localhost:5432/moncap`).
 
 Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
 (défaut : `info`). Les calculs de distances (`/stats`,
@@ -222,7 +242,8 @@ variables d'environnement.
 | `TILES_USER_AGENT` | Identification envoyée à l'amont. La plupart des fournisseurs refusent les requêtes sans `User-Agent` identifiable. |
 
 Le relais borne `z`, `x` et `y` (sinon n'importe qui pourrait lui faire
-relayer des requêtes arbitraires), garde 1500 tuiles en cache mémoire et
+relayer des requêtes arbitraires), garde les tuiles servies dans le cache
+SQLite (celles du relais comme celles de l'archive PMTiles) et
 dispose de sa propre limite de débit — la limite générale de 300 req/min
 couperait un téléchargement de zone au bout de 300 tuiles.
 
@@ -407,17 +428,17 @@ six zones qui se chevauchent.
 
 L'app se déploie via un **buildpack Rust** : la crate est à la racine,
 Heroku la compile (`cargo build --release`) et lance le binaire défini dans
-le `Procfile`. L'addon **Heroku Postgres** fournit `DATABASE_URL` ; la table
-base est créée ou mise à jour automatiquement au démarrage (migrations).
-Définir **`JWT_SECRET`** avec la valeur de l'ancien serveur garde les
-utilisateurs connectés pendant la transition vers les sessions. Pas de Docker, pas de
-GitHub Actions, pas de stack `container`.
+le `Procfile`. Aucun addon : la base et le cache sont des fichiers SQLite
+(voir « Données et cache » — et l'avertissement sur le disque éphémère).
+Une ancienne variable `DATABASE_URL` Postgres est ignorée, avec un
+avertissement dans les journaux. Pas de Docker, pas de GitHub Actions, pas
+de stack `container`.
 
 Fichiers utilisés :
 
 - `Cargo.toml` / `src/` — la crate à la racine (détectée par le buildpack)
 - `Procfile` — `web: ./target/release/moncap-gps`
-- `app.json` — déclare le buildpack Rust + l'addon Postgres
+- `app.json` — déclare le buildpack Rust
 
 ### Ce que sert le dyno
 
@@ -487,7 +508,7 @@ parle à l'API sans configuration.
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/maxlestage/moncap)
 
 Tape le bouton (depuis ton navigateur/téléphone). Heroku lit `app.json`,
-ajoute le buildpack Rust + Postgres, compile et démarre l'app. À la fin,
+ajoute le buildpack Rust, compile et démarre l'app. À la fin,
 ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 
 ### Option 2 — Depuis le tableau de bord Heroku (connexion GitHub)
@@ -495,11 +516,9 @@ ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 1. **New ▸ Create new app**, donne-lui un nom.
 2. Onglet **Settings ▸ Buildpacks ▸ Add buildpack** → colle cette URL :
    `https://github.com/emk/heroku-buildpack-rust.git` → **Save changes**.
-3. Onglet **Resources ▸ Add-ons** → cherche **Heroku Postgres** → ajoute le
-   plan `essential-0`.
-4. Onglet **Deploy ▸ Deployment method ▸ GitHub** → connecte le dépôt
+3. Onglet **Deploy ▸ Deployment method ▸ GitHub** → connecte le dépôt
    `maxlestage/moncap` → **Deploy Branch** (`master`).
-5. Ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
+4. Ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 
 > ℹ️ Le buildpack Rust **doit** être ajouté à l'étape 2, sinon Heroku affiche
 > « No default language could be detected for this app » (il ne sait pas
@@ -508,10 +527,9 @@ ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 ### Tester l'image en local (Docker, optionnel)
 
 ```bash
-docker build -t moncap-gps .
-docker run -p 3000:3000 \
-  -e DATABASE_URL="postgres://user:pass@host:5432/moncap" \
-  moncap-gps
+docker compose up --build
+# ou : docker build -t moncap-gps . && docker run -p 3000:3000 -v moncap:/app/data moncap-gps
+# le volume garde data/moncap.db (et le cache) d'un redémarrage à l'autre
 ```
 
 ## Front (Swift / SwiftUI)

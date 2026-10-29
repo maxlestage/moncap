@@ -3,6 +3,7 @@
 mod alertes;
 mod app;
 mod base;
+mod cache;
 mod commun;
 mod compte;
 mod connexion;
