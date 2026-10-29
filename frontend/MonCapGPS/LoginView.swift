@@ -1,102 +1,216 @@
 import SwiftUI
 
 /// Écran de connexion / inscription.
+///
+/// Il prend la suite de l'écran de garde dans le même décor (`FondDeMarque`) :
+/// le logo et le nom restent sur le bleu, le formulaire vient dans une carte
+/// claire. Le clavier enchaîne les champs — « suivant » puis « aller » — et
+/// le trousseau d'iOS reconnaît la paire identifiant / mot de passe.
 struct LoginView: View {
     @ObservedObject var auth: AuthStore
+
+    private enum Champ { case email, motDePasse }
 
     @State private var signupMode = false
     @State private var username = ""
     @State private var password = ""
+    @State private var motDePasseVisible = false
     @State private var errorMessage = ""
     /// Message d'information (vert) : « lien envoyé », par opposition aux
     /// erreurs rouges.
     @State private var infoMessage = ""
     @State private var busy = false
+    @FocusState private var focus: Champ?
     private let api = APIClient()
 
+    private var peutValider: Bool { !busy && !username.isEmpty && !password.isEmpty }
+
     var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Text("🛰️ MonCap GPS").font(.largeTitle.bold())
-            Text(signupMode ? "Créer un compte" : "Connexion")
-                .foregroundStyle(.secondary)
+        ZStack {
+            FondDeMarque()
+            ScrollView {
+                VStack(spacing: 28) {
+                    enTete
+                    carte
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 48)
+                .frame(maxWidth: 440)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    // MARK: - En-tête
+
+    private var enTete: some View {
+        VStack(spacing: 14) {
+            Image("Logo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88, height: 88)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .shadow(color: .black.opacity(0.3), radius: 14, y: 8)
+                .accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text("MonCap GPS")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("Navigation en temps réel")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+    }
+
+    // MARK: - Formulaire
+
+    private var carte: some View {
+        VStack(spacing: 14) {
+            Picker("Mode", selection: $signupMode) {
+                Text("Connexion").tag(false)
+                Text("Inscription").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .padding(.bottom, 4)
+            .onChange(of: signupMode) {
+                errorMessage = ""
+                infoMessage = ""
+            }
 
             // L'e-mail comme identifiant — choix de produit assumé, et la
             // politique de confidentialité le dit avec ses limites : aucun
-            // envoi, aucune revente. Champs exclus du .textCase(.lowercase)
-            // de l'écran : la saisie s'affiche telle qu'elle est tapée
-            // (l'auth est sensible à la casse).
-            TextField("e-mail", text: $username)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.emailAddress)
-                .textContentType(.emailAddress)
-                .textFieldStyle(.roundedBorder)
-                .textCase(nil)
+            // envoi, aucune revente. `.username` et non `.emailAddress` : c'est
+            // ce que le trousseau apparie au mot de passe pour le proposer.
+            champ(icone: "envelope") {
+                TextField("e-mail", text: $username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.emailAddress)
+                    .textContentType(.username)
+                    .focused($focus, equals: .email)
+                    .submitLabel(.next)
+                    .onSubmit { focus = .motDePasse }
+            }
 
             // `.newPassword` à l'inscription : le trousseau propose un mot de
             // passe fort et le retient — `.password` à la connexion pour
             // qu'il ressorte le bon.
-            SecureField("mot de passe", text: $password)
+            champ(icone: "lock") {
+                Group {
+                    if motDePasseVisible {
+                        TextField("mot de passe", text: $password)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    } else {
+                        SecureField("mot de passe", text: $password)
+                    }
+                }
                 .textContentType(signupMode ? .newPassword : .password)
-                .textFieldStyle(.roundedBorder)
-                .textCase(nil)
+                .focused($focus, equals: .motDePasse)
+                .submitLabel(.go)
+                .onSubmit { if peutValider { submit() } }
+
+                Button {
+                    motDePasseVisible.toggle()
+                } label: {
+                    Image(systemName: motDePasseVisible ? "eye.slash" : "eye")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    motDePasseVisible
+                        ? Text("Masquer le mot de passe") : Text("Afficher le mot de passe"))
+            }
 
             if signupMode {
                 Text("Ton e-mail sert d'identifiant — il ne sert qu'à ça, et à retrouver ton mot de passe.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if !errorMessage.isEmpty {
-                Text(LocalizedStringKey(errorMessage)).font(.footnote).foregroundStyle(.red)
+                message(errorMessage, icone: "exclamationmark.triangle.fill", couleur: .red)
             }
             if !infoMessage.isEmpty {
-                Text(LocalizedStringKey(infoMessage)).font(.footnote).foregroundStyle(.green)
+                message(infoMessage, icone: "checkmark.circle.fill", couleur: .green)
             }
 
             Button(action: submit) {
-                if busy {
-                    ProgressView()
-                } else {
-                    Text(signupMode ? "S'inscrire" : "Se connecter")
-                        .frame(maxWidth: .infinity)
+                ZStack {
+                    (signupMode ? Text("Créer mon compte") : Text("Se connecter"))
+                        .font(.headline)
+                        .opacity(busy ? 0 : 1)
+                    if busy { ProgressView().tint(.white) }
                 }
+                .frame(maxWidth: .infinity, minHeight: 50)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(busy || username.isEmpty || password.isEmpty)
-
-            Button(signupMode ? "Déjà un compte ? Se connecter" : "Pas de compte ? S'inscrire") {
-                signupMode.toggle()
-                errorMessage = ""
-                infoMessage = ""
-            }
-            .font(.footnote)
+            .buttonBorderShape(.roundedRectangle(radius: 14))
+            .disabled(!peutValider)
+            .padding(.top, 4)
 
             // Le lien de réinitialisation part par courriel : l'adresse tapée
             // au-dessus suffit. La réponse est la même que le compte existe
             // ou non — l'écran ne peut pas servir à deviner qui est inscrit.
             if !signupMode {
                 Button("Mot de passe oublié ?") { motDePasseOublie() }
-                    .font(.footnote)
+                    .font(.subheadline)
                     .disabled(busy)
             }
-
-            Spacer()
         }
-        .padding(24)
-        // Tout le texte affiché de l'écran (titres, libellés, boutons,
-        // placeholders) est rendu en minuscules. La saisie de l'utilisateur
-        // n'est pas modifiée : l'e-mail garde sa casse réelle.
-        .textCase(.lowercase)
+        .padding(20)
+        .background(
+            .background, in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
+        .animation(.easeInOut(duration: 0.2), value: signupMode)
+        .animation(.easeInOut(duration: 0.2), value: errorMessage)
+        .animation(.easeInOut(duration: 0.2), value: infoMessage)
     }
+
+    /// Un champ dans sa case : icône à gauche, saisie, accessoires éventuels.
+    private func champ<Contenu: View>(
+        icone: String, @ViewBuilder _ contenu: () -> Contenu
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icone)
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+                .accessibilityHidden(true)
+            contenu()
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 50)
+        .background(
+            Color(.secondarySystemBackground),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func message(_ texte: String, icone: String, couleur: Color) -> some View {
+        Label {
+            Text(LocalizedStringKey(texte))
+        } icon: {
+            Image(systemName: icone)
+        }
+        .font(.footnote)
+        .foregroundStyle(couleur)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .transition(.opacity)
+    }
+
+    // MARK: - Actions
 
     /// Demande le lien de réinitialisation pour l'adresse saisie.
     private func motDePasseOublie() {
         let email = AuthStore.normalize(username)
         guard AuthStore.isValidEmail(email) else {
-            errorMessage = "Adresse e-mail invalide."
+            errorMessage = "Tape ton adresse e-mail ci-dessus, puis touche « Mot de passe oublié ? »."
             infoMessage = ""
+            focus = .email
             return
         }
         busy = true
@@ -116,6 +230,7 @@ struct LoginView: View {
     }
 
     private func submit() {
+        focus = nil
         busy = true
         errorMessage = ""
         infoMessage = ""
