@@ -33,10 +33,8 @@
 use std::sync::OnceLock;
 
 use argon2::Argon2;
-use argon2::password_hash::{
-    PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-    rand_core::{OsRng, RngCore},
-};
+use argon2::password_hash::phc::PasswordHash;
+use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use paquets::orm::{Database, Executor, Transaction, params};
 use paquets::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -92,14 +90,14 @@ fn hex(octets: &[u8]) -> String {
 /// réinitialisation et de partage.
 pub fn jeton_aleatoire() -> String {
     let mut octets = [0u8; 16];
-    OsRng.fill_bytes(&mut octets);
+    aleatoire(&mut octets);
     hex(&octets)
 }
 
 /// Un nouveau jeton de session : `mc_` et 256 bits en hexadécimal.
 fn jeton_session() -> String {
     let mut octets = [0u8; 32];
-    OsRng.fill_bytes(&mut octets);
+    aleatoire(&mut octets);
     format!("{PREFIXE}{}", hex(&octets))
 }
 
@@ -108,10 +106,16 @@ pub fn empreinte(jeton: &str) -> String {
     hex(&Sha256::digest(jeton.as_bytes()))
 }
 
+/// Des octets aléatoires du système. Sans aléa, aucun jeton sûr n'est
+/// possible : mieux vaut s'arrêter que d'en fabriquer un prévisible.
+pub fn aleatoire(octets: &mut [u8]) {
+    getrandom::fill(octets).expect("aléa du système indisponible");
+}
+
 fn hache_sync(mdp: &str) -> Result<String, String> {
-    let sel = SaltString::generate(&mut OsRng);
+    // Le sel est tiré par argon2 lui-même.
     Argon2::default()
-        .hash_password(mdp.as_bytes(), &sel)
+        .hash_password(mdp.as_bytes())
         .map(|h| h.to_string())
         .map_err(|e| e.to_string())
 }

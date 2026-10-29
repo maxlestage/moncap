@@ -19,12 +19,17 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Connexion : Argon2 pour les mots de passe, SHA-256 pour ne stocker que
 # l'empreinte des jetons (sessions et réinitialisations).
-argon2 = "0.5"
-rand_core = { version = "0.6", features = ["getrandom"] }
-sha2 = "0.10"
+argon2 = "0.6"
+sha2 = "0.11"
+# L'aléa des jetons (sessions, liens, identifiants de connexion).
+getrandom = "0.4"
 # Client HTTP sortant (rustls, sans OpenSSL) : FIRMS, Open-Meteo, Transitous,
 # TomTom, tuiles et archives PMTiles, GitHub.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# rustls sur `ring`, comme le reste du serveur (securite, lettre) : le
+# fournisseur par défaut de reqwest 0.13, aws-lc, ajouterait une compilation
+# C lourde au buildpack. Installé avant le premier client (`externes`).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "query"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 # Décompression des répertoires PMTiles (gzip).
 flate2 = "1"
 # Envoi des courriels de réinitialisation via le SMTP configuré (SMTP_HOST…).
