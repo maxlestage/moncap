@@ -9,7 +9,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use argon2::password_hash::rand_core::{OsRng, RngCore};
 use paquets::prelude::*;
 use paquets::vitesse::ws::{self, Message};
 use serde::{Deserialize, Serialize};
@@ -35,7 +34,9 @@ impl Hub {
         let (tx, _) = broadcast::channel(256);
         // 20 bits aléatoires au-dessus de 32 bits de compteur : on reste sous
         // 2^53, l'entier exact le plus grand d'un nombre JavaScript.
-        let prefixe = (OsRng.next_u64() & 0xF_FFFF) << 32;
+        let mut octets = [0u8; 8];
+        crate::connexion::aleatoire(&mut octets);
+        let prefixe = (u64::from_le_bytes(octets) & 0xF_FFFF) << 32;
         Hub {
             tx,
             prefixe,

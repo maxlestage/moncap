@@ -148,7 +148,7 @@ fn nature_suffixe(nature: &str) -> Option<&'static str> {
 fn client_github() -> &'static reqwest::Client {
     static C: OnceLock<reqwest::Client> = OnceLock::new();
     C.get_or_init(|| {
-        reqwest::Client::builder()
+        super::constructeur_http()
             .timeout(DELAI_GITHUB)
             .build()
             .unwrap_or_default()
@@ -163,7 +163,7 @@ fn client_github() -> &'static reqwest::Client {
 fn client_sans_suivi() -> Resultat<&'static reqwest::Client> {
     static C: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
     C.get_or_init(|| {
-        reqwest::Client::builder()
+        super::constructeur_http()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(DELAI_GITHUB)
             .build()
