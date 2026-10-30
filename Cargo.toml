@@ -10,7 +10,7 @@ rust-version = "1.88"
 # compilé, dans le binaire : ni serveur de base à faire tourner, ni Redis. Les
 # données et le cache sont deux fichiers (voir `base` et `cache`).
 paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["sqlite"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rayon = "1"
