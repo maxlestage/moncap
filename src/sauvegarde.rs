@@ -4,8 +4,9 @@
 //! redémarrage — au moins une fois par jour, et à chaque déploiement. La base
 //! `data/moncap.db` partait avec lui : comptes, sessions, trajets, partages.
 //!
-//! Avec `SAUVEGARDE_TOKEN` (un jeton GitHub qui écrit dans les Releases de
-//! `SAUVEGARDE_DEPOT`, par défaut `maxlestage/moncap`, privé), le serveur :
+//! Avec un jeton GitHub qui écrit dans les Releases de `SAUVEGARDE_DEPOT`
+//! (par défaut `maxlestage/moncap`, privé) — `SAUVEGARDE_TOKEN`, à défaut le
+//! `GITHUB_TOKEN` déjà posé pour les régions hors ligne —, le serveur :
 //!
 //! - au **démarrage**, quand la base n'existe pas encore sur le disque, la
 //!   restaure depuis la dernière copie ;
@@ -20,6 +21,7 @@
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
@@ -39,6 +41,21 @@ const SUFFIXE: &str = ".db.gz";
 /// Combien de copies garder : la dernière, et celle d'avant au cas où.
 const GARDEES: usize = 2;
 
+/// GitHub a refusé le jeton (401, 403, 404 en écriture) : il ne sert à rien
+/// de réessayer chaque minute, ni d'en remplir les journaux.
+static REFUSE: AtomicBool = AtomicBool::new(false);
+
+/// Note un refus du jeton, et le dit une seule fois.
+fn refus(statut: reqwest::StatusCode, quoi: &str) -> String {
+    if matches!(statut.as_u16(), 401 | 403 | 404) && !REFUSE.swap(true, Ordering::Relaxed) {
+        tracing::warn!(
+            "sauvegarde arrêtée : GitHub refuse le jeton pour {quoi} ({statut}). \
+             Il faut SAUVEGARDE_TOKEN, « Contents: Read and write » sur le dépôt."
+        );
+    }
+    format!("{quoi} : GitHub répond {statut}")
+}
+
 /// Le délai d'un appel à GitHub.
 const DELAI: Duration = Duration::from_secs(20);
 
@@ -54,9 +71,13 @@ pub struct Reglage {
 }
 
 impl Reglage {
-    /// `SAUVEGARDE_TOKEN` et `SAUVEGARDE_DEPOT` ; `None` sans jeton.
+    /// `SAUVEGARDE_TOKEN` (à défaut `GITHUB_TOKEN`) et `SAUVEGARDE_DEPOT` ;
+    /// `None` sans jeton.
     pub fn depuis_env() -> Option<Self> {
-        let jeton = std::env::var("SAUVEGARDE_TOKEN").ok()?;
+        let jeton = std::env::var("SAUVEGARDE_TOKEN")
+            .ok()
+            .filter(|j| !j.trim().is_empty())
+            .or_else(|| std::env::var("GITHUB_TOKEN").ok())?;
         let jeton = jeton.trim().trim_matches(['"', '\'']).trim().to_owned();
         if jeton.is_empty() {
             return None;
@@ -223,7 +244,7 @@ impl Reglage {
                 .await
                 .map(Some)
                 .map_err(|e| format!("réponse de GitHub : {e}")),
-            s => Err(format!("GitHub répond {s} pour la Release {ETIQUETTE}")),
+            _ => Err(refus(r.status(), "la lecture de la Release")),
         }
     }
 
@@ -241,10 +262,7 @@ impl Reglage {
             .await
             .map_err(|e| format!("GitHub injoignable : {e}"))?;
         if !r.status().is_success() {
-            return Err(format!(
-                "création de la Release : GitHub répond {}",
-                r.status()
-            ));
+            return Err(refus(r.status(), "la création de la Release"));
         }
         r.json()
             .await
@@ -270,7 +288,7 @@ impl Reglage {
             .await
             .map_err(|e| format!("envoi : {e}"))?;
         if !r.status().is_success() {
-            return Err(format!("envoi : GitHub répond {}", r.status()));
+            return Err(refus(r.status(), "l'envoi"));
         }
         // La nouvelle n'est pas dans la liste lue avant l'envoi : on en garde
         // donc une de moins parmi les anciennes.
@@ -366,6 +384,9 @@ pub fn demarre(db: &'static Db) {
     let dernier: &'static Mutex<Option<[u8; 32]>> = Box::leak(Box::new(Mutex::new(None)));
 
     async fn tour(reglage: &Reglage, db: &Db, dernier: &Mutex<Option<[u8; 32]>>) {
+        if REFUSE.load(Ordering::Relaxed) {
+            return;
+        }
         let copie = match cliche(db).await {
             Ok(c) => c,
             Err(e) => return tracing::warn!("sauvegarde : {e}"),
@@ -381,7 +402,8 @@ pub fn demarre(db: &'static Db) {
         }
         match reglage.envoie(copie).await {
             Ok(()) => *dernier.lock().unwrap_or_else(|e| e.into_inner()) = Some(empreinte),
-            Err(e) => tracing::warn!("sauvegarde : {e}"),
+            Err(e) if !REFUSE.load(Ordering::Relaxed) => tracing::warn!("sauvegarde : {e}"),
+            Err(_) => {}
         }
     }
 

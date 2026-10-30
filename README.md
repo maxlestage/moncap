@@ -149,14 +149,16 @@ chaque requête, rien à installer ni à facturer.
   que Paquets garde pour elles, à côté des fils du serveur.
 - **La sauvegarde** (`src/sauvegarde.rs`) : le disque d'un dyno Heroku
   repart vide à chaque redémarrage, au moins une fois par jour, et la base
-  avec lui. Avec `SAUVEGARDE_TOKEN`, le serveur copie la base dans la
+  avec lui. Avec `SAUVEGARDE_TOKEN` (à défaut le `GITHUB_TOKEN` des régions
+  hors ligne, s'il peut écrire), le serveur copie la base dans la
   Release `sauvegarde-base` d'un dépôt **privé** (`SAUVEGARDE_DEPOT`,
   `maxlestage/moncap` par défaut) : un cliché `VACUUM INTO` compressé chaque
   minute s'il a changé, et un dernier à l'arrêt (`SIGTERM`). Au démarrage,
   une base absente du disque revient de la dernière copie ; une base présente
   n'est jamais écrasée. Les deux copies les plus récentes sont gardées. Le
   jeton : à portée fine, sur ce seul dépôt, « Contents: Read and write ».
-  Sans lui, rien ne change.
+  Sans jeton, rien ne change ; un jeton refusé est signalé une fois dans les
+  journaux, et la sauvegarde s'arrête jusqu'au redémarrage suivant.
 
 > ⚠️ **Le disque d'un dyno Heroku est éphémère** : il repart de zéro à chaque
 > déploiement et au redémarrage quotidien. Sur Heroku, la base SQLite oublie
