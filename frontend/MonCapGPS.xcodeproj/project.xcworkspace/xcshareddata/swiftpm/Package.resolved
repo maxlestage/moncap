@@ -23,8 +23,8 @@
       "kind": "remoteSourceControl",
       "location": "https://github.com/maplibre/maplibre-gl-native-distribution",
       "state": {
-        "revision": "5ee345ca5d65238a6fce29bba87816204be7df20",
-        "version": "6.28.0"
+        "revision": "c2e6e6bd24efa037a8ab13463d8ad047b929eb9f",
+        "version": "7.0.0"
       }
     },
     {
@@ -50,8 +50,8 @@
       "kind": "remoteSourceControl",
       "location": "https://github.com/Rallista/valhalla-mobile",
       "state": {
-        "revision": "fe12a51499db3be67ed03ae20a974be6ffdbd867",
-        "version": "0.5.1"
+        "revision": "852dd75c356ecbcd0fa693dcbdd7178059013f4c",
+        "version": "0.6.4"
       }
     },
     {
@@ -59,8 +59,8 @@
       "kind": "remoteSourceControl",
       "location": "https://github.com/Rallista/valhalla-openapi-models-swift.git",
       "state": {
-        "revision": "440addd4a9f5b07c44c4c2e8c9eb18e6e9334687",
-        "version": "0.2.2"
+        "revision": "a6e37f5e2c0c6a5e5f29721dfd420ffd0d4fcbb4",
+        "version": "0.6.0"
       }
     }
   ],

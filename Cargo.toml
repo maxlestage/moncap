@@ -10,7 +10,7 @@ rust-version = "1.88"
 # compilé, dans le binaire : ni serveur de base à faire tourner, ni Redis. Les
 # données et le cache sont deux fichiers (voir `base` et `cache`).
 paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["sqlite"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rayon = "1"
@@ -19,12 +19,17 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Connexion : Argon2 pour les mots de passe, SHA-256 pour ne stocker que
 # l'empreinte des jetons (sessions et réinitialisations).
-argon2 = "0.5"
-rand_core = { version = "0.6", features = ["getrandom"] }
-sha2 = "0.10"
+argon2 = "0.6"
+sha2 = "0.11"
+# L'aléa des jetons (sessions, liens, identifiants de connexion).
+getrandom = "0.4"
 # Client HTTP sortant (rustls, sans OpenSSL) : FIRMS, Open-Meteo, Transitous,
 # TomTom, tuiles et archives PMTiles, GitHub.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# rustls sur `ring`, comme le reste du serveur (securite, lettre) : le
+# fournisseur par défaut de reqwest 0.13, aws-lc, ajouterait une compilation
+# C lourde au buildpack. Installé avant le premier client (`externes`).
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "json", "query"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 # Décompression des répertoires PMTiles (gzip).
 flate2 = "1"
 # Envoi des courriels de réinitialisation via le SMTP configuré (SMTP_HOST…).

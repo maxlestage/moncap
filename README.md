@@ -147,6 +147,18 @@ chaque requête, rien à installer ni à facturer.
   plafond à douze. `GET /searches?limit=N` n'en rend que les N premières.
 - **Les tâches de fond** (purge des signalements, ménage) tournent sur un fil
   que Paquets garde pour elles, à côté des fils du serveur.
+- **La sauvegarde** (`src/sauvegarde.rs`) : le disque d'un dyno Heroku
+  repart vide à chaque redémarrage, au moins une fois par jour, et la base
+  avec lui. Avec `SAUVEGARDE_TOKEN` (à défaut le `GITHUB_TOKEN` des régions
+  hors ligne, s'il peut écrire), le serveur copie la base dans la
+  Release `sauvegarde-base` d'un dépôt **privé** (`SAUVEGARDE_DEPOT`,
+  `maxlestage/moncap` par défaut) : un cliché `VACUUM INTO` compressé chaque
+  minute s'il a changé, et un dernier à l'arrêt (`SIGTERM`). Au démarrage,
+  une base absente du disque revient de la dernière copie ; une base présente
+  n'est jamais écrasée. Les deux copies les plus récentes sont gardées. Le
+  jeton : à portée fine, sur ce seul dépôt, « Contents: Read and write ».
+  Sans jeton, rien ne change ; un jeton refusé est signalé une fois dans les
+  journaux, et la sauvegarde s'arrête jusqu'au redémarrage suivant.
 
 > ⚠️ **Le disque d'un dyno Heroku est éphémère** : il repart de zéro à chaque
 > déploiement et au redémarrage quotidien. Sur Heroku, la base SQLite oublie
@@ -321,7 +333,13 @@ Personne ne distribue ces tuiles gratuitement : le seul fournisseur prêt à
 l'emploi demande plusieurs centaines de dollars par mois. Un runner GitHub
 suffit pourtant, et les Releases les hébergent sans frais.
 
-- **Workflow** `.github/workflows/valhalla-tiles.yml`, manuel. L'entrée
+Tout cela vit dans un dépôt à part, **public** et dédié :
+[`maxlestage/MonCapMaps`](https://github.com/maxlestage/MonCapMaps) — les
+Releases (une par région) et les workflows qui les construisent. Ce dépôt-ci
+peut ainsi rester privé : l'app lit la liste et télécharge les fichiers sur
+MonCapMaps, sans jeton et sans passer par le serveur.
+
+- **Workflow** `valhalla-tiles.yml` (sur MonCapMaps), manuel. L'entrée
   `regions` accepte des zones Geofabrik (`france,portugal`), `europe`, ou
   `grandes-regions`.
 - **Découpage** lu sur l'index Geofabrik, jamais recopié à la main : au-delà
@@ -332,7 +350,7 @@ suffit pourtant, et les Releases les hébergent sans frais.
   retenant que les étiquettes préfixées `tuiles-eu-`. Le titre de la Release
   porte le nom lisible, sa pièce jointe `.tar` le poids réel. Deux cents
   entrées tenues à la main seraient fausses dès la construction suivante.
-- **Vérification** `.github/workflows/valhalla-epreuve.yml`, chaque lundi :
+- **Vérification** `valhalla-epreuve.yml` (sur MonCapMaps), chaque lundi :
   Bordeaux → Limoges sur le paquet publié, avec Toulouse en contrôle négatif.
 
 ### Deux impasses, mesurées — ne pas les retenter
@@ -374,10 +392,12 @@ Deux détails qui coûtent cher si on les ignore :
 - **Interrupteur hors ligne** dans les réglages : le calcul local n'est pas
   imposé, il est choisi.
 
-### `GITHUB_TOKEN` — sans quoi rien ne se télécharge
+### Le serveur, en repli
 
-Les paquets sont publiés en **Releases** de ce dépôt, qui est **privé**.
-L'application les demandait directement à `api.github.com`, sans jeton :
+L'app lit d'abord MonCapMaps directement ; le serveur ne sert plus que de
+repli pour la liste, quand GitHub refuse (soixante appels par heure sans
+jeton). Historique : quand les paquets vivaient sur ce dépôt **privé**,
+l'application les demandait directement à `api.github.com`, sans jeton :
 GitHub répondait 404, la liste des régions restait vide, aucune région
 n'était proposée — et l'écran affichait « il faut du réseau une fois » alors
 que le réseau allait très bien. Le message accusait le réseau parce que
@@ -404,7 +424,7 @@ Ce qu'il faut régler, une fois, dans **Heroku → Settings → Config Vars** :
 | Variable | Valeur |
 | --- | --- |
 | `GITHUB_TOKEN` | un jeton avec la portée `repo` en lecture sur ce dépôt |
-| `MONCAP_DEPOT` | facultatif, `maxlestage/moncap` par défaut |
+| `MONCAP_DEPOT` | facultatif, `maxlestage/MonCapMaps` par défaut |
 
 Sans jeton, les deux routes répondent **503 avec le motif écrit en toutes
 lettres** (`GITHUB_TOKEN absent`), que l'application affiche. C'est délibéré :
@@ -631,9 +651,9 @@ figurer aussi : un graphe partiel échoue exactement comme un graphe absent.
 
 | Paquet | Version | Déclaré par |
 | --- | --- | --- |
-| `maplibre-gl-native-distribution` | 6.28.0 | le projet |
-| `valhalla-mobile` | 0.5.1 | le projet |
-| `valhalla-openapi-models-swift` | 0.2.2 | valhalla-mobile |
+| `maplibre-gl-native-distribution` | 7.0.0 | le projet |
+| `valhalla-mobile` | 0.6.4 | le projet |
+| `valhalla-openapi-models-swift` | 0.6.0 | valhalla-mobile |
 | `light-swift-untar` | 1.0.4 | valhalla-mobile |
 | `swift-docc-plugin` | 1.5.0 | valhalla-mobile |
 | `swift-docc-symbolkit` | 1.0.0 | swift-docc-plugin |

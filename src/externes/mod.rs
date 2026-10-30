@@ -44,13 +44,22 @@ pub fn demarre(cache: &'static Db) {
     feux::demarre(cache);
 }
 
+/// Un constructeur de client HTTP sortant, TLS prêt : reqwest 0.13 ne choisit
+/// plus son fournisseur cryptographique quand on écarte aws-lc, on installe
+/// donc `ring` — le même que le reste du serveur — une fois pour toutes.
+pub fn constructeur_http() -> reqwest::ClientBuilder {
+    // Déjà installé (un autre client, un autre essai) : rien à faire.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    reqwest::Client::builder()
+}
+
 /// Client HTTP sortant partagé (pool de connexions + pile TLS construits une
 /// seule fois), avec un délai de 15 s et sans User-Agent par défaut. Chaque
 /// appel peut allonger ou raccourcir ce délai pour lui-même.
 pub fn client_http() -> &'static reqwest::Client {
     static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
     HTTP.get_or_init(|| {
-        reqwest::Client::builder()
+        constructeur_http()
             .timeout(Duration::from_secs(15))
             .build()
             .unwrap_or_default()

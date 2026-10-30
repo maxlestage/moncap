@@ -7,10 +7,17 @@
 //! et `localStorage` plafonne vers 5 Mo pour tout le site — Mémoire y garde
 //! déjà le profil. La trace s'efface quand le partage s'arrête.
 //!
-//! Base `moncap`, magasin `trace`, clés automatiques. Hors navigateur, ou
-//! quand IndexedDB est refusé (navigation privée stricte), tout se réduit à
-//! rien : la trace est un plus, jamais une condition du partage.
+//! Une base Mémoire (table `trace`, un point par ligne) rangée dans la base
+//! IndexedDB `moncap.memoire` par `paquets::IndexedDbStorage`. Hors
+//! navigateur, ou quand IndexedDB est refusé (navigation privée stricte),
+//! tout se réduit à rien : la trace est un plus, jamais une condition du
+//! partage.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use paquets::orm::web::LocalStorageDb;
+use paquets::orm::{Executor, Model};
 use serde::{Deserialize, Serialize};
 
 /// Un point envoyé.
@@ -20,6 +27,15 @@ pub struct Point {
     pub t: f64,
     pub lat: f64,
     pub lon: f64,
+}
+
+/// Un point tel que la base le range : l'identifiant suit l'ordre d'envoi.
+#[paquets::model(table = "trace")]
+struct PointTrace {
+    id: i64,
+    t: f64,
+    lat: f64,
+    lon: f64,
 }
 
 /// Ce que la page montre de la trace.
@@ -43,123 +59,75 @@ impl Resume {
     }
 }
 
+thread_local! {
+    /// La base ouverte, gardée pour les envois suivants.
+    static OUVERTE: RefCell<Option<Rc<LocalStorageDb>>> = const { RefCell::new(None) };
+}
+
+/// La base de la trace, ouverte une fois ; `None` sans IndexedDB.
+async fn base() -> Option<Rc<LocalStorageDb>> {
+    if let Some(db) = OUVERTE.with(|o| o.borrow().clone()) {
+        return Some(db);
+    }
+    let stockage = paquets::IndexedDbStorage::open("moncap.memoire")
+        .await
+        .ok()?;
+    let db = LocalStorageDb::open_with("trace", stockage).ok()?;
+    db.create_table_if_not_exists::<PointTrace>().await.ok()?;
+    // Deux appels ont pu ouvrir en même temps : le premier arrivé sert à
+    // tous, pour qu'une seule copie des lignes écrive.
+    Some(OUVERTE.with(|o| o.borrow_mut().get_or_insert(Rc::new(db)).clone()))
+}
+
 /// Ajoute un point à la trace.
 pub async fn ajoute(p: Point) {
-    #[cfg(target_arch = "wasm32")]
-    let _ = idb::ajoute(p).await;
-    #[cfg(not(target_arch = "wasm32"))]
-    let _ = p;
+    if let Some(db) = base().await {
+        ajoute_dans(&db, p).await;
+    }
 }
 
 /// Toute la trace, dans l'ordre d'envoi.
 pub async fn tous() -> Vec<Point> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        idb::tous().await.unwrap_or_default()
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        Vec::new()
+    match base().await {
+        Some(db) => tous_dans(&db).await,
+        None => Vec::new(),
     }
 }
 
 /// Efface la trace.
 pub async fn efface() {
-    #[cfg(target_arch = "wasm32")]
-    let _ = idb::efface().await;
+    if let Some(db) = base().await {
+        efface_dans(&db).await;
+    }
 }
 
-#[cfg(target_arch = "wasm32")]
-mod idb {
-    use std::cell::RefCell;
-
-    use wasm_bindgen::closure::Closure;
-    use wasm_bindgen::{JsCast, JsValue};
-    use wasm_bindgen_futures::JsFuture;
-    use web_sys::{
-        IdbDatabase, IdbObjectStore, IdbObjectStoreParameters, IdbRequest, IdbTransactionMode,
+async fn ajoute_dans(db: &LocalStorageDb, p: Point) {
+    let mut ligne = PointTrace {
+        id: 0,
+        t: p.t,
+        lat: p.lat,
+        lon: p.lon,
     };
+    let _ = ligne.insert(db).await;
+}
 
-    use super::Point;
+async fn tous_dans(db: &LocalStorageDb) -> Vec<Point> {
+    PointTrace::query()
+        .order_by(PointTrace::ID.asc())
+        .all(db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|l| Point {
+            t: l.t,
+            lat: l.lat,
+            lon: l.lon,
+        })
+        .collect()
+}
 
-    const BASE: &str = "moncap";
-    const VERSION: u32 = 1;
-    const MAGASIN: &str = "trace";
-
-    thread_local! {
-        /// La base ouverte, gardée pour les envois suivants.
-        static OUVERTE: RefCell<Option<IdbDatabase>> = const { RefCell::new(None) };
-    }
-
-    /// Attend la fin d'une requête IndexedDB : son résultat, ou l'échec.
-    async fn attends(req: &IdbRequest) -> Result<JsValue, JsValue> {
-        let promesse = js_sys::Promise::new(&mut |resous, rejette| {
-            let r = req.clone();
-            let ok = Closure::once_into_js(move |_: JsValue| {
-                let v = r.result().unwrap_or(JsValue::UNDEFINED);
-                let _ = resous.call1(&JsValue::NULL, &v);
-            });
-            let ko = Closure::once_into_js(move |e: JsValue| {
-                let _ = rejette.call1(&JsValue::NULL, &e);
-            });
-            req.set_onsuccess(Some(ok.unchecked_ref()));
-            req.set_onerror(Some(ko.unchecked_ref()));
-        });
-        JsFuture::from(promesse).await
-    }
-
-    async fn base() -> Result<IdbDatabase, JsValue> {
-        if let Some(b) = OUVERTE.with(|o| o.borrow().clone()) {
-            return Ok(b);
-        }
-        let fabrique = web_sys::window()
-            .ok_or(JsValue::NULL)?
-            .indexed_db()?
-            .ok_or(JsValue::NULL)?;
-        let ouverture = fabrique.open_with_u32(BASE, VERSION)?;
-        // La première fois (ou à un changement de version) : le magasin.
-        let req = ouverture.clone();
-        let prepare = Closure::once_into_js(move |_: JsValue| {
-            if let Ok(b) = req.result() {
-                let b: IdbDatabase = b.unchecked_into();
-                if !b.object_store_names().contains(MAGASIN) {
-                    let params = IdbObjectStoreParameters::new();
-                    params.set_auto_increment(true);
-                    let _ = b.create_object_store_with_optional_parameters(MAGASIN, &params);
-                }
-            }
-        });
-        ouverture.set_onupgradeneeded(Some(prepare.unchecked_ref()));
-        let b: IdbDatabase = attends(&ouverture).await?.unchecked_into();
-        OUVERTE.with(|o| *o.borrow_mut() = Some(b.clone()));
-        Ok(b)
-    }
-
-    async fn magasin(mode: IdbTransactionMode) -> Result<IdbObjectStore, JsValue> {
-        base()
-            .await?
-            .transaction_with_str_and_mode(MAGASIN, mode)?
-            .object_store(MAGASIN)
-    }
-
-    pub async fn ajoute(p: Point) -> Result<(), JsValue> {
-        let json = serde_json::to_string(&p).map_err(|_| JsValue::NULL)?;
-        let valeur = js_sys::JSON::parse(&json)?;
-        let m = magasin(IdbTransactionMode::Readwrite).await?;
-        attends(&m.add(&valeur)?).await.map(drop)
-    }
-
-    pub async fn tous() -> Result<Vec<Point>, JsValue> {
-        let m = magasin(IdbTransactionMode::Readonly).await?;
-        let tout = attends(&m.get_all()?).await?;
-        let json: String = js_sys::JSON::stringify(&tout)?.into();
-        Ok(serde_json::from_str(&json).unwrap_or_default())
-    }
-
-    pub async fn efface() -> Result<(), JsValue> {
-        let m = magasin(IdbTransactionMode::Readwrite).await?;
-        attends(&m.clear()?).await.map(drop)
-    }
+async fn efface_dans(db: &LocalStorageDb) {
+    let _ = PointTrace::delete_many().execute(db).await;
 }
 
 #[cfg(test)]
@@ -184,5 +152,42 @@ mod tests {
         r.ajoute(b);
         assert_eq!((r.points, r.dernier), (3, Some(b)));
         assert_eq!(Resume::de(&[]), Resume::default());
+    }
+
+    #[test]
+    fn la_base_garde_les_points_dans_l_ordre_puis_s_efface() {
+        use paquets::orm::web::MemoryStorage;
+        paquets::orm::block_on(async {
+            let db = LocalStorageDb::open_with("trace", MemoryStorage::new()).unwrap();
+            db.create_table_if_not_exists::<PointTrace>().await.unwrap();
+            let a = Point {
+                t: 1.0,
+                lat: 44.8,
+                lon: -0.6,
+            };
+            let b = Point {
+                t: 2.0,
+                lat: 45.8,
+                lon: 1.3,
+            };
+            ajoute_dans(&db, a).await;
+            ajoute_dans(&db, b).await;
+            assert_eq!(tous_dans(&db).await, [a, b]);
+            efface_dans(&db).await;
+            assert_eq!(tous_dans(&db).await, []);
+        });
+    }
+
+    #[test]
+    fn hors_navigateur_la_trace_est_vide() {
+        paquets::orm::block_on(async {
+            ajoute(Point {
+                t: 1.0,
+                lat: 0.0,
+                lon: 0.0,
+            })
+            .await;
+            assert!(tous().await.is_empty());
+        });
     }
 }

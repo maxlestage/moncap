@@ -86,12 +86,29 @@ final class OfflineRouter: NSObject, ObservableObject {
         static let base = APIClient().baseURL.appendingPathComponent("offline/regions")
             .absoluteString
 
-        /// Le dépôt qui publie les paquets. **Public** désormais : la liste se
-        /// lit sur l'API GitHub et les fichiers se téléchargent sur les
-        /// Releases, sans jeton et sans passer par le serveur — qui peut être
-        /// arrêté (heures de dyno épuisées : la liste répondait 503) sans que
-        /// les itinéraires hors réseau en souffrent.
-        static let depot = "maxlestage/moncap"
+        /// Le dépôt qui publie les paquets : `MonCapMaps`, **public** et dédié
+        /// à cela — le code de l'app reste privé. La liste se lit sur l'API
+        /// GitHub et les fichiers se téléchargent sur les Releases, sans jeton
+        /// et sans passer par le serveur, qui peut être arrêté (heures de dyno
+        /// épuisées : la liste répondait 503) sans que les itinéraires hors
+        /// réseau en souffrent.
+        static let depot = "maxlestage/MonCapMaps"
+
+        /// La date de construction d'une Release : la ligne `construit: …`
+        /// de ses notes quand elle y est, sinon la date de son archive. Les
+        /// régions recopiées depuis l'ancien dépôt portent leur date d'origine
+        /// dans les notes ; leur archive, datée du jour de la copie, aurait
+        /// fait proposer une mise à jour de chaque région installée.
+        static func dateDeConstruction(notes: String?, archive: String?) -> String? {
+            for ligne in (notes ?? "").split(whereSeparator: \.isNewline) {
+                if ligne.hasPrefix("construit: ") {
+                    let date = ligne.dropFirst("construit: ".count)
+                        .trimmingCharacters(in: .whitespaces)
+                    if !date.isEmpty { return date }
+                }
+            }
+            return archive
+        }
         /// Préfixe des étiquettes publiées par le workflow des tuiles.
         static let prefixe = "tuiles-eu-"
 
@@ -206,7 +223,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         var trouvee: Installee?
         for region in installees {
             guard let moteur = moteur(region.id) else { continue }
-            if !OfflineRoute.toutes(json: moteur.route(rawRequest: texte)).isEmpty {
+            if !OfflineRoute.toutes(json: Self.calcule(moteur, texte)).isEmpty {
                 trouvee = region
                 break
             }
@@ -462,7 +479,9 @@ final class OfflineRouter: NSObject, ObservableObject {
                     id: tag,
                     nom: titre.isEmpty ? tag : titre,
                     octets: tar["size"] as? Int ?? 0,
-                    construit: tar["updated_at"] as? String))
+                    construit: Region.dateDeConstruction(
+                        notes: release["body"] as? String,
+                        archive: tar["updated_at"] as? String)))
             }
             if liste.count < 100 { break }
         }
@@ -776,7 +795,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                 retiens(.paquetIllisible(region: region.nom))
                 continue
             }
-            let brut = moteur.route(rawRequest: texte)
+            let brut = Self.calcule(moteur, texte)
             let trouves = OfflineRoute.toutes(json: brut)
             if !trouves.isEmpty {
                 dernierEchec = nil
@@ -842,7 +861,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                     continue
                 }
                 let texte = String(decoding: json, as: UTF8.self)
-                for r in OfflineRoute.toutes(json: moteur.route(rawRequest: texte)) {
+                for r in OfflineRoute.toutes(json: Self.calcule(moteur, texte)) {
                     if vues.insert(Self.empreinte(r)).inserted {
                         routes.append(r)
                     }
@@ -1004,6 +1023,27 @@ final class OfflineRouter: NSObject, ObservableObject {
         else { return nil }
         moteurs[id] = neuf
         return neuf
+    }
+}
+
+extension OfflineRouter {
+    /// Une requête brute au moteur, et sa réponse JSON — refus compris.
+    ///
+    /// Depuis valhalla-mobile 0.6, un refus du moteur (« No suitable edges
+    /// near location »…) arrive en erreur Swift et non plus dans le JSON.
+    /// On le remet dans la forme d'avant, `{"error", "error_code"}`, que
+    /// `OfflineRoute.erreur(json:)` sait lire : l'écran continue de dire
+    /// pourquoi le calcul a échoué au lieu de rester muet.
+    static func calcule(_ moteur: Valhalla, _ requete: String) -> String {
+        do {
+            return try moteur.route(rawRequest: requete)
+        } catch ValhallaError.valhallaError(let code, let message) {
+            let refus: [String: Any] = ["error": message, "error_code": code]
+            guard let json = try? JSONSerialization.data(withJSONObject: refus) else { return "" }
+            return String(decoding: json, as: UTF8.self)
+        } catch {
+            return ""
+        }
     }
 }
 
