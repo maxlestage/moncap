@@ -318,7 +318,14 @@ pub fn porte(p: Proprietes) -> Node {
                         .on_click(oublie)
                         .text("Mot de passe oublié ?")
                         .into()]
-                }),
+                })
+                // Sans compte, sans serveur : se nommer et partager sa
+                // position, tout reste dans le navigateur.
+                .child(
+                    a().class("lien")
+                        .attr("href", crate::espace::FRAGMENT_ESPACE)
+                        .text("Sans compte : partager ma position →"),
+                ),
         )
         .child(
             details()

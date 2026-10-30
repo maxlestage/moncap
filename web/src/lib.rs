@@ -15,6 +15,7 @@ pub mod app;
 pub mod carte;
 pub mod catalogue;
 pub mod compte;
+pub mod espace;
 pub mod etat;
 pub mod geo;
 pub mod localisation;

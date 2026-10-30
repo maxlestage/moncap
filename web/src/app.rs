@@ -14,6 +14,7 @@ use paquets::active::prelude::*;
 
 use crate::api::{self, Erreur};
 use crate::catalogue::Ressources;
+use crate::espace::{self, espace, PositionPartagee};
 use crate::navigateur::{self, au_montage, fenetre, lance};
 use crate::porte::{self, porte};
 use crate::session::{self, Session};
@@ -64,6 +65,11 @@ const ATTENTE_DECONNEXION_MS: u32 = 2500;
 /// navigateur.
 pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
     let session = use_state(depart.clone());
+    // « Mon espace » — se nommer, partager sa position — s'ouvre par
+    // l'adresse (`#espace`, ou un lien `#position=…` reçu), avec ou sans
+    // compte, et sans le serveur.
+    let ouvert = use_state(ecran_espace(&espace::fragment()));
+    au_montage(move || ecoute_fragment(move |f| ouvert.set(ecran_espace(&f))));
     let avis = use_state(None::<(String, bool)>);
     let volet = use_state(Volet::Repos);
     let minuteurs: Rc<RefCell<Vec<Timeout>>> = Rc::default();
@@ -171,8 +177,19 @@ pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
         let ressources = ressources.clone();
         move || {
             let c = connecte.get();
+            let e = ouvert.get();
             untrack(|| {
-                vec![if c {
+                vec![if let Some(recue) = e {
+                    espace(espace::Proprietes {
+                        recue,
+                        retour: Rc::new(move || {
+                            if let Some(f) = fenetre() {
+                                let _ = f.location().set_hash("");
+                            }
+                            ouvert.set(None);
+                        }),
+                    })
+                } else if c {
                     tableau(tableau::Proprietes {
                         session,
                         ressources: ressources.clone(),
@@ -214,9 +231,49 @@ pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
     ])
 }
 
+/// L'écran que demande un fragment d'adresse : l'espace (avec la position
+/// reçue, s'il en porte une), ou rien de particulier.
+fn ecran_espace(fragment: &str) -> Option<Option<PositionPartagee>> {
+    if let Some(p) = espace::lis_fragment(fragment) {
+        Some(Some(p))
+    } else if fragment == espace::FRAGMENT_ESPACE {
+        Some(None)
+    } else {
+        None
+    }
+}
+
+/// Suit les changements du fragment de l'adresse (un lien `#espace` touché,
+/// un lien de position collé dans la barre).
+fn ecoute_fragment(sur_change: impl Fn(String) + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::closure::Closure;
+        use wasm_bindgen::JsCast;
+        if let Some(f) = fenetre() {
+            let rappel = Closure::<dyn FnMut()>::new(move || sur_change(espace::fragment()));
+            let _ =
+                f.add_event_listener_with_callback("hashchange", rappel.as_ref().unchecked_ref());
+            // La page vit aussi longtemps que l'application.
+            rappel.forget();
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    drop(sur_change);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn le_fragment_choisit_l_espace() {
+        assert!(ecran_espace("").is_none());
+        assert!(ecran_espace("#autre").is_none());
+        assert!(matches!(ecran_espace("#espace"), Some(None)));
+        let recue = ecran_espace("#position=44.8,-0.5,0,Lou").unwrap().unwrap();
+        assert_eq!(recue.nom, "Lou");
+    }
 
     fn ressources() -> Rc<Ressources> {
         Rc::new(
