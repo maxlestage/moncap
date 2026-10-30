@@ -9,7 +9,8 @@ use crate::cache::{self, CacheRef};
 use crate::erreur::texte;
 use crate::temps_reel::{self, Hub, HubRef};
 use crate::{
-    alertes, base, compte, connexion, externes, partage, positions, statique, trajets, tuiles,
+    alertes, base, compte, connexion, externes, partage, positions, sauvegarde, statique, trajets,
+    tuiles,
 };
 
 /// Les réglages qui changent entre la production et les tests.
@@ -28,6 +29,9 @@ pub struct Reglages {
 impl Reglages {
     pub fn production() -> Self {
         let base = base::url_base();
+        // Un dyno neuf a un disque vide : la base revient de sa sauvegarde
+        // avant de s'ouvrir.
+        sauvegarde::restaure(&base);
         let cache = cache::url_cache();
         tracing::info!("base {base}, cache {cache}");
         Reglages {
@@ -275,6 +279,7 @@ fn demarre_taches(db: &'static Db, cache: &'static Db) {
         }
     });
     externes::demarre(cache);
+    sauvegarde::demarre(db);
 }
 
 #[cfg(test)]
