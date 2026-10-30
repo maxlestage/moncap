@@ -65,6 +65,8 @@ pub struct Proprietes {
     /// Un message à montrer en arrivant — « session expirée », par
     /// exemple —, et s'il s'agit d'une erreur.
     pub avis: Option<(String, bool)>,
+    /// Retour au partage de position sans compte.
+    pub vers_partage: Rc<dyn Fn()>,
 }
 
 /// La porte.
@@ -320,6 +322,17 @@ pub fn porte(p: Proprietes) -> Node {
                         .into()]
                 }),
         )
+        .child({
+            let vers_partage = p.vers_partage.clone();
+            div().class("porte-liens").style("--i:5").child(
+                button()
+                    .attr("type", "button")
+                    .class("lien")
+                    .attr("data-onde", "")
+                    .on_click(move |_: Event| vers_partage())
+                    .text("Partager ma position sans compte"),
+            )
+        })
         .child(
             details()
                 .class("porte-avance")
@@ -392,7 +405,7 @@ fn p_() -> Element {
 }
 
 /// Le décor : une route qui se dessine, et un point GPS qui la parcourt.
-fn decor() -> Node {
+pub(crate) fn decor() -> Node {
     const ROUTE: &str = "M-40 720 C 180 640 260 760 420 650 S 640 420 800 470 \
                          S 1040 640 1180 470 S 1360 190 1500 230";
     let mut dessin = svg()
@@ -470,7 +483,7 @@ const FLOTTANTS: [(&str, u8, u8, f32); 5] = [
 
 /// Le bandeau qui défile en bas de l'écran. Doublé, pour boucler sans
 /// couture : quand la première moitié sort, la seconde est à sa place.
-fn defilant() -> Node {
+pub(crate) fn defilant() -> Node {
     let suite = || {
         span().class("defilant-suite").children(
             FONCTIONS
@@ -505,6 +518,7 @@ mod tests {
         porte(Proprietes {
             on_session: Rc::new(|_| {}),
             avis,
+            vers_partage: Rc::new(|| {}),
         })
         .render()
     }

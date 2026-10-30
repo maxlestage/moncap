@@ -20,10 +20,13 @@ pub mod geo;
 pub mod localisation;
 pub mod navigateur;
 pub mod nominatim;
+pub mod partage;
 pub mod porte;
+pub mod profil;
 pub mod session;
 pub mod tableau;
 pub mod temps_reel;
+pub mod trace;
 pub mod types;
 pub mod ui;
 

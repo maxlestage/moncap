@@ -777,6 +777,11 @@ T: dict[str, tuple[str, str]] = {
         "Sign in to an existing account",
     ),
     "Compte de cet appareil": ("Cuenta de este dispositivo", "This device's account"),
+    "Ton nom": ("Tu nombre", "Your name"),
+    "Montré à ceux qui suivent ta position. Laisse vide pour rester « Un ami ».": (
+        "Visible para quienes siguen tu posición. Déjalo vacío para seguir siendo «Un amigo».",
+        "Shown to people following your location. Leave empty to stay “A friend”.",
+    ),
     "Retrouve tes trajets et ton abonnement sur ce téléphone.": (
         "Recupera tus viajes y tu suscripción en este teléfono.",
         "Get your trips and subscription back on this phone.",

@@ -2210,3 +2210,22 @@ html.mvt button.avatar.choisi::after {
     display: none;
   }
 }
+
+/* Le partage sans compte : le lien à envoyer, ses deux boutons, l'état. */
+.partage-lien {
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+}
+
+.partage-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem;
+}
+
+.partage-etat {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--doux);
+  font-variant-numeric: tabular-nums;
+}
