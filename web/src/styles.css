@@ -507,7 +507,6 @@ button.lien::before {
 }
 
 input[type="email"],
-input[type="text"],
 input[type="password"],
 input[type="search"],
 input[type="number"],
@@ -2212,102 +2211,21 @@ html.mvt button.avatar.choisi::after {
   }
 }
 
-/* --- Mon espace : se nommer, partager sa position (sans compte) -------- */
-
-.espace {
-  display: grid;
-  gap: 1rem;
-  width: 100%;
-  max-width: 34rem;
-  margin: 0 auto;
-  padding: 1.5rem 16px 3rem;
-  color: var(--texte);
-}
-
-.espace-tete {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-/* Sur le marine de la page, comme la porte. */
-.espace-tete h1 {
-  margin: 0;
-  font-size: 1.6rem;
-  color: #fff;
-}
-
-.espace-tete .lien {
-  color: #cfe0ff;
-}
-
-.espace > section {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1.2rem;
-  border-radius: var(--rayon);
-  background: var(--papier);
-  box-shadow: var(--ombre);
-}
-
-.espace h2 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.espace-recue {
-  border: 2px solid var(--accent);
-}
-
-.espace-doux {
-  margin: 0;
-  color: var(--doux);
+/* Le partage sans compte : le lien à envoyer, ses deux boutons, l'état. */
+.partage-lien {
   font-size: 0.9rem;
-  line-height: 1.45;
+  text-overflow: ellipsis;
 }
 
-.espace-lien {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--trait);
-  border-radius: 12px;
-  background: var(--fond);
-  color: var(--texte);
-  font: 0.85rem ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.espace-liens {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 1rem;
-}
-
-.espace-liens a {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.espace-historique ul {
+.partage-actions {
   display: grid;
+  grid-template-columns: 1fr auto;
   gap: 0.6rem;
+}
+
+.partage-etat {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.espace-historique li {
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.7rem 0;
-  border-top: 1px solid var(--trait);
-}
-
-.espace-historique li:first-child {
-  border-top: 0;
-}
-
-.espace-historique li > button {
-  justify-self: start;
+  font-size: 0.86rem;
+  color: var(--doux);
+  font-variant-numeric: tabular-nums;
 }

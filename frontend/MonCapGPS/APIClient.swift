@@ -11,6 +11,24 @@ enum Session {
     static var username: String { UserDefaults.standard.string(forKey: userKey) ?? "" }
     static var isAuthenticated: Bool { !token.isEmpty }
 
+    /// Le nom choisi dans les réglages, montré à ceux qui suivent la
+    /// position (carte partagée, lien de suivi).
+    static let nomKey = "moncap.nom"
+    /// Longueur maximale d'un nom : de quoi tenir un prénom et un nom (le
+    /// serveur, lui, coupe à 120).
+    static let nomMax = 40
+
+    /// Le nom à montrer aux autres : celui choisi, sinon l'e-mail d'un compte
+    /// e-mail — jamais l'identifiant tiré au hasard du compte anonyme. Vide
+    /// quand il n'y a rien à montrer : à l'appelant de dire « Moi » ou
+    /// « Un ami ».
+    static func nomAffiche(_ saisi: String) -> String {
+        let nom = saisi.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !nom.isEmpty { return String(nom.prefix(nomMax)) }
+        if username.isEmpty || CompteAnonyme.estAnonyme(username) { return "" }
+        return username
+    }
+
     static var avatar: String {
         get { UserDefaults.standard.string(forKey: avatarKey) ?? "green" }
         set { UserDefaults.standard.set(newValue, forKey: avatarKey) }
