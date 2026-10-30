@@ -1,5 +1,10 @@
-//! La racine : la porte ou le tableau de bord, le volet qui passe de l'un
-//! à l'autre, et la session qui décide lequel montrer.
+//! La racine : le partage sans compte, la porte ou le tableau de bord, le
+//! volet qui passe de l'un à l'autre, et la session qui décide lequel
+//! montrer.
+//!
+//! Sans session, on arrive sur le partage de position : il ne demande rien.
+//! La porte est à un clic (« J'ai un compte »), et c'est elle qui se rouvre
+//! quand une session se referme — celui qui en avait une la retrouve.
 //!
 //! La session est gardée ici, et seulement ici. Elle s'ouvre à la porte,
 //! se renouvelle quand le mot de passe change, et se referme de trois
@@ -14,8 +19,8 @@ use paquets::active::prelude::*;
 
 use crate::api::{self, Erreur};
 use crate::catalogue::Ressources;
-use crate::espace::{self, espace, PositionPartagee};
 use crate::navigateur::{self, au_montage, fenetre, lance};
+use crate::partage::{self, partage};
 use crate::porte::{self, porte};
 use crate::session::{self, Session};
 use crate::tableau::{self, tableau};
@@ -42,6 +47,9 @@ impl FinDeSession {
     }
 }
 
+/// Ce qui change de vue, exécuté écran couvert.
+type Bascule = Box<dyn FnOnce()>;
+
 /// Le volet qui couvre l'écran pendant qu'on change de vue — la transition
 /// de page des sites qui bougent, plutôt qu'un écran qui en remplace un
 /// autre d'un coup.
@@ -65,26 +73,24 @@ const ATTENTE_DECONNEXION_MS: u32 = 2500;
 /// navigateur.
 pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
     let session = use_state(depart.clone());
-    // « Mon espace » — se nommer, partager sa position — s'ouvre par
-    // l'adresse (`#espace`, ou un lien `#position=…` reçu), avec ou sans
-    // compte, et sans le serveur.
-    let ouvert = use_state(ecran_espace(&espace::fragment()));
-    au_montage(move || ecoute_fragment(move |f| ouvert.set(ecran_espace(&f))));
     let avis = use_state(None::<(String, bool)>);
     let volet = use_state(Volet::Repos);
+    // Sans session : la porte (vrai) ou le partage sans compte (faux).
+    let compte = use_state(false);
     let minuteurs: Rc<RefCell<Vec<Timeout>>> = Rc::default();
     // Une fermeture déjà en route : les suivantes — plusieurs requêtes
     // refusées d'un coup — n'en rajoutent pas.
     let en_sortie = Rc::new(Cell::new(false));
 
-    let change: Rc<dyn Fn(Option<Session>)> = Rc::new(move |nouvelle: Option<Session>| {
+    // Change de vue derrière le volet : `bascule` s'exécute écran couvert.
+    let transition: Rc<dyn Fn(Bascule)> = Rc::new(move |bascule: Bascule| {
         if !navigateur::mouvement_permis() {
-            session.set(nouvelle);
+            bascule();
             return;
         }
         volet.set(Volet::Monte);
         let bascule = Timeout::new(MONTEE_MS, move || {
-            session.set(nouvelle);
+            bascule();
             volet.set(Volet::Part);
             if let Some(f) = fenetre() {
                 f.scroll_to_with_x_and_y(0.0, 0.0);
@@ -93,6 +99,13 @@ pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
         let repos = Timeout::new(MONTEE_MS + DEPART_MS, move || volet.set(Volet::Repos));
         *minuteurs.borrow_mut() = vec![bascule, repos];
     });
+
+    let change: Rc<dyn Fn(Option<Session>)> = {
+        let transition = transition.clone();
+        Rc::new(move |nouvelle: Option<Session>| {
+            transition(Box::new(move || session.set(nouvelle)));
+        })
+    };
 
     let fin: Rc<dyn Fn(FinDeSession)> = {
         let change = change.clone();
@@ -108,6 +121,7 @@ pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
             let termine = move || {
                 session::ferme();
                 avis.set(raison.avis());
+                compte.set(true);
                 change(None);
             };
             if raison != FinDeSession::Volontaire {
@@ -175,32 +189,40 @@ pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
     let connecte = memo(move || session.with(Option::is_some));
     let vue = fragment_dyn({
         let ressources = ressources.clone();
+        let vers_compte: Rc<dyn Fn()> = {
+            let transition = transition.clone();
+            Rc::new(move || transition(Box::new(move || compte.set(true))))
+        };
+        let vers_partage: Rc<dyn Fn()> = {
+            let transition = transition.clone();
+            Rc::new(move || {
+                transition(Box::new(move || {
+                    avis.set(None);
+                    compte.set(false);
+                }))
+            })
+        };
         move || {
             let c = connecte.get();
-            let e = ouvert.get();
+            let porte_ouverte = compte.get();
             untrack(|| {
-                vec![if let Some(recue) = e {
-                    espace(espace::Proprietes {
-                        recue,
-                        retour: Rc::new(move || {
-                            if let Some(f) = fenetre() {
-                                let _ = f.location().set_hash("");
-                            }
-                            ouvert.set(None);
-                        }),
-                    })
-                } else if c {
+                vec![if c {
                     tableau(tableau::Proprietes {
                         session,
                         ressources: ressources.clone(),
                         fin: fin.clone(),
                         renouvelle: renouvelle.clone(),
                     })
-                } else {
+                } else if porte_ouverte {
                     let avis = avis.get();
                     porte(porte::Proprietes {
                         on_session: on_session.clone(),
                         avis,
+                        vers_partage: vers_partage.clone(),
+                    })
+                } else {
+                    partage(partage::Proprietes {
+                        vers_compte: vers_compte.clone(),
                     })
                 }]
             })
@@ -231,49 +253,9 @@ pub fn app(ressources: Rc<Ressources>, depart: Option<Session>) -> Node {
     ])
 }
 
-/// L'écran que demande un fragment d'adresse : l'espace (avec la position
-/// reçue, s'il en porte une), ou rien de particulier.
-fn ecran_espace(fragment: &str) -> Option<Option<PositionPartagee>> {
-    if let Some(p) = espace::lis_fragment(fragment) {
-        Some(Some(p))
-    } else if fragment == espace::FRAGMENT_ESPACE {
-        Some(None)
-    } else {
-        None
-    }
-}
-
-/// Suit les changements du fragment de l'adresse (un lien `#espace` touché,
-/// un lien de position collé dans la barre).
-fn ecoute_fragment(sur_change: impl Fn(String) + 'static) {
-    #[cfg(target_arch = "wasm32")]
-    {
-        use wasm_bindgen::closure::Closure;
-        use wasm_bindgen::JsCast;
-        if let Some(f) = fenetre() {
-            let rappel = Closure::<dyn FnMut()>::new(move || sur_change(espace::fragment()));
-            let _ =
-                f.add_event_listener_with_callback("hashchange", rappel.as_ref().unchecked_ref());
-            // La page vit aussi longtemps que l'application.
-            rappel.forget();
-        }
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    drop(sur_change);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn le_fragment_choisit_l_espace() {
-        assert!(ecran_espace("").is_none());
-        assert!(ecran_espace("#autre").is_none());
-        assert!(matches!(ecran_espace("#espace"), Some(None)));
-        let recue = ecran_espace("#position=44.8,-0.5,0,Lou").unwrap().unwrap();
-        assert_eq!(recue.nom, "Lou");
-    }
 
     fn ressources() -> Rc<Ressources> {
         Rc::new(
@@ -283,9 +265,11 @@ mod tests {
     }
 
     #[test]
-    fn sans_session_la_porte() {
+    fn sans_session_le_partage() {
         let html = app(ressources(), None).render();
         assert!(html.contains(r#"class="porte""#), "{html}");
+        assert!(html.contains("Partager ma position"), "{html}");
+        assert!(!html.contains("Mot de passe oublié"));
         assert!(!html.contains(r#"class="tableau""#));
         assert!(html.contains(
             r#"<div class="volet" data-etat="repos" aria-hidden="true"><img src="/web/logo.webp""#

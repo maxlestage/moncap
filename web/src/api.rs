@@ -451,9 +451,83 @@ pub async fn vote(jeton: &str, id: i64, toujours_la: bool) -> Result<(), Erreur>
     .await
 }
 
+// --- Partage de position, sans compte ----------------------------------------
+
+/// Un partage ouvert par le serveur.
+#[derive(Clone, Debug, PartialEq, serde::Deserialize)]
+pub struct PartageOuvert {
+    pub token: String,
+    /// Absent d'un serveur trop ancien : le partage marche quand même.
+    #[serde(default)]
+    pub secret: String,
+}
+
+/// Ouvre un lien de suivi au nom donné. Aucun compte : le serveur ne garde
+/// que le nom et la dernière position, trois heures après le dernier envoi.
+pub async fn partage_ouvre(nom: &str) -> Result<PartageOuvert, Erreur> {
+    #[derive(Serialize)]
+    struct Demande<'a> {
+        name: &'a str,
+    }
+    lis(envoie(json_vers(
+        Request::post(&url("/live")),
+        &Demande { name: nom },
+    ))
+    .await?)
+    .await
+}
+
+/// Envoie une position au lien de suivi. `Statut(404, _)` : le partage a
+/// expiré ou a été arrêté ailleurs.
+pub async fn partage_envoie(jeton: &str, secret: &str, c: Coord) -> Result<(), Erreur> {
+    let chemin = format!("/live/{}", encode_composant(jeton));
+    vide(
+        envoie(json_vers(
+            Request::post(&url(&chemin)).header("x-live-secret", secret),
+            &c,
+        ))
+        .await?,
+    )
+    .await
+}
+
+/// Arrête le partage : le lien ne montre plus rien.
+pub async fn partage_arrete(jeton: &str, secret: &str) -> Result<(), Erreur> {
+    let chemin = format!("/live/{}", encode_composant(jeton));
+    vide(
+        envoie(
+            Request::delete(&url(&chemin))
+                .header("x-live-secret", secret)
+                .build(),
+        )
+        .await?,
+    )
+    .await
+}
+
+/// Le lien de suivi à envoyer : absolu, pour qu'il s'ouvre ailleurs.
+/// `origine` est celle de la page (`https://hôte`), qui sert quand l'API
+/// est sur ce même serveur.
+pub fn url_suivi(base: &str, origine: &str, jeton: &str) -> String {
+    let racine = if base.is_empty() { origine } else { base };
+    format!("{racine}/live/{}", encode_composant(jeton))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn le_lien_de_suivi_est_absolu() {
+        assert_eq!(
+            url_suivi("", "https://moncap.fr", "ab12"),
+            "https://moncap.fr/live/ab12"
+        );
+        assert_eq!(
+            url_suivi("https://api.moncap.fr", "https://moncap.fr", "ab12"),
+            "https://api.moncap.fr/live/ab12"
+        );
+    }
 
     #[test]
     fn l_encodage_suit_encode_uri_component() {

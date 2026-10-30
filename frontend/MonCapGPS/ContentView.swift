@@ -672,11 +672,13 @@ struct MapHomeView: View {
     @State private var shareError: String?
     // Partagé automatiquement pour que tout le monde apparaisse sur la carte.
     @State private var sharing = true
-    // Nom affiché aux autres : l'e-mail de connexion — jamais l'identifiant
-    // tiré au hasard du compte anonyme.
-    @State private var driverName =
-        Session.username.isEmpty || CompteAnonyme.estAnonyme(Session.username)
-        ? "Moi" : Session.username
+    /// Le nom choisi dans les réglages (« Ton nom »).
+    @AppStorage(Session.nomKey) private var nom = ""
+    /// Nom affiché aux autres sur la carte partagée.
+    private var driverName: String {
+        let n = Session.nomAffiche(nom)
+        return n.isEmpty ? "Moi" : n
+    }
     @State private var avatar = Session.avatar
     /// Un avatar retenu **par mode** : la voiture garde sa Ferrari pendant
     /// que la marche garde son randonneur. Sans cela, le mode changeant tout
@@ -1670,9 +1672,8 @@ struct MapHomeView: View {
     /// Démarre le partage de position en direct, puis présente le lien à envoyer.
     private func startLiveShare() {
         Task {
-            let name =
-                Session.username.isEmpty || CompteAnonyme.estAnonyme(Session.username)
-                ? "Un ami" : Session.username
+            let affiche = Session.nomAffiche(nom)
+            let name = affiche.isEmpty ? "Un ami" : affiche
             // Le lien s'obtient d'abord, le menu se ferme ensuite : le
             // partage part dans onDismiss, quand la feuille est vraiment
             // partie — deviner la durée de l'animation ne marche plus sur
@@ -4716,6 +4717,22 @@ struct MapHomeView: View {
                     ) {
                         Label("Faire découvrir MonCap", systemImage: "gift")
                     }
+                }
+                // Le nom que voient les proches : sur la carte partagée et
+                // sur la page du lien de suivi. Gardé sur l'appareil.
+                Section {
+                    TextField("Ton nom", text: $nom)
+                        .textContentType(.nickname)
+                        .submitLabel(.done)
+                        .onChange(of: nom) {
+                            if nom.count > Session.nomMax {
+                                nom = String(nom.prefix(Session.nomMax))
+                            }
+                        }
+                } header: {
+                    Text("Ton nom")
+                } footer: {
+                    Text("Montré à ceux qui suivent ta position. Laisse vide pour rester « Un ami ».")
                 }
                 Section("Compte") {
                     if auth.estAnonyme || auth.username.isEmpty {

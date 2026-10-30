@@ -4817,6 +4817,22 @@
         }
       }
     },
+    "Montré à ceux qui suivent ta position. Laisse vide pour rester « Un ami ».": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shown to people following your location. Leave empty to stay “A friend”."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visible para quienes siguen tu posición. Déjalo vacío para seguir siendo «Un amigo»."
+          }
+        }
+      }
+    },
     "Mot de passe oublié ?": {
       "localizations": {
         "en": {
@@ -7037,6 +7053,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tu mensaje"
+          }
+        }
+      }
+    },
+    "Ton nom": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tu nombre"
           }
         }
       }
