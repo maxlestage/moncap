@@ -436,9 +436,14 @@ source = "git+https://github.com/maxlestage/Memoire#d42619fd37cbe2ea7ae7f803f729
 dependencies = [
  "foldhash",
  "hashbrown",
+ "js-sys",
  "memoire-orm-derive",
  "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -480,10 +485,11 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "paquets"
 version = "0.2.0"
-source = "git+https://github.com/maxlestage/Paquets#e58578d7ad63e87c98474008db919a3c0e255db8"
+source = "git+https://github.com/maxlestage/Paquets#df4dec3f49d35d23063bfc96b0c7de41b282a2d6"
 dependencies = [
  "active",
  "hmac",
+ "js-sys",
  "memoire-orm",
  "paquets-macros",
  "securite",
@@ -492,12 +498,15 @@ dependencies = [
  "sha2",
  "tokio",
  "vitesse",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
 name = "paquets-macros"
 version = "0.2.0"
-source = "git+https://github.com/maxlestage/Paquets#e58578d7ad63e87c98474008db919a3c0e255db8"
+source = "git+https://github.com/maxlestage/Paquets#df4dec3f49d35d23063bfc96b0c7de41b282a2d6"
 dependencies = [
  "proc-macro2",
  "quote",

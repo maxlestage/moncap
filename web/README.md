@@ -71,6 +71,27 @@ Celles de l'ancien front, une par une :
 - **Mon compte** : les appareils où le compte est ouvert (en refermer un,
   ou tous à la fois), et le changement de mot de passe.
 
+### Mon espace — sans compte, sans serveur
+
+`/app#espace` (ou le lien « Sans compte : partager ma position » de la
+porte) : se nommer, et partager sa position par un simple lien. Tout reste
+dans le navigateur, par **Memoire**, l'ORM de Paquets (feature
+`browser-storage`) :
+
+- **le nom** dans le `localStorage`, par un `Store` Memoire : il revient à
+  chaque visite et suit d'un onglet à l'autre ;
+- **les positions envoyées et reçues** dans une base Memoire rangée dans
+  **IndexedDB** (`paquets::IndexedDbStorage`), ou dans le `localStorage`
+  quand le navigateur refuse IndexedDB.
+
+Le lien porte la position dans son fragment —
+`/app#position=lat,lon,heure,nom` —, qui ne part jamais vers un serveur : le
+destinataire l'ouvre, la page affiche « 📍 Zoé est ici » avec des liens vers
+OpenStreetMap et Plans, et la garde dans sa propre base (sans doublon si on
+rouvre le lien). La feuille de partage du système sert quand elle existe,
+sinon le presse-papiers ; le lien reste affiché, à copier à la main. Le
+serveur de l'application peut être arrêté : rien de tout cela ne s'en sert.
+
 ### Ce qui a changé en route
 
 Plusieurs défauts de l'ancien front sont corrigés, et chacun a son test :
@@ -249,6 +270,7 @@ cassée sur la carte.
 - `src/porte.rs` — connexion, inscription, mot de passe oublié
 - `src/tableau.rs` — le tableau de bord
 - `src/compte.rs` — appareils connectés, changement de mot de passe
+- `src/espace.rs` — mon espace : le nom, le partage de position par lien, l'historique (Memoire, localStorage et IndexedDB)
 - `src/carte/` — la carte (`projection.rs` pour la géométrie)
 - `src/etat.rs` — l'état du tableau et ses règles (réducteur pur)
 - `src/temps_reel.rs` — le WebSocket, avec reconnexion
