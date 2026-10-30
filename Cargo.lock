@@ -328,7 +328,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1007,7 +1007,7 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 [[package]]
 name = "paquets"
 version = "0.2.0"
-source = "git+https://github.com/maxlestage/Paquets#e58578d7ad63e87c98474008db919a3c0e255db8"
+source = "git+https://github.com/maxlestage/Paquets#df4dec3f49d35d23063bfc96b0c7de41b282a2d6"
 dependencies = [
  "active",
  "hmac",
@@ -1024,7 +1024,7 @@ dependencies = [
 [[package]]
 name = "paquets-macros"
 version = "0.2.0"
-source = "git+https://github.com/maxlestage/Paquets#e58578d7ad63e87c98474008db919a3c0e255db8"
+source = "git+https://github.com/maxlestage/Paquets#df4dec3f49d35d23063bfc96b0c7de41b282a2d6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1356,7 +1356,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2099,7 +2099,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
