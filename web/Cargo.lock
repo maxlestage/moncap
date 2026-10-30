@@ -364,9 +364,14 @@ source = "git+https://github.com/maxlestage/Memoire#764e04a792d0c35d756f1ba30cbd
 dependencies = [
  "foldhash",
  "hashbrown",
+ "js-sys",
  "memoire-orm-derive",
  "parking_lot",
+ "serde",
+ "serde_json",
  "thiserror",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

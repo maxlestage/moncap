@@ -37,7 +37,10 @@ path = "src/bin/app.rs"
 # construits par des fonctions, et des états fins (`State`) qui ne
 # mettent à jour que ce qui les lit. En natif, le même code rend du HTML —
 # ce que les tests relisent.
-paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false }
+#
+# `browser-storage` : `paquets::orm::web`, le magasin de Mémoire gardé dans
+# `localStorage` — le nom et le partage en cours, sans compte.
+paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["browser-storage"] }
 mouvement = { path = "../mouvement" }
 # Les outils de `construit` : natifs, absents du WebAssembly livré.
 fabrique = { path = "../fabrique" }
@@ -59,7 +62,7 @@ gloo-timers = { version = "0.4", features = ["futures"] }
 # qu'en WebAssembly : en natif, les effets ne tournent pas et la vue se
 # rend en texte, sans navigateur.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["client"] }
+paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["client", "browser-storage"] }
 
 [dependencies.web-sys]
 version = "0.3.106"
@@ -69,6 +72,7 @@ features = [
     "CloseEvent",
     "CssStyleDeclaration",
     "Document",
+    "DomStringList",
     "DomRect",
     "DomTokenList",
     "Element",
@@ -83,6 +87,15 @@ features = [
     "Coordinates",
     "Geolocation",
     "HtmlElement",
+    # IndexedDB : la trace du partage de position (voir `trace.rs`).
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbObjectStore",
+    "IdbObjectStoreParameters",
+    "IdbOpenDbRequest",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
     "HtmlInputElement",
     "KeyboardEvent",
     "Location",
