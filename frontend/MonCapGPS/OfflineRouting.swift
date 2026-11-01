@@ -226,7 +226,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         Task {
             var trouvee: Installee?
             for region in regions {
-                guard let moteur = moteur(region.id) else { continue }
+                guard let moteur = await moteur(region.id) else { continue }
                 if !OfflineRoute.toutes(json: await Self.calculeAuLarge(moteur, texte)).isEmpty {
                     trouvee = region
                     break
@@ -799,7 +799,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
 
         for region in installees {
-            guard let moteur = moteur(region.id) else {
+            guard let moteur = await moteur(region.id) else {
                 retiens(.paquetIllisible(region: region.nom))
                 continue
             }
@@ -1003,8 +1003,25 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// « aucune région ne couvre ce trajet ». Une config d'un autre âge que
     /// son moteur est une panne assurée ; celle du wrapper est accordée au
     /// sien par construction.
-    private func moteur(_ id: String) -> Valhalla? {
+    ///
+    /// L'ouverture lit l'archive et écrit la config : elle se fait sur la
+    /// file du moteur, pas sur le fil principal — le premier itinéraire d'une
+    /// session ne fige plus l'écran.
+    private func moteur(_ id: String) async -> Valhalla? {
         if let deja = moteurs[id] { return deja }
+        let max = Self.maxItineraires
+        let ouvert = await withCheckedContinuation { suite in
+            Self.file.async { suite.resume(returning: Self.ouvre(id, max: max).map(Moteur.init)) }
+        }
+        // Un autre appel a pu ouvrir le même paquet pendant l'attente.
+        if let deja = moteurs[id] { return deja }
+        guard let neuf = ouvert?.valhalla else { return nil }
+        moteurs[id] = neuf
+        return neuf
+    }
+
+    /// Ouvre le moteur d'une région, hors du fil principal.
+    nonisolated private static func ouvre(_ id: String, max: Int) -> Valhalla? {
         // Les fuseaux horaires que réclame Valhalla sont installés par le
         // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
         // rien à faire ici.
@@ -1021,7 +1038,7 @@ final class OfflineRouter: NSObject, ObservableObject {
             var racine = (try? JSONSerialization.jsonObject(with: brut)) as? [String: Any]
         else { return nil }
         var limites = racine["service_limits"] as? [String: Any] ?? [:]
-        limites["max_alternates"] = Self.maxItineraires - 1
+        limites["max_alternates"] = max - 1
         racine["service_limits"] = limites
         let chemin = Self.dossier.appendingPathComponent("\(id).moteur.json")
         guard
@@ -1029,7 +1046,6 @@ final class OfflineRouter: NSObject, ObservableObject {
             (try? json.write(to: chemin)) != nil,
             let neuf = try? Valhalla(configPath: chemin.path)
         else { return nil }
-        moteurs[id] = neuf
         return neuf
     }
 }
@@ -1042,11 +1058,11 @@ extension OfflineRouter {
     /// ni carte, ni bouton, ni bandeau « Recalcul… ». Le calcul part ici ;
     /// le fil principal, lui, attend sans bloquer. Une seule file pour tous
     /// les moteurs : ils ne sont jamais interrogés à deux en même temps.
-    private static let file = DispatchQueue(label: "moncap.valhalla", qos: .userInitiated)
+    fileprivate static let file = DispatchQueue(label: "moncap.valhalla", qos: .userInitiated)
 
     /// Le moteur traverse la frontière de la file ; il n'y est jamais utilisé
     /// à deux endroits à la fois, la file étant séquentielle.
-    private struct Moteur: @unchecked Sendable { let valhalla: Valhalla }
+    fileprivate struct Moteur: @unchecked Sendable { let valhalla: Valhalla }
 
     /// `calcule`, hors du fil principal.
     static func calculeAuLarge(_ moteur: Valhalla, _ requete: String) async -> String {
