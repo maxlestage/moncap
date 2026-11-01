@@ -86,12 +86,29 @@ final class OfflineRouter: NSObject, ObservableObject {
         static let base = APIClient().baseURL.appendingPathComponent("offline/regions")
             .absoluteString
 
-        /// Le dépôt qui publie les paquets. **Public** désormais : la liste se
-        /// lit sur l'API GitHub et les fichiers se téléchargent sur les
-        /// Releases, sans jeton et sans passer par le serveur — qui peut être
-        /// arrêté (heures de dyno épuisées : la liste répondait 503) sans que
-        /// les itinéraires hors réseau en souffrent.
-        static let depot = "maxlestage/moncap"
+        /// Le dépôt qui publie les paquets : `MonCapMaps`, **public** et dédié
+        /// à cela — le code de l'app reste privé. La liste se lit sur l'API
+        /// GitHub et les fichiers se téléchargent sur les Releases, sans jeton
+        /// et sans passer par le serveur, qui peut être arrêté (heures de dyno
+        /// épuisées : la liste répondait 503) sans que les itinéraires hors
+        /// réseau en souffrent.
+        static let depot = "maxlestage/MonCapMaps"
+
+        /// La date de construction d'une Release : la ligne `construit: …`
+        /// de ses notes quand elle y est, sinon la date de son archive. Les
+        /// régions recopiées depuis l'ancien dépôt portent leur date d'origine
+        /// dans les notes ; leur archive, datée du jour de la copie, aurait
+        /// fait proposer une mise à jour de chaque région installée.
+        static func dateDeConstruction(notes: String?, archive: String?) -> String? {
+            for ligne in (notes ?? "").split(whereSeparator: \.isNewline) {
+                if ligne.hasPrefix("construit: ") {
+                    let date = ligne.dropFirst("construit: ".count)
+                        .trimmingCharacters(in: .whitespaces)
+                    if !date.isEmpty { return date }
+                }
+            }
+            return archive
+        }
         /// Préfixe des étiquettes publiées par le workflow des tuiles.
         static let prefixe = "tuiles-eu-"
 
@@ -203,16 +220,24 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
         let texte = String(decoding: json, as: UTF8.self)
 
-        var trouvee: Installee?
-        for region in installees {
-            guard let moteur = moteur(region.id) else { continue }
-            if !OfflineRoute.toutes(json: moteur.route(rawRequest: texte)).isEmpty {
-                trouvee = region
-                break
+        // Le sondage se fait hors du fil principal : la carte reste réactive
+        // pendant que le moteur cherche.
+        let regions = installees
+        Task {
+            var trouvee: Installee?
+            for region in regions {
+                guard let moteur = await moteur(region.id) else { continue }
+                if !OfflineRoute.toutes(json: await Self.calculeAuLarge(moteur, texte)).isEmpty {
+                    trouvee = region
+                    break
+                }
             }
+            // Un sondage plus récent a pu partir entre-temps : seul le
+            // dernier écrit sa réponse.
+            guard couvertureVerifiee == case_ else { return }
+            regionCouvrante = trouvee
+            verifieCouverture = false
         }
-        regionCouvrante = trouvee
-        verifieCouverture = false
     }
 
     /// Régions publiées, relevées sur les Releases.
@@ -462,7 +487,9 @@ final class OfflineRouter: NSObject, ObservableObject {
                     id: tag,
                     nom: titre.isEmpty ? tag : titre,
                     octets: tar["size"] as? Int ?? 0,
-                    construit: tar["updated_at"] as? String))
+                    construit: Region.dateDeConstruction(
+                        notes: release["body"] as? String,
+                        archive: tar["updated_at"] as? String)))
             }
             if liste.count < 100 { break }
         }
@@ -694,8 +721,8 @@ final class OfflineRouter: NSObject, ObservableObject {
     func route(
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
         costing: String = "auto", vias: [CLLocationCoordinate2D] = []
-    ) -> OfflineRoute? {
-        routes(from: from, to: to, max: 1, costing: costing, vias: vias).first
+    ) async -> OfflineRoute? {
+        await routes(from: from, to: to, max: 1, costing: costing, vias: vias).first
     }
 
     /// Plusieurs itinéraires entre deux points, calculés sur l'appareil.
@@ -725,7 +752,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         max nombre: Int = OfflineRouter.maxItineraires,
         costing: String = "auto",
         vias: [CLLocationCoordinate2D] = []
-    ) -> [OfflineRoute] {
+    ) async -> [OfflineRoute] {
         var lieux: [[String: Any]] = [["lat": from.latitude, "lon": from.longitude]]
         for v in vias {
             lieux.append(["lat": v.latitude, "lon": v.longitude, "type": "break"])
@@ -772,18 +799,18 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
 
         for region in installees {
-            guard let moteur = moteur(region.id) else {
+            guard let moteur = await moteur(region.id) else {
                 retiens(.paquetIllisible(region: region.nom))
                 continue
             }
-            let brut = moteur.route(rawRequest: texte)
+            let brut = await Self.calculeAuLarge(moteur, texte)
             let trouves = OfflineRoute.toutes(json: brut)
             if !trouves.isEmpty {
                 dernierEchec = nil
                 // Pas d'éventail sur un trajet à étapes : il est déjà celui
                 // qu'on a voulu.
                 if !vias.isEmpty { return trouves }
-                return complete(
+                return await complete(
                     trouves, moteur: moteur, from: from, to: to,
                     max: nombre, costing: costing)
             }
@@ -811,7 +838,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         _ base: [OfflineRoute], moteur: Valhalla,
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
         max nombre: Int, costing: String
-    ) -> [OfflineRoute] {
+    ) async -> [OfflineRoute] {
         var routes = Array(base.prefix(nombre))
         guard routes.count < nombre, nombre > 1 else { return routes }
         var vues = Set(routes.map(Self.empreinte))
@@ -842,7 +869,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                     continue
                 }
                 let texte = String(decoding: json, as: UTF8.self)
-                for r in OfflineRoute.toutes(json: moteur.route(rawRequest: texte)) {
+                for r in OfflineRoute.toutes(json: await Self.calculeAuLarge(moteur, texte)) {
                     if vues.insert(Self.empreinte(r)).inserted {
                         routes.append(r)
                     }
@@ -976,8 +1003,25 @@ final class OfflineRouter: NSObject, ObservableObject {
     /// « aucune région ne couvre ce trajet ». Une config d'un autre âge que
     /// son moteur est une panne assurée ; celle du wrapper est accordée au
     /// sien par construction.
-    private func moteur(_ id: String) -> Valhalla? {
+    ///
+    /// L'ouverture lit l'archive et écrit la config : elle se fait sur la
+    /// file du moteur, pas sur le fil principal — le premier itinéraire d'une
+    /// session ne fige plus l'écran.
+    private func moteur(_ id: String) async -> Valhalla? {
         if let deja = moteurs[id] { return deja }
+        let max = Self.maxItineraires
+        let ouvert = await withCheckedContinuation { suite in
+            Self.file.async { suite.resume(returning: Self.ouvre(id, max: max).map(Moteur.init)) }
+        }
+        // Un autre appel a pu ouvrir le même paquet pendant l'attente.
+        if let deja = moteurs[id] { return deja }
+        guard let neuf = ouvert?.valhalla else { return nil }
+        moteurs[id] = neuf
+        return neuf
+    }
+
+    /// Ouvre le moteur d'une région, hors du fil principal.
+    nonisolated private static func ouvre(_ id: String, max: Int) -> Valhalla? {
         // Les fuseaux horaires que réclame Valhalla sont installés par le
         // paquet lui-même : son utilitaire de fichiers n'est pas exposé, donc
         // rien à faire ici.
@@ -994,7 +1038,7 @@ final class OfflineRouter: NSObject, ObservableObject {
             var racine = (try? JSONSerialization.jsonObject(with: brut)) as? [String: Any]
         else { return nil }
         var limites = racine["service_limits"] as? [String: Any] ?? [:]
-        limites["max_alternates"] = Self.maxItineraires - 1
+        limites["max_alternates"] = max - 1
         racine["service_limits"] = limites
         let chemin = Self.dossier.appendingPathComponent("\(id).moteur.json")
         guard
@@ -1002,8 +1046,49 @@ final class OfflineRouter: NSObject, ObservableObject {
             (try? json.write(to: chemin)) != nil,
             let neuf = try? Valhalla(configPath: chemin.path)
         else { return nil }
-        moteurs[id] = neuf
         return neuf
+    }
+}
+
+extension OfflineRouter {
+    /// La file du moteur : un calcul à la fois, jamais sur le fil principal.
+    ///
+    /// Un itinéraire se payait en dixièmes de seconde, et l'éventail de
+    /// variantes en secondes, pendant lesquelles l'écran ne répondait plus —
+    /// ni carte, ni bouton, ni bandeau « Recalcul… ». Le calcul part ici ;
+    /// le fil principal, lui, attend sans bloquer. Une seule file pour tous
+    /// les moteurs : ils ne sont jamais interrogés à deux en même temps.
+    fileprivate static let file = DispatchQueue(label: "moncap.valhalla", qos: .userInitiated)
+
+    /// Le moteur traverse la frontière de la file ; il n'y est jamais utilisé
+    /// à deux endroits à la fois, la file étant séquentielle.
+    fileprivate struct Moteur: @unchecked Sendable { let valhalla: Valhalla }
+
+    /// `calcule`, hors du fil principal.
+    static func calculeAuLarge(_ moteur: Valhalla, _ requete: String) async -> String {
+        let m = Moteur(valhalla: moteur)
+        return await withCheckedContinuation { suite in
+            file.async { suite.resume(returning: calcule(m.valhalla, requete)) }
+        }
+    }
+
+    /// Une requête brute au moteur, et sa réponse JSON — refus compris.
+    ///
+    /// Depuis valhalla-mobile 0.6, un refus du moteur (« No suitable edges
+    /// near location »…) arrive en erreur Swift et non plus dans le JSON.
+    /// On le remet dans la forme d'avant, `{"error", "error_code"}`, que
+    /// `OfflineRoute.erreur(json:)` sait lire : l'écran continue de dire
+    /// pourquoi le calcul a échoué au lieu de rester muet.
+    nonisolated static func calcule(_ moteur: Valhalla, _ requete: String) -> String {
+        do {
+            return try moteur.route(rawRequest: requete)
+        } catch ValhallaError.valhallaError(let code, let message) {
+            let refus: [String: Any] = ["error": message, "error_code": code]
+            guard let json = try? JSONSerialization.data(withJSONObject: refus) else { return "" }
+            return String(decoding: json, as: UTF8.self)
+        } catch {
+            return ""
+        }
     }
 }
 

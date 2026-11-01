@@ -361,7 +361,7 @@ une page qu'il ne saurait déjà pas afficher.
 Tout le texte chiffré est dans `src/contenu.rs`, séparé de la mise en forme.
 Les nombres qui y figurent sont **mesurés** : les tailles viennent des
 Releases publiées, les 222,5 km de Bordeaux → Limoges d'un calcul réel sans
-réseau (voir `.github/workflows/valhalla-epreuve.yml`). Une vitrine qui
+réseau (voir `valhalla-epreuve.yml` sur MonCapMaps). Une vitrine qui
 arrondit ses chiffres finit par mentir.
 
 Le plafond de quinze itinéraires n'est pas une estimation : il vient de la

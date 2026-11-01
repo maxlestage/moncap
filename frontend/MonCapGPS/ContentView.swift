@@ -2165,9 +2165,13 @@ struct MapHomeView: View {
                         }
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
-                        .background(isOn ? AnyShapeStyle(Color.blue.opacity(0.18))
-                                         : AnyShapeStyle(.regularMaterial),
-                                    in: Capsule())
+                        // Le bleu de la pastille choisie se pose sur la même
+                        // matière que les autres : seul, à 18 %, il laissait les
+                        // noms de la carte transparaître et brouiller le libellé.
+                        .background {
+                            Capsule().fill(.regularMaterial)
+                                .overlay(Capsule().fill(Color.blue.opacity(isOn ? 0.18 : 0)))
+                        }
                         .overlay(Capsule().stroke(isOn ? Color.blue : .clear, lineWidth: 1.5))
                     }
                     .buttonStyle(.plain)
@@ -5243,7 +5247,7 @@ struct MapHomeView: View {
             CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon), nom: dest.label)
         multiRoutes = []
         let to = CLLocationCoordinate2D(latitude: dest.lat, longitude: dest.lon)
-        if horsLigne, let local = router.route(from: from, to: to,
+        if horsLigne, let local = await router.route(from: from, to: to,
                                                costing: travelMode.costing) {
             nav.start(steps: local.steps, coordinates: local.coordinates,
                       distanceKm: local.km, etaMinutes: local.minutes, destination: to)
@@ -5255,7 +5259,7 @@ struct MapHomeView: View {
         guard let route = await drivingRoute(from: from, to: to) else {
             // Le réseau n'a rien rendu : un paquet installé peut encore
             // répondre, interrupteur ou non.
-            if let local = router.route(from: from, to: to,
+            if let local = await router.route(from: from, to: to,
                                         costing: travelMode.costing) {
                 nav.start(steps: local.steps, coordinates: local.coordinates,
                           distanceKm: local.km, etaMinutes: local.minutes, destination: to)
@@ -5363,10 +5367,12 @@ struct MapHomeView: View {
         // Tous les modes, pas la seule voiture : brider le calcul local à
         // `auto` envoyait le vélo et la marche sur le réseau en plein mode
         // avion, pour un calcul que le paquet installé savait faire.
-        let locaux = horsLigne
-            ? router.routes(from: from, to: dest, max: OfflineRouter.maxItineraires,
-                            costing: travelMode.costing)
-            : []
+        var locaux: [OfflineRoute] = []
+        if horsLigne {
+            locaux = await router.routes(
+                from: from, to: dest, max: OfflineRouter.maxItineraires,
+                costing: travelMode.costing)
+        }
         if !locaux.isEmpty {
             builds = locaux.map {
                 RouteBuild(coords: $0.coordinates, steps: $0.steps,
@@ -5434,7 +5440,7 @@ struct MapHomeView: View {
         if builds.count < OfflineRouter.maxItineraires {
             // Seulement le manque : quand le réseau a déjà fourni treize
             // tracés, deux détours locaux suffisent — pas douze.
-            builds += router.routes(from: from, to: dest,
+            builds += await router.routes(from: from, to: dest,
                                     max: OfflineRouter.maxItineraires - builds.count,
                                     costing: travelMode.costing)
                 .map {
@@ -5518,7 +5524,7 @@ struct MapHomeView: View {
         var build: RouteBuild?
 
         if horsLigne,
-            let locale = router.route(
+            let locale = await router.route(
                 from: from, to: dest, costing: travelMode.costing, vias: etapes)
         {
             build = RouteBuild(
@@ -5533,7 +5539,7 @@ struct MapHomeView: View {
         // Le réseau n'a rien rendu : le paquet installé peut encore répondre,
         // interrupteur ou non — même règle que sans étapes.
         if build == nil,
-            let locale = router.route(
+            let locale = await router.route(
                 from: from, to: dest, costing: travelMode.costing, vias: etapes)
         {
             build = RouteBuild(
@@ -6096,7 +6102,7 @@ struct MapHomeView: View {
         // Hors ligne assumé : on ne tente même pas le réseau. Attendre son
         // échec ferait patienter le bandeau « Recalcul… » plusieurs secondes,
         // au pire moment — celui où l'on vient de rater une sortie.
-        if horsLigne, let local = router.route(from: from, to: to,
+        if horsLigne, let local = await router.route(from: from, to: to,
                                                costing: travelMode.costing,
                                                vias: restantes) {
             nav.applyReroute(
@@ -6115,7 +6121,7 @@ struct MapHomeView: View {
                     steps: build.steps, coords: build.coords,
                     km: build.km, minutes: build.minutes + arrets)
                 speedLimit.preload(along: build.coords)
-            } else if let local = router.route(
+            } else if let local = await router.route(
                 from: from, to: to, costing: travelMode.costing, vias: restantes)
             {
                 nav.applyReroute(
@@ -6133,7 +6139,7 @@ struct MapHomeView: View {
             // Apple exige une connexion. Si les tuiles de la région sont
             // installées, le calcul se fait sur l'appareil — c'est tout
             // l'intérêt : rater une sortie hors couverture ne condamne plus.
-            if let local = OfflineRouter.shared.route(from: from, to: to,
+            if let local = await OfflineRouter.shared.route(from: from, to: to,
                                                       costing: travelMode.costing)
             {
                 nav.applyReroute(
