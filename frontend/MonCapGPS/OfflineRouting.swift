@@ -220,16 +220,24 @@ final class OfflineRouter: NSObject, ObservableObject {
         }
         let texte = String(decoding: json, as: UTF8.self)
 
-        var trouvee: Installee?
-        for region in installees {
-            guard let moteur = moteur(region.id) else { continue }
-            if !OfflineRoute.toutes(json: Self.calcule(moteur, texte)).isEmpty {
-                trouvee = region
-                break
+        // Le sondage se fait hors du fil principal : la carte reste réactive
+        // pendant que le moteur cherche.
+        let regions = installees
+        Task {
+            var trouvee: Installee?
+            for region in regions {
+                guard let moteur = moteur(region.id) else { continue }
+                if !OfflineRoute.toutes(json: await Self.calculeAuLarge(moteur, texte)).isEmpty {
+                    trouvee = region
+                    break
+                }
             }
+            // Un sondage plus récent a pu partir entre-temps : seul le
+            // dernier écrit sa réponse.
+            guard couvertureVerifiee == case_ else { return }
+            regionCouvrante = trouvee
+            verifieCouverture = false
         }
-        regionCouvrante = trouvee
-        verifieCouverture = false
     }
 
     /// Régions publiées, relevées sur les Releases.
@@ -713,8 +721,8 @@ final class OfflineRouter: NSObject, ObservableObject {
     func route(
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
         costing: String = "auto", vias: [CLLocationCoordinate2D] = []
-    ) -> OfflineRoute? {
-        routes(from: from, to: to, max: 1, costing: costing, vias: vias).first
+    ) async -> OfflineRoute? {
+        await routes(from: from, to: to, max: 1, costing: costing, vias: vias).first
     }
 
     /// Plusieurs itinéraires entre deux points, calculés sur l'appareil.
@@ -744,7 +752,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         max nombre: Int = OfflineRouter.maxItineraires,
         costing: String = "auto",
         vias: [CLLocationCoordinate2D] = []
-    ) -> [OfflineRoute] {
+    ) async -> [OfflineRoute] {
         var lieux: [[String: Any]] = [["lat": from.latitude, "lon": from.longitude]]
         for v in vias {
             lieux.append(["lat": v.latitude, "lon": v.longitude, "type": "break"])
@@ -795,14 +803,14 @@ final class OfflineRouter: NSObject, ObservableObject {
                 retiens(.paquetIllisible(region: region.nom))
                 continue
             }
-            let brut = Self.calcule(moteur, texte)
+            let brut = await Self.calculeAuLarge(moteur, texte)
             let trouves = OfflineRoute.toutes(json: brut)
             if !trouves.isEmpty {
                 dernierEchec = nil
                 // Pas d'éventail sur un trajet à étapes : il est déjà celui
                 // qu'on a voulu.
                 if !vias.isEmpty { return trouves }
-                return complete(
+                return await complete(
                     trouves, moteur: moteur, from: from, to: to,
                     max: nombre, costing: costing)
             }
@@ -830,7 +838,7 @@ final class OfflineRouter: NSObject, ObservableObject {
         _ base: [OfflineRoute], moteur: Valhalla,
         from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
         max nombre: Int, costing: String
-    ) -> [OfflineRoute] {
+    ) async -> [OfflineRoute] {
         var routes = Array(base.prefix(nombre))
         guard routes.count < nombre, nombre > 1 else { return routes }
         var vues = Set(routes.map(Self.empreinte))
@@ -861,7 +869,7 @@ final class OfflineRouter: NSObject, ObservableObject {
                     continue
                 }
                 let texte = String(decoding: json, as: UTF8.self)
-                for r in OfflineRoute.toutes(json: Self.calcule(moteur, texte)) {
+                for r in OfflineRoute.toutes(json: await Self.calculeAuLarge(moteur, texte)) {
                     if vues.insert(Self.empreinte(r)).inserted {
                         routes.append(r)
                     }
@@ -1027,6 +1035,27 @@ final class OfflineRouter: NSObject, ObservableObject {
 }
 
 extension OfflineRouter {
+    /// La file du moteur : un calcul à la fois, jamais sur le fil principal.
+    ///
+    /// Un itinéraire se payait en dixièmes de seconde, et l'éventail de
+    /// variantes en secondes, pendant lesquelles l'écran ne répondait plus —
+    /// ni carte, ni bouton, ni bandeau « Recalcul… ». Le calcul part ici ;
+    /// le fil principal, lui, attend sans bloquer. Une seule file pour tous
+    /// les moteurs : ils ne sont jamais interrogés à deux en même temps.
+    private static let file = DispatchQueue(label: "moncap.valhalla", qos: .userInitiated)
+
+    /// Le moteur traverse la frontière de la file ; il n'y est jamais utilisé
+    /// à deux endroits à la fois, la file étant séquentielle.
+    private struct Moteur: @unchecked Sendable { let valhalla: Valhalla }
+
+    /// `calcule`, hors du fil principal.
+    static func calculeAuLarge(_ moteur: Valhalla, _ requete: String) async -> String {
+        let m = Moteur(valhalla: moteur)
+        return await withCheckedContinuation { suite in
+            file.async { suite.resume(returning: calcule(m.valhalla, requete)) }
+        }
+    }
+
     /// Une requête brute au moteur, et sa réponse JSON — refus compris.
     ///
     /// Depuis valhalla-mobile 0.6, un refus du moteur (« No suitable edges
@@ -1034,7 +1063,7 @@ extension OfflineRouter {
     /// On le remet dans la forme d'avant, `{"error", "error_code"}`, que
     /// `OfflineRoute.erreur(json:)` sait lire : l'écran continue de dire
     /// pourquoi le calcul a échoué au lieu de rester muet.
-    static func calcule(_ moteur: Valhalla, _ requete: String) -> String {
+    nonisolated static func calcule(_ moteur: Valhalla, _ requete: String) -> String {
         do {
             return try moteur.route(rawRequest: requete)
         } catch ValhallaError.valhallaError(let code, let message) {
