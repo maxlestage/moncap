@@ -48,9 +48,9 @@ fabrique = { path = "../fabrique" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 
-wasm-bindgen = "0.2.129"
-wasm-bindgen-futures = "0.4.79"
-js-sys = "0.3.106"
+wasm-bindgen = "0.2.130"
+wasm-bindgen-futures = "0.4.80"
+js-sys = "0.3.107"
 
 # Le client HTTP : `fetch` derrière une interface Rust. Seul le module HTTP
 # est demandé — le WebSocket est écrit à la main dans `temps_reel.rs`, pour
@@ -65,7 +65,7 @@ gloo-timers = { version = "0.4", features = ["futures"] }
 paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["client", "browser-storage"] }
 
 [dependencies.web-sys]
-version = "0.3.106"
+version = "0.3.107"
 features = [
     "AddEventListenerOptions",
     "Blob",
