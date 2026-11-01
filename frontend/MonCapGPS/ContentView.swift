@@ -2165,9 +2165,13 @@ struct MapHomeView: View {
                         }
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
-                        .background(isOn ? AnyShapeStyle(Color.blue.opacity(0.18))
-                                         : AnyShapeStyle(.regularMaterial),
-                                    in: Capsule())
+                        // Le bleu de la pastille choisie se pose sur la même
+                        // matière que les autres : seul, à 18 %, il laissait les
+                        // noms de la carte transparaître et brouiller le libellé.
+                        .background {
+                            Capsule().fill(.regularMaterial)
+                                .overlay(Capsule().fill(Color.blue.opacity(isOn ? 0.18 : 0)))
+                        }
                         .overlay(Capsule().stroke(isOn ? Color.blue : .clear, lineWidth: 1.5))
                     }
                     .buttonStyle(.plain)
