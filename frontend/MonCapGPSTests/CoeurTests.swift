@@ -749,3 +749,23 @@ final class DestinationsTests: XCTestCase {
         XCTAssertEqual(d.toutes().count, 29)
     }
 }
+
+/// Une région recopiée sur MonCapMaps garde sa date d'origine : sans quoi
+/// chaque région installée se verrait proposer une mise à jour.
+final class DateDeConstructionTests: XCTestCase {
+    func testLaDateDesNotesPasseDevantCelleDeLArchive() {
+        XCTAssertEqual(
+            OfflineRouter.Region.dateDeConstruction(
+                notes: "Tuiles Valhalla · europe/france\n\nconstruit: 2026-09-20T08:56:34Z",
+                archive: "2026-10-30T01:00:00Z"),
+            "2026-09-20T08:56:34Z")
+    }
+
+    func testSansLigneLaDateDeLArchive() {
+        XCTAssertEqual(
+            OfflineRouter.Region.dateDeConstruction(
+                notes: "Tuiles Valhalla", archive: "2026-10-30T01:00:00Z"),
+            "2026-10-30T01:00:00Z")
+        XCTAssertNil(OfflineRouter.Region.dateDeConstruction(notes: nil, archive: nil))
+    }
+}

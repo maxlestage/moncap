@@ -106,13 +106,14 @@ fn forme_du_jeton(token: &str) -> String {
     format!("jeton {genre}, {} caractères", token.chars().count())
 }
 
-/// Dépôt qui porte les Releases (`MONCAP_DEPOT`, par défaut le nôtre).
+/// Dépôt qui porte les Releases (`MONCAP_DEPOT`, par défaut `MonCapMaps`,
+/// public et dédié aux paquets : le code de l'app reste privé).
 fn paquets_depot() -> String {
     std::env::var("MONCAP_DEPOT")
         .ok()
         .map(|d| d.trim().to_string())
         .filter(|d| !d.is_empty())
-        .unwrap_or_else(|| "maxlestage/moncap".to_string())
+        .unwrap_or_else(|| "maxlestage/MonCapMaps".to_string())
 }
 
 /// Une étiquette n'est qu'un identifiant de Release : minuscules, chiffres et
@@ -147,7 +148,7 @@ fn nature_suffixe(nature: &str) -> Option<&'static str> {
 fn client_github() -> &'static reqwest::Client {
     static C: OnceLock<reqwest::Client> = OnceLock::new();
     C.get_or_init(|| {
-        reqwest::Client::builder()
+        super::constructeur_http()
             .timeout(DELAI_GITHUB)
             .build()
             .unwrap_or_default()
@@ -162,7 +163,7 @@ fn client_github() -> &'static reqwest::Client {
 fn client_sans_suivi() -> Resultat<&'static reqwest::Client> {
     static C: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
     C.get_or_init(|| {
-        reqwest::Client::builder()
+        super::constructeur_http()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(DELAI_GITHUB)
             .build()
@@ -279,6 +280,22 @@ async fn releases_publiees(token: &str) -> Result<Vec<RegionPubliee>, String> {
     Ok(trouvees)
 }
 
+/// La date de construction d'une Release : la ligne `construit: …` de ses
+/// notes quand elle y est, sinon la date de son archive. Les régions
+/// recopiées sur MonCapMaps portent leur date d'origine dans les notes ;
+/// leur archive, datée de la copie, ferait proposer une mise à jour de
+/// chaque région installée.
+fn date_de_construction(notes: Option<&str>, archive: Option<&str>) -> String {
+    notes
+        .unwrap_or("")
+        .lines()
+        .find_map(|l| l.strip_prefix("construit: ").map(str::trim))
+        .filter(|d| !d.is_empty())
+        .or(archive)
+        .unwrap_or("")
+        .to_string()
+}
+
 /// Les régions d'une page de Releases.
 fn regions_de(liste: Vec<serde_json::Value>) -> Vec<RegionPubliee> {
     let mut trouvees = Vec::new();
@@ -298,7 +315,7 @@ fn regions_de(liste: Vec<serde_json::Value>) -> Vec<RegionPubliee> {
             continue;
         };
         let titre = release["name"].as_str().unwrap_or("").trim();
-        let construit = tar["updated_at"].as_str().unwrap_or("").to_string();
+        let construit = date_de_construction(release["body"].as_str(), tar["updated_at"].as_str());
         trouvees.push(RegionPubliee {
             id: tag.to_string(),
             construit,
@@ -483,6 +500,16 @@ mod tests {
         let release = &page[0];
         assert_eq!(piece_jointe(release, ".tar"), Some(2));
         assert_eq!(piece_jointe(release, ".json"), Some(1));
+
+        // Recopiée : la date des notes passe devant celle de l'archive.
+        let copie = serde_json::json!([
+            {"tag_name": "tuiles-eu-monaco", "name": "Monaco",
+             "body": "Tuiles Valhalla\n\nconstruit: 2026-09-20T08:56:34Z",
+             "assets": [{"name": "monaco.tar", "size": 1,
+                         "updated_at": "2026-10-30T01:00:00Z"}]}
+        ]);
+        let regions = regions_de(copie.as_array().unwrap().clone());
+        assert_eq!(regions[0].construit, "2026-09-20T08:56:34Z");
         assert_eq!(piece_jointe(release, ".rues.zz"), None);
     }
 }

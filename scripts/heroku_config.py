@@ -49,7 +49,7 @@ SMTP = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "SMTP_FROM", "SMTP_PORT"]
 JETON = "GITHUB_TOKEN"
 
 # Le dépôt sur lequel on éprouve le jeton avant de l'installer.
-DEPOT = os.environ.get("PAQUETS_DEPOT", "maxlestage/moncap")
+DEPOT = os.environ.get("PAQUETS_DEPOT", "maxlestage/MonCapMaps")
 
 
 def die(msg):
