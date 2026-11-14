@@ -1,21 +1,27 @@
-//! La base SQLite : les tables, leurs modèles, et les migrations.
+//! La base : ses tables, et l'endroit où elle vit.
 //!
-//! Un fichier, `data/moncap.db` par défaut, ouvert par Paquets dans le
-//! processus même : ni serveur de base à faire tourner, ni connexion réseau à
-//! payer à chaque requête. Le mode WAL (posé par memoire-orm) laisse lire
-//! pendant qu'on écrit, et le fichier se sauvegarde d'une simple copie.
+//! En production, **Nuage DB** : un serveur toujours allumé, qui chiffre tout
+//! et se sauvegarde sur S3 (`NUAGE_URL` et `NUAGE_TOKEN`). Le disque d'un dyno
+//! Heroku est effacé au moins une fois par jour ; une base SQLite posée dessus
+//! oubliait comptes, trajets et destinations à chaque fois. Sur Nuage DB, ils
+//! restent.
 //!
-//! Le schéma repart de zéro : il n'hérite pas de l'ancienne base Postgres,
-//! qui n'existe plus. Les migrations tiennent leur registre dans
-//! `_memoire_migrations`.
+//! Sans `NUAGE_URL`, la base reste un fichier sur la machine : `DATABASE_URL`
+//! s'il désigne un fichier SQLite, sinon le mode local de Nuage DB, dans
+//! `data/` — le même moteur que le serveur, pour développer.
+//!
+//! Nuage DB n'exécute pas le SQL brut de Memoire : toutes les requêtes passent
+//! par les modèles et le constructeur de requêtes, et les tables se créent
+//! d'après les modèles (`tables`), unicités et index compris. Le même code
+//! tourne ainsi sur Nuage DB, sur son mode local et sur SQLite.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use paquets::orm::{Migration, Migrator};
 use paquets::prelude::*;
 
-/// L'emplacement de la base quand rien n'est configuré.
-pub const BASE_PAR_DEFAUT: &str = "sqlite://data/moncap.db";
+/// L'emplacement de la base quand rien n'est configuré : le mode local de
+/// Nuage DB, dans `data/`.
+pub const BASE_PAR_DEFAUT: &str = "nuage:data";
 
 /// Secondes Unix.
 pub fn maintenant() -> i64 {
@@ -36,17 +42,68 @@ pub fn est_sqlite(url: &str) -> bool {
                 .any(|ext| url.ends_with(ext)))
 }
 
-/// L'URL de la base : `DATABASE_URL` s'il désigne un fichier SQLite, sinon
-/// `data/moncap.db`. Une ancienne URL Postgres restée dans la configuration
-/// est écartée avec un avertissement plutôt que d'empêcher le démarrage.
-pub fn url_base() -> String {
-    match std::env::var("DATABASE_URL") {
-        Ok(url) if est_sqlite(&url) => url.trim().to_owned(),
-        Ok(url) if !url.trim().is_empty() => {
+/// L'adresse d'un serveur Nuage DB (`https://…`, `http://…`), ou le dossier
+/// de son mode local (`nuage:data`), telle que Paquets l'ouvre.
+fn cible_nuage(valeur: &str) -> String {
+    let valeur = valeur.trim();
+    let minuscules = valeur.to_ascii_lowercase();
+    if minuscules.starts_with("https://")
+        || minuscules.starts_with("http://")
+        || minuscules.starts_with("nuage:")
+    {
+        valeur.to_owned()
+    } else {
+        format!("nuage:{valeur}")
+    }
+}
+
+/// L'URL de la base, d'après ces deux variables : `NUAGE_URL` d'abord (un
+/// serveur Nuage DB, ou un dossier), puis `DATABASE_URL` s'il désigne un
+/// fichier SQLite, sinon `nuage:data`. Une ancienne URL Postgres restée dans
+/// la configuration est écartée avec un avertissement plutôt que d'empêcher
+/// le démarrage.
+pub fn choisit_base(nuage_url: Option<&str>, database_url: Option<&str>) -> String {
+    fn rempli(v: Option<&str>) -> Option<&str> {
+        v.map(str::trim).filter(|v| !v.is_empty())
+    }
+    if let Some(cible) = rempli(nuage_url) {
+        return cible_nuage(cible);
+    }
+    match rempli(database_url) {
+        Some(url) if est_sqlite(url) => url.to_owned(),
+        Some(_) => {
             tracing::warn!("DATABASE_URL n'est pas une base SQLite : {BASE_PAR_DEFAUT} à la place");
             BASE_PAR_DEFAUT.to_owned()
         }
-        _ => BASE_PAR_DEFAUT.to_owned(),
+        None => BASE_PAR_DEFAUT.to_owned(),
+    }
+}
+
+/// L'URL de la base, d'après l'environnement (voir [`choisit_base`]).
+pub fn url_base() -> String {
+    let nuage = std::env::var("NUAGE_URL").ok();
+    let database = std::env::var("DATABASE_URL").ok();
+    let url = choisit_base(nuage.as_deref(), database.as_deref());
+    if std::env::var("DYNO").is_ok() && !url.starts_with("http") {
+        tracing::warn!(
+            "NUAGE_URL absent : la base est sur le disque du dyno, effacé à chaque redémarrage. \
+             Définir NUAGE_URL et NUAGE_TOKEN (le serveur Nuage DB)."
+        );
+    }
+    url
+}
+
+/// Ce que le journal peut dire de la base : jamais un jeton ni un mot de
+/// passe, seulement son genre et son hôte.
+pub fn decrit_base(url: &str) -> String {
+    match url.split_once("://") {
+        Some((schema, reste)) if schema.starts_with("http") => {
+            let hote = reste.split(['/', '?', '#']).next().unwrap_or("");
+            let hote = hote.rsplit('@').next().unwrap_or(hote);
+            format!("Nuage DB ({schema}://{hote})")
+        }
+        _ if url.starts_with("nuage:") => format!("Nuage DB, local ({})", &url[6..]),
+        _ => url.to_owned(),
     }
 }
 
@@ -62,6 +119,7 @@ pub struct Utilisateur {
     /// L'identifiant sans casse ni espaces autour (`connexion::cle_identifiant`) :
     /// unique, c'est lui qui fait qu'un compte ne se crée qu'une fois.
     #[serde(skip_serializing)]
+    #[memoire(unique)]
     pub cle: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
@@ -76,6 +134,7 @@ pub struct Position {
     pub lon: f64,
     pub label: String,
     #[serde(skip)]
+    #[memoire(index)]
     pub user_id: i32,
 }
 
@@ -88,6 +147,7 @@ pub struct Trajet {
     pub polyline: String,
     pub created_at: i64,
     #[serde(skip)]
+    #[memoire(index)]
     pub user_id: i32,
     pub pro: bool,
     pub motif: String,
@@ -97,6 +157,7 @@ pub struct Trajet {
 /// Y retourner remonte la ligne en tête (`created_at`) et compte la visite
 /// (`fois`) au lieu d'en créer une autre.
 #[model(table = "searches")]
+#[memoire(unique(user_id, cle))]
 pub struct Recherche {
     pub id: i32,
     pub name: String,
@@ -106,6 +167,7 @@ pub struct Recherche {
     /// La dernière fois que ce lieu a été choisi.
     pub created_at: i64,
     #[serde(skip)]
+    #[memoire(index)]
     pub user_id: i32,
     /// Le lieu, au nom et à une dizaine de mètres près (`trajets::recent_key`).
     #[serde(skip)]
@@ -129,13 +191,16 @@ pub struct Signalement {
     pub expires_at: i64,
     pub confirms: i32,
     pub denies: i32,
+    #[memoire(index)]
     pub user_id: i32,
 }
 
 #[model(table = "reset_tokens")]
 pub struct JetonReinit {
     pub id: i32,
+    #[memoire(index)]
     pub user_id: i32,
+    #[memoire(unique)]
     pub token_hash: String,
     pub expires_at: i64,
     pub used: bool,
@@ -146,7 +211,9 @@ pub struct JetonReinit {
 #[model(table = "sessions")]
 pub struct Session {
     pub id: i64,
+    #[memoire(index)]
     pub user_id: i32,
+    #[memoire(unique)]
     pub token_hash: String,
     pub created_at: i64,
     pub last_seen_at: i64,
@@ -165,76 +232,22 @@ pub struct EchecsConnexion {
     pub bloque_jusqu_a: i64,
 }
 
-/// Toutes les migrations, dans l'ordre.
+/// Déclare les tables de l'application : Paquets les crée d'après les
+/// modèles au démarrage, ou ajoute à une table existante les colonnes et les
+/// index qui lui manquent (`push`). Pas de SQL : Nuage DB ne l'exécute pas
+/// depuis Memoire, et ce sont les modèles qui portent unicités et index.
 ///
-/// Les données d'un compte disparaissent avec lui (`ON DELETE CASCADE`) : la
-/// suppression du compte les efface déjà une à une, la base y veille aussi.
-/// `AUTOINCREMENT` : un identifiant libéré n'est jamais redonné, si bien
-/// qu'une vieille référence ne désigne jamais la ligne de quelqu'un d'autre.
-pub fn migrations() -> Migrator {
-    Migrator::new().add(
-        Migration::new(1, "schema")
-            .sql(
-                "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 username TEXT NOT NULL, cle TEXT NOT NULL UNIQUE, \
-                 password_hash TEXT NOT NULL, created_at INTEGER NOT NULL, prefs TEXT)",
-            )
-            .sql(
-                "CREATE TABLE sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE, \
-                 token_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, \
-                 last_seen_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, \
-                 device TEXT NOT NULL DEFAULT '')",
-            )
-            .sql("CREATE INDEX sessions_user_id_idx ON sessions (user_id)")
-            .sql("CREATE INDEX sessions_expires_at_idx ON sessions (expires_at)")
-            .sql(
-                "CREATE TABLE reset_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE, \
-                 token_hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL, \
-                 used INTEGER NOT NULL DEFAULT 0)",
-            )
-            .sql("CREATE INDEX reset_tokens_user_id_idx ON reset_tokens (user_id)")
-            .sql(
-                "CREATE TABLE echecs_connexion (cle TEXT PRIMARY KEY, \
-                 echecs INTEGER NOT NULL DEFAULT 0, depuis INTEGER NOT NULL DEFAULT 0, \
-                 bloque_jusqu_a INTEGER NOT NULL DEFAULT 0) WITHOUT ROWID",
-            )
-            .sql(
-                "CREATE TABLE positions (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 lat REAL NOT NULL, lon REAL NOT NULL, label TEXT NOT NULL, \
-                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE)",
-            )
-            .sql("CREATE INDEX positions_user_id_idx ON positions (user_id, id)")
-            .sql(
-                "CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 label TEXT NOT NULL, distance_km REAL NOT NULL DEFAULT 0, \
-                 duration_min REAL NOT NULL DEFAULT 0, polyline TEXT NOT NULL DEFAULT '', \
-                 created_at INTEGER NOT NULL DEFAULT 0, \
-                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE, \
-                 pro INTEGER NOT NULL DEFAULT 0, motif TEXT NOT NULL DEFAULT '')",
-            )
-            .sql("CREATE INDEX trips_user_id_idx ON trips (user_id, created_at)")
-            .sql(
-                "CREATE TABLE searches (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 name TEXT NOT NULL, subtitle TEXT NOT NULL DEFAULT '', \
-                 lat REAL NOT NULL, lon REAL NOT NULL, created_at INTEGER NOT NULL DEFAULT 0, \
-                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE, \
-                 cle TEXT NOT NULL, fois INTEGER NOT NULL DEFAULT 1, \
-                 rang INTEGER NOT NULL DEFAULT 0, UNIQUE (user_id, cle))",
-            )
-            .sql("CREATE INDEX searches_recentes_idx ON searches (user_id, rang)")
-            .sql(
-                "CREATE TABLE alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, \
-                 category TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', \
-                 lat REAL NOT NULL, lon REAL NOT NULL, created_at INTEGER NOT NULL DEFAULT 0, \
-                 expires_at INTEGER NOT NULL DEFAULT 0, confirms INTEGER NOT NULL DEFAULT 0, \
-                 denies INTEGER NOT NULL DEFAULT 0, \
-                 user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE)",
-            )
-            .sql("CREATE INDEX alerts_expires_at_idx ON alerts (expires_at)")
-            .sql("CREATE INDEX alerts_user_id_idx ON alerts (user_id, created_at)"),
-    )
+/// Les données d'un compte partent avec lui : la suppression du compte les
+/// efface une à une, dans la même transaction (`compte::supprime`).
+pub fn tables(app: &mut App) {
+    app.model::<Utilisateur>()
+        .model::<Session>()
+        .model::<JetonReinit>()
+        .model::<EchecsConnexion>()
+        .model::<Position>()
+        .model::<Trajet>()
+        .model::<Recherche>()
+        .model::<Signalement>();
 }
 
 #[cfg(test)]
@@ -261,5 +274,46 @@ mod tests {
         ] {
             assert!(!est_sqlite(non), "{non}");
         }
+    }
+
+    #[test]
+    fn nuage_url_passe_avant_tout() {
+        let nuage = "https://nuage-f48a8945f31c.herokuapp.com";
+        assert_eq!(choisit_base(Some(nuage), None), nuage);
+        assert_eq!(
+            choisit_base(Some(&format!(" {nuage} ")), Some("sqlite://data/moncap.db")),
+            nuage
+        );
+        // Un dossier : le mode local de Nuage DB.
+        assert_eq!(choisit_base(Some("donnees"), None), "nuage:donnees");
+        assert_eq!(choisit_base(Some("nuage:donnees"), None), "nuage:donnees");
+    }
+
+    #[test]
+    fn sans_nuage_url_la_base_reste_locale() {
+        assert_eq!(choisit_base(None, None), BASE_PAR_DEFAUT);
+        assert_eq!(choisit_base(Some("  "), None), BASE_PAR_DEFAUT);
+        assert_eq!(
+            choisit_base(None, Some("sqlite://data/moncap.db")),
+            "sqlite://data/moncap.db"
+        );
+        // Une vieille URL Postgres n'empêche pas de démarrer.
+        assert_eq!(
+            choisit_base(None, Some("postgres://u:p@h:5432/moncap")),
+            BASE_PAR_DEFAUT
+        );
+    }
+
+    #[test]
+    fn le_journal_ne_montre_que_l_hote() {
+        assert_eq!(
+            decrit_base("https://nuage-f48a8945f31c.herokuapp.com/v1?x=1"),
+            "Nuage DB (https://nuage-f48a8945f31c.herokuapp.com)"
+        );
+        assert_eq!(decrit_base("nuage:data"), "Nuage DB, local (data)");
+        assert_eq!(
+            decrit_base("sqlite://data/moncap.db"),
+            "sqlite://data/moncap.db"
+        );
     }
 }

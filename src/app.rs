@@ -14,9 +14,11 @@ use crate::{
 
 /// Les réglages qui changent entre la production et les tests.
 pub struct Reglages {
-    /// La base : une URL SQLite, ou une base déjà ouverte (les essais).
+    /// La base : un serveur Nuage DB, un dossier ou un fichier SQLite (voir
+    /// `base::url_base`), ou une base déjà ouverte (les essais).
     pub base: paquets::DbSource,
-    /// Le cache, une autre base SQLite (voir `cache`).
+    /// Le cache, une base SQLite sur la machine (voir `cache`) : jetable, il
+    /// reste près des tuiles qu'il sert.
     pub cache: Db,
     /// La limitation de débit par adresse IP (coupée dans les tests, où
     /// toutes les requêtes viennent de la même adresse).
@@ -29,7 +31,7 @@ impl Reglages {
     pub fn production() -> Self {
         let base = base::url_base();
         let cache = cache::url_cache();
-        tracing::info!("base {base}, cache {cache}");
+        tracing::info!("base {}, cache {cache}", base::decrit_base(&base));
         Reglages {
             base: base.into(),
             cache: cache::ouvre(&cache),
@@ -178,10 +180,10 @@ async fn cors(req: Request, next: Next) -> Response {
     res
 }
 
-/// GET /health — le serveur répond et la base aussi.
+/// GET /health — le serveur répond et la base aussi. Un décompte : Nuage DB
+/// le lit sur un compteur, sans parcourir la table.
 async fn sante(req: Request) -> Response {
-    let ok: Result<Vec<(i32,)>, _> = req.db().raw("SELECT 1", &[]).await;
-    match ok {
+    match base::Utilisateur::query().count(req.db()).await {
         Ok(_) => texte(StatusCode::OK, "ok"),
         Err(e) => {
             tracing::warn!("base indisponible : {e}");
@@ -194,6 +196,7 @@ async fn sante(req: Request) -> Response {
 pub fn application(reglages: Reglages) -> App {
     let mut app = App::new();
     app.database(reglages.base);
+    base::tables(&mut app);
     app.security(bouclier(reglages.limites));
     app.on_error(|e: paquets::Error| {
         let statut = e.status();
@@ -224,12 +227,9 @@ pub fn application(reglages: Reglages) -> App {
 
     let taches = reglages.taches;
     app.on_start(move |db| async move {
-        // Une seule instance écrit dans le fichier : pas de course entre
-        // serveurs qui démarrent ensemble, la migration passe ou échoue.
-        let faites = base::migrations().run(db).await?;
-        if !faites.is_empty() {
-            tracing::info!(?faites, "migrations appliquées");
-        }
+        // Les tables sont déjà là : Paquets les a créées d'après les modèles
+        // (`base::tables`) avant de lancer ce qui suit.
+        //
         // Un cache en panne ne doit pas empêcher de servir : sans sa table,
         // chaque lecture est un défaut de cache, et rien de plus.
         if let Err(e) = cache::prepare(cache).await {
@@ -245,8 +245,9 @@ pub fn application(reglages: Reglages) -> App {
 
 /// Les tâches de fond, sur le fil que Paquets garde pour elles : la purge des
 /// alertes chaque minute, et chaque heure le ménage des sessions et du cache,
-/// puis `PRAGMA optimize`, qui tient à jour les statistiques dont SQLite se
-/// sert pour choisir ses index.
+/// puis `PRAGMA optimize` sur les bases SQLite, qui tient à jour les
+/// statistiques dont SQLite se sert pour choisir ses index (Nuage DB fait son
+/// entretien lui-même).
 fn demarre_taches(db: &'static Db, cache: &'static Db) {
     tokio::spawn(async move {
         let mut minute = tokio::time::interval(Duration::from_secs(60));
@@ -265,7 +266,7 @@ fn demarre_taches(db: &'static Db, cache: &'static Db) {
                     Ok(n) => tracing::info!("cache : {n} entrées retirées"),
                     Err(e) => tracing::warn!("ménage du cache : {e}"),
                 }
-                for base in [db, cache] {
+                for base in [db, cache].into_iter().filter(|b| b.kind() == "sqlite") {
                     if let Err(e) = base.raw_execute("PRAGMA optimize", &[]).await {
                         tracing::warn!("PRAGMA optimize : {e}");
                     }

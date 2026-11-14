@@ -1,7 +1,9 @@
 //! Le compte : ses chiffres, son export (RGPD), ses préférences, sa
 //! suppression ; le classement des contributeurs ; les rapports de plantage.
 
-use paquets::orm::{Database, Executor, Transaction, params};
+use std::collections::HashMap;
+
+use paquets::orm::{Database, count_all};
 use paquets::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
@@ -87,24 +89,20 @@ async fn compte(req: &Request) -> Resultat<Utilisateur> {
 /// GET /account — infos du compte et points de contribution.
 async fn infos(req: Request) -> Resultat<Response> {
     let u = compte(&req).await?;
-    // Les quatre décomptes en une seule requête, chacun sur son index.
-    let comptes: Vec<(i64, i64, i64, i64)> = req
-        .db()
-        .raw(
-            "SELECT (SELECT count(*) FROM alerts WHERE user_id = ?1), \
-             (SELECT count(*) FROM trips WHERE user_id = ?1), \
-             (SELECT count(*) FROM positions WHERE user_id = ?1), \
-             (SELECT count(*) FROM searches WHERE user_id = ?1)",
-            &params![u.id],
-        )
-        .await?;
-    let (alerts, trips, positions, searches) = comptes.first().copied().unwrap_or_default();
-    let (alerts, trips, positions, searches) = (
-        alerts.max(0) as u64,
-        trips.max(0) as u64,
-        positions.max(0) as u64,
-        searches.max(0) as u64,
-    );
+    let db = req.db();
+    // Les quatre décomptes en même temps, chacun sur l'index `user_id`.
+    let (alerts, trips, positions, searches) = tokio::try_join!(
+        Signalement::query()
+            .filter(Signalement::USER_ID.eq(u.id))
+            .count(db),
+        Trajet::query().filter(Trajet::USER_ID.eq(u.id)).count(db),
+        Position::query()
+            .filter(Position::USER_ID.eq(u.id))
+            .count(db),
+        Recherche::query()
+            .filter(Recherche::USER_ID.eq(u.id))
+            .count(db),
+    )?;
     Ok(Response::new().json(AccountInfo {
         plus_offert: plus_offert(&u.username),
         created_at: u.created_at,
@@ -125,27 +123,40 @@ async fn infos(req: Request) -> Resultat<Response> {
 async fn supprime(req: Request) -> Resultat<Response> {
     let qui = connexion::utilisateur(&req).await?;
     let uid = qui.user_id;
-    let tx = req.db().begin().await?;
-    let alertes: Vec<(i32,)> = tx
-        .raw(
-            "DELETE FROM alerts WHERE user_id = ?1 RETURNING id",
-            &params![uid],
-        )
+    let (alertes, positions) = req
+        .db()
+        .transaction(|tx| {
+            Box::pin(async move {
+                let alertes: Vec<i32> = Signalement::query()
+                    .filter(Signalement::USER_ID.eq(uid))
+                    .columns(Signalement::ID)
+                    .all(tx)
+                    .await?;
+                Signalement::delete_many()
+                    .filter(Signalement::USER_ID.eq(uid))
+                    .execute(tx)
+                    .await?;
+                let positions = Position::delete_many()
+                    .filter(Position::USER_ID.eq(uid))
+                    .execute(tx)
+                    .await?;
+                Trajet::delete_many()
+                    .filter(Trajet::USER_ID.eq(uid))
+                    .execute(tx)
+                    .await?;
+                Recherche::delete_many()
+                    .filter(Recherche::USER_ID.eq(uid))
+                    .execute(tx)
+                    .await?;
+                connexion::efface_traces(tx, uid).await?;
+                Utilisateur::delete_by_key(tx, uid).await?;
+                Ok((alertes, positions))
+            })
+        })
         .await?;
-    let positions = tx
-        .raw_execute("DELETE FROM positions WHERE user_id = ?1", &params![uid])
-        .await?;
-    tx.raw_execute("DELETE FROM trips WHERE user_id = ?1", &params![uid])
-        .await?;
-    tx.raw_execute("DELETE FROM searches WHERE user_id = ?1", &params![uid])
-        .await?;
-    connexion::efface_traces(&tx, uid).await?;
-    tx.raw_execute("DELETE FROM users WHERE id = ?1", &params![uid])
-        .await?;
-    tx.commit().await?;
 
     let hub = hub(&req);
-    for (id,) in alertes {
+    for id in alertes {
         hub.diffuse(&Evenement::AlertGone { id: id as i64 });
     }
     if positions > 0 {
@@ -218,12 +229,10 @@ async fn ecrit_prefs(req: Request) -> Resultat<Response> {
     if !matches!(serde_json::from_str::<Value>(&corps), Ok(Value::Object(_))) {
         return Err(Erreur::requete("préférences invalides"));
     }
-    let n = req
-        .db()
-        .raw_execute(
-            "UPDATE users SET prefs = ?1 WHERE id = ?2",
-            &params![corps, qui.user_id],
-        )
+    let n = Utilisateur::update_many()
+        .set(Utilisateur::PREFS, Some(corps))
+        .filter(Utilisateur::ID.eq(qui.user_id))
+        .execute(req.db())
         .await?;
     if n == 0 {
         return Err(Erreur::NonAuthentifie);
@@ -238,41 +247,62 @@ struct LeaderEntry {
     points: i64,
 }
 
+/// Les dix meilleurs contributeurs, d'après les décomptes par compte des
+/// signalements, trajets, positions et recherches ; à égalité, les comptes
+/// les plus anciens d'abord.
+fn meilleurs(comptes: Vec<(i32, String)>, decomptes: [Vec<(i32, i64)>; 4]) -> Vec<LeaderEntry> {
+    let par_compte: [HashMap<i32, u64>; 4] = decomptes.map(|lignes| {
+        lignes
+            .into_iter()
+            .map(|(id, n)| (id, n.max(0) as u64))
+            .collect()
+    });
+    let mut scores: Vec<(i64, i32, String)> = comptes
+        .into_iter()
+        .map(|(id, username)| {
+            let n = |i: usize| par_compte[i].get(&id).copied().unwrap_or(0);
+            (score(n(0), n(1), n(2), n(3)), id, username)
+        })
+        .collect();
+    scores.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    scores
+        .into_iter()
+        .take(10)
+        .map(|(points, _, username)| LeaderEntry {
+            name: public_name(&username),
+            points,
+        })
+        .collect()
+}
+
 /// GET /leaderboard — top 10 des contributeurs (noms pseudonymisés).
 async fn classement(req: Request) -> Resultat<Response> {
     connexion::utilisateur(&req).await?;
-    // Le score se calcule en SQL et seuls les dix premiers sortent de la
-    // base (à égalité, les comptes les plus anciens d'abord) : plus besoin de
-    // rapatrier tous les comptes pour en garder dix.
-    let lignes: Vec<(String, i64, i64, i64, i64)> = req
-        .db()
-        .raw(
-            "SELECT username, alerts, trips, positions, searches FROM (\
-               SELECT u.id, u.username, \
-                 (SELECT count(*) FROM alerts a WHERE a.user_id = u.id) AS alerts, \
-                 (SELECT count(*) FROM trips t WHERE t.user_id = u.id) AS trips, \
-                 (SELECT count(*) FROM positions p WHERE p.user_id = u.id) AS positions, \
-                 (SELECT count(*) FROM searches s WHERE s.user_id = u.id) AS searches \
-               FROM users u) \
-             ORDER BY alerts * 10 + trips * 5 + positions * 2 + searches DESC, id \
-             LIMIT 10",
-            &[],
-        )
-        .await?;
-    let entries: Vec<LeaderEntry> = lignes
-        .iter()
-        .map(
-            |(username, alerts, trips, positions, searches)| LeaderEntry {
-                name: public_name(username),
-                points: score(
-                    *alerts as u64,
-                    *trips as u64,
-                    *positions as u64,
-                    *searches as u64,
-                ),
-            },
-        )
-        .collect();
+    let db = req.db();
+    // Un décompte par compte et par table, fait par la base (GROUP BY) : seuls
+    // les totaux en sortent, jamais les lignes.
+    let (comptes, alerts, trips, positions, searches) = tokio::try_join!(
+        Utilisateur::query()
+            .columns((Utilisateur::ID, Utilisateur::USERNAME))
+            .all(db),
+        Signalement::query()
+            .group_by(Signalement::USER_ID)
+            .select_exprs::<(i32, i64)>([Signalement::USER_ID.expr(), count_all()])
+            .all(db),
+        Trajet::query()
+            .group_by(Trajet::USER_ID)
+            .select_exprs::<(i32, i64)>([Trajet::USER_ID.expr(), count_all()])
+            .all(db),
+        Position::query()
+            .group_by(Position::USER_ID)
+            .select_exprs::<(i32, i64)>([Position::USER_ID.expr(), count_all()])
+            .all(db),
+        Recherche::query()
+            .group_by(Recherche::USER_ID)
+            .select_exprs::<(i32, i64)>([Recherche::USER_ID.expr(), count_all()])
+            .all(db),
+    )?;
+    let entries = meilleurs(comptes, [alerts, trips, positions, searches]);
     Ok(Response::new().json(entries))
 }
 
@@ -324,10 +354,11 @@ mod tests {
 
 #[cfg(test)]
 mod essais {
-    use paquets::orm::{Executor, params};
     use serde_json::{Value, json};
 
-    use crate::essais::{bearer, client, inscrit};
+    use super::*;
+    use crate::base::{JetonReinit, Session};
+    use crate::essais::{bearer, client, compte, inscrit};
 
     #[tokio::test]
     async fn signup_then_authed_and_401_without_token() {
@@ -394,33 +425,31 @@ mod essais {
             .json(&json!({"name": "Gare", "lat": 1.0, "lon": 2.0}))
             .await;
         let db = &c.db;
-        let uid: Vec<(i32,)> = db
-            .raw(
-                "SELECT id FROM users WHERE username = ?1",
-                &params![nom.clone()],
-            )
-            .await
-            .unwrap();
-        let uid = uid[0].0;
-        db.raw_execute(
-            "INSERT INTO alerts (category, label, lat, lon, created_at, expires_at, user_id) \
-             VALUES ('police', '', 1.0, 2.0, ?2, ?3, ?1)",
-            &params![
-                uid,
-                crate::base::maintenant(),
-                crate::base::maintenant() + 600
-            ],
-        )
+        let uid = compte(&c, &nom).await.id;
+        let t = crate::base::maintenant();
+        Signalement {
+            id: 0,
+            category: "police".into(),
+            label: String::new(),
+            lat: 1.0,
+            lon: 2.0,
+            created_at: t,
+            expires_at: t + 600,
+            confirms: 0,
+            denies: 0,
+            user_id: uid,
+        }
+        .insert(db)
         .await
         .unwrap();
-        db.raw_execute(
-            "INSERT INTO reset_tokens (user_id, token_hash, expires_at, used) VALUES (?1, ?2, ?3, FALSE)",
-            &params![
-                uid,
-                crate::connexion::empreinte(&crate::connexion::jeton_aleatoire()),
-                crate::base::maintenant() + 3600
-            ],
-        )
+        JetonReinit {
+            id: 0,
+            user_id: uid,
+            token_hash: crate::connexion::empreinte(&crate::connexion::jeton_aleatoire()),
+            expires_at: t + 3600,
+            used: false,
+        }
+        .insert(db)
         .await
         .unwrap();
 
@@ -433,20 +462,37 @@ mod essais {
         assert_eq!(r.status(), 204);
 
         // Plus rien du compte en base.
-        let restes: Vec<(i64,)> = db
-            .raw(
-                "SELECT (SELECT count(*) FROM positions WHERE user_id = ?1) \
-                 + (SELECT count(*) FROM trips WHERE user_id = ?1) \
-                 + (SELECT count(*) FROM searches WHERE user_id = ?1) \
-                 + (SELECT count(*) FROM alerts WHERE user_id = ?1) \
-                 + (SELECT count(*) FROM sessions WHERE user_id = ?1) \
-                 + (SELECT count(*) FROM reset_tokens WHERE user_id = ?1) \
-                 + (SELECT count(*) FROM users WHERE id = ?1)",
-                &params![uid],
-            )
-            .await
-            .unwrap();
-        assert_eq!(restes[0].0, 0);
+        let restes = [
+            Position::query()
+                .filter(Position::USER_ID.eq(uid))
+                .count(db)
+                .await,
+            Trajet::query()
+                .filter(Trajet::USER_ID.eq(uid))
+                .count(db)
+                .await,
+            Recherche::query()
+                .filter(Recherche::USER_ID.eq(uid))
+                .count(db)
+                .await,
+            Signalement::query()
+                .filter(Signalement::USER_ID.eq(uid))
+                .count(db)
+                .await,
+            Session::query()
+                .filter(Session::USER_ID.eq(uid))
+                .count(db)
+                .await,
+            JetonReinit::query()
+                .filter(JetonReinit::USER_ID.eq(uid))
+                .count(db)
+                .await,
+            Utilisateur::query()
+                .filter(Utilisateur::ID.eq(uid))
+                .count(db)
+                .await,
+        ];
+        assert_eq!(restes.map(Result::unwrap), [0; 7]);
 
         // Les anciens jetons, des deux appareils, ne valent plus rien.
         for j in [&jeton, &deux] {

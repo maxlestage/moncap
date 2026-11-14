@@ -1,8 +1,13 @@
-//! Essais de bout en bout, sur une vraie base SQLite.
+//! Essais de bout en bout, sur le moteur de Nuage DB.
 //!
-//! Chaque essai a la sienne, en mémoire, toute neuve, avec ses migrations :
-//! rien à installer, rien à configurer, et ils tournent tous, en parallèle,
-//! à chaque `cargo test`.
+//! Chaque essai a sa base, en mémoire, toute neuve, avec ses tables : rien à
+//! installer, rien à configurer, et ils tournent tous, en parallèle, à chaque
+//! `cargo test`. C'est le moteur de Memoire, celui avec lequel un serveur
+//! Nuage DB exécute les requêtes : ce qui passe ici passe en production.
+//!
+//! `ESSAIS_BASE` choisit une autre base pour les mêmes essais, par exemple
+//! `sqlite::memory:` (chaque essai a la sienne), ou l'adresse d'un serveur
+//! Nuage DB avec `NUAGE_TOKEN` (les essais y partagent alors une base).
 
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,7 +16,9 @@ use paquets::test::TestClient;
 use serde_json::{Value, json};
 
 use crate::app::{Reglages, application};
+use crate::base::{JetonReinit, Utilisateur};
 use crate::cache;
+use paquets::prelude::*;
 
 /// Un client sur une application neuve, et la base qu'elle utilise — les
 /// essais y lisent ou y préparent ce que l'API ne montre pas.
@@ -28,12 +35,13 @@ impl Deref for Essai {
     }
 }
 
-/// Une application neuve, sur une base SQLite en mémoire qui n'appartient
-/// qu'à cet essai.
+/// Une application neuve, sur une base en mémoire qui n'appartient qu'à cet
+/// essai (ou sur celle de `ESSAIS_BASE`).
 pub async fn client() -> Essai {
-    let db = paquets::Db::connect("sqlite::memory:")
+    let url = std::env::var("ESSAIS_BASE").unwrap_or_else(|_| "memory".into());
+    let db = paquets::Db::connect(&url)
         .await
-        .expect("SQLite en mémoire");
+        .unwrap_or_else(|e| panic!("base des essais ({url}) : {e}"));
     let client = application(Reglages {
         base: db.clone().into(),
         cache: cache::ouvre("sqlite::memory:"),
@@ -68,6 +76,15 @@ pub async fn inscrit(c: &TestClient, prefixe: &str) -> (String, String) {
     assert_eq!(r.status(), 200, "{}", r.text());
     let v: Value = r.json();
     (nom, v["token"].as_str().unwrap().to_owned())
+}
+
+/// Le compte d'un nom, lu en base.
+pub async fn compte(c: &Essai, nom: &str) -> Utilisateur {
+    Utilisateur::query()
+        .filter(Utilisateur::CLE.eq(crate::connexion::cle_identifiant(nom)))
+        .one(&c.db)
+        .await
+        .expect("le compte existe")
 }
 
 pub fn bearer(jeton: &str) -> String {
@@ -315,20 +332,18 @@ mod connexion {
 
     #[tokio::test]
     async fn la_reinitialisation_change_le_mot_de_passe_une_seule_fois() {
-        use paquets::orm::{Executor, params};
         let c = client().await;
         let (nom, jeton_session) = inscrit(&c, "reinit").await;
         // Le lien qu'aurait reçu le courriel.
         let jeton = crate::connexion::jeton_aleatoire();
-        c.db.raw_execute(
-            "INSERT INTO reset_tokens (user_id, token_hash, expires_at, used) \
-             SELECT id, ?2, ?3, FALSE FROM users WHERE username = ?1",
-            &params![
-                nom.clone(),
-                crate::connexion::empreinte(&jeton),
-                crate::base::maintenant() + 3600
-            ],
-        )
+        JetonReinit {
+            id: 0,
+            user_id: compte(&c, &nom).await.id,
+            token_hash: crate::connexion::empreinte(&jeton),
+            expires_at: crate::base::maintenant() + 3600,
+            used: false,
+        }
+        .insert(&c.db)
         .await
         .unwrap();
 
@@ -442,15 +457,12 @@ mod connexion {
         let mut statuts = [a.status(), b.status()];
         statuts.sort();
         assert_eq!(statuts, [200, 400]);
-        use paquets::orm::{Executor, params};
-        let n: Vec<(i64,)> =
-            c.db.raw(
-                "SELECT count(*) FROM users WHERE cle = ?1",
-                &params![crate::connexion::cle_identifiant(&nom)],
-            )
+        let n = Utilisateur::query()
+            .filter(Utilisateur::CLE.eq(crate::connexion::cle_identifiant(&nom)))
+            .count(&c.db)
             .await
             .unwrap();
-        assert_eq!(n[0].0, 1);
+        assert_eq!(n, 1);
     }
 
     #[tokio::test]
