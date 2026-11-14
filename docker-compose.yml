@@ -1,5 +1,7 @@
-# Le serveur et sa base SQLite, gardée dans un volume : les données
-# survivent aux redémarrages du conteneur.
+# Le serveur, avec sa base locale (le mode local de Nuage DB) et son cache
+# dans un volume : les données survivent aux redémarrages du conteneur.
+# NUAGE_URL et NUAGE_TOKEN dans l'environnement les mettent sur un serveur
+# Nuage DB à la place.
 services:
   app:
     build: .
