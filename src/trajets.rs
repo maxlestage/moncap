@@ -1,7 +1,7 @@
 //! Les trajets parcourus (et leur requalification après coup) et les
 //! destinations choisies — toutes, sans plafond.
 
-use paquets::orm::params;
+use paquets::orm::Database;
 use paquets::prelude::*;
 use serde::Deserialize;
 
@@ -235,32 +235,53 @@ async fn ajoute_recherche(req: Request) -> Resultat<Response> {
         return Err(Erreur::requete("nom de recherche vide"));
     }
     let cle = recent_key(&name, s.lat, s.lon);
-    let lignes: Vec<Recherche> = req
+    let subtitle = nettoie_label(&s.subtitle);
+    let (lat, lon, uid) = (s.lat, s.lon, qui.user_id);
+    // Lu et écrit dans une transaction : deux envois simultanés du même lieu
+    // font deux visites d'une même ligne (le second est relancé sur la ligne
+    // que le premier a créée), et l'unicité (compte, lieu) empêche le doublon.
+    let recherche = req
         .db()
-        .raw(
-            "INSERT INTO searches \
-             (name, subtitle, lat, lon, created_at, user_id, cle, fois, rang) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, \
-             (SELECT coalesce(max(rang), 0) + 1 FROM searches WHERE user_id = ?6)) \
-             ON CONFLICT (user_id, cle) DO UPDATE SET name = excluded.name, \
-             subtitle = excluded.subtitle, lat = excluded.lat, lon = excluded.lon, \
-             created_at = excluded.created_at, fois = fois + 1, rang = excluded.rang \
-             RETURNING id, name, subtitle, lat, lon, created_at, user_id, cle, fois, rang",
-            &params![
-                name,
-                nettoie_label(&s.subtitle),
-                s.lat,
-                s.lon,
-                maintenant(),
-                qui.user_id,
-                cle
-            ],
-        )
+        .transaction(|tx| {
+            let (name, subtitle, cle) = (name.clone(), subtitle.clone(), cle.clone());
+            Box::pin(async move {
+                let rang = Recherche::query()
+                    .filter(Recherche::USER_ID.eq(uid))
+                    .order_by(Recherche::RANG.desc())
+                    .columns(Recherche::RANG)
+                    .first(tx)
+                    .await?
+                    .unwrap_or(0)
+                    + 1;
+                let deja = Recherche::query()
+                    .filter(Recherche::USER_ID.eq(uid))
+                    .filter(Recherche::CLE.eq(cle.clone()))
+                    .first(tx)
+                    .await?;
+                let mut r = Recherche {
+                    id: 0,
+                    name,
+                    subtitle,
+                    lat,
+                    lon,
+                    created_at: maintenant(),
+                    user_id: uid,
+                    cle,
+                    fois: 1,
+                    rang,
+                };
+                match deja {
+                    Some(d) => {
+                        r.id = d.id;
+                        r.fois = d.fois + 1;
+                        r.update(tx).await?;
+                    }
+                    None => r.insert(tx).await?,
+                }
+                Ok(r)
+            })
+        })
         .await?;
-    let recherche = lignes
-        .into_iter()
-        .next()
-        .ok_or_else(|| Erreur::interne("destination non enregistrée"))?;
     Ok(Response::new().json(recherche))
 }
 

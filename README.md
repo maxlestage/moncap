@@ -13,7 +13,7 @@ moncap/
 │   ├── main.rs         Point d'entrée
 │   ├── app.rs          L'application : bouclier de sécurité, CORS, routes, tâches de fond
 │   ├── connexion.rs    Comptes, sessions, mots de passe (voir « Connexion »)
-│   ├── base.rs         La base SQLite : tables (modèles memoire-orm), migrations
+│   ├── base.rs         La base, sur Nuage DB : tables (modèles memoire-orm)
 │   ├── cache.rs        Le cache SQLite : tuiles, feux, air, régions hors ligne
 │   ├── erreur.rs       Les erreurs, en texte brut comme l'app iOS les attend
 │   ├── temps_reel.rs   Le WebSocket
@@ -36,7 +36,7 @@ moncap/
 
 Paquets réunit le serveur HTTP (**vitesse**), le bouclier de sécurité
 (**securite** : pare-feu applicatif, limitation de débit, en-têtes, blocage
-des robots d'attaque), l'ORM (**memoire-orm**, SQLite) et le front
+des robots d'attaque), l'ORM (**memoire-orm**, sur Nuage DB) et le front
 (**active**). Les routes sont volontairement aussi simples que possible :
 
 | Méthode | Route         | Rôle                                              |
@@ -120,42 +120,59 @@ ou expiré donne `401 authentification requise`.
 
 Le client envoie `{"kind":"live", lat, lon, label}` ou
 `{"kind":"alert", category, lat, lon, label}`. Le serveur tourne en une
-seule instance (sa base est un fichier) : plus de Redis ni de pont entre
+seule instance : plus de Redis ni de pont entre
 instances, le canal de diffusion est partagé par tous ses fils.
 
-### Données et cache : SQLite, sans serveur de base
+### Données : Nuage DB ; cache : SQLite
 
-Plus de Postgres ni de Redis : tout tient dans deux fichiers SQLite, ouverts
-par Paquets dans le processus même — pas de connexion réseau à payer à
-chaque requête, rien à installer ni à facturer.
+Les données vivent sur [**Nuage DB**](https://github.com/maxlestage/Nuage),
+la base de la famille Paquets : un serveur toujours allumé (dyno Basic,
+qui ne dort jamais), qui chiffre tout et se sauvegarde sur S3. Le disque
+d'un dyno Heroku est effacé au moins une fois par jour : une base posée
+dessus oubliait comptes, trajets et destinations à chaque fois. Sur Nuage
+DB, ils restent, que le dyno de moncap redémarre, s'endorme ou soit
+redéployé.
 
-| Fichier | Variable | Contenu |
+| Où | Variable | Contenu |
 | --- | --- | --- |
-| `data/moncap.db` | `DATABASE_URL` (`sqlite://…`) | comptes, sessions, positions, trajets, destinations, signalements |
+| Nuage DB | `NUAGE_URL` (`https://…`) et `NUAGE_TOKEN` | comptes, sessions, positions, trajets, destinations, signalements |
 | `data/cache.db` | `CACHE_URL` | tuiles, feux, qualité de l'air, liste des régions — jetable |
 
-- **Le mode WAL** laisse lire pendant qu'on écrit ; le schéma
-  (`src/base.rs`) se crée au premier démarrage et les migrations tiennent
-  leur registre dans `_memoire_migrations`. Les données d'un compte partent
-  avec lui (`ON DELETE CASCADE`).
-- **Le cache est un fichier à part** : ses écritures (une tuile par requête)
-  ne prennent pas le verrou de la base des comptes, et on peut l'effacer à
-  tout moment. Il garde 30 jours au plus et `CACHE_MAX_MO` (512 par défaut) ;
-  le ménage passe chaque heure, suivi de `PRAGMA optimize` sur les deux bases.
+- **Le choix de la base** (`src/base.rs`) : `NUAGE_URL` d'abord, un serveur
+  Nuage DB (`https://…`, avec le jeton de `NUAGE_TOKEN`) ou un dossier ;
+  sans lui, `DATABASE_URL` s'il désigne un fichier SQLite ; sinon le mode
+  local de Nuage DB, dans `data/`, pour développer. Le journal de
+  démarrage dit laquelle (l'hôte seulement, jamais le jeton), et prévient
+  sur Heroku quand `NUAGE_URL` manque.
+- **Pas de SQL** : Nuage DB n'exécute pas le SQL brut de Memoire. Toutes les
+  requêtes passent par les modèles et le constructeur de requêtes, et les
+  tables se créent d'après les modèles au démarrage, unicités et index
+  compris (`base::tables`) — le même code tourne sur Nuage DB, sur son mode
+  local et sur SQLite.
+- **Les écritures en plusieurs temps** (inscription, votes, échecs de
+  connexion, liens de réinitialisation, destinations, suppression du compte)
+  passent par `db.transaction(...)` : Nuage DB valide de façon optimiste, et
+  une transaction en conflit est relancée sur des données fraîches. Deux
+  inscriptions simultanées du même nom ne font qu'un compte, deux votes
+  simultanés comptent tous deux.
+- **La suppression du compte** efface ses positions, trajets, destinations,
+  signalements, sessions et liens dans la même transaction.
+- **Le cache reste un fichier SQLite** à côté du serveur : ses écritures
+  (une tuile par requête) restent locales, et on peut l'effacer à tout
+  moment. Il garde 30 jours au plus et `CACHE_MAX_MO` (512 par défaut) ; le
+  ménage passe chaque heure, suivi de `PRAGMA optimize` sur les bases SQLite.
 - **Toutes les destinations sont gardées** (`/searches`), une ligne par lieu :
   y retourner la remonte en tête et compte la visite (`fois`). Plus de
   plafond à douze. `GET /searches?limit=N` n'en rend que les N premières.
 - **Les tâches de fond** (purge des signalements, ménage) tournent sur un fil
   que Paquets garde pour elles, à côté des fils du serveur.
 
-> ⚠️ **Le disque d'un dyno Heroku est éphémère** : il repart de zéro à chaque
-> déploiement et au redémarrage quotidien. Sur Heroku, la base SQLite oublie
-> donc comptes, trajets et destinations au moins une fois par jour. L'app
-> s'en remet seule (le compte de l'appareil se recrée, et **les destinations
-> restent sur le téléphone**, dans sa propre base SQLite), mais pour garder
-> les données du serveur, il faut un disque qui dure : un volume (Fly.io,
-> Railway, Render, un VPS, Docker) monté sur `data/`, ou `DATABASE_URL`
-> pointé dessus, par exemple `sqlite:///data/moncap.db`.
+**Brancher moncap sur Nuage DB** : dans la console du serveur
+(`https://nuage-f48a8945f31c.herokuapp.com/admin`), **Nouvelle
+application** `moncap`, qui donne un jeton (montré une fois). Puis, dans les
+config vars de l'app Heroku `moncap` : `NUAGE_URL` =
+`https://nuage-f48a8945f31c.herokuapp.com` et `NUAGE_TOKEN` = ce jeton.
+L'app redémarre, crée ses tables sur Nuage DB et y garde tout.
 
 ### Sécurité
 
@@ -170,12 +187,19 @@ applicatif** (injection SQL, XSS, RCE…), en-têtes de sécurité (HSTS,
 ### Lancer le backend
 
 ```bash
-# Rien à installer : la base est un fichier, créé au premier démarrage.
+# Rien à installer : sans NUAGE_URL, la base est le mode local de Nuage DB,
+# dans data/, créé au premier démarrage.
 cargo run
-# moncap-gps écoute sur http://0.0.0.0:3000, données dans data/moncap.db
+# moncap-gps écoute sur http://0.0.0.0:3000
 
-# Les tests : chaque essai de bout en bout a sa propre base SQLite en mémoire.
+# Sur un serveur Nuage DB (le vrai, ou un serveur lancé en local) :
+NUAGE_URL=https://nuage-f48a8945f31c.herokuapp.com NUAGE_TOKEN=… cargo run
+
+# Les tests : chaque essai de bout en bout a sa propre base en mémoire, sur
+# le moteur de Nuage DB. ESSAIS_BASE les fait tourner ailleurs :
 cargo test
+ESSAIS_BASE=sqlite::memory: cargo test
+ESSAIS_BASE=http://127.0.0.1:8080 NUAGE_TOKEN=… cargo test   # un serveur Nuage DB
 ```
 
 Le niveau de logs (structurés via `tracing`) se règle avec `RUST_LOG`
@@ -428,8 +452,9 @@ six zones qui se chevauchent.
 
 L'app se déploie via un **buildpack Rust** : la crate est à la racine,
 Heroku la compile (`cargo build --release`) et lance le binaire défini dans
-le `Procfile`. Aucun addon : la base et le cache sont des fichiers SQLite
-(voir « Données et cache » — et l'avertissement sur le disque éphémère).
+le `Procfile`. Aucun addon : les données sont sur Nuage DB (`NUAGE_URL` et
+`NUAGE_TOKEN`, voir « Données : Nuage DB ») et le cache est un fichier
+SQLite sur le dyno.
 Une ancienne variable `DATABASE_URL` Postgres est ignorée, avec un
 avertissement dans les journaux. Pas de Docker, pas de GitHub Actions, pas
 de stack `container`.
@@ -529,7 +554,8 @@ ouvre `https://<ton-app>.herokuapp.com/health` → doit afficher `ok`.
 ```bash
 docker compose up --build
 # ou : docker build -t moncap-gps . && docker run -p 3000:3000 -v moncap:/app/data moncap-gps
-# le volume garde data/moncap.db (et le cache) d'un redémarrage à l'autre
+# sans NUAGE_URL, le volume garde data/ (la base locale et le cache) d'un
+# redémarrage à l'autre
 ```
 
 ## Front (Swift / SwiftUI)

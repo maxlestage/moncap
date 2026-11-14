@@ -39,9 +39,13 @@ Le serveur, à la racine — sa CI (`ci.yml`) ne se lance qu'à la main :
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-La base est SQLite (`data/moncap.db`, le cache dans `data/cache.db`) : rien
-à installer. Les essais de bout en bout (`src/essais.rs` et les modules)
-tournent toujours, chacun sur sa propre base SQLite en mémoire.
+La base est sur Nuage DB (`NUAGE_URL`, `NUAGE_TOKEN`) ; sans eux, le mode
+local de Nuage DB dans `data/`. Le cache est SQLite (`data/cache.db`) : rien
+à installer. Pas de SQL brut sur la base : Nuage DB ne l'exécute pas, tout
+passe par les modèles et le constructeur de requêtes. Les essais de bout en
+bout (`src/essais.rs` et les modules) tournent toujours, chacun sur sa propre
+base en mémoire (le moteur de Nuage DB) ; `ESSAIS_BASE=sqlite::memory:` ou
+l'adresse d'un serveur Nuage DB les fait tourner ailleurs.
 
 L'app iOS (`frontend/`, Swift) a ses propres workflows ; elle ne se
 construit pas ici.

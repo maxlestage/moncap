@@ -1,8 +1,18 @@
 {
   "name": "moncap-gps",
-  "description": "API GPS (Rust + Paquets) sur SQLite — déploiement buildpack, sans addon.",
+  "description": "API GPS (Rust + Paquets) sur Nuage DB — déploiement buildpack, sans addon.",
   "repository": "https://github.com/maxlestage/moncap",
-  "keywords": ["rust", "paquets", "gps", "sqlite"],
+  "keywords": ["rust", "paquets", "gps", "nuage"],
+  "env": {
+    "NUAGE_URL": {
+      "description": "Le serveur Nuage DB qui garde les données (comptes, trajets, destinations).",
+      "value": "https://nuage-f48a8945f31c.herokuapp.com"
+    },
+    "NUAGE_TOKEN": {
+      "description": "Le jeton de l'application moncap sur ce serveur (console Nuage DB, « Nouvelle application »).",
+      "required": false
+    }
+  },
   "buildpacks": [
     { "url": "https://github.com/emk/heroku-buildpack-rust.git" }
   ]

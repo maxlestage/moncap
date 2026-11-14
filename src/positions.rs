@@ -150,17 +150,25 @@ async fn modifie(req: Request) -> Resultat<Response> {
     let id: i32 = param(&req, "id")?;
     let p: NewPosition = corps_json(&req).await?;
     verifie_coord(p.lat, p.lon)?;
-    let maj: Vec<Position> = req
-        .db()
-        .raw(
-            "UPDATE positions SET lat = ?1, lon = ?2, label = ?3 \
-             WHERE id = ?4 AND user_id = ?5 RETURNING id, lat, lon, label, user_id",
-            &paquets::orm::params![p.lat, p.lon, nettoie_label(&p.label), id, qui.user_id],
-        )
-        .await?;
-    let Some(position) = maj.into_iter().next() else {
-        return Err(Erreur::introuvable(""));
+    let position = Position {
+        id,
+        lat: p.lat,
+        lon: p.lon,
+        label: nettoie_label(&p.label),
+        user_id: qui.user_id,
     };
+    // Le filtre sur le compte fait qu'une position d'un autre n'est pas touchée.
+    let n = Position::update_many()
+        .set(Position::LAT, position.lat)
+        .set(Position::LON, position.lon)
+        .set(Position::LABEL, position.label.clone())
+        .filter(Position::ID.eq(id))
+        .filter(Position::USER_ID.eq(qui.user_id))
+        .execute(req.db())
+        .await?;
+    if n == 0 {
+        return Err(Erreur::introuvable(""));
+    }
     hub(&req).diffuse(&Evenement::PositionsChanged);
     Ok(Response::new().json(position))
 }

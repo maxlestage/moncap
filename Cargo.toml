@@ -2,14 +2,14 @@
 name = "moncap-gps"
 version = "0.2.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 
 [dependencies]
 # Le framework : serveur (vitesse), bouclier de sécurité (securite), base de
-# données (memoire-orm), le tout derrière une seule `App`. Seul SQLite est
-# compilé, dans le binaire : ni serveur de base à faire tourner, ni Redis. Les
-# données et le cache sont deux fichiers (voir `base` et `cache`).
-paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["sqlite"] }
+# données (memoire-orm), le tout derrière une seule `App`. Les données vivent
+# sur Nuage DB (`nuage` : le client d'un serveur, `NUAGE_URL`), le cache dans
+# un fichier SQLite (`sqlite`) ; ni Postgres ni Redis (voir `base` et `cache`).
+paquets = { git = "https://github.com/maxlestage/Paquets", default-features = false, features = ["sqlite", "nuage"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

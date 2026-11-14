@@ -25,5 +25,5 @@ DerivedData/
 __pycache__/
 *.pyc
 
-# La base et le cache SQLite locaux
+# La base locale (Nuage DB, mode local) et le cache SQLite
 /data/

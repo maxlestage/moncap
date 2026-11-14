@@ -1,6 +1,6 @@
 //! Les signalements communautaires (police, accident, bouchon, danger…).
 
-use paquets::orm::{Executor, params};
+use paquets::orm::{Database, Executor};
 use paquets::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -75,13 +75,13 @@ pub async fn cree(
     label: &str,
 ) -> Resultat<Option<Alerte>> {
     let t = maintenant();
-    let comptes: Vec<(i64, i64)> = db
-        .raw(
-            "SELECT count(*) FILTER (WHERE created_at > ?2), count(*) FROM alerts WHERE user_id = ?1",
-            &params![uid, t - 120],
-        )
-        .await?;
-    let (recents, total) = comptes.first().copied().unwrap_or((0, 0));
+    let siens = || Signalement::query().filter(Signalement::USER_ID.eq(uid));
+    let (recents, total) = tokio::try_join!(
+        siens()
+            .filter(Signalement::CREATED_AT.gt(t - 120))
+            .count(db),
+        siens().count(db),
+    )?;
     if recents >= 3 || total >= 10 {
         return Ok(None);
     }
@@ -103,12 +103,35 @@ pub async fn cree(
 
 /// Supprime les signalements expirés (tâche de fond, toutes les minutes).
 pub async fn purge<E: Executor>(db: &E) -> Resultat<u64> {
-    Ok(db
-        .raw_execute(
-            "DELETE FROM alerts WHERE expires_at <= ?1",
-            &params![maintenant()],
-        )
+    Ok(Signalement::delete_many()
+        .filter(Signalement::EXPIRES_AT.le(maintenant()))
+        .execute(db)
         .await?)
+}
+
+/// Ce qu'un vote fait d'un signalement.
+#[derive(Debug)]
+enum Issue {
+    /// Il reste, ainsi compté.
+    Garde(Signalement),
+    /// Assez infirmé : il est retiré.
+    Retire,
+}
+
+/// Le signalement après un vote, à l'instant `t`. « Toujours là » le
+/// prolonge, sans dépasser deux heures de vie ; « plus là » le retire dès
+/// deux infirmations qui l'emportent sur les confirmations.
+fn apres_vote(mut s: Signalement, up: bool, t: i64) -> Issue {
+    if up {
+        s.confirms += 1;
+        s.expires_at = (s.expires_at.max(t) + PROLONGATION).min(s.created_at + VIE_MAX);
+        Issue::Garde(s)
+    } else if s.denies + 1 >= 2 && s.denies + 1 > s.confirms {
+        Issue::Retire
+    } else {
+        s.denies += 1;
+        Issue::Garde(s)
+    }
 }
 
 /// GET /alerts — signalements en cours.
@@ -123,58 +146,51 @@ struct Vote {
 }
 
 /// POST /alerts/:id/vote — confirme (prolonge) ou infirme (peut supprimer).
-/// Les mises à jour sont atomiques : deux votes simultanés comptent tous deux.
+/// Lu et écrit dans une transaction : deux votes simultanés comptent tous
+/// deux (le second est relancé sur le signalement déjà compté).
 async fn vote(req: Request) -> Resultat<Response> {
     connexion::utilisateur(&req).await?;
     let id: i32 = param(&req, "id")?;
-    let v: Vote = corps_json(&req).await?;
-    let db = req.db();
-    let t = maintenant();
+    let Vote { up } = corps_json(&req).await?;
+    let issue = req
+        .db()
+        .transaction(|tx| {
+            Box::pin(async move {
+                let Some(s) = Signalement::find(tx, id).await? else {
+                    return Ok(None);
+                };
+                let issue = apres_vote(s, up, maintenant());
+                match &issue {
+                    Issue::Garde(s) => {
+                        s.update_only(
+                            tx,
+                            (
+                                Signalement::CONFIRMS,
+                                Signalement::DENIES,
+                                Signalement::EXPIRES_AT,
+                            ),
+                        )
+                        .await?;
+                    }
+                    Issue::Retire => {
+                        Signalement::delete_by_key(tx, id).await?;
+                    }
+                }
+                Ok(Some(issue))
+            })
+        })
+        .await?;
     let hub = hub(&req);
-    if v.up {
-        let maj: Vec<Signalement> = db
-            .raw(
-                "UPDATE alerts SET confirms = confirms + 1, \
-                 expires_at = min(max(expires_at, ?2) + ?3, created_at + ?4) \
-                 WHERE id = ?1 RETURNING id, category, label, lat, lon, created_at, \
-                 expires_at, confirms, denies, user_id",
-                &params![id, t, PROLONGATION, VIE_MAX],
-            )
-            .await?;
-        let Some(s) = maj.first() else {
-            return Err(Erreur::introuvable(""));
-        };
-        hub.diffuse(&Evenement::Alert(Alerte::from(s)));
-    } else {
-        let supprime: Vec<(i32,)> = db
-            .raw(
-                "DELETE FROM alerts WHERE id = ?1 AND denies + 1 >= 2 AND denies + 1 > confirms \
-                 RETURNING id",
-                &params![id],
-            )
-            .await?;
-        if !supprime.is_empty() {
-            hub.diffuse(&Evenement::AlertGone { id: id as i64 });
-        } else {
-            let maj: Vec<Signalement> = db
-                .raw(
-                    "UPDATE alerts SET denies = denies + 1 WHERE id = ?1 RETURNING id, category, \
-                     label, lat, lon, created_at, expires_at, confirms, denies, user_id",
-                    &params![id],
-                )
-                .await?;
-            let Some(s) = maj.first() else {
-                return Err(Erreur::introuvable(""));
-            };
-            hub.diffuse(&Evenement::Alert(Alerte::from(s)));
-        }
+    match issue {
+        None => return Err(Erreur::introuvable("")),
+        Some(Issue::Garde(s)) => hub.diffuse(&Evenement::Alert(Alerte::from(&s))),
+        Some(Issue::Retire) => hub.diffuse(&Evenement::AlertGone { id: id as i64 }),
     }
     Ok(Response::new().status(204))
 }
 
 #[cfg(test)]
 mod essais {
-    use paquets::orm::{Executor, params};
     use serde_json::{Value, json};
 
     use super::*;
@@ -184,14 +200,12 @@ mod essais {
     async fn creation_bornee_et_votes() {
         let c = client().await;
         let (nom, jeton) = inscrit(&c, "alerte").await;
-        let uid: Vec<(i32,)> =
-            c.db.raw(
-                "SELECT id FROM users WHERE cle = ?1",
-                &params![crate::connexion::cle_identifiant(&nom)],
-            )
+        let uid = crate::base::Utilisateur::query()
+            .filter(crate::base::Utilisateur::CLE.eq(crate::connexion::cle_identifiant(&nom)))
+            .one(&c.db)
             .await
-            .unwrap();
-        let uid = uid[0].0;
+            .unwrap()
+            .id;
 
         // Trois en deux minutes, pas une de plus.
         let mut ids = Vec::new();
@@ -226,14 +240,9 @@ mod essais {
                 .await;
             assert_eq!(r.status(), 204);
         }
-        let (cree_a, expire): (i64, i64) =
-            c.db.raw(
-                "SELECT created_at, expires_at FROM alerts WHERE id = ?1",
-                &params![id],
-            )
-            .await
-            .unwrap()[0];
-        assert_eq!(expire - cree_a, VIE_MAX);
+        let s = Signalement::get(&c.db, id as i32).await.unwrap();
+        assert_eq!(s.expires_at - s.created_at, VIE_MAX);
+        assert_eq!(s.confirms, 20);
 
         // Deux « plus là » sur une alerte jamais confirmée : elle part.
         let id = ids[1];
@@ -252,12 +261,57 @@ mod essais {
         assert_eq!(r.json::<Vec<Value>>().len(), 2);
 
         // Expirée : la purge l'emporte.
-        c.db.raw_execute(
-            "UPDATE alerts SET expires_at = 0 WHERE id = ?1",
-            &params![ids[2]],
-        )
-        .await
-        .unwrap();
+        Signalement::update_many()
+            .set(Signalement::EXPIRES_AT, 0)
+            .filter(Signalement::ID.eq(ids[2] as i32))
+            .execute(&c.db)
+            .await
+            .unwrap();
         assert_eq!(purge(&c.db).await.unwrap(), 1);
+    }
+
+    #[test]
+    fn un_vote_prolonge_ou_retire() {
+        let s = Signalement {
+            id: 1,
+            category: "police".into(),
+            label: String::new(),
+            lat: 0.0,
+            lon: 0.0,
+            created_at: 1000,
+            expires_at: 1000 + TTL,
+            confirms: 0,
+            denies: 0,
+            user_id: 1,
+        };
+        // Confirmé : dix minutes de plus, sans dépasser deux heures de vie.
+        let Issue::Garde(plus) = apres_vote(s.clone(), true, 1000) else {
+            panic!("une confirmation garde le signalement");
+        };
+        assert_eq!(
+            (plus.confirms, plus.expires_at),
+            (1, 1000 + TTL + PROLONGATION)
+        );
+        let tard = Signalement {
+            expires_at: 1000 + VIE_MAX - 60,
+            ..s.clone()
+        };
+        let Issue::Garde(plafonne) = apres_vote(tard, true, 1000) else {
+            panic!("une confirmation garde le signalement");
+        };
+        assert_eq!(plafonne.expires_at, 1000 + VIE_MAX);
+        // Infirmé : la première infirmation compte, la deuxième retire.
+        let Issue::Garde(moins) = apres_vote(s.clone(), false, 1000) else {
+            panic!("une seule infirmation garde le signalement");
+        };
+        assert_eq!(moins.denies, 1);
+        assert!(matches!(apres_vote(moins, false, 1000), Issue::Retire));
+        // Plus confirmé qu'infirmé : il reste.
+        let confirme = Signalement {
+            confirms: 3,
+            denies: 1,
+            ..s
+        };
+        assert!(matches!(apres_vote(confirme, false, 1000), Issue::Garde(_)));
     }
 }

@@ -37,12 +37,12 @@ use argon2::password_hash::{
     PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
     rand_core::{OsRng, RngCore},
 };
-use paquets::orm::{Database, Executor, Transaction, params};
+use paquets::orm::{Database, Executor};
 use paquets::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::base::{Utilisateur, maintenant};
+use crate::base::{EchecsConnexion, JetonReinit, Session, Utilisateur, maintenant};
 use crate::erreur::{Erreur, Resultat, corps_json, param};
 
 /// Une session vit 180 jours après son dernier usage.
@@ -234,72 +234,71 @@ pub async fn utilisateur(req: &Request) -> Resultat<Authentifie> {
 }
 
 /// L'utilisateur d'un jeton (en-tête, ou `?token=` pour le WebSocket et
-/// l'export GPX), ou 401. Le compte doit encore exister.
+/// l'export GPX), ou 401. Le compte existe encore : ses sessions partent avec
+/// lui, dans la transaction qui le supprime.
 pub async fn depuis_jeton(db: &Db, jeton: &str) -> Resultat<Authentifie> {
     let jeton = jeton.trim();
     if !jeton.starts_with(PREFIXE) {
         return Err(Erreur::NonAuthentifie);
     }
     let maintenant = maintenant();
-    let lignes: Vec<(i64, i32, i64)> = db
-        .raw(
-            "SELECT s.id, s.user_id, s.last_seen_at FROM sessions s \
-             JOIN users u ON u.id = s.user_id \
-             WHERE s.token_hash = ?1 AND s.expires_at > ?2",
-            &params![empreinte(jeton), maintenant],
-        )
-        .await?;
-    let Some(&(id, user_id, vu)) = lignes.first() else {
-        return Err(Erreur::NonAuthentifie);
-    };
-    if maintenant - vu >= RAFRAICHISSEMENT {
+    // L'empreinte est unique : une lecture d'index, une seule ligne.
+    let session = Session::query()
+        .filter(Session::TOKEN_HASH.eq(empreinte(jeton)))
+        .filter(Session::EXPIRES_AT.gt(maintenant))
+        .first(db)
+        .await?
+        .ok_or(Erreur::NonAuthentifie)?;
+    if maintenant - session.last_seen_at >= RAFRAICHISSEMENT {
         // L'échéance glisse : une session dont on se sert ne meurt pas.
-        db.raw_execute(
-            "UPDATE sessions SET last_seen_at = ?1, expires_at = ?2 WHERE id = ?3",
-            &params![maintenant, maintenant + DUREE_SESSION, id],
-        )
-        .await?;
+        Session::update_many()
+            .set(Session::LAST_SEEN_AT, maintenant)
+            .set(Session::EXPIRES_AT, maintenant + DUREE_SESSION)
+            .filter(Session::ID.eq(session.id))
+            .execute(db)
+            .await?;
     }
     Ok(Authentifie {
-        user_id,
-        session: id,
+        user_id: session.user_id,
+        session: session.id,
     })
 }
 
 /// Coupe toutes les sessions d'un compte.
-pub async fn coupe_tout<E: Executor>(db: &E, user_id: i32) -> Resultat<()> {
-    db.raw_execute("DELETE FROM sessions WHERE user_id = ?1", &params![user_id])
+pub async fn coupe_tout<E: Executor>(db: &E, user_id: i32) -> paquets::orm::Result<()> {
+    Session::delete_many()
+        .filter(Session::USER_ID.eq(user_id))
+        .execute(db)
         .await?;
     Ok(())
 }
 
 /// Ce que la connexion garde d'un compte, à effacer avec lui.
-pub async fn efface_traces<E: Executor>(db: &E, user_id: i32) -> Resultat<()> {
-    db.raw_execute("DELETE FROM sessions WHERE user_id = ?1", &params![user_id])
+pub async fn efface_traces<E: Executor>(db: &E, user_id: i32) -> paquets::orm::Result<()> {
+    coupe_tout(db, user_id).await?;
+    JetonReinit::delete_many()
+        .filter(JetonReinit::USER_ID.eq(user_id))
+        .execute(db)
         .await?;
-    db.raw_execute(
-        "DELETE FROM reset_tokens WHERE user_id = ?1",
-        &params![user_id],
-    )
-    .await?;
     Ok(())
 }
 
 /// Le ménage périodique : sessions mortes, liens échus, échecs oubliés.
 pub async fn menage(db: &Db) -> Resultat<()> {
     let t = maintenant();
-    db.raw_execute("DELETE FROM sessions WHERE expires_at <= ?1", &params![t])
+    Session::delete_many()
+        .filter(Session::EXPIRES_AT.le(t))
+        .execute(db)
         .await?;
-    db.raw_execute(
-        "DELETE FROM reset_tokens WHERE expires_at <= ?1",
-        &params![t - 24 * 3600],
-    )
-    .await?;
-    db.raw_execute(
-        "DELETE FROM echecs_connexion WHERE depuis <= ?1 AND bloque_jusqu_a <= ?2",
-        &params![t - FENETRE_ECHECS, t],
-    )
-    .await?;
+    JetonReinit::delete_many()
+        .filter(JetonReinit::EXPIRES_AT.le(t - 24 * 3600))
+        .execute(db)
+        .await?;
+    EchecsConnexion::delete_many()
+        .filter(EchecsConnexion::DEPUIS.le(t - FENETRE_ECHECS))
+        .filter(EchecsConnexion::BLOQUE_JUSQU_A.le(t))
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -341,21 +340,26 @@ async fn ouvre_session<E: Executor>(
     user_id: i32,
     username: String,
     device: String,
-) -> Resultat<Response> {
+) -> paquets::orm::Result<ReponseConnexion> {
     let jeton = jeton_session();
     let t = maintenant();
     let expires_at = t + DUREE_SESSION;
-    db.raw_execute(
-        "INSERT INTO sessions (user_id, token_hash, created_at, last_seen_at, expires_at, device) \
-         VALUES (?1, ?2, ?3, ?3, ?4, ?5)",
-        &params![user_id, empreinte(&jeton), t, expires_at, device],
-    )
+    Session {
+        id: 0,
+        user_id,
+        token_hash: empreinte(&jeton),
+        created_at: t,
+        last_seen_at: t,
+        expires_at,
+        device,
+    }
+    .insert(db)
     .await?;
-    Ok(Response::new().json(ReponseConnexion {
+    Ok(ReponseConnexion {
         token: jeton,
         username,
         expires_at,
-    }))
+    })
 }
 
 /// POST /auth/signup — crée un compte et ouvre une session.
@@ -364,67 +368,89 @@ async fn inscription(req: Request) -> Resultat<Response> {
     let username = c.username.trim().to_owned();
     valide_identifiants(&username, &c.password)?;
     let hash = hache(&c.password).await?;
+    let device = appareil(&req);
 
-    let db = req.db();
-    let tx = db.begin().await?;
     // La clé est unique : de deux inscriptions simultanées du même nom (à la
-    // casse près), la seconde ne crée rien.
-    let ids: Vec<(i32,)> = tx
-        .raw(
-            "INSERT INTO users (username, cle, password_hash, created_at) \
-             VALUES (?1, ?2, ?3, ?4) ON CONFLICT (cle) DO NOTHING RETURNING id",
-            &params![
-                username.clone(),
-                cle_identifiant(&username),
-                hash,
-                maintenant()
-            ],
-        )
+    // casse près), la seconde ne crée rien. Sur Nuage DB, elle échoue au
+    // commit (conflit), et sa relance voit le compte déjà là.
+    let ouverte = req
+        .db()
+        .transaction(|tx| {
+            let (username, hash, device) = (username.clone(), hash.clone(), device.clone());
+            Box::pin(async move {
+                let mut u = Utilisateur {
+                    id: 0,
+                    cle: cle_identifiant(&username),
+                    username: username.clone(),
+                    password_hash: hash,
+                    created_at: maintenant(),
+                    prefs: None,
+                };
+                match u.insert(tx).await {
+                    Ok(()) => {}
+                    Err(e) if e.is_unique_violation() => return Ok(None),
+                    Err(e) => return Err(e),
+                }
+                ouvre_session(tx, u.id, username, device).await.map(Some)
+            })
+        })
         .await?;
-    let Some(&(id,)) = ids.first() else {
-        return Err(Erreur::requete("nom d'utilisateur déjà pris"));
-    };
-    let res = ouvre_session(&tx, id, username, appareil(&req)).await?;
-    tx.commit().await?;
-    Ok(res)
+    match ouverte {
+        Some(reponse) => Ok(Response::new().json(reponse)),
+        None => Err(Erreur::requete("nom d'utilisateur déjà pris")),
+    }
 }
 
 /// Où en est un identifiant : bloqué (et pour combien de secondes) ?
 async fn blocage(db: &Db, cle: &str) -> Resultat<Option<i64>> {
-    let lignes: Vec<(i64,)> = db
-        .raw(
-            "SELECT bloque_jusqu_a FROM echecs_connexion WHERE cle = ?1",
-            &params![cle.to_owned()],
-        )
-        .await?;
+    let ligne = EchecsConnexion::find(db, cle.to_owned()).await?;
     let t = maintenant();
-    Ok(lignes
-        .first()
-        .map(|&(jusqu_a,)| jusqu_a - t)
+    Ok(ligne
+        .map(|e| e.bloque_jusqu_a - t)
         .filter(|&reste| reste > 0))
 }
 
-/// Compte un échec ; au dixième dans le quart d'heure, l'identifiant est
-/// freiné un quart d'heure.
+/// L'identifiant après un échec de plus, à l'instant `t` : un échec hors de
+/// la fenêtre en ouvre une nouvelle ; au dixième dans la fenêtre,
+/// l'identifiant est freiné un quart d'heure.
+fn apres_echec(avant: Option<EchecsConnexion>, cle: &str, t: i64) -> EchecsConnexion {
+    match avant {
+        Some(e) if e.depuis > t - FENETRE_ECHECS => {
+            let echecs = e.echecs + 1;
+            EchecsConnexion {
+                bloque_jusqu_a: if echecs >= ECHECS_MAX {
+                    t + BLOCAGE
+                } else {
+                    e.bloque_jusqu_a
+                },
+                echecs,
+                ..e
+            }
+        }
+        Some(e) => EchecsConnexion {
+            echecs: 1,
+            depuis: t,
+            ..e
+        },
+        None => EchecsConnexion {
+            cle: cle.to_owned(),
+            echecs: 1,
+            depuis: t,
+            bloque_jusqu_a: 0,
+        },
+    }
+}
+
+/// Compte un échec. Lu et écrit dans une transaction : deux échecs
+/// simultanés comptent tous deux.
 async fn note_echec(db: &Db, cle: &str) -> Resultat<()> {
-    let t = maintenant();
-    db.raw_execute(
-        "INSERT INTO echecs_connexion AS e (cle, echecs, depuis, bloque_jusqu_a) \
-         VALUES (?1, 1, ?2, 0) \
-         ON CONFLICT (cle) DO UPDATE SET \
-           echecs = CASE WHEN e.depuis <= ?2 - ?3 THEN 1 ELSE e.echecs + 1 END, \
-           depuis = CASE WHEN e.depuis <= ?2 - ?3 THEN ?2 ELSE e.depuis END, \
-           bloque_jusqu_a = CASE \
-             WHEN e.depuis > ?2 - ?3 AND e.echecs + 1 >= ?4 THEN ?2 + ?5 \
-             ELSE e.bloque_jusqu_a END",
-        &params![
-            cle.to_owned(),
-            t,
-            FENETRE_ECHECS,
-            ECHECS_MAX as i64,
-            BLOCAGE
-        ],
-    )
+    db.transaction(|tx| {
+        let cle = cle.to_owned();
+        Box::pin(async move {
+            let avant = EchecsConnexion::find(tx, cle.clone()).await?;
+            apres_echec(avant, &cle, maintenant()).upsert(tx).await
+        })
+    })
     .await?;
     Ok(())
 }
@@ -453,19 +479,17 @@ async fn connexion(req: Request) -> Resultat<Response> {
         return Err(trop_de_tentatives(reste));
     }
 
-    let comptes: Vec<(i32, String, String)> = db
-        .raw(
-            "SELECT id, username, password_hash FROM users WHERE cle = ?1",
-            &params![cle.clone()],
-        )
+    let comptes = Utilisateur::query()
+        .filter(Utilisateur::CLE.eq(cle.clone()))
+        .all(db)
         .await?;
-    let empreintes = comptes.iter().map(|(_, _, h)| h.clone()).collect();
+    let empreintes = comptes.iter().map(|u| u.password_hash.clone()).collect();
     match verifie_parmi(&c.password, empreintes).await {
         Some(i) => {
-            let (id, username, _) = comptes[i].clone();
-            db.raw_execute("DELETE FROM echecs_connexion WHERE cle = ?1", &params![cle])
-                .await?;
-            ouvre_session(db, id, username, appareil(&req)).await
+            let u = comptes[i].clone();
+            EchecsConnexion::delete_by_key(db, cle).await?;
+            let reponse = ouvre_session(db, u.id, u.username, appareil(&req)).await?;
+            Ok(Response::new().json(reponse))
         }
         None => {
             note_echec(db, &cle).await?;
@@ -480,9 +504,7 @@ async fn connexion(req: Request) -> Resultat<Response> {
 /// POST /auth/logout — ferme la session de la requête.
 async fn deconnexion(req: Request) -> Resultat<Response> {
     let qui = utilisateur(&req).await?;
-    req.db()
-        .raw_execute("DELETE FROM sessions WHERE id = ?1", &params![qui.session])
-        .await?;
+    Session::delete_by_key(req.db(), qui.session).await?;
     Ok(Response::new().status(204))
 }
 
@@ -523,22 +545,21 @@ struct SessionVue {
 /// GET /auth/sessions — les appareils connectés au compte.
 async fn liste_sessions(req: Request) -> Resultat<Response> {
     let qui = utilisateur(&req).await?;
-    let lignes: Vec<(i64, String, i64, i64)> = req
-        .db()
-        .raw(
-            "SELECT id, device, created_at, last_seen_at FROM sessions \
-             WHERE user_id = ?1 AND expires_at > ?2 ORDER BY last_seen_at DESC, id DESC",
-            &params![qui.user_id, maintenant()],
-        )
+    let sessions = Session::query()
+        .filter(Session::USER_ID.eq(qui.user_id))
+        .filter(Session::EXPIRES_AT.gt(maintenant()))
+        .order_by(Session::LAST_SEEN_AT.desc())
+        .order_by(Session::ID.desc())
+        .all(req.db())
         .await?;
-    let vues: Vec<SessionVue> = lignes
+    let vues: Vec<SessionVue> = sessions
         .into_iter()
-        .map(|(id, device, created_at, last_seen_at)| SessionVue {
-            id,
-            device,
-            created_at,
-            last_seen_at,
-            current: qui.session == id,
+        .map(|s| SessionVue {
+            current: qui.session == s.id,
+            id: s.id,
+            device: s.device,
+            created_at: s.created_at,
+            last_seen_at: s.last_seen_at,
         })
         .collect();
     Ok(Response::new().json(vues))
@@ -548,12 +569,10 @@ async fn liste_sessions(req: Request) -> Resultat<Response> {
 async fn revoque_session(req: Request) -> Resultat<Response> {
     let qui = utilisateur(&req).await?;
     let id: i64 = param(&req, "id")?;
-    let n = req
-        .db()
-        .raw_execute(
-            "DELETE FROM sessions WHERE id = ?1 AND user_id = ?2",
-            &params![id, qui.user_id],
-        )
+    let n = Session::delete_many()
+        .filter(Session::ID.eq(id))
+        .filter(Session::USER_ID.eq(qui.user_id))
+        .execute(req.db())
         .await?;
     if n == 0 {
         return Err(Erreur::introuvable("session introuvable"));
@@ -581,16 +600,22 @@ async fn change_mot_de_passe(req: Request) -> Resultat<Response> {
         return Err(Erreur::Refus("mot de passe actuel incorrect".into()));
     }
     let hash = hache(&c.new_password).await?;
-    let tx = db.begin().await?;
-    tx.raw_execute(
-        "UPDATE users SET password_hash = ?1 WHERE id = ?2",
-        &params![hash, u.id],
-    )
-    .await?;
-    coupe_tout(&tx, u.id).await?;
-    let res = ouvre_session(&tx, u.id, u.username, appareil(&req)).await?;
-    tx.commit().await?;
-    Ok(res)
+    let device = appareil(&req);
+    let reponse = db
+        .transaction(|tx| {
+            let (hash, username, device) = (hash.clone(), u.username.clone(), device.clone());
+            Box::pin(async move {
+                Utilisateur::update_many()
+                    .set(Utilisateur::PASSWORD_HASH, hash)
+                    .filter(Utilisateur::ID.eq(u.id))
+                    .execute(tx)
+                    .await?;
+                coupe_tout(tx, u.id).await?;
+                ouvre_session(tx, u.id, username, device).await
+            })
+        })
+        .await?;
+    Ok(Response::new().json(reponse))
 }
 
 // ---------------------------------------------------------------------------
@@ -661,7 +686,7 @@ struct Oubli {
 }
 
 /// Trois liens par heure et par compte, pas plus.
-const LIENS_PAR_HEURE: i64 = 3;
+const LIENS_PAR_HEURE: u64 = 3;
 
 /// POST /auth/forgot — envoie un lien de réinitialisation si un compte
 /// existe pour cette adresse.
@@ -680,37 +705,48 @@ async fn mot_de_passe_oublie(req: Request) -> Resultat<Response> {
         return Ok(Response::new().status(204));
     }
     let db = req.db();
-    let comptes: Vec<(i32, String)> = db
-        .raw(
-            "SELECT id, username FROM users WHERE cle = ?1",
-            &params![cle_identifiant(nom)],
-        )
+    let compte = Utilisateur::query()
+        .filter(Utilisateur::CLE.eq(cle_identifiant(nom)))
+        .first(db)
         .await?;
-    if let Some((user_id, username)) = comptes.into_iter().next() {
+    if let Some(Utilisateur {
+        id: user_id,
+        username,
+        ..
+    }) = compte
+    {
         let t = maintenant();
         // Les liens vivent une heure : ceux encore vivants ont tous moins d'une heure.
-        let recents: Vec<(i64,)> = db
-            .raw(
-                "SELECT count(*) FROM reset_tokens WHERE user_id = ?1 AND expires_at > ?2",
-                &params![user_id, t],
-            )
+        let recents = JetonReinit::query()
+            .filter(JetonReinit::USER_ID.eq(user_id))
+            .filter(JetonReinit::EXPIRES_AT.gt(t))
+            .count(db)
             .await?;
-        if recents.first().map_or(0, |r| r.0) < LIENS_PAR_HEURE {
+        if recents < LIENS_PAR_HEURE {
             let jeton = jeton_aleatoire();
-            let tx = db.begin().await?;
-            // Un nouveau lien rend les précédents caducs.
-            tx.raw_execute(
-                "UPDATE reset_tokens SET used = TRUE WHERE user_id = ?1 AND used = FALSE",
-                &params![user_id],
-            )
+            let token_hash = empreinte(&jeton);
+            db.transaction(|tx| {
+                let token_hash = token_hash.clone();
+                Box::pin(async move {
+                    // Un nouveau lien rend les précédents caducs.
+                    JetonReinit::update_many()
+                        .set(JetonReinit::USED, true)
+                        .filter(JetonReinit::USER_ID.eq(user_id))
+                        .filter(JetonReinit::USED.eq(false))
+                        .execute(tx)
+                        .await?;
+                    JetonReinit {
+                        id: 0,
+                        user_id,
+                        token_hash,
+                        expires_at: t + 3600,
+                        used: false,
+                    }
+                    .insert(tx)
+                    .await
+                })
+            })
             .await?;
-            tx.raw_execute(
-                "INSERT INTO reset_tokens (user_id, token_hash, expires_at, used) \
-                 VALUES (?1, ?2, ?3, FALSE)",
-                &params![user_id, empreinte(&jeton), t + 3600],
-            )
-            .await?;
-            tx.commit().await?;
             let lien = format!("{}/reinitialisation?jeton={jeton}", url_publique());
             let corps = format!(
                 "Bonjour,\n\n\
@@ -782,13 +818,13 @@ const LIEN_MORT: &str = "<h1>Lien expiré</h1><p>Ce lien de réinitialisation n'
 
 /// Le lien est-il encore vivant ?
 async fn lien_vivant(db: &Db, jeton: &str) -> Resultat<bool> {
-    let lignes: Vec<(i32,)> = db
-        .raw(
-            "SELECT id FROM reset_tokens WHERE token_hash = ?1 AND used = FALSE AND expires_at > ?2",
-            &params![empreinte(jeton), maintenant()],
-        )
-        .await?;
-    Ok(!lignes.is_empty())
+    Ok(JetonReinit::query()
+        .filter(JetonReinit::TOKEN_HASH.eq(empreinte(jeton)))
+        .filter(JetonReinit::USED.eq(false))
+        .filter(JetonReinit::EXPIRES_AT.gt(maintenant()))
+        .first(db)
+        .await?
+        .is_some())
 }
 
 /// GET /reinitialisation?jeton=… — la page du lien reçu par courriel.
@@ -848,34 +884,49 @@ async fn reinitialise(req: Request) -> Resultat<Response> {
         ));
     }
     let hash = hache(&f.mot_de_passe).await?;
-    let db = req.db();
-    let tx = db.begin().await?;
-    let brules: Vec<(i32,)> = tx
-        .raw(
-            "UPDATE reset_tokens SET used = TRUE \
-             WHERE token_hash = ?1 AND used = FALSE AND expires_at > ?2 RETURNING user_id",
-            &params![empreinte(&f.jeton), maintenant()],
-        )
+    let token_hash = empreinte(&f.jeton);
+    // Deux envois simultanés lisent tous deux le lien encore neuf ; le
+    // second échoue au commit (conflit), et sa relance le trouve brûlé.
+    let fait = req
+        .db()
+        .transaction(|tx| {
+            let (hash, token_hash) = (hash.clone(), token_hash.clone());
+            Box::pin(async move {
+                let Some(lien) = JetonReinit::query()
+                    .filter(JetonReinit::TOKEN_HASH.eq(token_hash))
+                    .filter(JetonReinit::USED.eq(false))
+                    .filter(JetonReinit::EXPIRES_AT.gt(maintenant()))
+                    .first(tx)
+                    .await?
+                else {
+                    return Ok(false);
+                };
+                let Some(u) = Utilisateur::find(tx, lien.user_id).await? else {
+                    return Ok(false);
+                };
+                let brule = JetonReinit::update_many()
+                    .set(JetonReinit::USED, true)
+                    .filter(JetonReinit::ID.eq(lien.id))
+                    .filter(JetonReinit::USED.eq(false))
+                    .execute(tx)
+                    .await?;
+                if brule == 0 {
+                    return Ok(false);
+                }
+                Utilisateur::update_many()
+                    .set(Utilisateur::PASSWORD_HASH, hash)
+                    .filter(Utilisateur::ID.eq(u.id))
+                    .execute(tx)
+                    .await?;
+                coupe_tout(tx, u.id).await?;
+                EchecsConnexion::delete_by_key(tx, u.cle).await?;
+                Ok(true)
+            })
+        })
         .await?;
-    let Some(&(user_id,)) = brules.first() else {
-        return Ok(page_reinit(400, mort));
-    };
-    let n = tx
-        .raw_execute(
-            "UPDATE users SET password_hash = ?1 WHERE id = ?2",
-            &params![hash, user_id],
-        )
-        .await?;
-    if n == 0 {
+    if !fait {
         return Ok(page_reinit(400, mort));
     }
-    coupe_tout(&tx, user_id).await?;
-    tx.raw_execute(
-        "DELETE FROM echecs_connexion WHERE cle = (SELECT cle FROM users WHERE id = ?1)",
-        &params![user_id],
-    )
-    .await?;
-    tx.commit().await?;
     Ok(page_reinit(
         200,
         "<h1>C'est fait ✅</h1><p>Ton mot de passe est changé, et tous tes \
